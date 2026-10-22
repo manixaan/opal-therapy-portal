@@ -21,3 +21,8 @@ process.env.EMAIL_PORT = '587';
 process.env.EMAIL_USER = 'test@test.invalid';
 process.env.EMAIL_PASS = 'test-pass';
 process.env.EMAIL_FROM = 'Test <test@test.invalid>';
+// Never the Graph transport in a unit test, whatever a developer .env holds.
+process.env.EMAIL_TRANSPORT = '';
+process.env.EMAIL_SENDER = '';
+process.env.GRAPH_MAIL_ENABLED = 'false';
+process.env.M365_PROVISIONING_ENABLED = 'false';

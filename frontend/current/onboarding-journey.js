@@ -744,14 +744,17 @@
   }
 
   function startForm(opts, t) {
-    // Every hire reports to the owner, so the list holds only owner accounts.
-    var staff = [['', '\u2014 Not set \u2014']].concat((opts.staff || []).filter(function (u) { return String(u.role || '').toLowerCase() === 'owner'; }).map(function (u) { return [u.id, u.name + ' (' + titleCase(u.role) + ')']; }));
+    // Any staff member can be the person the new starter reports to.
+    var staff = [['', '— Not set —']].concat((opts.staff || []).map(function (u) { return [u.id, u.name + ' (' + titleCase(u.role) + ')']; }));
     var roleCats = [['', '— Choose —']].concat((opts.roleCategories || []).map(function (c) { return [c, titleCase(c)]; }));
-    // Only the OT Full-Time pack is live for now; the rest stay visible but greyed out.
-    var liveRe = /occupational therapist\s*[-\u2013\u2014]\s*full[- ]?time/i;
-    var pkgs = (opts.packages || []).map(function (p) { return [p.id, p.title, !liveRe.test(p.title || '')]; });
-    var livePkg = pkgs.filter(function (p) { return !p[2]; })[0];
-    var pkgValue = t.packageId || (livePkg ? livePkg[0] : '');
+    // Every published package can be chosen (audit B-17); blank lets the portal
+    // recommend one from the role category and employment type.
+    var pkgs = [['', '— Recommend from the role and employment type —']].concat((opts.packages || []).map(function (p) { return [p.id, p.title]; }));
+    var pkgValue = t.packageId || '';
+    var roles = (opts.portalRoles || ['therapist', 'admin', 'read_only']).map(function (r) { return [r, r === 'read_only' ? 'Read only' : titleCase(r)]; });
+    // Treating clinician is the record's own fact (audit B-16): it drives the
+    // registration clause in the letter, Ahpra, and the clinical rules.
+    var treating = t.isTreatingTherapist != null ? t.isTreatingTherapist === true : (t.roleCategory || '') === 'occupational_therapist';
     return ''
       + '<form class="oj-form" id="oj-start" onsubmit="return OnboardingJourney.submitStart(event)">'
       + '<section class="oj-panel"><h2>Who</h2>'
@@ -760,9 +763,10 @@
       + field('oj-f-email', 'Personal email', input('oj-f-email', 'email', t.personalEmail, 'maxlength="255" required autocomplete="off"'))
       + field('oj-f-mobile', 'Mobile (optional)', input('oj-f-mobile', 'tel', t.mobile, 'maxlength="40"'))
       + field('oj-f-roleCategory', 'Role category', select('oj-f-roleCategory', roleCats, t.roleCategory || ''))
-      + field('oj-f-proposedRole', 'Portal access role', select('oj-f-proposedRole', [['therapist', 'Therapist'], ['admin', 'Admin'], ['read_only', 'Read only']], t.proposedRole || 'therapist'))
+      + field('oj-f-proposedRole', 'Portal access role', select('oj-f-proposedRole', roles, t.proposedRole || 'therapist'))
       + field('oj-f-managerUserId', 'Reports to', select('oj-f-managerUserId', staff, t.managerUserId || ''))
       + '</div>'
+      + '<div class="ob-check"><input type="checkbox" id="oj-f-treating"' + (treating ? ' checked' : '') + '><label for="oj-f-treating">Treating clinician — sees clients (Ahpra registration, NDIS Worker Screening and WWCC are required and can never be waived)</label></div>'
       + '</section>'
       + '<section class="oj-panel"><h2>The offer</h2>'
       + termsFields(opts, t)
@@ -786,7 +790,7 @@
       name: v('oj-f-name'), personalEmail: v('oj-f-email'), mobile: v('oj-f-mobile') || null,
       roleCategory: v('oj-f-roleCategory') || null, proposedRole: v('oj-f-proposedRole'),
       managerUserId: v('oj-f-managerUserId') || null,
-      isTreatingTherapist: true,
+      isTreatingTherapist: !!(doc.getElementById('oj-f-treating') && doc.getElementById('oj-f-treating').checked),
       position: terms.positionTitle, employmentType: terms.employmentType, startDate: terms.startDate, endDate: terms.endDate,
       payBasis: terms.payBasis, payRate: terms.payRate, hoursPerWeek: terms.hoursPerWeek, probationMonths: terms.probationMonths,
       awardClassification: terms.awardClassification, workLocation: terms.workLocation, additionalTerms: terms.additionalTerms,
@@ -851,6 +855,9 @@
       // when that phase completes, the screen moves to the next. Earlier
       // phases stay reachable through the stepper.
       + phaseStepper(d)
+      // The one line that says what happens next, and who acts (audit B-25).
+      + (j.closed ? '' : nextBanner(d))
+      + ((d.attention || []).length ? attentionHtml(d) : '')
       + '<div class="oj-stages">'
       + phaseBody(d)
       + '</div>'
@@ -861,6 +868,13 @@
   function currentPhase(d) {
     var o = d.offer; var r = d.record;
     if (!o || ['accepted', 'not_required'].indexOf(o.status) === -1) return 1;
+    // The portal route (owner decision 1): Stage 3 opens when the starter's
+    // documentation is verified, or the record is already activated.
+    if (d.route === 'portal') {
+      var p2 = d.journey && d.journey.stages && d.journey.stages[1];
+      if (['ready_to_activate', 'activated', 'completed'].indexOf(r.status) !== -1) return 3;
+      return p2 && p2.state === 'complete' ? 3 : 2;
+    }
     var I = d.induction || {};
     if (I.sentAt || I.completedAt || r.status === 'completed' || r.status === 'activated' || r.status === 'ready_to_activate') return 3;
     var s2 = d.journey && d.journey.stages && d.journey.stages[1];
@@ -898,6 +912,10 @@
     var cur = currentPhase(d);
     var view = Math.min(S.phaseView || cur, cur);
     if (view === 1) return offerPanel(d);
+    if (d.route === 'portal') {
+      if (view === 2) return tabset(d, PORTAL_DOC_TABS, 'doc', 'Onboarding documentation');
+      return tabset(d, PORTAL_INDUCTION_TABS, 'induction', 'Internal setup and induction') + profilePanel(d);
+    }
     if (view === 2) return tabset(d, DOC_TABS, 'doc', 'Onboarding documentation');
     var outstanding = docsOutstanding(d);
     var pending = outstanding
@@ -922,6 +940,19 @@
 
   var INDUCTION_TABS = [
     ['email', 'Email & attachments', function (d) { return phase3Panel(d); }],
+    ['setup', 'Internal setup', function (d) { return inductionPanel(d); }],
+    ['payroll', 'Payroll & Xero', function (d) { return payrollPanel(d); }],
+  ];
+
+  // The portal route (owner decision 1): no emails or ZIPs — the starter
+  // completes everything in the portal; the Owner releases, reviews, activates.
+  var PORTAL_DOC_TABS = [
+    ['docs', 'Release & documentation', function (d) { return portalDocumentationPanel(d); }],
+    ['setup', 'Internal setup', function (d) { return inductionPanel(d); }],
+    ['payroll', 'Payroll & Xero', function (d) { return payrollPanel(d); }],
+  ];
+  var PORTAL_INDUCTION_TABS = [
+    ['activate', 'Induction & activation', function (d) { return portalInductionPanel(d); }],
     ['setup', 'Internal setup', function (d) { return inductionPanel(d); }],
     ['payroll', 'Payroll & Xero', function (d) { return payrollPanel(d); }],
   ];
@@ -979,7 +1010,8 @@
       case 'send_in_outlook': return (d.offer && d.offer.email && d.offer.email.webLink ? '<a class="oj-btn oj-btn-primary" href="' + esc(d.offer.email.webLink) + '" target="_blank" rel="noopener">Open the draft in Outlook</a>' : '')
         + (c.assign ? btn('Mark as sent', 'OnboardingJourney.markSent()') : '');
       case 'verify_offer': return btn('View the signed letter', 'OnboardingJourney.previewSigned()') + (c.assign ? btn('Submit the signed letter', 'OnboardingJourney.verifyOffer()', 'oj-btn-primary') : '');
-      case 'release': return c.assign ? btn('Release the documentation', 'OnboardingJourney.release()', 'oj-btn-primary') : '';
+      case 'release': return c.assign ? btn('Release the onboarding', 'OnboardingJourney.release()', 'oj-btn-primary') : '';
+      case 'activation_blocked': return btn('See what is outstanding', 'OnboardingJourney.scrollTo(\'oj-activation\')');
       case 'review_pack': return btn('Review the document pack', 'OnboardingJourney.scrollTo(\'oj-stage-2\')', 'oj-btn-primary');
       case 'send_pack_in_outlook': return (d.pack && d.pack.email && d.pack.email.webLink ? '<a class="oj-btn oj-btn-primary" href="' + esc(d.pack.email.webLink) + '" target="_blank" rel="noopener">Open the draft in Outlook</a>' : '')
         + (c.assign ? btn('Mark as sent', 'OnboardingJourney.packMarkSent()') : '');
@@ -989,7 +1021,7 @@
       case 'send_induction_in_outlook': return (d.induction && d.induction.email && d.induction.email.webLink ? '<a class="oj-btn oj-btn-primary" href="' + esc(d.induction.email.webLink) + '" target="_blank" rel="noopener">Open the draft in Outlook</a>' : '')
         + (c.assign ? btn('Mark as sent', 'OnboardingJourney.packMarkSent(\'induction\')') : '');
       case 'review': return btn('Open the review', 'OnboardingJourney.openReview()', 'oj-btn-primary');
-      case 'activate': return c.activate ? btn('Activate portal access', 'OnboardingJourney.runTask(\'portal_access\')', 'oj-btn-primary') : '';
+      case 'activate': return c.activate && (!d.activation || d.activation.ok) ? btn('Activate portal access', 'OnboardingJourney.runTask(\'portal_access\')', 'oj-btn-primary') : '';
       case 'task': return n.taskCode ? btn('Go to the task', 'OnboardingJourney.scrollTo(\'oj-task-' + jsq(n.taskCode) + '\')') : '';
       case 'open_record': return btn('Open the paper round-trip', 'OnboardingJourney.openReview()');
       default: return '';
@@ -1314,6 +1346,131 @@
     return stagePanel(2, 'Onboarding Documentation', st, body);
   }
 
+
+  // ── The portal route: Stage 2 (owner decision 1) ─────────────────────────
+
+  /** The record's own contract and position description — what the starter acknowledges. */
+  function recordDocumentsBlock(d) {
+    var docs = d.recordDocuments || []; var c = d.can || {};
+    if (!docs.length) return '';
+    return '<div class="oj-step" id="oj-record-docs"><div class="oj-step-head"><span class="oj-step-n">✎</span><strong>The starter\'s contract and position description</strong></div>'
+      + '<p class="oj-quiet">The starter reads and acknowledges exactly these files in the portal. A file that still contains "[TO CONFIRM …]" is refused.</p>'
+      + '<ul class="oj-sections">' + docs.map(function (x) {
+        var f = x.document;
+        var acts = '';
+        if (f) acts += '<a class="oj-btn oj-btn-small" href="' + esc(f.previewUrl) + '" target="_blank" rel="noopener">View</a>';
+        if (c.assign) {
+          acts += '<label class="oj-btn oj-btn-small">' + (f ? 'Replace' : 'Attach') + ' (PDF or Word)<input type="file" hidden accept=".pdf,.docx" onchange="OnboardingJourney.attachRecordDoc(\'' + jsq(x.kind) + '\', this)"></label>';
+          if (x.kind === 'contract' && !f) acts += btn('Generate from the contract template', 'OnboardingJourney.generateContract()', 'oj-btn-small');
+          if (f) acts += btn('Remove', 'OnboardingJourney.removeRecordDoc(\'' + jsq(x.kind) + '\')', 'oj-btn-small oj-btn-quiet');
+        }
+        return '<li' + (f ? ' class="is-done"' : '') + '><span>' + esc(x.label) + (f ? ' — <span class="oj-quiet">' + esc(f.fileName) + ' · ' + esc(fmtDate(f.uploadedAt)) + '</span>' : ' — <span class="oj-warn">not attached</span>') + '</span>'
+          + '<span class="oj-actions oj-actions-tight">' + acts + '</span></li>';
+      }).join('') + '</ul></div>';
+  }
+
+  /** The invitation, after release: where it stands, the link, and a Resend that renews. */
+  function invitationBlock(d) {
+    var inv = d.invitation; var c = d.can || {};
+    if (!inv) return '';
+    var label = inv.status === 'accepted' ? 'Accepted — the starter has set their password and signed in'
+      : inv.status === 'expired' ? 'Expired ' + fmtDate(inv.expiresAt) + ' — resend to issue a new link'
+      : inv.status === 'pending' ? 'Waiting for the starter — the link expires ' + fmtDate(inv.expiresAt)
+      : titleCase(inv.status);
+    var out = '<div class="oj-step' + (inv.status === 'accepted' ? '' : ' is-active') + '" id="oj-invitation"><div class="oj-step-head"><span class="oj-step-n">✉</span><strong>Invitation</strong>'
+      + '<span class="oj-chip ' + (inv.status === 'accepted' ? 'is-done' : inv.status === 'expired' ? 'is-you' : 'is-employee') + '">' + esc(inv.status === 'accepted' ? 'Accepted' : inv.status === 'expired' ? 'Expired' : 'Sent') + '</span></div>'
+      + '<p>' + esc(label) + '</p>';
+    if (!inv.emailConfigured && inv.status !== 'accepted') out += '<p class="oj-quiet">Email is not set up on this portal: copy the link and send it to the starter yourself.</p>';
+    if (S.inviteUrl && inv.status !== 'accepted') {
+      out += '<div class="oj-field"><label for="oj-invite-url">Invitation link — send it only to the starter</label><input id="oj-invite-url" type="text" readonly value="' + esc(S.inviteUrl) + '" onclick="this.select()"></div>';
+    }
+    if (c.assign && inv.canResend) {
+      out += '<div class="oj-actions">' + btn('Copy the invitation link', 'OnboardingJourney.copyInviteLink()')
+        + btn(inv.status === 'expired' ? 'Resend — issue a new link' : 'Resend invitation', 'OnboardingJourney.resendInvitation()', inv.status === 'expired' ? 'oj-btn-primary' : '') + '</div>';
+    }
+    return out + '</div>';
+  }
+
+  function portalDocumentationPanel(d) {
+    var st = d.journey.stages[1];
+    if (st.state === 'pending') return '';
+    var r = d.record; var c = d.can || {};
+    var body = '';
+    if (r.status === 'created') {
+      var pv = d.packageVersion || {};
+      if (pv.behind && c.assign) {
+        body += '<div class="ob-note is-warn" role="status"><strong>A newer version of the ' + esc(r.packageTitle || 'onboarding') + ' package is published (v' + esc(pv.current) + '; this record uses v' + esc(pv.pinned) + ').</strong> '
+          + btn('Move this record to v' + pv.current, 'OnboardingJourney.repinPackage()', 'oj-btn-small') + '</div>';
+      }
+      body += '<p>Releasing creates the starter\'s portal account and an invitation link. They choose their own password, then complete their personal details, emergency contact, tax, bank, super, identity and credentials, and acknowledge their contract and position description — all in the portal. Nothing sensitive travels by email.</p>';
+      body += recordDocumentsBlock(d);
+      var R = d.releaseCheck;
+      if (R && !R.ready) {
+        body += '<div class="ob-note is-danger" role="alert"><strong>The onboarding cannot be released yet.</strong> ' + esc(R.message || R.error || '')
+          + (R.problems && R.problems.length ? '<ul>' + R.problems.map(function (p) { return '<li>' + esc(p.message) + '</li>'; }).join('') + '</ul>' : '') + '</div>';
+      } else if (R && R.toAttach && R.toAttach.length) {
+        body += '<div class="ob-note is-info" role="status">You can release now. The starter cannot acknowledge ' + esc(R.toAttach.map(function (p) { return p.title; }).join(' or ')) + ' until it is attached above, and activation waits for it.</div>';
+      }
+      if (c.assign) body += '<div class="oj-actions">' + '<button type="button" class="oj-btn oj-btn-primary" onclick="OnboardingJourney.release()"' + (R && !R.ready ? ' disabled' : '') + '>Release the onboarding to the starter</button></div>';
+      return stagePanel(2, 'Onboarding Documentation', st, body);
+    }
+    body += invitationBlock(d);
+    body += recordDocumentsBlock(d);
+    var p = r.progress || {};
+    body += '<div class="oj-meters">'
+      + meter('Starter\'s documentation', d.journey.summary.documentation.done, d.journey.summary.documentation.total)
+      + meter('Practice verification', p.employerDone, p.employerTotal)
+      + '</div>';
+    var docSections = (d.sections || []).filter(function (s) { return s.key !== 'policies' && s.key !== 'training'; });
+    if (docSections.length) {
+      body += '<ul class="oj-sections">' + docSections.map(function (s) {
+        var open = s.requirements.filter(function (q) { return ['submitted', 'awaiting_verification'].indexOf(q.status) !== -1; }).length;
+        return '<li' + (s.complete ? ' class="is-done"' : '') + '><span>' + esc(s.label) + '</span><span class="oj-quiet">' + s.employeeDone + ' of ' + s.employeeTotal
+          + (open ? ' · <strong>' + open + ' to review</strong>' : '') + '</span></li>';
+      }).join('') + '</ul>';
+    }
+    body += '<div class="oj-actions">' + btn('Open the full review — verify, request a correction, set aside', 'OnboardingJourney.openReview()') + '</div>';
+    return stagePanel(2, 'Onboarding Documentation', st, body);
+  }
+
+  // ── The portal route: Stage 3 — the induction and the Activate button ────
+
+  function portalInductionPanel(d) {
+    var st = d.journey.stages[2];
+    var r = d.record; var c = d.can || {};
+    var body = '';
+    var indSections = (d.sections || []).filter(function (s) { return s.key === 'policies' || s.key === 'training'; });
+    body += '<h3>The starter\'s induction</h3>';
+    if (indSections.length) {
+      body += '<ul class="oj-sections">' + indSections.map(function (s) {
+        var open = s.requirements.filter(function (q) { return ['submitted', 'awaiting_verification'].indexOf(q.status) !== -1; }).length;
+        return '<li' + (s.complete ? ' class="is-done"' : '') + '><span>' + esc(s.label) + '</span><span class="oj-quiet">' + s.employeeDone + ' of ' + s.employeeTotal
+          + (open ? ' · <strong>' + open + ' to review</strong>' : '') + '</span></li>';
+      }).join('') + '</ul>';
+    } else {
+      body += '<p class="oj-quiet">No policies or training were issued with this package.</p>';
+    }
+    if (r.status === 'activated' || r.status === 'completed') {
+      body += '<div class="ob-note is-info" role="status"><strong>Active since ' + esc(fmtDate(r.activatedAt)) + '.</strong> '
+        + (r.status === 'completed' ? 'Onboarding complete.' : 'The record completes when every internal setup task is done or skipped.') + '</div>';
+      return stagePanel(3, 'Internal Setup & Induction', st, body);
+    }
+    var A = d.activation || { ok: false, blockers: [] };
+    body += '<div class="oj-ready' + (A.ok ? ' is-ready' : '') + '" id="oj-activation"><h3>' + (A.ok ? 'Ready to activate' : 'Before you can activate') + '</h3>';
+    if (A.blockers && A.blockers.length) {
+      body += '<ol class="oj-rdy-list">' + A.blockers.map(function (b) {
+        return '<li class="oj-rdy is-open"><div class="oj-rdy-head"><span class="oj-rdy-mark" aria-hidden="true"></span><span class="oj-rdy-label">' + esc(b.title) + '</span></div>'
+          + '<ul class="oj-rdy-items"><li>' + esc(b.reason) + '</li></ul></li>';
+      }).join('') + '</ol>';
+    } else {
+      body += '<p>Everything required is done: the starter has their own password, the documents are verified, the policies acknowledged and the induction complete.</p>';
+    }
+    if (c.activate) {
+      body += '<div class="oj-actions"><button type="button" class="oj-btn oj-btn-primary" onclick="OnboardingJourney.runTask(\'portal_access\')"' + (A.ok ? '' : ' disabled aria-disabled="true"') + '>Activate — give ' + esc(r.applicantName || 'the starter') + ' their ' + esc(titleCase(r.proposedRole || '')) + ' access</button></div>';
+    }
+    body += '</div>';
+    return stagePanel(3, 'Internal Setup & Induction', st, body);
+  }
 
   function packPanel(d) {
     var P = d.pack; var r = d.record; var c = P.can || d.can;
@@ -1697,7 +1854,10 @@
         // Manual tasks are ticked and unticked; only the portal's own action keeps a button.
         var tickable = c.review && t.automation !== 'activate_portal_access';
         if (t.automation === 'activate_portal_access' && open && c.activate) {
-          acts.push(btn(t.status === 'failed' ? 'Try again' : 'Activate', 'OnboardingJourney.runTask(\'' + jsq(t.code) + '\')', 'oj-btn-primary oj-btn-small'));
+          // Owner decision 2: pressable only when everything required is done.
+          var ready = !d.activation || d.activation.ok;
+          acts.push('<button type="button" class="oj-btn oj-btn-primary oj-btn-small" onclick="OnboardingJourney.runTask(\'' + jsq(t.code) + '\')"'
+            + (ready ? '' : ' disabled aria-disabled="true" title="' + esc((d.activation.blockers || []).length + ' item(s) outstanding — see Induction & activation') + '"') + '>Activate</button>');
         }
         var lead = tickable
           ? '<label class="oj-task-check" title="' + (t.status === 'done' ? 'Untick to reopen' : 'Tick when done') + '"><input type="checkbox"' + (t.status === 'done' ? ' checked' : '') + ' aria-label="' + esc(t.title) + ' done" onchange="OnboardingJourney.task(\'' + jsq(t.code) + '\', this.checked ? \'complete\' : \'reopen\')"><span class="oj-task-dot">' + icon + '</span></label>'
@@ -2008,7 +2168,13 @@
         + '</ul>' : '<p class="oj-quiet">Nothing yet.</p>') + '</div>'
       + '<div><h3>Vehicle</h3>' + dl(v ? row('Registration', v.registration) + row('Vehicle', [v.make, v.model].filter(Boolean).join(' ')) + row('Registration expiry', v.registrationExpiry ? fmtDate(v.registrationExpiry) : '') + row('Insurance expiry', v.insuranceExpiry ? fmtDate(v.insuranceExpiry) : '') : '') + '</div>'
       + '</div>';
-    return '<section class="oj-panel oj-stage is-parallel" id="oj-profile"><header><h2><span class="oj-stage-n">👤</span>Employee profile</h2></header>' + body + '</section>';
+    // What this reader's permissions leave out is said, not silently blank (audit B-18).
+    var restricted = p.restricted || [];
+    var note = restricted.length
+      ? '<p class="oj-quiet">' + (restricted.indexOf('personal') !== -1 ? 'Personal, emergency, identity and licence details need the sensitive-identity permission. ' : '')
+        + (restricted.indexOf('payroll') !== -1 ? 'Pay and bank details need the payroll permission.' : '') + '</p>'
+      : '';
+    return '<section class="oj-panel oj-stage is-parallel" id="oj-profile"><header><h2><span class="oj-stage-n">👤</span>Employee profile</h2></header>' + note + body + '</section>';
   }
 
   function emailsPanel(d) {
@@ -2528,10 +2694,10 @@
     var Sg = S.record && S.record.signed; var check = Sg && Sg.check;
     var flagged = check && check.status !== 'ok';
     var q = flagged
-      ? 'The portal\'s reading of the signed letter flagged: ' + (check.issues || []).map(function (i) { return i.message; }).join('; ') + '. Submit it anyway? Phase 1 completes and the onboarding documentation is released to the employee.'
-      : 'Submit the signed letter of offer? Phase 1 completes and the onboarding documentation is released to the employee.';
+      ? 'The portal\'s reading of the signed letter flagged: ' + (check.issues || []).map(function (i) { return i.message; }).join('; ') + '. Submit it anyway? Phase 1 completes; you then release the onboarding to the starter when you are ready.'
+      : 'Submit the signed letter of offer? Phase 1 completes; you then release the onboarding to the starter when you are ready.';
     if (!await portalConfirm(q, flagged ? { danger: true } : undefined)) return;
-    return act('/offer/verify', flagged ? { acknowledge: true } : {}, function (r) { return (r.release && r.release.message) || 'Submitted — the offer is accepted.'; });
+    return act('/offer/verify', flagged ? { acknowledge: true } : {}, 'Submitted — the offer is accepted. Release the onboarding next.');
   }
   async function declineOffer() {
     if (!await portalConfirm('Record that the candidate declined?')) return;
@@ -2544,17 +2710,60 @@
   }
 
   async function skipOffer() {
-    if (!await portalConfirm('Skip the letter of offer and release the onboarding documentation now?')) return;
-    return act('/offer/skip', {}, function (r) { return r.release && r.release.message ? r.release.message : 'Letter marked as not required.'; });
+    if (!await portalConfirm('Skip the letter of offer? You then release the onboarding to the starter.')) return;
+    return act('/offer/skip', {}, 'Letter marked as not required. Release the onboarding next.');
   }
 
-  function release() {
-    return act('/release', {}, function (r) { return (r.release && r.release.message) || r.error || 'Released.'; });
+  async function release() {
+    if (!await portalConfirm('Release the onboarding? The starter\'s portal account is created and they receive an invitation link to set their own password.')) return;
+    var res = await act('/release', {}, function (r) { return (r.release && r.release.message) || r.error || 'Released.'; });
+    if (res && res.release && res.release.onboardingUrl && !res.release.emailSent) {
+      S.inviteUrl = res.release.onboardingUrl;
+      var pane = doc.getElementById('oj-view'); if (pane && S.record) drawRecord(pane);
+    }
+    return res;
   }
 
   async function runTask(code) {
-    if (code === 'portal_access' && !await portalConfirm('Activate portal access for this person now? Their account becomes a staff account with the agreed role.')) return;
-    return act('/tasks/' + encodeURIComponent(code) + '/run', {}, 'Portal access activated.');
+    if (code === 'portal_access') {
+      var r = S.record && S.record.record;
+      if (!await portalConfirm('Activate ' + ((r && r.applicantName) || 'this person') + ' now? Their account becomes a ' + titleCase((r && r.proposedRole) || 'staff') + ' account and they can use the portal straight away.')) return;
+    }
+    return act('/tasks/' + encodeURIComponent(code) + '/run', {}, code === 'portal_access' ? 'Activated.' : 'Done.');
+  }
+
+  // ── The portal route: record documents, invitation, package version ──
+  async function attachRecordDoc(kind, input) {
+    var res = await uploadTo(input, '/documents/' + encodeURIComponent(kind), kind === 'contract' ? 'Contract' : 'Position description');
+    return res;
+  }
+  function generateContract() {
+    return act('/documents/contract/generate', {}, 'Contract generated from the template and the agreed terms.');
+  }
+  async function removeRecordDoc(kind) {
+    if (!await portalConfirm('Remove this document from the record?', { danger: true })) return;
+    return act('/documents/' + encodeURIComponent(kind), {}, 'Removed.', 'DELETE');
+  }
+  async function copyInviteLink() {
+    var res = await api('/api/onboarding/assignments/' + encodeURIComponent(S.recordId) + '/invite-link');
+    if (!res.ok) { toast(res.error || 'There is no valid link — use Resend to issue a new one.', true); return; }
+    S.inviteUrl = res.onboardingUrl;
+    var pane = doc.getElementById('oj-view'); if (pane && S.record) drawRecord(pane);
+    copy(res.onboardingUrl);
+  }
+  async function resendInvitation() {
+    if (!await portalConfirm('Issue a new invitation link? The previous link stops working.')) return;
+    var res = await api('/api/onboarding/assignments/' + encodeURIComponent(S.recordId) + '/resend-invite', { method: 'POST', body: {} });
+    if (!res.ok) { toast(res.error, true); return; }
+    S.inviteUrl = res.emailSent ? null : res.onboardingUrl;
+    toast(res.message || 'A new invitation link has been issued.');
+    var fresh = await api('/api/onboarding/journey/records/' + encodeURIComponent(S.recordId));
+    if (fresh.ok) S.record = fresh;
+    var pane = doc.getElementById('oj-view'); if (pane && S.record) drawRecord(pane);
+  }
+  async function repinPackage() {
+    if (!await portalConfirm('Move this record to the current version of its package? The starter will be asked for what the new version requires.')) return;
+    return act('/package-version', { confirm: true }, 'The record now uses the current package version.');
   }
   async function task(code, verb) {
     var note;
@@ -3065,6 +3274,8 @@
     loadPayrollReference: loadPayrollReference, savePayrollConfig: savePayrollConfig, addPayrollLeave: addPayrollLeave, removePayrollLeave: removePayrollLeave,
     requestPayrollChanges: requestPayrollChanges, syncPayroll: syncPayroll, recheckPayroll: recheckPayroll, resolvePayrollDuplicate: resolvePayrollDuplicate, completePayrollAction: completePayrollAction,
     release: release,
+    attachRecordDoc: attachRecordDoc, generateContract: generateContract, removeRecordDoc: removeRecordDoc,
+    copyInviteLink: copyInviteLink, resendInvitation: resendInvitation, repinPackage: repinPackage,
     runTask: runTask, task: task, assignTask: assignTask,
     cancelRecord: cancelRecord, openReview: openReview,
     scrollTo: scrollTo, copy: copy, viewPhase: viewPhase, docTab: docTab,

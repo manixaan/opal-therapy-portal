@@ -77,13 +77,15 @@ describe('Stage 1 — Letter of Offer', () => {
     expect(j.counts.adminReview).toBe(1);
   });
 
-  test('verification completes the stage; the document pack then asks the admin to review it', () => {
+  test('verification completes the stage; the portal route then asks the Owner to release; a paper pack asks for review', () => {
     const accepted = offer({ status: 'accepted', verified_at: NOW });
-    const preparing = journey.projectJourney({ assignment: assignment(), offer: accepted, now: NOW });
-    expect(preparing.stages[0].state).toBe('complete');
-    expect(preparing.stages[0].completedAt).toBe(NOW);
-    expect(preparing.stage.key).toBe('documentation');
-    expect(preparing.next).toMatchObject({ actor: 'system', action: 'prepare_pack' });
+    const portal = journey.projectJourney({ assignment: assignment(), offer: accepted, now: NOW });
+    expect(portal.stages[0].state).toBe('complete');
+    expect(portal.stages[0].completedAt).toBe(NOW);
+    expect(portal.stage.key).toBe('documentation');
+    // Owner decision 1: the portal route — the Owner releases, the starter is invited.
+    expect(portal.next).toMatchObject({ actor: 'admin', action: 'release' });
+    expect(portal.summary.documentation.label).toBe('Ready to release');
 
     const ready = journey.projectJourney({
       assignment: assignment({ pack_prepared_at: NOW }), offer: accepted, now: NOW,
@@ -175,7 +177,33 @@ describe('Stage 2 — Onboarding Documentation', () => {
     const j = journey.projectJourney({ assignment: assignment({ status: 'ready_to_activate' }), offer: accepted, now: NOW });
     expect(j.stages[1].state).toBe('complete');
     expect(j.stage.key).toBe('induction');
-    expect(j.next.action).toBe('generate_tasks');
+    expect(j.next.action).toBe('activate');
+  });
+
+  test('portal route: Stage 2 counts the starter\'s documentation; policies and training belong to Stage 3', () => {
+    const req = (code, section, status, over = {}) => ({ id: code, template_code: code, title: code, section, status, actor: 'employee', blocks_activation: true, mandatory: true, ...over });
+    const requirements = [
+      req('REQ_BANK_DETAILS', 'payroll_tax_super', 'verified'),
+      req('REQ_CONTRACT', 'welcome_employment', 'complete'),
+      req('REQ_ACK_POL_WHS', 'policies', 'not_started'),
+      req('REQ_TRAINING_WHS', 'training', 'not_started'),
+    ];
+    const j = journey.projectJourney({ assignment: assignment({ status: 'in_progress', released_at: NOW }), offer: accepted, requirements, now: NOW });
+    expect(j.stages[1].state).toBe('complete');
+    expect(j.summary.documentation).toMatchObject({ done: 2, total: 2 });
+    expect(j.summary.induction).toMatchObject({ done: 0, total: 2 });
+    expect(j.next).toMatchObject({ actor: 'employee' });
+  });
+
+  test('portal route: everything done but not activated waits for the Owner — never "Complete" (B-8)', () => {
+    const tasks = [task({ code: 'portal_access', automation: 'activate_portal_access', sort_order: 10 }), task({ code: 'payroll_setup', sort_order: 30 })];
+    const ready = journey.projectJourney({ assignment: assignment({ status: 'ready_to_activate' }), offer: accepted, tasks, activation: { ok: true, blockers: [] }, now: NOW });
+    expect(ready.next).toMatchObject({ actor: 'admin', action: 'activate' });
+    expect(ready.stage.key).not.toBe('complete');
+    const active = journey.projectJourney({ assignment: assignment({ status: 'activated' }), offer: accepted, tasks: [task({ code: 'portal_access', status: 'done' }), task({ code: 'payroll_setup', title: 'Set up Xero (Payroll) access' })], now: NOW });
+    expect(active.stage.key).not.toBe('complete');
+    expect(active.summary.employee).toBeNull();
+    expect(active.next.label).toMatch(/Xero/);
   });
 });
 

@@ -45,6 +45,7 @@ function buildApp() {
   app.use('/', require('../../auth'));
   app.use('/', require('../../onboarding-employee-routes'));
   app.use('/', require('../../onboarding-assignment-routes'));
+  app.use('/', require('../../onboarding-journey-routes'));
   app.use('/', require('../../onboarding-library-routes'));
   app.use('/', require('../../onboarding-routes'));
   // Users & Roles + /api/invites — for the M-2 exclusion test.
@@ -74,6 +75,26 @@ async function agentFor(overrides) {
     .send({ email: user.email, password: PASSWORD });
   expect(res.status).toBe(200);
   return { agent, user };
+}
+
+/** A small, real PDF with words in it — a finished practice document. */
+async function finishedPdf(title) {
+  const { PDFDocument, StandardFonts } = require('pdf-lib');
+  const pdf = await PDFDocument.create();
+  const page = pdf.addPage([595, 842]);
+  const font = await pdf.embedFont(StandardFonts.Helvetica);
+  page.drawText(title, { x: 50, y: 780, size: 16, font });
+  page.drawText('The final wording agreed by the practice for this employee and this role.', { x: 50, y: 750, size: 10, font });
+  return Buffer.from(await pdf.save()).toString('base64');
+}
+
+/** The record's own contract and position description (migration 079, audit B-5). */
+async function attachRecordDocuments(owner, assignmentId) {
+  for (const [kind, title] of [['contract', 'Employment contract'], ['position_description', 'Position description']]) {
+    const res = await owner.post(`/api/onboarding/journey/records/${assignmentId}/documents/${kind}`)
+      .send({ fileName: `${title}.pdf`, fileMime: 'application/pdf', fileData: await finishedPdf(title) });
+    expect(res.status).toBe(201);
+  }
 }
 
 /** Seed the catalogue for this organisation. */
@@ -411,6 +432,13 @@ describe('the complete workflow', () => {
     for (const s of mine.body.sections) for (const r of s.requirements) byCode[r.code] = r;
 
     // ── Acknowledgements ──────────────────────────────────────────────────
+    // Nothing is acknowledged without a document behind it (audit B-5): the
+    // contract and position description are attached to the record first.
+    const unattached = await applicant.post(`/api/onboarding/me/requirements/${byCode.REQ_CONTRACT.id}/acknowledge`)
+      .send({ acknowledged: true, typedLegalName: 'Test OT Casual' });
+    expect(unattached.status).toBe(409);
+    expect(unattached.body.code).toBe('document_not_attached');
+    await attachRecordDocuments(owner, assignmentId);
     for (const code of Object.keys(byCode)) {
       const r = byCode[code];
       if (r.handler !== 'document_ack') continue;
@@ -639,23 +667,41 @@ describe('the complete workflow', () => {
     expect(fixed.body.actionRequired).toBe(0);
   }, 60000);
 
-  test('marking a requirement not applicable requires a reason', async () => {
+  test('marking a requirement not applicable is the Owner\'s, needs a reason, and never clears a clinician\'s statutory check', async () => {
     const { agent: owner } = await agentFor({ role: 'owner' });
     const { assignmentId } = await releaseOtCasual(owner);
     const detail = await owner.get(`/api/onboarding/assignments/${assignmentId}`);
-    const wwcc = detail.body.sections.flatMap((s) => s.requirements).find((r) => r.code === 'REQ_WWCC');
+    const all = detail.body.sections.flatMap((s) => s.requirements);
+    const wwcc = all.find((r) => r.code === 'REQ_WWCC');
 
-    const noReason = await owner
+    // Owner decision 3: an OT is a clinician — the WWCC can never be set aside.
+    const statutory = await owner
       .post(`/api/onboarding/assignments/${assignmentId}/requirements/${wwcc.id}/not-applicable`)
+      .send({ reason: 'Role does not involve child-related work.' });
+    expect(statutory.status).toBe(409);
+    expect(statutory.body.code).toBe('statutory_not_waivable');
+
+    // A non-statutory item: a reason is required.
+    const other = all.find((r) => !['REQ_WWCC', 'REQ_AHPRA', 'REQ_NDIS_SCREENING'].includes(r.code)
+      && ['not_started', 'in_progress'].includes(r.status));
+    const noReason = await owner
+      .post(`/api/onboarding/assignments/${assignmentId}/requirements/${other.id}/not-applicable`)
       .send({});
     expect(noReason.status).toBe(400);
 
+    // A reviewer who is not the Owner cannot set anything aside (audit B-22).
+    const { agent: reviewer } = await agentFor({ role: 'admin', permissions: ['onboarding.view', 'onboarding.review', 'onboarding.verify'] });
+    const byReviewer = await reviewer
+      .post(`/api/onboarding/assignments/${assignmentId}/requirements/${other.id}/not-applicable`)
+      .send({ reason: 'Not needed.' });
+    expect(byReviewer.status).toBe(403);
+
     const withReason = await owner
-      .post(`/api/onboarding/assignments/${assignmentId}/requirements/${wwcc.id}/not-applicable`)
-      .send({ reason: 'Role does not involve child-related work.' });
+      .post(`/api/onboarding/assignments/${assignmentId}/requirements/${other.id}/not-applicable`)
+      .send({ reason: 'Not part of this role.' });
     expect(withReason.status).toBe(200);
     expect(withReason.body.requirement.status).toBe('not_applicable');
-    expect(withReason.body.requirement.reviewReason).toContain('child-related');
+    expect(withReason.body.requirement.reviewReason).toContain('Not part of this role');
   });
 
   test('a statutory requirement cannot be waived into a clearance', async () => {

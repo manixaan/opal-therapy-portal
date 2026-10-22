@@ -28,13 +28,14 @@ Warmly,
 Ann
 Director | Opal Therapy`;
 
+const { applySignOff } = require('./onboarding-practice');
 const firstName = (name) => String(name || '').trim().split(/\s+/)[0] || 'there';
 
 /** The default Email 1 for a record. */
-function composeOfferEmail({ applicantName, positionTitle }) {
-  const body = BODY
+function composeOfferEmail({ applicantName, positionTitle, signOff }) {
+  const body = applySignOff(BODY
     .replace(/\[Name\]/g, firstName(applicantName))
-    .replace(/\[Position Role\]/g, String(positionTitle || 'the role discussed').trim());
+    .replace(/\[Position Role\]/g, String(positionTitle || 'the role discussed').trim()), signOff);
   return { subject: SUBJECT, body };
 }
 

@@ -173,7 +173,20 @@ A blocking requirement is satisfied by `verified` / `complete` /
 `not_applicable`, or an Owner waiver **with a recorded reason**.
 
 Waiving is refused outright on `REQ_NDIS_SCREENING`, `REQ_WWCC`, `REQ_AHPRA`
-and `REQ_RIGHT_TO_WORK`. Waiving "police check — role has no participant
+and `REQ_RIGHT_TO_WORK`.
+
+**Oct 2026 (owner decisions).** Activation happens only when the Owner presses
+Activate; nothing activates automatically. `lifecycle.activationReadiness()` is
+the gate: the starter's own password, every blocking requirement, statutory
+checks verified for a clinician, paper-pack returns (if any), and the induction
+walkthrough task. Waivers *and* "not applicable" are Owner-only by role, with a
+reason, and Ahpra / NDIS screening / WWCC can never be set aside for a clinician
+(`lifecycle.waiverRefusal`). Every link from a record to an account is re-checked
+at the moment of use (`onboarding-account-guard.js`): only the record's own
+pre-employee. Documents with "[TO CONFIRM" gaps, placeholder files or stubs are
+refused at release, acknowledgement, attachment and pack send
+(`onboarding-placeholder-check.js`). The contract and position description are
+the record's own files (migration 079). Waiving "police check — role has no participant
 contact" is a legitimate organisational decision; turning an NDIS exclusion
 into a clearance is not a decision Opal is entitled to make.
 

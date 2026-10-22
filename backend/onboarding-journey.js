@@ -72,14 +72,14 @@ function buildInductionTasks(assignment, { now = new Date() } = {}) {
     {
       code: 'portal_account', sortOrder: 5,
       title: 'Opal Portal account',
-      description: 'The pre-employee account and employment profile, created with the document pack. Portal access (the staff role) is granted at activation.',
+      description: 'Done when the starter accepts the onboarding invitation and sets their own password. Portal access (the staff role) is granted only when the Owner presses Activate.',
       automation: 'portal_account',
       dueAt: soonest(beforeStart(14)),
     },
     {
       code: 'portal_access', sortOrder: 10,
       title: 'Activate portal access',
-      description: 'Turns the pre-employee account into a staff account with the agreed portal role. The portal does this itself.',
+      description: 'Turns the pre-employee account into a staff account with the agreed portal role. Only the Owner presses Activate, once every required item is done.',
       automation: 'activate_portal_access',
       dueAt: soonest(beforeStart(1)),
     },
@@ -195,12 +195,103 @@ function projectOffer(assignment, offer, now) {
  *   • the 034 portal wizard, once a release has issued requirements.
  * The projection reads whichever the record is actually using.
  */
+/**
+ * The portal route's split of the requirement list (owner decision 1): Stage 2
+ * is the starter's documentation — personal, emergency, TFN, bank, super,
+ * identity, credentials, contract and position description; Stage 3 is the
+ * induction — policies and the handbook acknowledged in the portal, training.
+ */
+const INDUCTION_SECTIONS = new Set(['policies', 'training']);
+const isInductionReq = (r) => INDUCTION_SECTIONS.has(r.section);
+const counts = (r) => r.blocks_activation === true || r.mandatory !== false;
+const satisfied = (r) => REQ_DONE.has(r.status) || r.waived === true;
+
+/** Requirement rows → journey items, the same way for both stages. */
+function requirementItems(rows, now) {
+  const items = []; let employeeOpen = 0; let review = 0; let employerOpen = 0; let done = 0;
+  for (const r of rows) {
+    if (satisfied(r)) {
+      done += 1;
+      items.push({ kind: 'done', label: r.title, at: r.completed_at || r.reviewed_at || null });
+    } else if (REQ_NEEDS_REVIEW.has(r.status)) {
+      review += 1;
+      items.push({ kind: 'review', label: `${r.title} — submitted, needs ${r.requires_employer_verification ? 'verification' : 'review'}`, at: r.submitted_at || null, requirementId: r.id });
+    } else if (isEmployeeActor(r) && REQ_EMPLOYEE_OPEN.has(r.status)) {
+      employeeOpen += 1;
+      items.push({
+        kind: 'employee', label: r.status === 'correction_required' ? `${r.title} — correction requested` : r.title,
+        dueAt: r.due_at || null, overdue: isOverdue(r.due_at, now), requirementId: r.id,
+      });
+    } else if (isEmployerActor(r)) {
+      employerOpen += 1;
+      items.push({ kind: 'internal', label: r.title, dueAt: r.due_at || null, overdue: isOverdue(r.due_at, now), requirementId: r.id });
+    }
+  }
+  return { items, employeeOpen, review, employerOpen, done, total: rows.length };
+}
+
+/** Stage 2 on the portal route: release → invitation → the starter's documentation → review. */
+function projectPortalDocumentation(assignment, requirements, now) {
+  const out = { state: 'active', summary: '', completedAt: null, items: [], next: null };
+  const status = assignment.status;
+  if (status === 'created') {
+    out.summary = 'Ready to release — the starter receives an invitation link and completes everything in the portal.';
+    out.items.push({ kind: 'review', label: 'Release the onboarding to the starter', at: null });
+    out.next = { actor: 'admin', action: 'release', label: 'Release the onboarding — the starter receives an invitation link' };
+    return out;
+  }
+  if (status === 'invite_sent' || status === 'account_created') {
+    out.summary = 'Invitation sent — waiting for the starter to set their password and begin.';
+    out.items.push({
+      kind: 'employee', label: 'Accept the onboarding invitation and set a password',
+      dueAt: assignment.due_at || null, overdue: isOverdue(assignment.due_at, now),
+    });
+    out.next = { actor: 'employee', action: null, label: 'Waiting for the starter to accept the invitation' };
+    return out;
+  }
+  const docReqs = requirements.filter((r) => !isInductionReq(r));
+  const R = requirementItems(docReqs, now);
+  out.items = R.items;
+  if (docReqs.length && docReqs.filter(counts).every(satisfied)) {
+    out.state = 'complete';
+    out.completedAt = docReqs.reduce((m, r) => { const d = toDate(r.completed_at || r.reviewed_at); return d && (!m || d > m) ? d : m; }, null);
+    out.summary = 'Onboarding documentation complete — every required item verified.';
+    out.next = null;
+    return out;
+  }
+  if (R.review > 0) {
+    out.summary = `${R.done} of ${R.total} complete — ${R.review} awaiting your review.`;
+    out.next = { actor: 'admin', action: 'review', label: `Review ${R.review} submitted item(s)` };
+  } else if (status === 'corrections_required') {
+    out.summary = 'Corrections requested — waiting on the starter.';
+    out.next = { actor: 'employee', action: null, label: 'Waiting for the starter to supply corrections' };
+  } else if (R.employeeOpen > 0) {
+    out.summary = `${R.done} of ${R.total} complete — ${R.employeeOpen} waiting on the starter.`;
+    out.next = { actor: 'employee', action: null, label: 'Waiting for the starter to complete their documentation' };
+  } else {
+    out.summary = `${R.done} of ${R.total} complete — ${R.employerOpen} for the practice to do.`;
+    out.next = { actor: 'admin', action: 'review', label: 'Complete the practice\'s items' };
+  }
+  return out;
+}
+
 function projectDocumentation(assignment, requirements, now, stage1Complete, pack) {
   const out = { state: 'pending', summary: 'Starts when the signed letter of offer is verified.', completedAt: null, items: [], next: null };
   if (!stage1Complete) return out;
 
   const status = assignment.status;
   const p = pack || {};
+  // The portal route — every record without a paper pack (owner decision 1).
+  if (!p.prepared) {
+    if (STAGE3_STATUSES.has(status)) {
+      out.state = 'complete';
+      out.completedAt = assignment.submitted_at || assignment.activated_at || null;
+      out.summary = 'Onboarding documentation complete.';
+      out.items = requirementItems(requirements.filter((r) => !isInductionReq(r)), now).items;
+      return out;
+    }
+    return projectPortalDocumentation(assignment, requirements, now);
+  }
 
   if (STAGE3_STATUSES.has(status) || (p.completedAt && ['documents_received', 'starter_pack_sent'].includes(status))) {
     out.state = 'complete';
@@ -330,15 +421,101 @@ function projectDocumentation(assignment, requirements, now, stage1Complete, pac
 
 // ── Stage 3 ─────────────────────────────────────────────────────────────────
 
+/**
+ * Stage 3 on the portal route: the Owner's setup tasks, the starter's
+ * induction (policies, handbook, training) in the portal, and the Activate
+ * button — which only the Owner presses, and only when everything required is
+ * done (owner decision 2). Complete only when the person is active AND every
+ * setup task is done or skipped (audit B-8).
+ */
+/** The next line for an open task: Activate for the portal's own act, else the task and who has it. */
+function taskNext(t) {
+  if (t.automation === 'activate_portal_access') return { actor: 'admin', action: 'activate', label: 'Activate portal access', taskCode: t.code };
+  return { actor: 'admin', action: 'task', taskCode: t.code, label: `${t.title}${t.assignee_name ? ` (${t.assignee_name})` : ''}` };
+}
+
+function projectPortalInduction(assignment, tasks, requirements, now, stage2Complete, activation) {
+  const out = { state: 'pending', summary: 'Starts when the documentation is approved.', completedAt: null, items: [], next: null };
+  const status = assignment.status;
+  const sorted = [...(tasks || [])].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+  const openTasks = sorted.filter((t) => !['done', 'skipped'].includes(t.status));
+  for (const t of sorted) {
+    if (t.status === 'done' || t.status === 'skipped') out.items.push({ kind: 'done', label: t.title, at: t.completed_at || null, taskCode: t.code });
+    else out.items.push({ kind: 'internal', label: t.title, dueAt: t.due_at || null, overdue: isOverdue(t.due_at, now), assigneeUserId: t.assignee_user_id || null, assigneeName: t.assignee_name || null, taskCode: t.code, automation: t.automation || null, status: t.status });
+  }
+  const indReqs = requirements.filter(isInductionReq);
+  const R = requirementItems(indReqs, now);
+  out.items.push(...R.items);
+
+  if (status === 'completed') {
+    out.state = 'complete';
+    out.completedAt = assignment.completed_at || null;
+    out.summary = 'Induction complete. The employee is active.';
+    return out;
+  }
+  if (status === 'activated') {
+    if (!openTasks.length) {
+      out.state = 'complete'; out.completedAt = assignment.activated_at || null;
+      out.summary = 'Induction complete. The employee is active.';
+      return out;
+    }
+    out.state = 'active';
+    out.summary = `Active. ${openTasks.length} setup task(s) still open: ${openTasks.slice(0, 3).map((t) => t.title).join(', ')}.`;
+    out.next = taskNext(openTasks[0]);
+    return out;
+  }
+  if (!stage2Complete) {
+    if (!sorted.length && !indReqs.length) return out;
+    out.state = 'parallel';
+    out.summary = `Internal setup under way (${sorted.length - openTasks.length} of ${sorted.length} ready); the starter's induction: ${R.done} of ${R.total} done.`;
+    return out;
+  }
+  out.state = 'active';
+  const A = activation || null;
+  if (A && A.ok) {
+    out.summary = 'Everything required is done. Activation is waiting for you.';
+    out.next = { actor: 'admin', action: 'activate', label: 'Activate portal access', taskCode: 'portal_access' };
+  } else if (R.review > 0) {
+    out.summary = `Induction: ${R.review} item(s) to review.`;
+    out.next = { actor: 'admin', action: 'review', label: `Review ${R.review} submitted item(s)` };
+  } else if (R.employeeOpen > 0) {
+    out.summary = `Induction: ${R.done} of ${R.total} done — waiting on the starter.`;
+    out.next = { actor: 'employee', action: null, label: 'Waiting for the starter to finish the induction (policies, training)' };
+  } else if (A && A.blockers && A.blockers.length) {
+    out.summary = `Before activation: ${A.blockers.slice(0, 3).map((b) => b.title).join('; ')}${A.blockers.length > 3 ? '…' : ''}`;
+    out.next = { actor: 'admin', action: 'activation_blocked', label: `Before activation: ${A.blockers[0].title}` };
+  } else if (openTasks.length) {
+    out.summary = `${sorted.length - openTasks.length} of ${sorted.length} setup tasks done.`;
+    out.next = taskNext(openTasks[0]);
+  } else {
+    out.summary = 'Ready for activation.';
+    out.next = { actor: 'admin', action: 'activate', label: 'Activate portal access', taskCode: 'portal_access' };
+  }
+  return out;
+}
+
 function projectInduction(assignment, tasks, now, stage2Complete, induction) {
   const out = { state: 'pending', summary: 'Starts when the documentation is approved.', completedAt: null, items: [], next: null };
   const I = induction || {};
   // ── The induction PACK (Phase 3) once it has been sent ──
   if (I.sentAt) {
     const tr = I.tracking || { total: 0, done: 0, required: 0, requiredDone: 0 };
-    if (I.completedAt || assignment.status === 'completed') {
-      out.state = 'complete'; out.completedAt = I.completedAt || assignment.completed_at || null;
+    // Complete only when the person is active and every setup task is done
+    // (B-8) — never because the induction items alone came back.
+    if (assignment.status === 'completed') {
+      out.state = 'complete'; out.completedAt = assignment.completed_at || I.completedAt || null;
       out.summary = 'Induction complete. Employee active and ready for commencement.';
+      return out;
+    }
+    if (I.completedAt) {
+      out.state = 'active';
+      out.summary = assignment.status === 'activated'
+        ? 'Induction items complete — finish the remaining internal setup tasks to close the record.'
+        : 'Induction items complete — activation is waiting for the Owner.';
+      const open = (tasks || []).filter((t) => !['done', 'skipped'].includes(t.status)).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+      out.next = open[0]
+        ? { actor: 'admin', action: open[0].automation === 'activate_portal_access' ? 'activate' : 'task', taskCode: open[0].code, label: open[0].title }
+        : { actor: 'admin', action: 'activate', label: 'Activate portal access', taskCode: 'portal_access' };
       return out;
     }
     out.state = 'active';
@@ -451,12 +628,15 @@ function projectInduction(assignment, tasks, now, stage2Complete, induction) {
  * @param {object|null} p.pack    { prepared, draftId, counts:{included,returns,missingFiles} } for the document pack
  * @param {Date} p.now
  */
-function projectJourney({ assignment, offer = null, requirements = [], tasks = [], pack = null, attention = [], induction = null, payroll = null, now = new Date() }) {
+function projectJourney({ assignment, offer = null, requirements = [], tasks = [], pack = null, attention = [], induction = null, payroll = null, activation = null, route = null, now = new Date() }) {
   const closed = assignment.status === 'cancelled' || assignment.status === 'archived';
+  const portal = (route || (pack && pack.prepared ? 'paper' : 'portal')) === 'portal';
 
   const s1 = projectOffer(assignment, offer, now);
   const s2 = projectDocumentation(assignment, requirements, now, s1.state === 'complete', pack);
-  const s3 = projectInduction(assignment, tasks, now, s2.state === 'complete' || s2.formsDone === true, induction);
+  const s3 = portal
+    ? projectPortalInduction(assignment, tasks, requirements, now, s2.state === 'complete', activation)
+    : projectInduction(assignment, tasks, now, s2.state === 'complete' || s2.formsDone === true, induction);
 
   const stages = [
     { ...STAGES[0], ...pick(s1) },
@@ -500,7 +680,9 @@ function projectJourney({ assignment, offer = null, requirements = [], tasks = [
   const daysToStart = start ? daysBetween(now, start) : null;
 
   // The one-screen summary: six lines, each a state and a count.
-  const p2 = (pack && pack.tracking) || null;
+  // On the portal route the meters count requirements, split by stage.
+  const reqMeter = (rows) => ({ total: rows.filter(counts).length, done: rows.filter(counts).filter(satisfied).length });
+  const p2 = portal ? reqMeter(requirements.filter((r) => !isInductionReq(r))) : ((pack && pack.tracking) || null);
   const setupTasks = (tasks || []).filter((t) => t.code !== 'portal_access');
   const setupReady = setupTasks.filter((t) => t.status === 'done' || t.status === 'skipped').length;
   const I = induction || {};
@@ -508,14 +690,23 @@ function projectJourney({ assignment, offer = null, requirements = [], tasks = [
     offer: { state: s1.state === 'complete' ? 'complete' : s1.state === 'blocked' ? 'blocked' : s1.substage === 'waiting' ? 'waiting' : 'in_progress', label: s1.state === 'complete' ? 'Complete' : s1.substage === 'waiting' ? 'Awaiting signed offer' : s1.state === 'blocked' ? 'Declined / withdrawn' : 'In progress' },
     documentation: {
       state: s2.state, done: p2 ? p2.done : 0, total: p2 ? p2.total : 0,
-      label: s2.state === 'complete' ? 'Complete' : s2.state === 'pending' ? 'Not yet started' : p2 && p2.total ? `${p2.done} of ${p2.total} items complete` : (pack && pack.sentAt ? 'Awaiting employee' : 'Preparing the pack'),
+      label: s2.state === 'complete' ? 'Complete' : s2.state === 'pending' ? 'Not yet started'
+        : portal && assignment.status === 'created' ? 'Ready to release'
+        : portal && ['invite_sent', 'account_created'].includes(assignment.status) ? 'Invitation sent'
+        : p2 && p2.total ? `${p2.done} of ${p2.total} items complete` : (pack && pack.sentAt ? 'Awaiting employee' : 'Preparing the pack'),
       detail: s2.state === 'active' ? (s2.next && s2.next.actor === 'employee' ? 'Awaiting employee' : s2.next ? s2.next.label : '') : '',
     },
     setup: { ready: setupReady, total: setupTasks.length, label: setupTasks.length ? `${setupReady} of ${setupTasks.length} items ready` : 'Not yet started' },
     payroll: { state: payroll ? payroll.status : 'unknown', label: payroll ? payroll.label : '—' },
-    induction: {
+    induction: portal ? (() => {
+      const m = reqMeter(requirements.filter(isInductionReq));
+      return {
+        state: s3.state, done: m.done, total: m.total,
+        label: s3.state === 'complete' ? 'Complete' : !m.total ? 'Not yet started' : `${m.done} of ${m.total} complete`,
+      };
+    })() : {
       state: s3.state, done: I.tracking ? I.tracking.done : 0, total: I.tracking ? I.tracking.total : 0,
-      label: I.completedAt ? 'Complete' : I.sentAt ? `Sent — ${I.tracking ? `${I.tracking.done} of ${I.tracking.total} complete` : 'tracking'}` : I.draftId ? 'Draft in Outlook' : s2.state !== 'complete' ? 'Not yet sent' : I.readiness && !I.readiness.ready ? 'Not ready' : 'Ready to send',
+      label: I.completedAt && s3.state === 'complete' ? 'Complete' : I.completedAt ? 'Items complete' : I.sentAt ? `Sent — ${I.tracking ? `${I.tracking.done} of ${I.tracking.total} complete` : 'tracking'}` : I.draftId ? 'Draft in Outlook' : s2.state !== 'complete' ? 'Not yet sent' : I.readiness && !I.readiness.ready ? 'Not ready' : 'Ready to send',
     },
     attention: (attention || []).length,
     employee: current.key === 'complete' ? 'Active — ready for commencement' : null,

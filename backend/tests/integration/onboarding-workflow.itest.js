@@ -1074,16 +1074,21 @@ describe('creating the portal account', () => {
     expect(res.body.error).toContain('Sam Jones');
   });
 
-  test('Admin access grants the admin role, not the therapist one', async () => {
+  test('the agreed role is the record\'s: a different choice is refused, the agreed one is kept (audit B-4)', async () => {
     const { agent, assignmentId } = await readyForAccount();
-    const res = await agent.post(`/api/onboarding/assignments/${assignmentId}/account`)
+    const wrong = await agent.post(`/api/onboarding/assignments/${assignmentId}/account`)
       .send({ portalRole: 'admin' });
+    expect(wrong.status).toBe(409);
+    expect(wrong.body.code).toBe('role_mismatch');
+
+    const res = await agent.post(`/api/onboarding/assignments/${assignmentId}/account`)
+      .send({ portalRole: 'employee' });
     expect(res.status).toBe(201);
 
     const { rows } = await db.pool.query(
       'SELECT proposed_role FROM onboarding_assignments WHERE id = $1', [assignmentId]
     );
-    expect(rows[0].proposed_role).toBe('admin');
+    expect(rows[0].proposed_role).toBe('therapist');
     // And the account is still a pre-employee until activation — the role is
     // GRANTED at activation, never before.
     const { rows: user } = await db.pool.query('SELECT role FROM users WHERE id = $1', [res.body.userId]);

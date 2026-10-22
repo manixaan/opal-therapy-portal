@@ -126,8 +126,21 @@ async function buildContractDocx(input) {
     const xml = await zip.file(part)?.async('string');
     if (xml && /\[PORTAL\s+[—–-]/.test(xml)) throw new Error(`Contract of Employment: a placeholder survived in ${part}`);
   }
+  // The notices clause named a fixed mailbox; it is the practice's configured
+  // email now (onboarding settings), when one is given.
+  const notices = String(input.noticesEmail || '').trim();
+  if (notices && notices !== TEMPLATE_NOTICES_EMAIL) {
+    const xml = await zip.file('word/document.xml').async('string');
+    if (xml.includes(TEMPLATE_NOTICES_EMAIL)) {
+      zip.file('word/document.xml', xml.split(TEMPLATE_NOTICES_EMAIL).join(notices.replace(/&/g, '&amp;').replace(/</g, '&lt;')));
+      return zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
+    }
+  }
   return buffer;
 }
+
+/** The mailbox the shipped contract's notices clause was written with. */
+const TEMPLATE_NOTICES_EMAIL = 'adminservices@opaltherapy.com.au';
 
 function contractFileName(applicantName) {
   const stem = String(applicantName || 'Employee').replace(/[^A-Za-z0-9 .'-]/g, '').trim().replace(/\s+/g, ' ');

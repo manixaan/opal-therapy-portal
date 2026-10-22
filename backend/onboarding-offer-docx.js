@@ -40,13 +40,21 @@ const DEFAULTS = {
     + 'prevent or restrict the performance of Your Role.',
 };
 
-/** The practice signatory. Overridable through onboarding settings (offerSignatory*). */
-const DEFAULT_SIGNATORY = {
-  name: 'Ann Mary Mathew',
-  title: 'Director',
-  email: 'ann.mathew@opaltherapy.com.au',
-  phone: '0484 827 212',
-};
+/**
+ * The practice signatory: the onboarding settings' own defaults (the Owner
+ * edits them in Onboarding settings; callers pass the saved values).
+ */
+const { DEFAULT_SETTINGS: PRACTICE } = require('./onboarding-catalogue');
+const DEFAULT_SIGNATORY = Object.freeze({
+  name: PRACTICE.offerSignatoryName,
+  title: PRACTICE.offerSignatoryTitle,
+  email: PRACTICE.offerSignatoryEmail,
+  phone: PRACTICE.offerSignatoryPhone,
+});
+
+/** The date the template's running footer was saved with — replaced by the issue date. */
+const TEMPLATE_FOOTER_DATE = '31-08-2026';
+const FOOTER_PARTS = ['word/footer1.xml', 'word/footer2.xml', 'word/footer3.xml'];
 
 const TAGS = [
   'OPAL_LOO_DATE', 'OPAL_LOO_CANDIDATE_FULL_NAME', 'OPAL_LOO_CANDIDATE_FIRST_NAME', 'OPAL_LOO_CANDIDATE_EMAIL',
@@ -195,7 +203,29 @@ async function buildOfferDocx(input) {
     options: OPTIONS,
   });
   await assertNoPlaceholders(buffer);
-  return buffer;
+  return stampFooterDate(buffer, input.issuedAt || new Date());
+}
+
+/**
+ * The running footer carried the date the template was saved (31-08-2026) on
+ * every letter ever generated. It now carries the letter's own issue date.
+ */
+async function stampFooterDate(buffer, issuedAt) {
+  const JSZip = require('jszip');
+  const zip = await JSZip.loadAsync(buffer);
+  let changed = false;
+  for (const part of FOOTER_PARTS) {
+    const f = zip.file(part);
+    if (!f) continue;
+    const xml = await f.async('string');
+    if (!xml.includes(TEMPLATE_FOOTER_DATE)) continue;
+    zip.file(part, xml.split(TEMPLATE_FOOTER_DATE).join(dmy(issuedAt).replace(/\//g, '-')));
+    changed = true;
+  }
+  if (!changed) return buffer;
+  const out = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
+  if (buffer.docxStats) out.docxStats = buffer.docxStats;
+  return out;
 }
 
 async function assertNoPlaceholders(buffer) {
@@ -217,6 +247,6 @@ function offerFileName(applicantName, issuedAt) {
 
 module.exports = {
   TEMPLATE_FILENAME, TEMPLATE_VERSION, TEMPLATE_FILE, DOCX_MIME, CONTROL_PARTS, TAGS, DEFAULTS, DEFAULT_SIGNATORY,
-  buildScalars, buildOfferDocx, offerFileName, readTemplateBuffer,
+  buildScalars, buildOfferDocx, offerFileName, readTemplateBuffer, stampFooterDate, TEMPLATE_FOOTER_DATE,
   _internals: { employmentBasis, hoursDescription, remuneration, probation, offerClosingDate },
 };

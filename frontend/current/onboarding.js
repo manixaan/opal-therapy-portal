@@ -1203,8 +1203,10 @@
     var res = await api('/api/onboarding/assignments/' + encodeURIComponent(assignmentId())
       + '/resend-invite', { method: 'POST', body: {} });
     if (!res.ok) { toast(res.error, true); return; }
-    toast(res.emailSent ? 'Invitation resent'
-      : 'Email is not configured — use “Copy link” to share it manually', !res.emailSent);
+    // Resend always issues a NEW link (the old one stops working), so an
+    // expired invitation is never a dead end.
+    toast(res.message || (res.emailSent ? 'A new invitation link has been emailed'
+      : 'A new link is ready — use “Copy link” to share it'), !res.emailSent && !res.message);
   }
 
   async function showInviteLink() {
@@ -2392,6 +2394,7 @@
       subtitle: 'Organisation configuration and who can manage onboarding.',
       wide: true,
       body: ''
+        + practiceDetailsCard(s, user().role === 'owner')
         + '<div class="ob-section-card"><div class="ob-section-head"><h2>Organisation</h2></div>'
         + '<div class="ob-section-body">'
         + '  <div class="ob-note is-info">These answers change what the portal states is legally '
@@ -2446,6 +2449,62 @@
         + (perms.ok ? renderPermissions(perms) : ''),
       footer: '<button class="btn" onclick="Onboarding.closeModal()">Close</button>',
     });
+  }
+
+  /**
+   * The practice's own details — printed on every letter of offer, contract
+   * and onboarding email (Oct 2026: these were fixed in code). The Owner edits
+   * them; anyone else with the settings open sees them read-only.
+   */
+  var PRACTICE_FIELDS = [
+    ['practiceName', 'Practice name', 'text'], ['practiceAbn', 'ABN', 'text'], ['practiceAcn', 'ACN', 'text'],
+    ['practicePhone', 'Practice phone', 'tel'], ['practiceEmail', 'Practice email', 'email'],
+    ['practiceAddress', 'Street address (blank: none printed)', 'text'],
+    ['offerSignatoryName', 'Signatory — name', 'text'], ['offerSignatoryTitle', 'Signatory — title', 'text'],
+    ['offerSignatoryEmail', 'Signatory — email', 'email'], ['offerSignatoryPhone', 'Signatory — phone', 'tel'],
+    ['returnEmail', 'Where returns and replies go (blank: practice email)', 'email'],
+    ['defaultWorkLocation', 'Default work location for new offers', 'text'],
+  ];
+  function practiceDetailsCard(s, editable) {
+    var fund = s.defaultSuperFund || {};
+    var f = function (k, label, type, value) {
+      return '<div class="ob-field"><label for="ob-p-' + k + '">' + esc(label) + '</label>'
+        + '<input type="' + type + '" id="ob-p-' + k + '" name="' + k + '" maxlength="200" value="' + esc(value == null ? '' : value) + '"'
+        + (editable ? '' : ' readonly') + '><p class="ob-hint ob-field-error" id="ob-p-err-' + k + '" hidden></p></div>';
+    };
+    return '<div class="ob-section-card"><div class="ob-section-head"><h2>Practice details</h2></div>'
+      + '<div class="ob-section-body">'
+      + '<div class="ob-note is-info">Printed on every letter of offer, contract and onboarding email. '
+      + (editable ? 'Only you, as the practice owner, can change them.' : 'Only the practice owner can change them.') + '</div>'
+      + '<div class="ob-form"><div class="ob-form-row is-thirds">'
+      + PRACTICE_FIELDS.map(function (x) { return f(x[0], x[1], x[2], s[x[0]]); }).join('')
+      + '</div><h3 class="ob-mt-3">Default super fund (the employer section of the super choice)</h3><div class="ob-form-row is-thirds">'
+      + f('fundName', 'Fund name', 'text', fund.name) + f('fundAbn', 'Fund ABN', 'text', fund.abn) + f('fundUsi', 'Fund USI', 'text', fund.usi)
+      + '</div>'
+      + (editable ? '<div><button class="btn primary" onclick="Onboarding.savePracticeDetails()">Save practice details</button></div>' : '')
+      + '</div></div></div>';
+  }
+
+  async function savePracticeDetails() {
+    var body = {};
+    PRACTICE_FIELDS.forEach(function (x) {
+      var el = doc.getElementById('ob-p-' + x[0]);
+      if (el) body[x[0]] = el.value.trim();
+    });
+    var v = function (id) { var el = doc.getElementById('ob-p-' + id); return el && el.value.trim() ? el.value.trim() : null; };
+    body.defaultSuperFund = { name: v('fundName'), abn: v('fundAbn'), usi: v('fundUsi') };
+    doc.querySelectorAll('.ob-field-error').forEach(function (el) { el.hidden = true; el.textContent = ''; });
+    var res = await api('/api/onboarding/settings', { method: 'PUT', body: body });
+    if (!res.ok) {
+      var fields = (res.details && res.details.fields) || {};
+      Object.keys(fields).forEach(function (k) {
+        var el = doc.getElementById('ob-p-err-' + (k === 'defaultSuperFund' ? 'fundAbn' : k));
+        if (el) { el.textContent = fields[k]; el.hidden = false; }
+      });
+      toast(res.error, true);
+      return;
+    }
+    toast('Practice details saved');
   }
 
   function renderPermissions(perms) {
@@ -2731,6 +2790,23 @@
             + ' rel="noopener noreferrer">open the official page</a>.</p>';
         }
       }
+    } else if (r.attachedDocument) {
+      // The practice's own document for this person — their contract or
+      // position description. The acknowledgement is against exactly this file.
+      var ad = r.attachedDocument;
+      body += '<div class="ob-inline-actions ob-mb-3"><a class="btn" href="' + esc(ad.url) + '" target="_blank" rel="noopener">Open '
+        + esc(ad.fileName) + '</a></div>';
+      if (ad.mime === 'application/pdf') {
+        body += '<iframe class="ob-doc-frame" title="' + esc(req.title) + '" src="' + esc(ad.url) + '"></iframe>';
+      }
+    } else if (r.attachedDocument === null) {
+      openModal({
+        title: req.title,
+        body: '<div class="ob-note is-info">The practice has not attached this document yet. You do not need to do anything — '
+          + 'it will appear here when it is ready.</div>',
+        footer: '<button class="btn primary" onclick="Onboarding.closeModal()">Close</button>',
+      });
+      return;
     } else if (req.externalUrl) {
       body += '<p>This is published by an external body. Open it, read it, then confirm below.</p>'
         + '<p class="ob-mt-3"><a class="btn" href="' + esc(req.externalUrl) + '" target="_blank"'
@@ -3105,6 +3181,17 @@
         + (r.prefill
           ? '<div class="ob-note is-ok"><strong>We filled this in for you.</strong> '
             + esc(r.prefill.message) + '</div>'
+          : '')
+        // The employer's section of the super choice (who is paying, under
+        // which ABN, and the default fund) — from the practice's settings.
+        + (req.formKey === 'super_setup' && r.employer
+          ? '<div class="ob-note is-info"><strong>Your employer:</strong> ' + esc(r.employer.name)
+            + (r.employer.abn ? ' · ABN ' + esc(r.employer.abn) : '')
+            + (r.employer.defaultFund && r.employer.defaultFund.name
+              ? '<br>Default fund if you do not choose one: ' + esc(r.employer.defaultFund.name)
+                + (r.employer.defaultFund.usi ? ' (USI ' + esc(r.employer.defaultFund.usi) + ')' : '')
+              : '')
+            + '</div>'
           : '')
         + builder(r.values),
       footer: '<button class="btn" onclick="Onboarding.closeModal()">Cancel</button>'
@@ -4077,12 +4164,10 @@
       subtitle: a.name || '',
       body: '<div class="ob-note is-info">We will generate a temporary password and show it to you '
         + 'once. They will be asked to choose their own the first time they sign in.</div>'
-        + '<div class="ob-field"><label>Portal access</label>'
-        + radio('portalRole', 'employee', 'Employee',
-          'Their own calendar, their own clients, their own records.', true)
-        + radio('portalRole', 'admin', 'Admin',
-          'Practice-wide scheduling and travel. No financials, no user management.', false)
-        + '</div>'
+        // The role is the one agreed on the onboarding record and is granted
+        // only when the Owner presses Activate — this dialog never changes it.
+        + '<p class="ob-hint">Portal access: the role agreed on the onboarding record'
+        + (a.proposedRole ? ' (' + esc(titleCase(a.proposedRole)) + ')' : '') + ', granted when you activate them.</p>'
         + field2('Sign-in email', 'loginEmail', 'email', a.loginEmail || a.email || '')
         + '<p class="ob-hint">This is what they type to sign in. It can be their personal address '
         + 'or an Opal Therapy one — whichever they will actually use.</p>',
@@ -4095,7 +4180,7 @@
   async function submitCreateAccount() {
     var v = modalValues();
     var res = await api('/api/onboarding/assignments/' + encodeURIComponent(assignmentId())
-      + '/account', { method: 'POST', body: { portalRole: v.portalRole, loginEmail: v.loginEmail } });
+      + '/account', { method: 'POST', body: { loginEmail: v.loginEmail } });
     if (!res.ok) { modalError(res.error); return; }
     showCredential(res, 'Account created');
     await refreshAssignment();
@@ -4700,6 +4785,7 @@
     submitImport: submitImport,
     applyImport: applyImport,
     saveSettings: saveSettings,
+    savePracticeDetails: savePracticeDetails,
     savePermissions: savePermissions,
     // employee
     openDocument: openDocument,

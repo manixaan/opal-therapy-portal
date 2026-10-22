@@ -3,10 +3,14 @@
 /**
  * EMAIL 2 — the message that carries the Onboarding Documentation Pack.
  *
- * Opal's wording, verbatim, with two substitutions: [Name] (first name) and
+ * Opal's wording with two substitutions: [Name] (first name) and
  * [DD/MM/YYYY] (seven days after the day the email goes). The due date is
  * fixed when the Outlook draft is created — that is the date the employee
  * reads — and the record shows the same date.
+ *
+ * Oct 2026 (owner decision 1): the email no longer asks for a tax summary, bank
+ * details or identity copies by email — those are collected in the portal.
+ * The sign-off is the practice signatory from onboarding settings.
  */
 
 const SUBJECT = 'Onboarding Documentation Pack - Opal Therapy';
@@ -21,24 +25,18 @@ Attachments: ZIP folder including –
 - Contract of Employment
 - Superannuation Form
 - FWIS (and FTCIS/CEIS)
-- New Employee Details, with the copies the form asks for:
-   o Driver's licence (front and back)
-   o Passport photo page (identity and right to work)
-   o Visa evidence / VEVO check (if you are not an Australian citizen or permanent resident)
-   o AHPRA registration certificate (registered roles)
-   o First Aid / CPR certificate (where required for your role)
-   o NDIS Worker Screening clearance
-   o WWCC clearance
-   o National Police Check certificate
+- New Employee Details
+
+Your identity documents, registrations, screening clearances and certificates are uploaded securely through the Opal Portal, not returned by email.
 
 Please download and extract the ZIP folder, carefully review each document, and complete and sign all documentation applicable to you. Please return the completed documentation within seven days, by [DD/MM/YYYY].
 
 Tax File Number Declaration
 
-Complete your ATO declaration form using your myGov account:
+Complete your TFN declaration through your myGov account:
 ato.gov.au/forms-and-instructions/tfn-declaration
 
-Generate your Employee Tax Details Summary and email it to us at ann.mathew@opaltherapy.com.au.
+Please never send your tax file number, bank details or identity documents by email. We will ask you to provide them securely through the Opal Portal.
 
 Before returning the pack, please check that all required fields, dates, signatures and supporting documents have been included. If you have any questions or are waiting for a screening or credential document, please let us know as soon as possible.
 
@@ -62,10 +60,10 @@ function dueDateFrom(from = new Date()) {
 const ddmmyyyy = (d) => new Date(d).toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Australia/Perth' });
 
 /** The default Email 2 for a record, with the due date it states. */
-function composePackEmail({ applicantName, sentAt = new Date() }) {
+function composePackEmail({ applicantName, sentAt = new Date(), signOff }) {
   const dueAt = dueDateFrom(sentAt);
   const body = BODY.replace(/\[Name\]/g, firstName(applicantName)).replace(/\[DD\/MM\/YYYY\]/g, ddmmyyyy(dueAt));
-  return { subject: SUBJECT, body, dueAt };
+  return { subject: SUBJECT, body: require('./onboarding-practice').applySignOff(body, signOff), dueAt };
 }
 
 /** Re-stamp the due date in an edited body, if the Owner kept the placeholder or the old date. */

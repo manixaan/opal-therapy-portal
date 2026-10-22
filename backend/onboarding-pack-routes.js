@@ -150,9 +150,10 @@ async function packDetail(req, assignment, phase = 'documentation') {
   const included = items.filter((i) => i.status === 'included');
   const zip = await wdb.getLiveStarterPack(assignment.id);
   const zipIsOurs = zip && Array.isArray(zip.manifest) && (zip.manifest.length === 0 || zip.manifest[0].phase === phase);
+  const signOff = require('./onboarding-practice').practiceProfile(await odb.getOnboardingSettings()).signOff;
   const emailDefault = phase === 'induction'
-    ? induction.composeInductionEmail({ applicantName: assignment.applicant_name })
-    : packEmail.composePackEmail({ applicantName: assignment.applicant_name });
+    ? induction.composeInductionEmail({ applicantName: assignment.applicant_name, signOff })
+    : packEmail.composePackEmail({ applicantName: assignment.applicant_name, signOff });
   const base = `/api/onboarding/journey/records/${assignment.id}/${P.prefix}`;
   // A document marked not applicable is set aside: it is neither tracked nor expected back.
   const tracked = included.filter((i) => (i.employeeReturns || i.itemKind !== 'document') && i.progress !== 'not_applicable');
@@ -318,25 +319,82 @@ async function shippedFileSuperseded(doc, shippedPath) {
 }
 function offerDocxMime() { return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'; }
 
-/** The attachments in the pack that still have no file at all — nothing is sent while any remain. */
+/**
+ * The attachments in the pack that cannot go to a starter — no file at all,
+ * a "PLACEHOLDER - …" stand-in, or a file still holding "[TO CONFIRM …]"
+ * gaps (owner decision 4). Nothing is sent while any remain; each is named.
+ */
 async function missingFilesFor(assignment, phase) {
+  const placeholder = require('./onboarding-placeholder-check');
   const rows = (await pdb.listItems(assignment.id, undefined, phase)).filter((r) => r.status === 'included' && r.sends_document);
-  return rows.filter((r) => { const f = pdb.describeItemFile(r); return f.source === 'none' || f.source === 'link'; }).map((r) => r.title);
+  const out = [];
+  for (const r of rows) {
+    const f = pdb.describeItemFile(r);
+    if (f.source === 'none' || f.source === 'link') { out.push(r.title); continue; }
+    if (placeholder.isPlaceholderName(f.fileName)) { out.push(`${r.title} (a placeholder, not the practice document)`); continue; }
+    const file = await pdb.readItemFile(r).catch(() => null);
+    const why = file ? await placeholder.fileProblem({ buffer: file.bytes, mime: file.mime, fileName: file.fileName }) : null;
+    if (why) out.push(`${r.title} (${why})`);
+  }
+  return out;
+}
+
+/**
+ * The record's contract, composed from the practice's contract template (the
+ * library copy of DOC_CONTRACT_TEMPLATE, else the shipped master) and the
+ * agreed terms. Null when no template with the portal's fields exists.
+ */
+async function generateContractFor(assignment) {
+  const fs = require('fs'); const path = require('path');
+  const contractDocx = require('./onboarding-contract-docx');
+  let templateBytes = null;
+  const doc = await odb.getDocumentByCode(assignment.organisation_id, 'DOC_CONTRACT_TEMPLATE').catch(() => null);
+  if (doc) {
+    const v = await odb.getCurrentDocumentVersion(doc.id).catch(() => null);
+    if (v && v.file_data) templateBytes = Buffer.from(v.file_data, 'base64');
+  }
+  if (!templateBytes || !(await contractDocx.isContractTemplate(templateBytes))) {
+    const shipped = path.join(__dirname, 'onboarding-templates', 'stage2', 'contract-of-employment.docx');
+    templateBytes = fs.existsSync(shipped) ? fs.readFileSync(shipped) : null;
+  }
+  if (!templateBytes || !(await contractDocx.isContractTemplate(templateBytes))) return null;
+  const file = await personaliseItemFile(assignment, { code: 'PACK_CONTRACT' }, {
+    bytes: templateBytes, mime: offerDocxMime(), fileName: 'Contract of Employment.docx',
+  });
+  return { buffer: file.bytes, fileName: file.fileName, fileMime: offerDocxMime() };
 }
 
 /** A users row for the record, created once; the employment profile from the offer terms. */
 async function ensureProfileOwner(assignment) {
-  if (!assignment.user_id) {
-    const { rows } = await odb.pool.query(
-      `INSERT INTO users (email, name, role, organisation_id, is_active, account_status, email_verified, profile_completed, is_treating_therapist)
-       VALUES (LOWER($1), $2, 'pre_employee', $3, TRUE, 'active', FALSE, TRUE, $4)
-       ON CONFLICT (email) DO UPDATE SET role = CASE WHEN users.role = 'pre_employee' THEN 'pre_employee' ELSE users.role END, organisation_id = COALESCE(users.organisation_id, $3)
-       RETURNING id, role`,
-      [assignment.applicant_email, assignment.applicant_name, assignment.organisation_id, assignment.is_treating_therapist === true]
-    );
-    await odb.pool.query('UPDATE onboarding_assignments SET user_id = $2, updated_at = NOW() WHERE id = $1 AND user_id IS NULL', [assignment.id, rows[0].id]);
-    assignment.user_id = rows[0].id;
-  }
+  // Only ever this record's OWN pre-employee (audit B-1). This used to be
+  // INSERT … ON CONFLICT (email) DO UPDATE, which adopted any account that
+  // shared the applicant's email — an Admin or the Owner included — and then
+  // overwrote its employment profile. Re-checked even when the link exists.
+  const guard = require('./onboarding-account-guard');
+  await odb.withTransaction(async (q) => {
+    if (assignment.user_id) {
+      await guard.assertOwnPreEmployee(q, assignment, assignment.user_id, { lock: true });
+      return;
+    }
+    const found = await guard.adoptableByEmail(q, assignment, assignment.applicant_email, { lock: true });
+    let userId;
+    if (found.exists) {
+      if (!found.ok) throw new guard.AccountGuardError(found.code, found.error);
+      userId = found.user.id;
+    } else {
+      // Created INACTIVE: nobody signs in to a pre-release account (B-29).
+      // The invitation (or a temporary password) activates it.
+      const { rows } = await q.query(
+        `INSERT INTO users (email, name, role, organisation_id, is_active, account_status, email_verified, profile_completed, is_treating_therapist)
+         VALUES (LOWER($1), $2, 'pre_employee', $3, FALSE, 'active', FALSE, TRUE, $4)
+         RETURNING id`,
+        [assignment.applicant_email, assignment.applicant_name, assignment.organisation_id, assignment.is_treating_therapist === true]
+      );
+      userId = rows[0].id;
+    }
+    await q.query('UPDATE onboarding_assignments SET user_id = $2, updated_at = NOW() WHERE id = $1 AND user_id IS NULL', [assignment.id, userId]);
+    assignment.user_id = userId;
+  });
   await odb.upsertEmploymentProfile(assignment.user_id, assignment.organisation_id, {
     assignmentId: assignment.id, jobTitle: assignment.job_title, employmentType: assignment.employment_type, roleCategory: assignment.role_category,
     startDate: assignment.start_date, endDate: assignment.end_date, hoursPerWeek: assignment.hours_per_week ?? undefined,
@@ -373,6 +431,7 @@ async function personaliseItemFile(assignment, row, file) {
     },
     applicant: { name: assignment.applicant_name, email: assignment.applicant_email, mobile: assignment.mobile },
     signatory: { name: st.offerSignatoryName, title: st.offerSignatoryTitle, email: st.offerSignatoryEmail, phone: st.offerSignatoryPhone },
+    noticesEmail: require('./onboarding-practice').practiceProfile(st).email,
     issuedAt: new Date(),
     isTreatingTherapist: assignment.is_treating_therapist === true || assignment.role_category === 'occupational_therapist',
   });
@@ -399,7 +458,8 @@ async function buildZipForRecord(req, assignment, phase = 'documentation') {
   const org = await orgName(assignment.organisation_id);
   const built = await pack.buildPackZip(resolved, {
     orgName: org, employeeName: assignment.applicant_name, roleTitle: assignment.job_title,
-    dueDate: assignment[PHASES[phase].cols.dueAt], returnEmail: req.user.email, packName: PHASES[phase].zipName,
+    // Returns go to the practice's configured address, not to whoever pressed the button.
+    dueDate: assignment[PHASES[phase].cols.dueAt], returnEmail: require('./onboarding-practice').practiceProfile(await odb.getOnboardingSettings()).returnEmail, packName: PHASES[phase].zipName,
   });
   built.manifest = built.manifest.map((m) => ({ ...m, phase }));
   built.fileName = built.fileName.replace('Onboarding Documentation Pack', PHASES[phase].zipName);
@@ -455,7 +515,16 @@ router.get(`${BASE}`, requirePermission('onboarding.view'), safe(async (req, res
     const assignment = await loadRecord(req);
     if (!assignment) return notFound(res);
     if (!(await phase1Settled(assignment))) return res.status(409).json({ error: 'The letter of offer has not been verified yet.', code: 'phase1_open' });
-    const out = await preparePack(assignment);
+    // The paper pack is the secondary route (owner decision 1): never laid
+    // over a record already released to the starter through the portal.
+    if (assignment.released_at && !assignment.pack_prepared_at) {
+      return res.status(409).json({ error: 'This onboarding has been released to the starter through the portal. The paper pack is not used for it.', code: 'portal_route' });
+    }
+    let out;
+    try { out = await preparePack(assignment); } catch (err) {
+      if (err instanceof require('./onboarding-account-guard').AccountGuardError) return res.status(409).json({ error: err.message, code: 'account_exists' });
+      throw err;
+    }
     await auditOnboarding(req, P.auditPrefix + '_prepared', { targetType: 'onboarding_assignment', targetId: assignment.id, metadata: { assignmentId: assignment.id, inserted: out.inserted, total: out.total } });
     await respond(req, res, assignment, 200, phase);
   }));
@@ -743,7 +812,8 @@ router.get(`${BASE}`, requirePermission('onboarding.view'), safe(async (req, res
     const now = new Date();
     const E = P.email;
     const dueAt = E.dueDateFrom(now);
-    const d = phase === 'induction' ? E.composeInductionEmail({ applicantName: assignment.applicant_name, sentAt: now }) : E.composePackEmail({ applicantName: assignment.applicant_name, sentAt: now });
+    const signOff = require('./onboarding-practice').practiceProfile(await odb.getOnboardingSettings()).signOff;
+    const d = phase === 'induction' ? E.composeInductionEmail({ applicantName: assignment.applicant_name, sentAt: now, signOff }) : E.composePackEmail({ applicantName: assignment.applicant_name, sentAt: now, signOff });
     const subject = str(req.body?.subject, 250) || assignment[C.subject] || d.subject;
     const rawBody = (typeof req.body?.body === 'string' && req.body.body.trim()) ? req.body.body.slice(0, 20000) : (assignment[C.body] || d.body);
     const body = E.restampDueDate(rawBody, assignment[C.dueAt], dueAt);
@@ -877,4 +947,4 @@ registerPackRoutes('documentation');
 registerPackRoutes('induction');
 
 module.exports = router;
-module.exports._internals = { PHASES, preparePack, ensureProfileOwner, ensurePlaceholderDocuments, packDetail, buildZipForRecord, itemRow, readUpload, packEditable, readinessFor };
+module.exports._internals = { PHASES, preparePack, ensureProfileOwner, generateContractFor, missingFilesFor, ensurePlaceholderDocuments, packDetail, buildZipForRecord, itemRow, readUpload, packEditable, readinessFor };

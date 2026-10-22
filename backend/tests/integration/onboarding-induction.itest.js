@@ -119,6 +119,8 @@ async function throughPhase2(agent) {
   const res = await agent.post('/api/onboarding/journey/records').send(ADMIN);
   const id = res.body.record.id; const base = `/api/onboarding/journey/records/${id}`;
   await agent.post(`${base}/offer/skip`);
+  // The paper document pack is now a secondary route, prepared on request (owner decision 1).
+  await agent.post(`${base}/pack/prepare`);
   await agent.post(`${base}/pack/mark-sent`);
   return { id, base };
 }
@@ -216,20 +218,21 @@ describe('Payroll Setup and Phase 3', () => {
       if (item) expect((await agent.post(`${base}/pack/items/${item.id}/not-applicable`).send({ note: 'Not required for this role' })).status).toBe(200);
     }
     await agent.post(`${base}/tasks/work_email/complete`).send({ note: 'bob@opaltherapy.com.au' });
+    // The account counts only once Bob signs in with a password he chose (audit B-3).
+    await db.pool.query(
+      `UPDATE users SET password_hash = 'chosen-by-bob', password_is_temporary = FALSE, must_change_password = FALSE
+        WHERE id = (SELECT user_id FROM onboarding_assignments WHERE id = $1)`, [rec.body.record.id]);
     rec = await agent.get(base);
     if (!rec.body.induction.readiness.ready) console.log('BLOCKERS', JSON.stringify(rec.body.induction.readiness.blockers));
     expect(rec.body.induction.readiness.ready).toBe(true);
     expect(rec.body.journey.stages[1].state).toBe('complete');
-    // Since dd842e5 the portal sets the person up itself the moment the last
-    // required document is verified: portal access is already activated, so
-    // the journey's next line is the first open Internal Setup task rather
-    // than a manual "prepare the induction" step.
-    expect(rec.body.record.status).toBe('activated');
-    expect(rec.body.journey.next).toMatchObject({ actor: 'admin', action: 'task' });
+    // Owner decision 2 (Oct 2026): the documentation being verified NEVER
+    // activates anyone. The task says what is left; the Owner presses Activate.
+    expect(rec.body.record.status).not.toBe('activated');
     const { rows: acct } = await db.pool.query(
       "SELECT status, note FROM onboarding_internal_tasks WHERE code = 'portal_access' AND assignment_id = $1", [rec.body.record.id]);
-    expect(acct[0]).toMatchObject({ status: 'done' });
-    expect(acct[0].note).toMatch(/Activated by the portal/);
+    expect(acct[0].status).toBe('pending');
+    expect(acct[0].note).toMatch(/Waiting on/);
     // The account item follows its task.
     expect(rec.body.induction.items.find((i) => i.code === 'IND_OUTLOOK_ACTIVE').progress).toBe('verified');
 
@@ -280,11 +283,16 @@ describe('Payroll Setup and Phase 3', () => {
     // so the remaining manual ones (payroll, systems, equipment) are ticked
     // here before the walkthrough, exactly as an admin would.
     const internal = rec.body.internalTasks || rec.body.tasks || [];
-    for (const t of internal.filter((x) => ['pending', 'in_progress'].includes(x.status) && x.code !== 'induction_walkthrough')) {
+    for (const t of internal.filter((x) => ['pending', 'in_progress'].includes(x.status) && !x.automation && x.code !== 'induction_walkthrough')) {
       const done = await agent.post(`${base}/tasks/${t.code}/complete`).send({ note: 'done in test' });
       expect([200, 201]).toContain(done.status);
     }
     await agent.post(`${base}/tasks/induction_walkthrough/complete`);
+    rec = await agent.get(base);
+    // Everything else done: still not active until the Owner presses Activate.
+    expect(rec.body.record.status).not.toBe('activated');
+    const activated = await agent.post(`${base}/tasks/portal_access/run`);
+    expect(activated.status).toBe(200);
     rec = await agent.get(base);
     expect(rec.body.record.status).toBe('completed');
     expect(rec.body.journey.stage.key).toBe('complete');

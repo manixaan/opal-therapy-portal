@@ -106,14 +106,15 @@ router.get('/api/onboarding/journey/defaults/:packageId', requirePermission('onb
   if (!pkg) return notFound(res);
   const sample = { name: 'Sample Employee', position: pkg.title.split('—')[0].trim() };
   const [documentation, inductionItems] = await Promise.all([defaultItems(req, pkg, 'documentation'), defaultItems(req, pkg, 'induction')]);
+  const signOff = require('./onboarding-practice').practiceProfile(await odb.getOnboardingSettings()).signOff;
   res.json({
     ok: true,
     package: { id: pkg.id, code: pkg.code, title: pkg.title, roleCategory: pkg.role_category, employmentType: pkg.employment_type, published: pkg.status === 'published' && Number(pkg.current_version) > 0 },
     letter: { previewUrl: `/api/onboarding/journey/defaults/${pkg.id}/letter/preview.docx`, downloadUrl: `/api/onboarding/journey/defaults/${pkg.id}/letter/preview.docx?download=1`, pdfUrl: `/api/onboarding/journey/defaults/${pkg.id}/letter/download.pdf`, templateVersion: offerDocx.TEMPLATE_VERSION, sample },
     emails: {
-      offer: offerEmail.composeOfferEmail({ applicantName: sample.name, positionTitle: sample.position }),
-      documentation: packEmail.composePackEmail({ applicantName: sample.name }),
-      induction: induction.composeInductionEmail({ applicantName: sample.name }),
+      offer: offerEmail.composeOfferEmail({ applicantName: sample.name, positionTitle: sample.position, signOff }),
+      documentation: packEmail.composePackEmail({ applicantName: sample.name, signOff }),
+      induction: induction.composeInductionEmail({ applicantName: sample.name, signOff }),
     },
     phases: { documentation: { items: documentation }, induction: { items: inductionItems } },
     can: { edit: require('./permissions').hasPermission(req.user, 'onboarding.manage_packages') },

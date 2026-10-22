@@ -209,20 +209,30 @@ activation can later set it back to the role the onboarding proposed.
 
 1. **Create the onboarding** (Onboarding → Start onboarding / assign a package).
    Choose their role for after onboarding: Therapist ("Employee"), Admin or Read-only.
-2. **Give them a way in** — either:
-   - **Release** (preferred): creates a **pre-employee** account with no password
-     and emails an **onboarding link** (`/onboarding-invite?token=…`, 14 days by
-     default, up to 60). They choose their password there and are signed straight
-     in to their onboarding. Use the Onboarding screen's **Resend invitation** if needed.
-   - **Create portal account** (Owner only): issues a **temporary password**
-     (e.g. `Harbour-olive-dune-numbat-4821-0937`), shown to you **once**. It expires
-     after 7 days unused (adjustable 1–30). On first sign-in they must set their own.
-3. As a pre-employee they see **only** their own onboarding: forms, uploads,
-   policy acknowledgements, assigned learning.
-4. **Activation:** when every blocking requirement is approved/verified, someone
-   with `onboarding.activate` presses **Activate**, or the portal activates them
-   automatically once the documentation stage is complete. Their role changes to
-   the one chosen in step 1; they get an "account active" email and notification.
+2. **Release** (Stage 2): creates a **pre-employee** account with no password
+   and an **onboarding link** (`/onboarding-invite?token=…`, 14 days by default,
+   up to 60) — emailed when email is configured, otherwise copied from the record.
+   They choose their own password there and are signed straight in to their
+   onboarding. **Resend invitation** always issues a new link (the old one stops
+   working), so an expired link is never a dead end. Release is refused while any
+   document they would acknowledge still contains "[TO CONFIRM …]", is a
+   placeholder, or is unpublished — the refusal names each one. Attach their
+   **Employment contract** and **Position description** on the record; they cannot
+   acknowledge either until it is attached.
+   - **Create portal account** (Owner only) remains a fallback on a released
+     record: a **temporary password**, shown once, expiring after 7 days. It never
+     changes the agreed role, the record's status or its list of items.
+3. As a pre-employee they see **only** their own onboarding: personal details,
+   emergency contact, TFN, bank, super, identity, credential uploads (these become
+   their credential records), contract/PD and policy acknowledgements, training.
+   Nothing sensitive is ever requested by email.
+4. **Activation is only ever the Owner pressing Activate.** The button stays
+   disabled, listing what is outstanding, until the starter has set their own
+   password, every blocking item is verified/acknowledged, and the induction
+   walkthrough task is done. Their role changes to the one chosen in step 1. The
+   record shows "Complete" only once every internal setup task is done or skipped.
+   Waivers and "not applicable" are the Owner's alone, with a reason; Ahpra, NDIS
+   Worker Screening and WWCC can never be set aside for a clinician.
 5. On their next click they have their full role. For a therapist, link their
    Splose practitioner (§9) and ask them to connect Outlook.
 

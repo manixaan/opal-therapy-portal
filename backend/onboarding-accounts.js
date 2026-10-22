@@ -204,11 +204,9 @@ function classifyAccountTarget(existingUser, assignment) {
     return { action: 'adopt', userId: existingUser.id };
   }
 
-  // Our own subject, already promoted — a retry after a partial success.
-  if (assignment.user_id && existingUser.id === assignment.user_id) {
-    return { action: 'adopt', userId: existingUser.id };
-  }
-
+  // Anything else — staff, Owner, or an account this record was once
+  // (wrongly) linked to — is never adopted (audit B-1). Adopting it here
+  // demoted a live account to pre_employee and replaced its password.
   return {
     action: 'conflict',
     reason: existingUser.is_active === false
@@ -218,7 +216,15 @@ function classifyAccountTarget(existingUser, assignment) {
   };
 }
 
+/** What the Owner calls a portal role. */
+const ROLE_LABELS = Object.freeze({ therapist: 'Employee', admin: 'Admin', read_only: 'Read only', pre_employee: 'Pre-employee', owner: 'Owner' });
+function roleLabel(role) { return ROLE_LABELS[role] || String(role || ''); }
+/** The dialog key for a role ('employee' for therapist), or the role itself. */
+function portalKeyFor(role) { return role === 'therapist' ? 'employee' : String(role || ''); }
+
 module.exports = {
+  roleLabel,
+  portalKeyFor,
   SALT_ROUNDS,
   TEMP_PASSWORD_TTL_DAYS,
   PORTAL_ROLES,

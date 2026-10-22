@@ -139,10 +139,10 @@ function inviteProblem(invite) {
     return { code: 'revoked', message: 'This onboarding link has been cancelled. Please contact the practice.' };
   }
   if (invite.status === 'expired') {
-    return { code: 'expired', message: 'This onboarding link has expired. Please ask for a new one.' };
+    return { code: 'expired', message: 'This onboarding link has expired. Ask the practice to send you a new one — it takes them one click, and the new link works straight away.' };
   }
   if (invite.expires_at && new Date(invite.expires_at) <= new Date()) {
-    return { code: 'expired', message: 'This onboarding link has expired. Please ask for a new one.' };
+    return { code: 'expired', message: 'This onboarding link has expired. Ask the practice to send you a new one — it takes them one click, and the new link works straight away.' };
   }
   if (!invite.assignment_id) {
     return { code: 'invalid', message: 'This onboarding link is not valid.' };
@@ -213,6 +213,20 @@ router.post('/api/onboarding-invite/accept', inviteRateLimit, safe(async (req, r
       throw err;
     }
 
+    // Only ever this onboarding's own pre-employee (audit B-1). An account
+    // that has since become — or always was — a staff or Owner account keeps
+    // its password: the invitation is refused and the spend rolled back.
+    const { rows: arows } = await q.query(
+      'SELECT id, organisation_id FROM onboarding_assignments WHERE id = $1', [invite.assignment_id]
+    );
+    const own = await require('./onboarding-account-guard')
+      .loadAndAssess(q, arows[0] || { id: invite.assignment_id, organisation_id: invite.organisation_id }, userId, { lock: true });
+    if (!own.ok) {
+      const err = new Error('account_not_owned');
+      err.code = 'ACCOUNT_NOT_OWNED';
+      throw err;
+    }
+
     await q.query(
       `UPDATE users
           SET password_hash = $2, name = COALESCE($3, name),
@@ -224,7 +238,7 @@ router.post('/api/onboarding-invite/accept', inviteRateLimit, safe(async (req, r
               password_is_temporary = FALSE, must_change_password = FALSE,
               temp_password_expires_at = NULL, password_changed_at = NOW(),
               updated_at = CURRENT_TIMESTAMP
-        WHERE id = $1`,
+        WHERE id = $1 AND role = 'pre_employee'`,
       [userId, passwordHash, str(name, 200)]
     );
 
@@ -240,6 +254,12 @@ router.post('/api/onboarding-invite/accept', inviteRateLimit, safe(async (req, r
     if (err.code === 'INVITE_SPENT') {
       res.status(409).json({
         error: 'This link has already been used. Please sign in instead.', code: 'used',
+      });
+      return null;
+    }
+    if (err.code === 'ACCOUNT_NOT_OWNED') {
+      res.status(409).json({
+        error: 'This onboarding link cannot be used for this account. Please contact the practice.', code: 'account_conflict',
       });
       return null;
     }
@@ -374,6 +394,13 @@ router.get('/api/onboarding/me/requirements/:rid', safe(async (req, res) => {
       payload.values = await odb.getPersonalDetails(req.user.id);
     } else if (['bank_details', 'tax_setup', 'super_setup'].includes(snap.form_key)) {
       payload.values = odb.payrollView(await odb.getPayrollProfileMasked(req.user.id));
+      if (snap.form_key === 'super_setup') {
+        // The employer's part of the super choice, from the practice settings.
+        const settings = await odb.getOnboardingSettings();
+        const p = require('./onboarding-practice').practiceProfile(settings);
+        const fund = settings.defaultSuperFund || {};
+        payload.employer = { name: p.name, abn: p.abn, defaultFund: fund.name ? { name: fund.name, abn: fund.abn || null, usi: fund.usi || null } : null };
+      }
     } else if (['identity', 'right_to_work'].includes(snap.form_key)) {
       payload.values = await odb.listIdentityRecordsMasked(req.user.id);
     }
@@ -381,6 +408,15 @@ router.get('/api/onboarding/me/requirements/:rid', safe(async (req, res) => {
   if (requirement.handler === 'credential' && requirement.credential_id) {
     const creds = await odb.listCredentialsForUser(req.user.id);
     payload.credential = creds.find((c) => c.id === requirement.credential_id) || null;
+  }
+  // The record's own contract / position description, when one answers this item.
+  const recordDocs = require('./onboarding-record-documents');
+  if (requirement.handler === 'document_ack' && recordDocs.kindFor(requirement.template_code)) {
+    const doc = await recordDocs.forRequirement(assignment.id, requirement.template_code);
+    payload.attachedDocument = doc ? {
+      id: doc.id, fileName: doc.file_name, mime: doc.file_mime, uploadedAt: doc.uploaded_at,
+      url: `/api/onboarding/me/requirements/${requirement.id}/document`,
+    } : null;
   }
 
   // PROVENANCE for anything we filled in on their behalf.
@@ -567,6 +603,38 @@ router.post('/api/onboarding/me/requirements/:rid/acknowledge', safe(async (req,
     });
   }
 
+  // Nothing is acknowledged without a document behind it, and never a
+  // document that still has gaps in it (audit B-5, owner decision 4). The
+  // contract and position description are the record's own attached files.
+  let attached = null;
+  if (requirement.handler === 'document_ack') {
+    const placeholder = require('./onboarding-placeholder-check');
+    const docTitle = snap.document?.title || requirement.title;
+    if (snap.document_id && snap.document_version_id) {
+      const why = await placeholder.versionProblem(await odb.getDocumentVersion(snap.document_version_id));
+      if (why) {
+        return res.status(409).json({
+          error: `${docTitle} is not ready to be acknowledged yet`,
+          message: 'The practice is still finalising this document. You do not need to do anything — it will appear here when it is ready.',
+          code: 'document_not_ready',
+        });
+      }
+    } else if (!snap.document_id) {
+      const recordDocs = require('./onboarding-record-documents');
+      attached = await recordDocs.forRequirement(assignment.id, requirement.template_code);
+      if (!attached) {
+        return res.status(409).json({
+          error: `${docTitle} has not been attached yet`,
+          message: 'The practice still needs to attach this document. You do not need to do anything — it will appear here when it is ready.',
+          code: 'document_not_attached',
+        });
+      }
+      if (req.body?.attachedDocumentId && req.body.attachedDocumentId !== attached.id) {
+        return res.status(409).json({ error: 'This document has been replaced since you opened it. Please read the current version.', code: 'document_replaced' });
+      }
+    }
+  }
+
   let acknowledgement = null;
   if (snap.document_version_id && snap.document_id) {
     acknowledgement = await odb.recordAcknowledgement({
@@ -615,7 +683,11 @@ router.post('/api/onboarding/me/requirements/:rid/acknowledge', safe(async (req,
 
   try {
     await advanceRequirement(req, assignment, requirement, {
-      data: { acknowledged: true, typedLegalName: typedName || undefined },
+      // The exact file acknowledged, for the record's own documents.
+      data: {
+        acknowledged: true, typedLegalName: typedName || undefined,
+        ...(attached ? { attachedDocumentId: attached.id, attachedDocumentSha256: attached.file_sha256, attachedFileName: attached.file_name } : {}),
+      },
       acknowledgementId: acknowledgement?.id || null,
       eventType: 'acknowledged',
     });
@@ -675,6 +747,40 @@ const AU_STATES = ['WA', 'SA', 'NT', 'QLD', 'NSW', 'ACT', 'VIC', 'TAS'];
 async function recordPayrollNotice(userId) {
   const { PRIVACY_NOTICE_VERSION } = require('./xero-payroll-mapping');
   await require('./xero-payroll-db').recordPrivacyNotice(userId, PRIVACY_NOTICE_VERSION);
+}
+
+/**
+ * The values the database accepts for each choice field (migration 034's
+ * CHECK lists). An unrecognised value used to reach the INSERT and surface as
+ * a 500 "Internal error" (audit B-21); it is a 400 naming the field now.
+ */
+const FORM_ENUMS = Object.freeze({
+  tax_setup: { residencyStatus: ['australian_resident', 'foreign_resident', 'working_holiday_maker'] },
+  identity: {
+    evidenceType: ['australian_passport', 'foreign_passport', 'citizenship_certificate', 'birth_certificate',
+      'permanent_residency', 'visa', 'immicard', 'drivers_licence', 'medicare_card', 'other'],
+  },
+  right_to_work: { rightToWorkBasis: ['citizen', 'permanent_resident', 'nz_citizen', 'visa_with_work_rights', 'other'] },
+});
+const FIELD_LABELS = { residencyStatus: 'Residency status', evidenceType: 'Identity document', rightToWorkBasis: 'Right-to-work basis', dateOfBirth: 'Date of birth', expiryDate: 'Expiry date', issueDate: 'Issue date' };
+const DATE_FIELDS = { personal_details: ['dateOfBirth'], identity: ['issueDate', 'expiryDate'], right_to_work: ['workRightsExpiry'], vehicle_details: ['registrationExpiry', 'insuranceExpiry'] };
+
+/** { field, message } for the first unrecognised choice or unreadable date, or null. */
+function formFieldProblem(formKey, b) {
+  for (const [field, allowed] of Object.entries(FORM_ENUMS[formKey] || {})) {
+    const v = b[field];
+    if (v != null && v !== '' && !allowed.includes(v)) {
+      return { field, message: `${FIELD_LABELS[field] || field} is not one of the options — choose one from the list` };
+    }
+  }
+  for (const field of DATE_FIELDS[formKey] || []) {
+    const v = b[field];
+    if (v == null || v === '') continue;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(v)) || Number.isNaN(new Date(v).getTime())) {
+      return { field, message: `${FIELD_LABELS[field] || field} is not a valid date` };
+    }
+  }
+  return null;
 }
 
 function validateForm(formKey, b) {
@@ -778,6 +884,8 @@ router.post('/api/onboarding/me/requirements/:rid/form', safe(async (req, res) =
   }
 
   const b = req.body || {};
+  const problem = formFieldProblem(formKey, b);
+  if (problem) return res.status(400).json({ error: problem.message, field: problem.field, fields: { [problem.field]: problem.message } });
   const error = validateForm(formKey, b);
   if (error) return res.status(400).json({ error });
 
@@ -994,6 +1102,26 @@ router.post('/api/onboarding/me/requirements/:rid/upload', safe(async (req, res)
   return respondAdvanced(req, res, assignment, requirement.id, {
     document: { id: record.id, fileName: record.file_name },
   });
+}));
+
+/**
+ * The record's own contract or position description, for the requirement it
+ * answers. Self-scoped: the caller's own assignment and requirement only.
+ */
+router.get('/api/onboarding/me/requirements/:rid/document', safe(async (req, res) => {
+  const assignment = await myAssignment(req);
+  const requirement = await myRequirement(req, assignment);
+  if (!requirement || requirement.handler !== 'document_ack') return notFound(res);
+  const recordDocs = require('./onboarding-record-documents');
+  const doc = await recordDocs.forRequirement(assignment.id, requirement.template_code);
+  const bytes = doc ? await recordDocs.bytesOf(doc).catch(() => null) : null;
+  if (!bytes) return notFound(res);
+  res.set('Cache-Control', 'no-store');
+  res.set('Content-Type', doc.file_mime);
+  res.set('Content-Length', String(bytes.length));
+  res.set('X-Content-Type-Options', 'nosniff');
+  res.set('Content-Disposition', require('./content-disposition').contentDisposition(req.query.download ? 'attachment' : 'inline', doc.file_name));
+  res.send(bytes);
 }));
 
 /** Download evidence the caller uploaded themselves. Self-scoped by user id. */
@@ -1358,5 +1486,6 @@ module.exports = router;
 module.exports._resetInviteRateLimit = _resetInviteRateLimit;
 module.exports.inviteRateLimit = inviteRateLimit;
 module.exports.validateForm = validateForm;
+module.exports.formFieldProblem = formFieldProblem;
 module.exports.validateUpload = validateUpload;
 module.exports.inviteProblem = inviteProblem;

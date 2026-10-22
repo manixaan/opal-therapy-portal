@@ -210,11 +210,11 @@ describe('classifyAccountTarget', () => {
     expect(out).toEqual({ action: 'adopt', userId: 'u1' });
   });
 
-  test('a retry after a partial success adopts our own subject', () => {
+  test('B-1: a staff account the record points at is a conflict, never adopted (it used to be demoted)', () => {
     const out = accounts.classifyAccountTarget(
       { id: 'u1', role: 'therapist' }, { id: 'a1', user_id: 'u1' }
     );
-    expect(out).toEqual({ action: 'adopt', userId: 'u1' });
+    expect(out.action).toBe('conflict');
   });
 
   test('an existing ACTIVE employee is a conflict the Owner must resolve', () => {
@@ -297,5 +297,27 @@ describe('the password-change allowlist', () => {
     // And it must genuinely be narrower.
     expect(isPreEmployeePath('/api/onboarding/me')).toBe(true);
     expect(isPasswordChangePath('/api/onboarding/me')).toBe(false);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  THE ACCOUNT GUARD (audit B-1) — re-checked at every act
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe('onboarding-account-guard assessAccount', () => {
+  const guard = require('../onboarding-account-guard');
+  const a = { id: 'a1', organisation_id: 'org1' };
+
+  test('only the record\'s own pre-employee in the same organisation passes', () => {
+    expect(guard.assessAccount({ id: 'u1', role: 'pre_employee', organisation_id: 'org1' }, a)).toEqual({ ok: true });
+  });
+  test.each(['owner', 'admin', 'therapist', 'read_only'])('a %s account is refused', (role) => {
+    const out = guard.assessAccount({ id: 'u1', role, organisation_id: 'org1' }, a);
+    expect(out).toMatchObject({ ok: false, code: 'not_pre_employee' });
+  });
+  test('another organisation, another open onboarding, or no account are each refused', () => {
+    expect(guard.assessAccount({ id: 'u1', role: 'pre_employee', organisation_id: 'org2' }, a).code).toBe('other_organisation');
+    expect(guard.assessAccount({ id: 'u1', role: 'pre_employee', organisation_id: 'org1' }, a, { busy: true }).code).toBe('in_use');
+    expect(guard.assessAccount(null, a).code).toBe('no_account');
   });
 });
