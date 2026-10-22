@@ -445,3 +445,70 @@ describe('the practice\'s details are settings the Owner edits, used everywhere'
     expect(xml).toContain('Kim Lee');
   });
 });
+
+describe('data, validation and permissions', () => {
+  async function acceptedStarter(owner, over) {
+    const { id, url } = await released(owner, over);
+    const starter = request.agent(server);
+    await starter.post('/api/onboarding-invite/accept').set('X-Forwarded-For', nextIp()).send({ token: tokenOf(url), password: STARTER_PASSWORD });
+    return { id, starter };
+  }
+
+  test('B-21: an unrecognised choice is a 400 naming the field, not a 500', async () => {
+    const { agent: owner } = await agentFor({ role: 'owner', email: 'owner@example.test' });
+    const { id, starter } = await acceptedStarter(owner);
+    const form = async (code, body) => starter.post(`/api/onboarding/me/requirements/${(await requirementByCode(id, code)).id}/form`).send(body);
+    const tax = await form('REQ_TAX_SETUP', { payrollNoticeAccepted: true, taxSubmissionMethod: 'employer_electronic_form', residencyStatus: 'resident', tfn: '123456782' });
+    expect(tax.status).toBe(400);
+    expect(tax.body.field).toBe('residencyStatus');
+    const idn = await form('REQ_IDENTITY', { evidenceType: 'passport', nameOnDocument: 'Dana Adopt' });
+    expect(idn.status).toBe(400);
+    expect(idn.body.field).toBe('evidenceType');
+    const rtw = await form('REQ_RIGHT_TO_WORK', { rightToWorkBasis: 'australian_citizen' });
+    expect(rtw.status).toBe(400);
+    expect(rtw.body.field).toBe('rightToWorkBasis');
+    const dob = await form('REQ_PERSONAL_DETAILS', { legalFirstName: 'Dana', surname: 'Adopt', dateOfBirth: '31/02/1990', mobile: '0400000000', addressLine1: '1 St', suburb: 'Perth', postcode: '6000' });
+    expect(dob.status).toBe(400);
+    expect(dob.body.field).toBe('dateOfBirth');
+    expect((await form('REQ_RIGHT_TO_WORK', { rightToWorkBasis: 'citizen' })).status).toBe(200);
+  });
+
+  test('B-18: the profile is tiered by permission and every sensitive read is audited', async () => {
+    const { agent: owner } = await agentFor({ role: 'owner', email: 'owner@example.test' });
+    const { id, starter } = await acceptedStarter(owner);
+    const pd = await requirementByCode(id, 'REQ_PERSONAL_DETAILS');
+    expect((await starter.post(`/api/onboarding/me/requirements/${pd.id}/form`).send({
+      legalFirstName: 'Dana', surname: 'Adopt', dateOfBirth: '1990-02-03', mobile: '0400000000', addressLine1: '1 Home St', suburb: 'Perth', state: 'WA', postcode: '6000',
+    })).status).toBe(200);
+
+    const { agent: viewer } = await agentFor({ role: 'admin', email: 'viewer@example.test', permissions: ['onboarding.view'] });
+    const v = await viewer.get(`/api/onboarding/journey/records/${id}/profile`);
+    expect(v.status).toBe(200);
+    expect(v.body.profile.personal).toBeNull();
+    expect(v.body.profile.restricted).toEqual(expect.arrayContaining(['personal', 'payroll']));
+    const vr = await viewer.get(`/api/onboarding/journey/records/${id}`);
+    expect(JSON.stringify(vr.body.profile)).not.toContain('1 Home St');
+
+    await db.pool.query("DELETE FROM audit_logs WHERE action = 'onboarding.profile_viewed'");
+    const o = await owner.get(`/api/onboarding/journey/records/${id}/profile`);
+    expect(o.body.profile.personal.address).toContain('1 Home St');
+    const { rows } = await db.pool.query("SELECT actor_user_id FROM audit_logs WHERE action = 'onboarding.profile_viewed'");
+    expect(rows.length).toBe(1);
+  });
+
+  test('B-20: a returned scan needs the sensitive-identity tier, not just review, and each view is audited', async () => {
+    const { agent: owner } = await agentFor({ role: 'owner', email: 'owner@example.test' });
+    const { record } = await start(owner);
+    await owner.post(`/api/onboarding/journey/records/${record.id}/offer/skip`);
+    const up = await owner.post(`/api/onboarding/journey/records/${record.id}/returns`).send({
+      fileName: 'passport.txt', fileMime: 'text/plain', fileData: Buffer.from('PASSPORT Dana Adopt Australia'.padEnd(60, ' ')).toString('base64'),
+    });
+    expect(up.status).toBe(201);
+    const docId = up.body.stored[0].id;
+    const { agent: reviewer } = await agentFor({ role: 'admin', email: 'rev@example.test', permissions: ['onboarding.view', 'onboarding.review'] });
+    expect((await reviewer.get(`/api/onboarding/assignments/${record.id}/returned-documents/${docId}/preview`)).status).toBe(403);
+    expect((await owner.get(`/api/onboarding/assignments/${record.id}/returned-documents/${docId}/preview`)).status).toBe(200);
+    const { rows } = await db.pool.query("SELECT 1 FROM audit_logs WHERE action = 'onboarding.returned_document_viewed'");
+    expect(rows.length).toBe(1);
+  });
+});

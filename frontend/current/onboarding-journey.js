@@ -2168,7 +2168,13 @@
         + '</ul>' : '<p class="oj-quiet">Nothing yet.</p>') + '</div>'
       + '<div><h3>Vehicle</h3>' + dl(v ? row('Registration', v.registration) + row('Vehicle', [v.make, v.model].filter(Boolean).join(' ')) + row('Registration expiry', v.registrationExpiry ? fmtDate(v.registrationExpiry) : '') + row('Insurance expiry', v.insuranceExpiry ? fmtDate(v.insuranceExpiry) : '') : '') + '</div>'
       + '</div>';
-    return '<section class="oj-panel oj-stage is-parallel" id="oj-profile"><header><h2><span class="oj-stage-n">👤</span>Employee profile</h2></header>' + body + '</section>';
+    // What this reader's permissions leave out is said, not silently blank (audit B-18).
+    var restricted = p.restricted || [];
+    var note = restricted.length
+      ? '<p class="oj-quiet">' + (restricted.indexOf('personal') !== -1 ? 'Personal, emergency, identity and licence details need the sensitive-identity permission. ' : '')
+        + (restricted.indexOf('payroll') !== -1 ? 'Pay and bank details need the payroll permission.' : '') + '</p>'
+      : '';
+    return '<section class="oj-panel oj-stage is-parallel" id="oj-profile"><header><h2><span class="oj-stage-n">👤</span>Employee profile</h2></header>' + note + body + '</section>';
   }
 
   function emailsPanel(d) {

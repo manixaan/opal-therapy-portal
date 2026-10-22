@@ -855,6 +855,20 @@ async function serveReturned(req, res, disposition) {
   const doc = await wdb.getReturnedDocument(assignment.id, req.params.docId);
   if (!doc) return notFound(res);
 
+  // A returned scan can carry a TFN, a bank account or a passport page: it is
+  // the sensitive-identity tier, or payroll for the payroll forms (audit
+  // B-20) — review alone is not enough — and every view is recorded.
+  const PAYROLL_KINDS = ['tax_summary', 'super_choice', 'new_employee_details'];
+  const allowed = hasPermission(req.user, 'onboarding.sensitive_identity')
+    || (PAYROLL_KINDS.includes(doc.document_kind) && hasPermission(req.user, 'onboarding.payroll'));
+  if (!allowed) {
+    return res.status(403).json({ error: 'Returned documents need the sensitive-identity permission.', code: 'sensitive_identity_required' });
+  }
+  await auditOnboarding(req, 'returned_document_viewed', {
+    targetType: 'onboarding_assignment', targetId: assignment.id,
+    metadata: { assignmentId: assignment.id, returnedDocumentId: doc.id, kind: doc.document_kind || null, method: disposition },
+  });
+
   const bytes = await wdb.readReturnedDocumentBytes(doc).catch(() => null);
   if (!bytes) return res.status(404).json({ error: 'That document could not be read.' });
 

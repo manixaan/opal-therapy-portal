@@ -376,7 +376,7 @@ async function recordDetail(req, assignment) {
   const returns = require('./onboarding-returns-routes')._internals;
   const attentionList = await returns.attentionFor(assignment);
   const portal = await portalRouteFacts(req, assignment, offer);
-  const profile = await require('./onboarding-profile-sync').profileSummary(assignment.user_id);
+  const profile = await require('./onboarding-profile-sync').tieredProfileFor(req, assignment);
   const returnedDocs = (await require('./onboarding-returns-db').listReturns(assignment.id, { includeArchived: true })).map((d) => ({
     id: d.id, title: d.title, fileName: d.file_name, mime: d.file_mime, size: d.file_size_bytes, status: d.status, uploadedAt: d.uploaded_at,
     textStatus: d.text_status, packItemId: d.pack_item_id || null, matchStatus: d.match_status || 'pending', documentKind: d.document_kind || null,

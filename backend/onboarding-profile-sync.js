@@ -217,4 +217,46 @@ async function profileSummary(userId) {
   };
 }
 
-module.exports = { CREDENTIAL_MAP, FIELD_TO_CREDENTIAL, syncProfile, profileSummary };
+/**
+ * The profile as THIS reader may see it (audit B-18). `onboarding.view`
+ * alone used to return the home address, date of birth, emergency contact,
+ * pay and full licence numbers, unaudited. Now:
+ *   • personal details, emergency contact, identity, vehicle and credential
+ *     numbers need `onboarding.sensitive_identity`;
+ *   • pay and payroll need `onboarding.payroll`;
+ *   • everyone with view sees the employment basics and credential names,
+ *     statuses and expiries;
+ * and every read that returns a sensitive tier is audited (`profile_viewed`).
+ */
+async function tieredProfileFor(req, assignment) {
+  if (!assignment || !assignment.user_id) return null;
+  const { hasPermission } = require('./permissions');
+  const full = await profileSummary(assignment.user_id);
+  if (!full) return null;
+  const identityOk = hasPermission(req.user, 'onboarding.sensitive_identity');
+  const payrollOk = hasPermission(req.user, 'onboarding.payroll');
+  const e = full.employment;
+  const out = {
+    employment: e ? { ...e, payBasis: payrollOk ? e.payBasis : null, payRate: payrollOk ? e.payRate : null } : null,
+    credentials: full.credentials.map((c) => ({ ...c, number: identityOk ? c.number : null })),
+    personal: null, emergency: null, identity: [], vehicle: null, payroll: null,
+    restricted: [],
+  };
+  if (identityOk) Object.assign(out, { personal: full.personal, emergency: full.emergency, identity: full.identity, vehicle: full.vehicle });
+  else out.restricted.push('personal', 'emergency', 'identity', 'vehicle', 'credential_numbers');
+  if (payrollOk) out.payroll = full.payroll;
+  else out.restricted.push('pay', 'payroll');
+
+  const tiers = [identityOk ? 'sensitive_identity' : null, payrollOk ? 'payroll' : null].filter(Boolean);
+  const hasSensitive = (identityOk && (full.personal || full.emergency || full.identity.length || full.vehicle || full.credentials.some((c) => c.number)))
+    || (payrollOk && (full.payroll || (e && e.payRate != null)));
+  if (hasSensitive) {
+    await require('./onboarding-audit').auditOnboarding(req, 'profile_viewed', {
+      targetType: 'user', targetId: assignment.user_id,
+      metadata: { assignmentId: assignment.id, subjectUserId: assignment.user_id, permissions: tiers },
+    });
+  }
+  return out;
+}
+
+module.exports = { CREDENTIAL_MAP, FIELD_TO_CREDENTIAL, syncProfile, profileSummary, tieredProfileFor };

@@ -749,6 +749,40 @@ async function recordPayrollNotice(userId) {
   await require('./xero-payroll-db').recordPrivacyNotice(userId, PRIVACY_NOTICE_VERSION);
 }
 
+/**
+ * The values the database accepts for each choice field (migration 034's
+ * CHECK lists). An unrecognised value used to reach the INSERT and surface as
+ * a 500 "Internal error" (audit B-21); it is a 400 naming the field now.
+ */
+const FORM_ENUMS = Object.freeze({
+  tax_setup: { residencyStatus: ['australian_resident', 'foreign_resident', 'working_holiday_maker'] },
+  identity: {
+    evidenceType: ['australian_passport', 'foreign_passport', 'citizenship_certificate', 'birth_certificate',
+      'permanent_residency', 'visa', 'immicard', 'drivers_licence', 'medicare_card', 'other'],
+  },
+  right_to_work: { rightToWorkBasis: ['citizen', 'permanent_resident', 'nz_citizen', 'visa_with_work_rights', 'other'] },
+});
+const FIELD_LABELS = { residencyStatus: 'Residency status', evidenceType: 'Identity document', rightToWorkBasis: 'Right-to-work basis', dateOfBirth: 'Date of birth', expiryDate: 'Expiry date', issueDate: 'Issue date' };
+const DATE_FIELDS = { personal_details: ['dateOfBirth'], identity: ['issueDate', 'expiryDate'], right_to_work: ['workRightsExpiry'], vehicle_details: ['registrationExpiry', 'insuranceExpiry'] };
+
+/** { field, message } for the first unrecognised choice or unreadable date, or null. */
+function formFieldProblem(formKey, b) {
+  for (const [field, allowed] of Object.entries(FORM_ENUMS[formKey] || {})) {
+    const v = b[field];
+    if (v != null && v !== '' && !allowed.includes(v)) {
+      return { field, message: `${FIELD_LABELS[field] || field} is not one of the options — choose one from the list` };
+    }
+  }
+  for (const field of DATE_FIELDS[formKey] || []) {
+    const v = b[field];
+    if (v == null || v === '') continue;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(v)) || Number.isNaN(new Date(v).getTime())) {
+      return { field, message: `${FIELD_LABELS[field] || field} is not a valid date` };
+    }
+  }
+  return null;
+}
+
 function validateForm(formKey, b) {
   switch (formKey) {
     case 'personal_details':
@@ -850,6 +884,8 @@ router.post('/api/onboarding/me/requirements/:rid/form', safe(async (req, res) =
   }
 
   const b = req.body || {};
+  const problem = formFieldProblem(formKey, b);
+  if (problem) return res.status(400).json({ error: problem.message, field: problem.field, fields: { [problem.field]: problem.message } });
   const error = validateForm(formKey, b);
   if (error) return res.status(400).json({ error });
 
@@ -1450,5 +1486,6 @@ module.exports = router;
 module.exports._resetInviteRateLimit = _resetInviteRateLimit;
 module.exports.inviteRateLimit = inviteRateLimit;
 module.exports.validateForm = validateForm;
+module.exports.formFieldProblem = formFieldProblem;
 module.exports.validateUpload = validateUpload;
 module.exports.inviteProblem = inviteProblem;

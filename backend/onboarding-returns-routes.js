@@ -670,7 +670,8 @@ router.post('/api/onboarding/journey/records/:id/payroll/approve', requirePermis
 router.get('/api/onboarding/journey/records/:id/profile', requirePermission('onboarding.view'), safe(async (req, res) => {
   const assignment = await loadRecord(req);
   if (!assignment) return notFound(res);
-  res.json({ ok: true, profile: await sync.profileSummary(assignment.user_id) });
+  // Tiered by permission and audited (audit B-18).
+  res.json({ ok: true, profile: await sync.tieredProfileFor(req, assignment) });
 }));
 
 module.exports = router;
