@@ -352,6 +352,45 @@ describe('detectUnlinked — portal bookings Splose never received', () => {
     expect(r.map(a => a.eventId)).toEqual(['a']);
     expect(r[0]).toMatchObject({ kind: 'unlinked', sploseAppointmentId: 'local:a', fingerprint: 'unlinked', details: { clientId: '41' } });
   });
+
+  test('a booking the owner chose to ignore (080) is never offered', () => {
+    const rows = [
+      { id: 'a', user_id: 'u1', splose_id: null, client_id: '41', created_by_source: 'app' },
+      { id: 'g', user_id: 'u1', splose_id: null, client_id: '41', created_by_source: 'app', splose_sync_ignored_at: '2026-10-01T00:00:00Z' },
+    ];
+    expect(detectUnlinked({ localEvents: rows }).map(a => a.eventId)).toEqual(['a']);
+  });
+});
+
+describe('link / ignore safety in the queue (080)', () => {
+  const { enqueueChange, createPublisher } = require('../splose-draft-sync');
+
+  test('enqueueChange refuses an ignored event and touches no queue row', async () => {
+    const sqls = [];
+    const db = { pool: { query: async (sql) => {
+      sqls.push(sql);
+      if (/splose_sync_ignored_at FROM events/.test(sql)) return { rows: [{ splose_sync_ignored_at: new Date() }] };
+      throw new Error('should not reach the queue');
+    } } };
+    const r = await enqueueChange(db, { userId: 'u1', eventId: 'e1', action: 'update', payload: {} });
+    expect(r).toBeNull();
+    expect(sqls).toHaveLength(1);
+  });
+
+  test('a row linked or ignored after the run read the queue is skipped, never written', async () => {
+    const createAppointment = jest.fn(async () => ({ id: 1 }));
+    const db = { pool: { query: async (sql) => {
+      if (/FROM splose_sync_queue q JOIN events e/.test(sql)) {
+        return { rows: [{ id: 'q1', action: 'create', status: 'pending', user_id: 'u1', event_id: 'e1', payload: { patientId: 41, serviceId: 1 }, start_time: 's', end_time: 'e' }] };
+      }
+      if (/SET status = 'publishing'/.test(sql)) return { rowCount: 0, rows: [] };   // already resolved
+      return { rows: [], rowCount: 0 };
+    } } };
+    const pub = createPublisher({ db, sploseApi: { createAppointment }, gapMs: 0, sleep: async () => {} });
+    const state = await pub.publish('u1');
+    expect(createAppointment).not.toHaveBeenCalled();
+    expect(state.results[0]).toMatchObject({ ok: true, skipped: 'resolved_elsewhere' });
+  });
 });
 
 describe('autoPublishable — what the server may write without a review step', () => {

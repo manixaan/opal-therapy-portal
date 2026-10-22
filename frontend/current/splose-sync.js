@@ -16,6 +16,10 @@
        backend queues for Splose
      • polls for "changed inside Splose" alerts and shows each one, asking
        whether the change was valid
+     • match, link or ignore (080): each queued new appointment shows whether
+       Splose already holds it; Link adopts that appointment (no write),
+       Ignore drops the booking from Splose sync for good (Owner/Admin can
+       undo), Send creates it — Send needs ENABLE_SPLOSE_WRITE, the others don't
 
    Globals on window (window.SploseSync), no modules — the house pattern.
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -38,6 +42,11 @@
     alertQueue: [], alertShowing: false,
     pollTimer: null,
     lastRunShown: null,
+    // Match, link or ignore (080)
+    match: null,            // { state: 'loading'|'ready'|'error', byRow: { queueId: [candidates] }, error }
+    ignored: [], ignoredCanUndo: false, showIgnored: false,
+    picked: {},             // queueId → ticked (survives re-renders)
+    svcChoice: {},          // queueId → chosen service id
   };
 
   function esc(s) {
@@ -246,10 +255,11 @@
     var p = ensurePanel();
     p.hidden = false;
     p.querySelector('.ssp-body').innerHTML = '<div class="ssp-empty">Loading…</div>';
-    Promise.all([refreshPending(), refreshStatus(), loadReference()]).then(function () {
+    Promise.all([refreshPending(), refreshStatus(), loadReference(), loadIgnored()]).then(function () {
       renderPanel();
       var first = p.querySelector('button, select, input');
       if (first) first.focus();
+      loadMatches();
     });
   }
   function closePanel() {
@@ -259,6 +269,159 @@
   }
 
   var ACTION_LABEL = { create: 'New appointment', update: 'Moved', cancel: 'Cancelled' };
+  var WRITE_OFF_REASON = 'Splose writing is switched off in this environment';
+
+  // ── Match, link or ignore (080) ───────────────────────────────────────────
+  // For every queued new appointment the server looks in the practitioner's
+  // Splose diary for one that is already there (same client, same day, start
+  // within ±30 min). Link adopts it (no write), Ignore drops the booking from
+  // Splose sync for good, Send creates it. Link and Ignore work with writing off.
+
+  function loadMatches() {
+    var creates = S.pending.filter(function (c) { return c.action === 'create'; });
+    if (!creates.length) { S.match = { state: 'ready', byRow: {} }; return Promise.resolve(); }
+    S.match = { state: 'loading', byRow: (S.match && S.match.byRow) || {} };
+    if (S.panelOpen) renderPanel();
+    return fetchJson('/api/splose-sync/matches').then(function (r) {
+      if (!r.ok) S.match = { state: 'error', error: r.json.error || 'Could not check Splose', byRow: {} };
+      else S.match = { state: 'ready', byRow: r.json.matches || {}, windowMinutes: r.json.windowMinutes };
+    }).catch(function () {
+      S.match = { state: 'error', error: 'Could not reach the portal to check Splose', byRow: {} };
+    }).then(function () { if (S.panelOpen && !S.publishing) renderPanel(); });
+  }
+
+  function loadIgnored() {
+    return fetchJson('/api/splose-sync/ignored').then(function (r) {
+      if (!r.ok) return;
+      S.ignored = r.json.events || [];
+      S.ignoredCanUndo = r.json.canUndo === true;
+    }).catch(function () {});
+  }
+
+  function matchesFor(id) {
+    return (S.match && S.match.state === 'ready' && S.match.byRow[id]) || null;
+  }
+  function exactSingles() {
+    return S.pending.filter(function (c) {
+      var m = c.action === 'create' ? matchesFor(c.id) : null;
+      return m && m.length === 1 && m[0].confidence === 'exact';
+    });
+  }
+  // A create that looks like it is already in Splose starts unticked: sending
+  // it would make a duplicate.
+  function isPicked(c) {
+    if (Object.prototype.hasOwnProperty.call(S.picked, c.id)) return S.picked[c.id];
+    var m = c.action === 'create' ? matchesFor(c.id) : null;
+    return !(m && m.length);
+  }
+  function describeMatch(m) {
+    var bits = [fmtTimeOnly(m.start)];
+    if (m.serviceName) bits.push(m.serviceName);
+    var s = bits.join(' ') + (m.patientName ? ' with ' + m.patientName : '');
+    if (m.locationName) s += ' · ' + m.locationName;
+    return s;
+  }
+
+  function renderMatch(c) {
+    var st = S.match ? S.match.state : 'idle';
+    if (st === 'loading' || st === 'idle') return '<div class="ssp-match checking">Checking Splose for this appointment…</div>';
+    if (st === 'error') return '<div class="ssp-match err">Could not check Splose: ' + esc(S.match.error) + '</div>';
+    var list = matchesFor(c.id) || [];
+    if (!list.length) return '<div class="ssp-match none">No match found in Splose</div>';
+    return '<div class="ssp-match found"><ul class="ssp-cands">' + list.map(function (m) {
+      return '<li><span class="ssp-conf ' + esc(m.confidence) + '">' + (m.confidence === 'exact' ? 'Already in Splose' : 'Possibly in Splose') + '</span> ' +
+        '<span class="ssp-cand-text">' + esc(describeMatch(m)) + (m.confidence === 'likely' && m.minutesApart ? ' <span class="ssp-hint">(' + esc(m.minutesApart) + ' min apart)</span>' : '') + '</span> ' +
+        '<button type="button" class="btn small" data-link="' + esc(c.id) + '" data-appt="' + esc(m.sploseAppointmentId) + '">Link</button></li>';
+    }).join('') + '</ul></div>';
+  }
+
+  function renderIgnored() {
+    var list = S.ignored || [];
+    if (!list.length) return '';
+    return '<details class="ssp-ignored"' + (S.showIgnored ? ' open' : '') + '><summary>Ignored <span class="n">' + list.length + '</span></summary>' +
+      '<p class="ssp-hint">These bookings stay in the portal and are never sent to Splose or asked about again.' +
+      (S.ignoredCanUndo ? '' : ' Only an Owner or Admin can undo an ignore.') + '</p>' +
+      '<ul class="ssp-list">' + list.map(function (e) {
+        return '<li class="ssp-row ign"><span></span><div class="ssp-main"><div class="ssp-title">' + esc(e.title || 'Appointment') +
+          (e.clientName ? ' <span class="who">' + esc(e.clientName) + '</span>' : '') + '</div>' +
+          '<div class="ssp-when">' + esc(fmtPerth(e.start)) + '</div></div>' +
+          (S.ignoredCanUndo ? '<button type="button" class="ssp-discard" data-unignore="' + esc(e.eventId) + '">Undo ignore</button>' : '<span></span>') +
+          '</li>';
+      }).join('') + '</ul></details>';
+  }
+
+  function wireIgnored(body) {
+    var det = body.querySelector('.ssp-ignored');
+    if (det) det.addEventListener('toggle', function () { S.showIgnored = det.open; });
+    body.querySelectorAll('[data-unignore]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        b.disabled = true;
+        fetchJson('/api/splose-sync/ignored/' + encodeURIComponent(b.getAttribute('data-unignore')) + '/undo', { method: 'POST', body: {} }).then(function (r) {
+          if (!r.ok) { b.disabled = false; toast(r.json.error || 'Could not undo the ignore', true); return; }
+          toast(r.json.queued ? 'Ignore undone — the booking is waiting for Splose again' : 'Ignore undone');
+          return Promise.all([refreshPending(), loadIgnored()]).then(function () { renderPanel(); loadMatches(); });
+        });
+      });
+    });
+  }
+
+  function afterResolve(msg) {
+    toast(msg);
+    return Promise.all([refreshPending(), loadIgnored()]).then(function () {
+      if (S.panelOpen) renderPanel();
+      if (typeof global.loadOutlookEventsToCalendar === 'function') { try { global.loadOutlookEventsToCalendar(); } catch (e) {} }
+    });
+  }
+
+  function linkOne(queueId, apptId, btn) {
+    if (btn) btn.disabled = true;
+    return fetchJson('/api/splose-sync/pending/' + encodeURIComponent(queueId) + '/link', { method: 'POST', body: { sploseAppointmentId: apptId } }).then(function (r) {
+      if (!r.ok) { if (btn) btn.disabled = false; toast(r.json.error || 'Could not link', true); return; }
+      delete S.picked[queueId];
+      return afterResolve('Linked to the Splose appointment — nothing was written to Splose');
+    });
+  }
+
+  function linkAllExact() {
+    var n = exactSingles().length;
+    if (!n) return Promise.resolve();
+    return confirmDialog('Link ' + n + ' booking' + (n === 1 ? '' : 's') + ' to the matching appointment' + (n === 1 ? '' : 's') + ' already in Splose? Nothing is written to Splose; later changes in the portal will update those appointments.', { title: 'Link exact matches', ok: 'Link ' + n })
+      .then(function (yes) {
+        if (!yes) return;
+        return fetchJson('/api/splose-sync/link-matches', { method: 'POST', body: {} }).then(function (r) {
+          if (!r.ok) { toast(r.json.error || 'Could not link', true); return; }
+          var k = (r.json.linked || []).length, s = (r.json.skipped || []).length;
+          return afterResolve(k + ' linked' + (s ? ' · ' + s + ' left for review (Splose changed since the check)' : '')).then(loadMatches);
+        });
+      });
+  }
+
+  function ignoreIds(ids) {
+    if (!ids.length) { toast('Tick the new appointments to ignore first'); return Promise.resolve(); }
+    var n = ids.length;
+    return confirmDialog('Ignore ' + n + ' booking' + (n === 1 ? '' : 's') + ' permanently? ' + (n === 1 ? 'It stays' : 'They stay') + ' in the portal but will never be sent to Splose or asked about again. An Owner or Admin can undo this.', { title: 'Ignore permanently', ok: 'Ignore', danger: true })
+      .then(function (yes) {
+        if (!yes) return;
+        var req = n === 1
+          ? fetchJson('/api/splose-sync/pending/' + encodeURIComponent(ids[0]) + '/ignore', { method: 'POST', body: {} }).then(function (r) { return r.ok ? { ok: true, json: { ignored: [ids[0]], skipped: [] } } : r; })
+          : fetchJson('/api/splose-sync/ignore', { method: 'POST', body: { queueIds: ids } });
+        return req.then(function (r) {
+          if (!r.ok) { toast(r.json.error || 'Could not ignore', true); return; }
+          ids.forEach(function (id) { delete S.picked[id]; });
+          var k = (r.json.ignored || []).length, s = (r.json.skipped || []).length;
+          return afterResolve(k + ' ignored' + (s ? ' · ' + s + ' could not be (refresh and check)' : ''));
+        });
+      });
+  }
+
+  function pickedIds(body, action) {
+    var ids = [];
+    body.querySelectorAll('input[data-pick]:checked').forEach(function (i) {
+      var c = S.pending.find(function (x) { return x.id === i.getAttribute('data-pick'); });
+      if (c && (!action || c.action === action)) ids.push(c.id);
+    });
+    return ids;
+  }
 
   function renderPanel() {
     var p = ensurePanel();
@@ -288,11 +451,13 @@
         '</div>';
     }
     if (!S.writeEnabled) {
-      html += '<div class="ssp-warn">Writing to Splose is switched off in this environment. You can review and shape the week; publishing will be refused until the practice owner turns it on.</div>';
+      html += '<div class="ssp-warn">' + esc(WRITE_OFF_REASON) + '. You can still link bookings to appointments already in Splose, or ignore them — neither writes to Splose. Sending is unavailable until the practice owner turns writing on.</div>';
     }
     if (!rows.length) {
-      html += '<div class="ssp-empty">Nothing waiting. Every client appointment on your calendar is in Splose.</div>';
+      html += '<div class="ssp-empty">Nothing waiting. Every client appointment on your calendar is in Splose, linked or ignored.</div>';
+      html += renderIgnored();
       body.innerHTML = html;
+      wireIgnored(body);
       foot.innerHTML = '<button type="button" class="btn" data-act="close">Close</button>';
       foot.querySelector('[data-act=close]').addEventListener('click', closePanel);
       return;
@@ -304,27 +469,61 @@
     ['cancel', 'update', 'create'].forEach(function (act) {
       var list = groups[act];
       if (!list.length) return;
-      html += '<h3 class="ssp-group">' + esc(ACTION_LABEL[act]) + ' <span class="n">' + list.length + '</span></h3><ul class="ssp-list">';
+      html += '<h3 class="ssp-group">' + esc(ACTION_LABEL[act]) + ' <span class="n">' + list.length + '</span></h3>';
+      if (act === 'create') html += renderCreateSummary(list);
+      html += '<ul class="ssp-list">';
       list.forEach(function (c) {
         var when = fmtPerth(c.start) + (c.end ? ' – ' + fmtTimeOnly(c.end) : '');
         var who = c.clientName ? esc(c.clientName) : (c.payload.patientId ? 'Client #' + esc(c.payload.patientId) : '');
+        var create = c.action === 'create';
         html += '<li class="ssp-row ' + (c.status === 'failed' ? 'failed' : '') + '" data-id="' + esc(c.id) + '">' +
-          '<label class="ssp-check"><input type="checkbox" checked data-pick="' + esc(c.id) + '"></label>' +
+          '<label class="ssp-check"><input type="checkbox"' + (isPicked(c) ? ' checked' : '') + ' data-pick="' + esc(c.id) + '" aria-label="Select ' + esc(c.title || 'appointment') + '"></label>' +
           '<div class="ssp-main"><div class="ssp-title">' + esc(c.title || 'Appointment') + (who ? ' <span class="who">' + who + '</span>' : '') + '</div>' +
           '<div class="ssp-when">' + esc(when) + '</div>' +
           (c.status === 'failed' ? '<div class="ssp-err">' + esc(c.error || 'Failed last time') + '</div>' : '') +
+          (create ? renderMatch(c) : '') +
           renderRowControls(c) +
+          (create ? '<div class="ssp-actions">' +
+            '<button type="button" class="btn small" data-send="' + esc(c.id) + '"' + (S.writeEnabled ? '' : ' disabled title="' + esc(WRITE_OFF_REASON) + '"') + '>Send to Splose</button>' +
+            '<button type="button" class="btn small" data-ignore="' + esc(c.id) + '">Ignore permanently</button>' +
+          '</div>' : '') +
           '</div>' +
-          '<button type="button" class="ssp-discard" data-discard="' + esc(c.id) + '" title="Drop this change from the queue (the calendar keeps it)">Discard</button>' +
+          (create ? '<span></span>' : '<button type="button" class="ssp-discard" data-discard="' + esc(c.id) + '" title="Drop this change from the queue (the calendar keeps it)">Discard</button>') +
           '</li>';
       });
       html += '</ul>';
     });
+    html += renderIgnored();
     body.innerHTML = html;
 
+    // Keep ticks and chosen services across re-renders (the match check re-renders).
+    body.querySelectorAll('input[data-pick]').forEach(function (i) {
+      i.addEventListener('change', function () { S.picked[i.getAttribute('data-pick')] = i.checked; });
+    });
+    body.querySelectorAll('select[data-service]').forEach(function (sel) {
+      var id = sel.getAttribute('data-service');
+      if (S.svcChoice[id]) sel.value = S.svcChoice[id];
+      sel.addEventListener('change', function () { S.svcChoice[id] = sel.value; });
+    });
     body.querySelectorAll('[data-discard]').forEach(function (b) {
       b.addEventListener('click', function () { discardChange(b.getAttribute('data-discard')); });
     });
+    body.querySelectorAll('[data-link]').forEach(function (b) {
+      b.addEventListener('click', function () { linkOne(b.getAttribute('data-link'), b.getAttribute('data-appt'), b); });
+    });
+    body.querySelectorAll('[data-ignore]').forEach(function (b) {
+      b.addEventListener('click', function () { ignoreIds([b.getAttribute('data-ignore')]); });
+    });
+    body.querySelectorAll('[data-send]').forEach(function (b) {
+      b.addEventListener('click', function () { publishSelected({ ids: [b.getAttribute('data-send')] }); });
+    });
+    var bl = body.querySelector('[data-bulk=link]');
+    if (bl) bl.addEventListener('click', function () { linkAllExact(); });
+    var bi = body.querySelector('[data-bulk=ignore]');
+    if (bi) bi.addEventListener('click', function () { ignoreIds(pickedIds(body, 'create')); });
+    var br = body.querySelector('[data-bulk=retry]');
+    if (br) br.addEventListener('click', function () { loadMatches(); });
+    wireIgnored(body);
     // Case chooser for creates that have none yet
     rows.filter(function (c) { return c.action === 'create' && !c.payload.caseId && c.payload.patientId; }).forEach(function (c) {
       casesFor(c.payload.patientId).then(function (list) {
@@ -342,9 +541,32 @@
     foot.innerHTML =
       '<button type="button" class="btn" data-act="close">Not now</button>' +
       '<span class="spacer"></span>' +
-      '<button type="button" class="btn primary" data-act="publish"' + (S.writeEnabled ? '' : ' disabled') + '>Write to Splose</button>';
+      (S.writeEnabled ? '' : '<span class="ssp-hint ssp-off">' + esc(WRITE_OFF_REASON) + '</span>') +
+      '<button type="button" class="btn primary" data-act="publish"' + (S.writeEnabled ? '' : ' disabled title="' + esc(WRITE_OFF_REASON) + '"') + '>Send selected to Splose</button>';
     foot.querySelector('[data-act=close]').addEventListener('click', closePanel);
     foot.querySelector('[data-act=publish]').addEventListener('click', function () { publishSelected(); });
+  }
+
+  function renderCreateSummary(list) {
+    var st = S.match ? S.match.state : 'idle';
+    var counts = '';
+    if (st === 'ready') {
+      var exact = 0, likely = 0, none = 0;
+      list.forEach(function (c) {
+        var m = matchesFor(c.id) || [];
+        if (!m.length) none++; else if (m[0].confidence === 'exact') exact++; else likely++;
+      });
+      counts = '<div class="ssp-counts">' + exact + ' already in Splose · ' + likely + ' possible match' + (likely === 1 ? '' : 'es') + ' · ' + none + ' not found</div>';
+    } else if (st === 'error') {
+      counts = '<div class="ssp-counts err">Could not check Splose: ' + esc(S.match.error) + ' <button type="button" class="btn small" data-bulk="retry">Try again</button></div>';
+    } else {
+      counts = '<div class="ssp-counts checking" role="status">Checking Splose for appointments that already exist…</div>';
+    }
+    var n = st === 'ready' ? exactSingles().length : 0;
+    return counts + '<div class="ssp-bulk">' +
+      '<button type="button" class="btn small" data-bulk="link"' + (n ? '' : ' disabled') + '>Link all exact matches (' + n + ')</button>' +
+      '<button type="button" class="btn small" data-bulk="ignore">Ignore selected</button>' +
+      '</div>';
   }
 
   function renderRowControls(c) {
@@ -395,9 +617,11 @@
     opts = opts || {};
     var p = ensurePanel();
     var body = p.querySelector('.ssp-body');
+    if (!S.writeEnabled) { toast(WRITE_OFF_REASON, true); return Promise.resolve(); }
     var ids = [];
     body.querySelectorAll('input[data-pick]:checked').forEach(function (i) { ids.push(i.getAttribute('data-pick')); });
     if (opts.all) ids = S.pending.map(function (c) { return c.id; });
+    if (opts.ids) ids = opts.ids.slice();
     if (!ids.length) { toast('Nothing ticked'); return Promise.resolve(); }
     var overrides = collectOverrides(body, ids);
     // A new appointment cannot go without a service.
@@ -415,6 +639,14 @@
     var go = cancels.length
       ? confirmDialog(cancels.length + ' cancellation' + (cancels.length === 1 ? '' : 's') + ' will be sent to Splose. Cancelling there may trigger a short-notice charge and a client message. Continue?', { title: 'Confirm cancellations', ok: 'Send', danger: true })
       : Promise.resolve(true);
+    // Sending a booking Splose already holds makes a duplicate: say so first.
+    var dupes = ids.filter(function (id) { var m = matchesFor(id); return m && m.length; });
+    if (dupes.length) {
+      go = go.then(function (yes) {
+        if (!yes) return false;
+        return confirmDialog(dupes.length + ' of these look' + (dupes.length === 1 ? 's' : '') + ' already in Splose. Sending creates a second appointment there — use Link instead unless you are sure. Send anyway?', { title: 'Possible duplicates', ok: 'Send anyway', danger: true });
+      });
+    }
     return go.then(function (yes) {
       if (!yes) return;
       return fetchJson('/api/splose-sync/publish', { method: 'POST', body: { queueIds: ids, overrides: overrides } }).then(function (r) {

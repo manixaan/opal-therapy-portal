@@ -166,7 +166,8 @@ function detectExternalChanges({ localEvents, sploseAppointments, pendingEventId
 function detectUnlinked({ localEvents, pendingEventIds }) {
   const pending = pendingEventIds || new Set();
   return (localEvents || [])
-    .filter(ev => ev && !ev.splose_id && ev.client_id && ev.created_by_source === 'app' && !ev.is_deleted && !pending.has(ev.id))
+    // An event the owner chose to ignore (080) is never offered again.
+    .filter(ev => ev && !ev.splose_id && ev.client_id && ev.created_by_source === 'app' && !ev.is_deleted && !ev.splose_sync_ignored_at && !pending.has(ev.id))
     .map(ev => ({
       kind: 'unlinked', eventId: ev.id, userId: ev.user_id, practitionerId: null,
       // No Splose id exists yet; the local id keys the alert so it is recorded once.
@@ -182,6 +183,11 @@ function detectUnlinked({ localEvents, pendingEventIds }) {
  * Returns the resulting row, or null when the change cancelled itself out.
  */
 async function enqueueChange(db, { userId, createdBy, eventId, action, payload }) {
+  // "Ignore permanently" (080): this booking is never written to Splose, so
+  // no edit, move or re-queue may put it back in the queue.
+  const ign = await db.pool.query(
+    `SELECT splose_sync_ignored_at FROM events WHERE id = $1`, [eventId]);
+  if (ign && ign.rows && ign.rows[0] && ign.rows[0].splose_sync_ignored_at) return null;
   const { rows } = await db.pool.query(
     `SELECT id, action, payload FROM splose_sync_queue
       WHERE event_id = $1 AND status IN ('pending', 'failed') LIMIT 1`,
@@ -219,10 +225,11 @@ async function enqueueChange(db, { userId, createdBy, eventId, action, payload }
 /** Live queue rows for a user (pending, publishing, failed), oldest first. */
 async function listPending(db, userId) {
   const { rows } = await db.pool.query(
-    `SELECT q.*, e.title AS event_title, e.start_time, e.end_time, e.splose_id, e.client_name
+    `SELECT q.*, e.title AS event_title, e.start_time, e.end_time, e.splose_id, e.client_name, e.client_id
        FROM splose_sync_queue q
        JOIN events e ON e.id = q.event_id
       WHERE q.user_id = $1 AND q.status IN ('pending', 'publishing', 'failed')
+        AND e.splose_sync_ignored_at IS NULL
       ORDER BY q.created_at`,
     [userId]
   );
@@ -394,10 +401,20 @@ function createPublisher(deps) {
         const o = overrides[row.id] || {};
         row.payload = { ...(row.payload || {}), ...o };
         state.current = { id: row.id, action: row.action, title: row.title };
-        await db.pool.query(
-          `UPDATE splose_sync_queue SET status = 'publishing', payload = $2::jsonb, batch_id = $3, attempts = attempts + 1, updated_at = NOW() WHERE id = $1`,
+        // Claim the row only while it is still live: a row linked to an
+        // existing Splose appointment or ignored (080) after this run read
+        // the queue must never be written — a create here would duplicate.
+        const claim = await db.pool.query(
+          `UPDATE splose_sync_queue SET status = 'publishing', payload = $2::jsonb, batch_id = $3, attempts = attempts + 1, updated_at = NOW()
+            WHERE id = $1 AND status IN ('pending', 'failed')`,
           [row.id, JSON.stringify(row.payload), state.batchId]
         );
+        if (claim && claim.rowCount === 0) {
+          state.results.push({ id: row.id, ok: true, action: row.action, skipped: 'resolved_elsewhere' });
+          state.done++;
+          emit(userId, { phase: 'progress', ...state });
+          continue;
+        }
         const event = { start_time: row.start_time, end_time: row.end_time, splose_id: row.splose_id };
         try {
           const { sploseId } = await publishRow(row, event);
@@ -526,9 +543,10 @@ function createWatcher(deps) {
       const alerts = detectExternalChanges({ localEvents: local, sploseAppointments: appts, pendingEventIds, now: t0, recentHours });
       // Portal bookings that never reached Splose and have nothing queued.
       const { rows: unlinkedRows } = await db.pool.query(
-        `SELECT id, user_id, title, start_time, end_time, client_id, created_by_source, is_deleted, splose_id FROM events
+        `SELECT id, user_id, title, start_time, end_time, client_id, created_by_source, is_deleted, splose_id, splose_sync_ignored_at FROM events
           WHERE splose_id IS NULL AND client_id IS NOT NULL AND created_by_source = 'app'
             AND (is_deleted IS NULL OR is_deleted = FALSE)
+            AND splose_sync_ignored_at IS NULL
             AND start_time >= $1::timestamptz AND start_time <= $2::timestamptz`,
         [new Date(t0.getTime() - 1 * 86400000).toISOString(), new Date(t0.getTime() + windowDays * 86400000).toISOString()]
       );
@@ -698,6 +716,7 @@ module.exports = {
   summariseError,
   detectExternalChanges,
   detectUnlinked,
+  isCancelledAppointment,
   enqueueChange,
   listPending,
   createPublisher,
