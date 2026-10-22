@@ -138,6 +138,18 @@ router.put('/api/onboarding/settings', requirePermission('onboarding.manage_comp
     if (!Object.keys(patch).length) {
       return res.status(400).json({ error: 'No recognised settings supplied' });
     }
+    // The practice's own identity — the name, ABN, signatory and contact
+    // details printed on every letter and email — is the Owner's to change.
+    const practice = require('./onboarding-practice');
+    const touchesPractice = Object.keys(patch).some((k) => practice.PRACTICE_KEYS.includes(k) || k === 'defaultSuperFund');
+    if (touchesPractice && req.user.role !== 'owner') {
+      return res.status(403).json({ error: 'Only the practice owner can change the practice details.', code: 'owner_only' });
+    }
+    const fieldErrors = practice.validatePracticePatch(patch);
+    if (Object.keys(fieldErrors).length) {
+      return res.status(400).json({ error: 'Some details are not valid', fields: fieldErrors });
+    }
+    for (const k of practice.PRACTICE_KEYS) if (typeof patch[k] === 'string') patch[k] = patch[k].trim();
     // Provider status changes what the portal asserts is legally required, so
     // it is audited as its own event rather than a generic settings write.
     const before = await odb.getOnboardingSettings();

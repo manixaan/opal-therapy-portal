@@ -36,9 +36,10 @@ const firstName = (name) => String(name || '').trim().split(/\s+/)[0] || 'there'
 const ddmmyyyy = (d) => new Date(d).toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Australia/Perth' });
 function dueDateFrom(from = new Date()) { const d = new Date(from); d.setDate(d.getDate() + RETURN_DAYS); return d; }
 
-function composeInductionEmail({ applicantName, sentAt = new Date() }) {
+function composeInductionEmail({ applicantName, sentAt = new Date(), signOff }) {
   const dueAt = dueDateFrom(sentAt);
-  return { subject: SUBJECT, body: BODY.replace(/\[Name\]/g, firstName(applicantName)).replace(/\[DD\/MM\/YYYY\]/g, ddmmyyyy(dueAt)), dueAt };
+  const body = BODY.replace(/\[Name\]/g, firstName(applicantName)).replace(/\[DD\/MM\/YYYY\]/g, ddmmyyyy(dueAt));
+  return { subject: SUBJECT, body: require('./onboarding-practice').applySignOff(body, signOff), dueAt };
 }
 function restampDueDate(body, previousDueAt, dueAt) {
   let out = String(body || '').replace(/\[DD\/MM\/YYYY\]/g, ddmmyyyy(dueAt));

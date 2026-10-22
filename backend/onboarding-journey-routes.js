@@ -45,6 +45,7 @@ const letter = require('./onboarding-offer-letter');
 const offerDocx = require('./onboarding-offer-docx');
 const offerEmail = require('./onboarding-offer-email');
 const offerTemplate = require('./onboarding-offer-template');
+const practice = require('./onboarding-practice');
 const documentCheck = require('./onboarding-document-check');
 const graphMail = require('./graph-mail');
 const { auditOnboarding } = require('./onboarding-audit');
@@ -397,6 +398,7 @@ async function recordDetail(req, assignment) {
     : [null, null, null];
   const emailDefault = offerEmail.composeOfferEmail({
     applicantName: assignment.applicant_name, positionTitle: assignment.job_title,
+    signOff: practice.practiceProfile(await odb.getOnboardingSettings()).signOff,
   });
 
   return {
@@ -1100,7 +1102,7 @@ router.post('/api/onboarding/journey/records/:id/offer/email/draft', requirePerm
   }
 
   // The body may arrive edited with this click, or have been saved earlier.
-  const d = offerEmail.composeOfferEmail({ applicantName: assignment.applicant_name, positionTitle: assignment.job_title });
+  const d = offerEmail.composeOfferEmail({ applicantName: assignment.applicant_name, positionTitle: assignment.job_title, signOff: practice.practiceProfile(await odb.getOnboardingSettings()).signOff });
   const subject = str(req.body?.subject, 250) || offer.email_subject || d.subject;
   const body = (typeof req.body?.body === 'string' && req.body.body.trim()) ? req.body.body.slice(0, 20000) : (offer.email_body || d.body);
 

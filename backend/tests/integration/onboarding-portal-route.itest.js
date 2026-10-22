@@ -422,3 +422,26 @@ describe('Owner decision 1 — the portal route', () => {
     expect(offer.terms).toMatchObject({ award: 'QA-AWARD', payCycle: 'Weekly', workPattern: 'QA-PATTERN', superannuationRate: 12, offerClosingDate: '2026-11-20', cpdAllowance: 1500 });
   });
 });
+
+describe('the practice\'s details are settings the Owner edits, used everywhere', () => {
+  test('Owner-only, validated field by field, and the letter and Email 1 follow them', async () => {
+    const { agent: owner } = await agentFor({ role: 'owner', email: 'owner@example.test' });
+    const bad = await owner.put('/api/onboarding/settings').send({ practiceEmail: 'nope', practiceAbn: '12' });
+    expect(bad.status).toBe(400);
+    expect(Object.keys(bad.body.fields).sort()).toEqual(['practiceAbn', 'practiceEmail']);
+
+    const { agent: delegate } = await agentFor({ role: 'admin', email: 'd@example.test', permissions: ['onboarding.view', 'onboarding.manage_compliance'] });
+    expect((await delegate.put('/api/onboarding/settings').send({ offerSignatoryName: 'Someone Else' })).status).toBe(403);
+    // The delegate can still change the compliance settings that are theirs.
+    expect((await delegate.put('/api/onboarding/settings').send({ defaultDueDays: 21 })).status).toBe(200);
+
+    const ok = await owner.put('/api/onboarding/settings').send({ offerSignatoryName: 'Kim Lee', offerSignatoryTitle: 'Practice Manager', returnEmail: 'hr@example.test' });
+    expect(ok.status).toBe(200);
+    const { record } = await start(owner);
+    const rec = await owner.get(`/api/onboarding/journey/records/${record.id}`);
+    expect(rec.body.email.body).toMatch(/Kim\nPractice Manager \| Opal Therapy$/);
+    const letter = await owner.get(`/api/onboarding/journey/records/${record.id}/offer/letter/download`).buffer(true).parse((res, cb) => { const c = []; res.on('data', (d) => c.push(d)); res.on('end', () => cb(null, Buffer.concat(c))); });
+    const xml = await (await require('jszip').loadAsync(letter.body)).file('word/document.xml').async('string');
+    expect(xml).toContain('Kim Lee');
+  });
+});

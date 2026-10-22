@@ -394,6 +394,13 @@ router.get('/api/onboarding/me/requirements/:rid', safe(async (req, res) => {
       payload.values = await odb.getPersonalDetails(req.user.id);
     } else if (['bank_details', 'tax_setup', 'super_setup'].includes(snap.form_key)) {
       payload.values = odb.payrollView(await odb.getPayrollProfileMasked(req.user.id));
+      if (snap.form_key === 'super_setup') {
+        // The employer's part of the super choice, from the practice settings.
+        const settings = await odb.getOnboardingSettings();
+        const p = require('./onboarding-practice').practiceProfile(settings);
+        const fund = settings.defaultSuperFund || {};
+        payload.employer = { name: p.name, abn: p.abn, defaultFund: fund.name ? { name: fund.name, abn: fund.abn || null, usi: fund.usi || null } : null };
+      }
     } else if (['identity', 'right_to_work'].includes(snap.form_key)) {
       payload.values = await odb.listIdentityRecordsMasked(req.user.id);
     }

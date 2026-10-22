@@ -93,6 +93,26 @@ const DEFAULT_SETTINGS = {
   // Default super fund. The employer must complete Section C of the
   // Superannuation standard choice form BEFORE giving it to an employee.
   defaultSuperFund: { name: null, abn: null, usi: null },
+
+  // ── The practice's own details (Oct 2026) ────────────────────────────────
+  // Every generated letter, contract and email reads these (see
+  // onboarding-practice.js); the Owner edits them in Onboarding settings.
+  // Seeded with the practice's current details. No street address is
+  // printed until one is set.
+  practiceName: 'Opal Therapy',
+  practiceAbn: '49 699 791 958',
+  practiceAcn: '699 791 958',
+  practicePhone: '0484 827 212',
+  practiceEmail: 'ann.mathew@opaltherapy.com.au',
+  practiceAddress: '',
+  offerSignatoryName: 'Ann Mary Mathew',
+  offerSignatoryTitle: 'Director',
+  offerSignatoryEmail: 'ann.mathew@opaltherapy.com.au',
+  offerSignatoryPhone: '0484 827 212',
+  // Where returned documents and replies go. Blank: the practice email.
+  returnEmail: '',
+  // The base location printed on a new offer when the form leaves it blank.
+  defaultWorkLocation: '',
 };
 
 // ═════════════════════════════════════════════════════════════════════════════

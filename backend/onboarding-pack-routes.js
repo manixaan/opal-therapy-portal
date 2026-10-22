@@ -150,9 +150,10 @@ async function packDetail(req, assignment, phase = 'documentation') {
   const included = items.filter((i) => i.status === 'included');
   const zip = await wdb.getLiveStarterPack(assignment.id);
   const zipIsOurs = zip && Array.isArray(zip.manifest) && (zip.manifest.length === 0 || zip.manifest[0].phase === phase);
+  const signOff = require('./onboarding-practice').practiceProfile(await odb.getOnboardingSettings()).signOff;
   const emailDefault = phase === 'induction'
-    ? induction.composeInductionEmail({ applicantName: assignment.applicant_name })
-    : packEmail.composePackEmail({ applicantName: assignment.applicant_name });
+    ? induction.composeInductionEmail({ applicantName: assignment.applicant_name, signOff })
+    : packEmail.composePackEmail({ applicantName: assignment.applicant_name, signOff });
   const base = `/api/onboarding/journey/records/${assignment.id}/${P.prefix}`;
   // A document marked not applicable is set aside: it is neither tracked nor expected back.
   const tracked = included.filter((i) => (i.employeeReturns || i.itemKind !== 'document') && i.progress !== 'not_applicable');
@@ -430,6 +431,7 @@ async function personaliseItemFile(assignment, row, file) {
     },
     applicant: { name: assignment.applicant_name, email: assignment.applicant_email, mobile: assignment.mobile },
     signatory: { name: st.offerSignatoryName, title: st.offerSignatoryTitle, email: st.offerSignatoryEmail, phone: st.offerSignatoryPhone },
+    noticesEmail: require('./onboarding-practice').practiceProfile(st).email,
     issuedAt: new Date(),
     isTreatingTherapist: assignment.is_treating_therapist === true || assignment.role_category === 'occupational_therapist',
   });
@@ -456,7 +458,8 @@ async function buildZipForRecord(req, assignment, phase = 'documentation') {
   const org = await orgName(assignment.organisation_id);
   const built = await pack.buildPackZip(resolved, {
     orgName: org, employeeName: assignment.applicant_name, roleTitle: assignment.job_title,
-    dueDate: assignment[PHASES[phase].cols.dueAt], returnEmail: req.user.email, packName: PHASES[phase].zipName,
+    // Returns go to the practice's configured address, not to whoever pressed the button.
+    dueDate: assignment[PHASES[phase].cols.dueAt], returnEmail: require('./onboarding-practice').practiceProfile(await odb.getOnboardingSettings()).returnEmail, packName: PHASES[phase].zipName,
   });
   built.manifest = built.manifest.map((m) => ({ ...m, phase }));
   built.fileName = built.fileName.replace('Onboarding Documentation Pack', PHASES[phase].zipName);
@@ -809,7 +812,8 @@ router.get(`${BASE}`, requirePermission('onboarding.view'), safe(async (req, res
     const now = new Date();
     const E = P.email;
     const dueAt = E.dueDateFrom(now);
-    const d = phase === 'induction' ? E.composeInductionEmail({ applicantName: assignment.applicant_name, sentAt: now }) : E.composePackEmail({ applicantName: assignment.applicant_name, sentAt: now });
+    const signOff = require('./onboarding-practice').practiceProfile(await odb.getOnboardingSettings()).signOff;
+    const d = phase === 'induction' ? E.composeInductionEmail({ applicantName: assignment.applicant_name, sentAt: now, signOff }) : E.composePackEmail({ applicantName: assignment.applicant_name, sentAt: now, signOff });
     const subject = str(req.body?.subject, 250) || assignment[C.subject] || d.subject;
     const rawBody = (typeof req.body?.body === 'string' && req.body.body.trim()) ? req.body.body.slice(0, 20000) : (assignment[C.body] || d.body);
     const body = E.restampDueDate(rawBody, assignment[C.dueAt], dueAt);
