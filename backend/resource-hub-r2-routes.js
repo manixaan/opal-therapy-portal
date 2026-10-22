@@ -205,10 +205,18 @@ async function transition(req, resourceId, {
       }
     }
 
+    // Leaving 'retired' must also lift the withdrawal stamp. Every reader
+    // (LIVE_RESOURCE_SQL, the library scope, file delivery) requires
+    // archived_at IS NULL, so a "restored" record that kept it stayed
+    // invisible, unmovable and unable to take files — restored in name only.
+    // The archive route sets archived_at itself through extraSet, so the
+    // clearing is added only when this transition does not set it.
+    const clearArchived = (toState !== 'retired' && !/archived_at/.test(extraSet))
+      ? ', archived_at = NULL' : '';
     const params = [resourceId, orgOf(req), toState, legacyStatus, ...extraParams];
     const { rows: updated } = await client.query(
       `UPDATE resources
-          SET publication_state = $3, status = $4, updated_at = NOW()${extraSet}
+          SET publication_state = $3, status = $4, updated_at = NOW()${clearArchived}${extraSet}
         WHERE id = $1 AND organisation_id IS NOT DISTINCT FROM $2
         RETURNING *`, params);
 

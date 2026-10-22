@@ -82,11 +82,16 @@ test('RBAC + governance lifecycle + private files', async () => {
   const nowVisible = await therapist.get('/api/resources');
   expect(nowVisible.body.resources).toHaveLength(2);
 
-  // Files: therapist cannot upload; owner can; bad type refused
+  // Files: this legacy router has NO upload door. The old
+  // POST /api/resources/:id/files skipped the Resource Hub privacy scan, so it
+  // was removed; every role now gets a 404 from it. The download below is of
+  // a file stored the way legacy rows were (base64 in the database).
   const rid = approvedRes.body.resource.id;
-  expect((await therapist.post(`/api/resources/${rid}/files`).send({ fileName: 'a.pdf', fileMime: 'application/pdf', fileData: PDF_B64 })).status).toBe(403);
-  expect((await owner.post(`/api/resources/${rid}/files`).send({ fileName: 'evil.exe', fileMime: 'application/x-msdownload', fileData: 'TVqQ' })).status).toBe(415);
-  expect((await owner.post(`/api/resources/${rid}/files`).send({ fileName: 'handout.pdf', fileMime: 'application/pdf', fileData: PDF_B64 })).status).toBe(201);
+  expect((await therapist.post(`/api/resources/${rid}/files`).send({ fileName: 'a.pdf', fileMime: 'application/pdf', fileData: PDF_B64 })).status).toBe(404);
+  expect((await owner.post(`/api/resources/${rid}/files`).send({ fileName: 'handout.pdf', fileMime: 'application/pdf', fileData: PDF_B64 })).status).toBe(404);
+  await db.pool.query(
+    `INSERT INTO resource_files (resource_id, file_name, file_mime, file_size_bytes, file_data, storage_backend)
+     VALUES ($1, 'handout.pdf', 'application/pdf', 22, $2, 'db')`, [rid, PDF_B64]);
 
   // Download: therapist OK on approved; 404 on garbage id; draft blocked pre-approval
   const dl = await therapist.get(`/api/resources/${rid}/download`);
@@ -108,7 +113,7 @@ test('RBAC + governance lifecycle + private files', async () => {
   // Audit rows exist, no file content inside
   const audit = await db.pool.query("SELECT action, metadata::text AS m FROM audit_logs WHERE action LIKE 'resource.%'");
   const actions = audit.rows.map(r => r.action);
-  for (const a of ['resource.created', 'resource.approved', 'resource.file_uploaded', 'resource.downloaded', 'resource.favourited', 'resource.archived']) {
+  for (const a of ['resource.created', 'resource.approved', 'resource.downloaded', 'resource.favourited', 'resource.archived']) {
     expect(actions).toContain(a);
   }
   for (const r of audit.rows) expect(r.m || '').not.toContain(PDF_B64.slice(0, 12));

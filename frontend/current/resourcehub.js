@@ -4252,6 +4252,10 @@
   }
 
   async function adminAction(id, action) {
+    // Archiving withdraws a live document from every reader in one click, so
+    // it asks first. Submit and approve move a record forward and do not.
+    if (action === 'archive' && typeof global.portalConfirm === 'function'
+      && !await global.portalConfirm('Archive this resource? Staff will no longer see it. An owner can return it to review later.', { danger: true })) return;
     var d = await api('/api/rh2/resources/' + encodeURIComponent(id) + '/' + action, { method: 'POST' });
     if (!d.ok) { toast('Could not ' + action, d.error || 'Please try again.', 'warn'); return; }
     toast('Done', action === 'approve' ? 'Resource approved. It remains unpublished.' : action === 'submit' ? 'Submitted for review.' : 'Archived.');

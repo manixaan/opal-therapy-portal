@@ -24,7 +24,6 @@ const router = express.Router();
 const db = require('./database');
 const { pool } = require('./database');
 const { requireAuth, requireRole } = require('./permissions');
-const { validateUpload } = require('./profile-routes');
 const log = require('./logger').createLogger('resources');
 
 const hubEnabled = () => process.env.ENABLE_RESOURCE_HUB !== 'false';
@@ -152,42 +151,10 @@ router.post('/api/resources', safe(async (req, res) => {
   }
 }));
 
-// Upload a file to a resource (owner/admin only) via the storage abstraction.
-router.post('/api/resources/:id/files', requireRole('owner'), safe(async (req, res) => {
-  try {
-    if (!isUuid(req.params.id)) return res.status(404).json({ error: 'Not found' });
-    const { fileName, fileMime, fileData, fileSizeBytes } = req.body || {};
-    const uploadError = validateUpload({ fileName, fileMime, fileData });
-    if (uploadError) return res.status(415).json({ error: uploadError });
-    const r = await pool.query('SELECT id FROM resources WHERE id=$1 AND organisation_id IS NOT DISTINCT FROM $2', [req.params.id, orgOf(req)]);
-    if (!r.rows.length) return res.status(404).json({ error: 'Not found' });
-
-    const { getBackend, getBackendName } = require('./storage');
-    const backendName = getBackendName();
-    const ins = await pool.query(
-      `INSERT INTO resource_files (resource_id, file_name, file_mime, file_size_bytes, file_data, storage_backend)
-       VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
-      [req.params.id, fileName, fileMime, fileSizeBytes || null,
-       backendName === 'db' ? fileData : null, backendName]);
-    const fileId = ins.rows[0].id;
-    if (backendName !== 'db' && fileData) {
-      try {
-        const put = await getBackend().put({ userId: req.user.id, docId: fileId, fileName, mime: fileMime, base64: fileData });
-        await pool.query('UPDATE resource_files SET storage_backend=$2, storage_key=$3, file_data=NULL WHERE id=$1',
-          [fileId, put.backend, put.storageKey]);
-      } catch (putErr) {
-        await pool.query('DELETE FROM resource_files WHERE id=$1', [fileId]);
-        throw putErr;
-      }
-    }
-    await pool.query('UPDATE resource_files SET uploaded_by=$2 WHERE id=$1', [fileId, req.user.id]);
-    await audit(req, 'resource.file_uploaded', req.params.id, { fileName, mime: fileMime });
-    res.status(201).json({ ok: true, fileId });
-  } catch (err) {
-    log.error('resource upload failed', { error: err });
-    res.status(500).json({ error: 'Upload failed' });
-  }
-}));
+// There is no upload door on this legacy router. POST /api/resources/:id/files
+// stored bytes after only the profile-document validator — no privacy scan, no
+// magic-byte gate — and nothing in the portal called it. Every resource file now
+// arrives through resource-file-intake.js (Admin → Content, or the Library).
 
 // Private, authenticated download. Therapists: approved resources only.
 router.get('/api/resources/:id/download', safe(async (req, res) => {

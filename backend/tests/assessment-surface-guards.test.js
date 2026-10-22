@@ -630,7 +630,8 @@ describe('changed assets are cache-busted', () => {
       // the built-in import when the shelf has not got it yet, and plays the
       // walkthrough as a learner. The CSS carries the strip.
       // r53: the toast wrapper forwards kind; failures pass 'warn' (10 Oct 2026).
-      ['resourcehub.js', 'r53'], ['resourcehub.css', 'r30'],
+      // r54: Admin → Content "Archive" asks before withdrawing a live document.
+      ['resourcehub.js', 'r54'], ['resourcehub.css', 'r30'],
       // 2: the Resource Hub walkthrough lost the step that spotlighted the
       // Home collections grid, because the grid it pointed at is gone.
       // 3: the Splose induction — eight screenshot-led lessons in module
