@@ -612,8 +612,17 @@ describe('Stage 3 — the induction checklist, portal access as a task, and comp
     await db.pool.query(
       `UPDATE onboarding_requirements SET status = 'complete', completed_at = NOW() WHERE assignment_id = $1`, [record.id]);
     await db.pool.query(
+      `UPDATE onboarding_pack_items SET verification_status = 'verified', verified_at = NOW() WHERE assignment_id = $1`, [record.id]);
+    await db.pool.query(
       `UPDATE onboarding_assignments SET status = 'ready_to_activate', submitted_at = NOW() WHERE id = $1`, [record.id]);
     return { record, base };
+  }
+
+  /** Stand in for the starter accepting the invitation: a password of their own. */
+  async function starterSetsPassword(recordId) {
+    await db.pool.query(
+      `UPDATE users SET password_hash = 'chosen-by-the-starter', password_is_temporary = FALSE, must_change_password = FALSE
+        WHERE id = (SELECT user_id FROM onboarding_assignments WHERE id = $1)`, [recordId]);
   }
 
   test('reaching the stage generates a role-keyed checklist, once', async () => {
@@ -667,6 +676,14 @@ describe('Stage 3 — the induction checklist, portal access as a task, and comp
     // An automated task cannot simply be ticked.
     expect((await agent.post(`${base}/tasks/portal_access/complete`)).status).toBe(409);
 
+    // Owner decision 2: Activate is refused — and says why — until the starter
+    // has their own password and the induction walkthrough is done.
+    const early = await agent.post(`${base}/tasks/portal_access/run`);
+    expect(early.status).toBe(409);
+    expect(early.body.blockers.map((b) => b.code)).toEqual(expect.arrayContaining(['password_not_set', 'induction_walkthrough']));
+    await starterSetsPassword(record.id);
+    expect((await agent.post(`${base}/tasks/induction_walkthrough/complete`)).status).toBe(200);
+
     const run = await agent.post(`${base}/tasks/portal_access/run`);
     expect(run.status).toBe(200);
     expect(run.body.record.status).toBe('activated');
@@ -716,11 +733,12 @@ describe('Stage 3 — the induction checklist, portal access as a task, and comp
   }
   const fakeReq = (user) => ({ user, ip: '127.0.0.1', headers: {}, get: () => '' });
 
-  test('Stage 2 completing sets the person up by itself: requirements synced, portal access activated, tasks ticked', async () => {
+  test('Stage 2 completing syncs the requirements but NEVER activates — that is the Owner\'s press (owner decision 2, audit B-2)', async () => {
     const { agent, user: owner } = await agentFor({ role: 'owner', email: 'owner@example.com' });
     const { record } = await start(agent);
     const base = `/api/onboarding/journey/records/${record.id}`;
     await agent.post(`${base}/offer/skip`);
+    await agent.post(`${base}/pack/prepare`);
     expect((await agent.post(`${base}/release`)).status).toBe(201);
     await completeDocumentation(agent, record.id);
 
@@ -730,32 +748,45 @@ describe('Stage 3 — the induction checklist, portal access as a task, and comp
     expect(out.documentationComplete).toBe(true);
 
     const after = await agent.get(base);
-    expect(after.body.record.status).toBe('activated');
+    expect(after.body.record.status).not.toBe('activated');
     const byCode = Object.fromEntries(after.body.tasks.map((t) => [t.code, t]));
-    expect(byCode.portal_account.status).toBe('done');
-    expect(byCode.portal_access).toMatchObject({ status: 'done', note: expect.stringMatching(/by the portal/) });
+    // No password of their own yet: the account is not "done", and the task says what is left.
+    expect(byCode.portal_account.status).toBe('pending');
+    expect(byCode.portal_access.status).toBe('pending');
+    expect(byCode.portal_access.note).toMatch(/Waiting on/);
     expect(byCode.work_email.status).toBe('pending'); // no Microsoft 365 account yet — an Owner's deliberate step
+    const stillPre = await db.pool.query('SELECT role FROM users WHERE id = $1', [after.body.record.userId]);
+    expect(stillPre.rows[0].role).toBe('pre_employee');
     // The requirements the pack verified were completed by the sync, not by hand.
     const { rows } = await db.pool.query(
       `SELECT r.status FROM onboarding_requirements r JOIN onboarding_pack_items i ON i.requirement_code = r.template_code AND i.assignment_id = r.assignment_id
         WHERE r.assignment_id = $1 AND i.verification_status = 'verified'`, [record.id]);
     expect(rows.length).toBeGreaterThan(0);
     expect(rows.every((r) => r.status === 'complete')).toBe(true);
-    // The person is staff now.
-    const u = await db.pool.query('SELECT role, account_status FROM users WHERE id = $1', [after.body.record.userId]);
-    expect(u.rows[0]).toMatchObject({ role: 'therapist', account_status: 'active' });
-    // Running the sync again changes nothing and throws nothing.
+    // Everything done — still not activated by a sync; the task says it is ready for the Owner.
+    await starterSetsPassword(record.id);
+    await agent.post(`${base}/tasks/induction_walkthrough/complete`);
     const again = await db.pool.query('SELECT * FROM onboarding_assignments WHERE id = $1', [record.id]);
     await sync(fakeReq(owner), again.rows[0]);
-    expect((await agent.get(base)).body.record.status).toBe('activated');
+    const ready = await agent.get(base);
+    expect(ready.body.record.status).not.toBe('activated');
+    expect(ready.body.tasks.find((t) => t.code === 'portal_access').note).toMatch(/Ready — waiting for the Owner/);
+    // The Owner presses Activate: the person is staff now.
+    const run = await agent.post(`${base}/tasks/portal_access/run`);
+    expect(run.status).toBe(200);
+    expect(run.body.record.status).toBe('activated');
+    const u = await db.pool.query('SELECT role, account_status FROM users WHERE id = $1', [after.body.record.userId]);
+    expect(u.rows[0]).toMatchObject({ role: 'therapist', account_status: 'active' });
   });
 
-  test('with a blocking requirement still open, the portal waits and says what on the task — then finishes when it clears', async () => {
+  test('with a blocking requirement still open, the portal waits and says what on the task — and says it is ready when it clears', async () => {
     const { agent, user: owner } = await agentFor({ role: 'owner', email: 'owner@example.com' });
     const { record } = await start(agent);
     const base = `/api/onboarding/journey/records/${record.id}`;
     await agent.post(`${base}/offer/skip`);
+    await agent.post(`${base}/pack/prepare`);
     await agent.post(`${base}/release`);
+    await starterSetsPassword(record.id);
     await completeDocumentation(agent, record.id);
     // One blocking requirement the pack cannot vouch for stays open.
     const { rows: blk } = await db.pool.query(
@@ -776,26 +807,32 @@ describe('Stage 3 — the induction checklist, portal access as a task, and comp
     expect(waiting.note).toContain(blk[0].title);
 
     await db.pool.query(`UPDATE onboarding_requirements SET status = 'complete', completed_at = NOW() WHERE assignment_id = $1 AND status = 'not_started'`, [record.id]);
+    await agent.post(`${base}/tasks/induction_walkthrough/complete`);
     const a2 = await db.pool.query('SELECT * FROM onboarding_assignments WHERE id = $1', [record.id]);
     await sync(fakeReq(owner), a2.rows[0]);
     rec = await agent.get(base);
-    expect(rec.body.record.status).toBe('activated');
-    expect(rec.body.tasks.find((t) => t.code === 'portal_access').status).toBe('done');
+    expect(rec.body.record.status).not.toBe('activated');
+    expect(rec.body.tasks.find((t) => t.code === 'portal_access')).toMatchObject({ status: 'pending', note: expect.stringMatching(/Ready/) });
   });
 
-  test('activation refuses while a blocking requirement is open, and says so on the task', async () => {
+  test('activation refuses while a blocking requirement is open, and says exactly what on the task', async () => {
     const { agent } = await agentFor({ role: 'owner', email: 'owner@example.com' });
     const { record, base } = await toReadyToActivate(agent);
-    await db.pool.query(
+    await starterSetsPassword(record.id);
+    const { rows: blk } = await db.pool.query(
       `UPDATE onboarding_requirements SET status = 'not_started'
-        WHERE id = (SELECT id FROM onboarding_requirements WHERE assignment_id = $1 AND blocks_activation = TRUE LIMIT 1)`, [record.id]);
+        WHERE id = (SELECT id FROM onboarding_requirements WHERE assignment_id = $1 AND blocks_activation = TRUE LIMIT 1) RETURNING template_code`, [record.id]);
     await agent.get(base);
     const run = await agent.post(`${base}/tasks/portal_access/run`);
     expect(run.status).toBe(409);
     expect(run.body.code).toBe('activation_blocked');
+    expect(run.body.blockers.map((b) => b.code)).toContain(blk[0].template_code);
     const after = await agent.get(base);
-    expect(after.body.tasks.find((t) => t.code === 'portal_access').status).toBe('failed');
-    expect(after.body.journey.counts.adminReview).toBe(1);
+    const t = after.body.tasks.find((x) => x.code === 'portal_access');
+    expect(t.status).toBe('pending');
+    expect(t.note).toMatch(/Outstanding items/);
+    const { rows } = await db.pool.query('SELECT role FROM users WHERE id = $1', [after.body.record.userId]);
+    expect(rows[0].role).toBe('pre_employee');
   });
 
   test('a viewer cannot tick off a task; another organisation cannot see the record', async () => {

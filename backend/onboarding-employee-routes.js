@@ -402,6 +402,15 @@ router.get('/api/onboarding/me/requirements/:rid', safe(async (req, res) => {
     const creds = await odb.listCredentialsForUser(req.user.id);
     payload.credential = creds.find((c) => c.id === requirement.credential_id) || null;
   }
+  // The record's own contract / position description, when one answers this item.
+  const recordDocs = require('./onboarding-record-documents');
+  if (requirement.handler === 'document_ack' && recordDocs.kindFor(requirement.template_code)) {
+    const doc = await recordDocs.forRequirement(assignment.id, requirement.template_code);
+    payload.attachedDocument = doc ? {
+      id: doc.id, fileName: doc.file_name, mime: doc.file_mime, uploadedAt: doc.uploaded_at,
+      url: `/api/onboarding/me/requirements/${requirement.id}/document`,
+    } : null;
+  }
 
   // PROVENANCE for anything we filled in on their behalf.
   //
@@ -587,6 +596,38 @@ router.post('/api/onboarding/me/requirements/:rid/acknowledge', safe(async (req,
     });
   }
 
+  // Nothing is acknowledged without a document behind it, and never a
+  // document that still has gaps in it (audit B-5, owner decision 4). The
+  // contract and position description are the record's own attached files.
+  let attached = null;
+  if (requirement.handler === 'document_ack') {
+    const placeholder = require('./onboarding-placeholder-check');
+    const docTitle = snap.document?.title || requirement.title;
+    if (snap.document_id && snap.document_version_id) {
+      const why = await placeholder.versionProblem(await odb.getDocumentVersion(snap.document_version_id));
+      if (why) {
+        return res.status(409).json({
+          error: `${docTitle} is not ready to be acknowledged yet`,
+          message: 'The practice is still finalising this document. You do not need to do anything — it will appear here when it is ready.',
+          code: 'document_not_ready',
+        });
+      }
+    } else if (!snap.document_id) {
+      const recordDocs = require('./onboarding-record-documents');
+      attached = await recordDocs.forRequirement(assignment.id, requirement.template_code);
+      if (!attached) {
+        return res.status(409).json({
+          error: `${docTitle} has not been attached yet`,
+          message: 'The practice still needs to attach this document. You do not need to do anything — it will appear here when it is ready.',
+          code: 'document_not_attached',
+        });
+      }
+      if (req.body?.attachedDocumentId && req.body.attachedDocumentId !== attached.id) {
+        return res.status(409).json({ error: 'This document has been replaced since you opened it. Please read the current version.', code: 'document_replaced' });
+      }
+    }
+  }
+
   let acknowledgement = null;
   if (snap.document_version_id && snap.document_id) {
     acknowledgement = await odb.recordAcknowledgement({
@@ -635,7 +676,11 @@ router.post('/api/onboarding/me/requirements/:rid/acknowledge', safe(async (req,
 
   try {
     await advanceRequirement(req, assignment, requirement, {
-      data: { acknowledged: true, typedLegalName: typedName || undefined },
+      // The exact file acknowledged, for the record's own documents.
+      data: {
+        acknowledged: true, typedLegalName: typedName || undefined,
+        ...(attached ? { attachedDocumentId: attached.id, attachedDocumentSha256: attached.file_sha256, attachedFileName: attached.file_name } : {}),
+      },
       acknowledgementId: acknowledgement?.id || null,
       eventType: 'acknowledged',
     });
@@ -1014,6 +1059,26 @@ router.post('/api/onboarding/me/requirements/:rid/upload', safe(async (req, res)
   return respondAdvanced(req, res, assignment, requirement.id, {
     document: { id: record.id, fileName: record.file_name },
   });
+}));
+
+/**
+ * The record's own contract or position description, for the requirement it
+ * answers. Self-scoped: the caller's own assignment and requirement only.
+ */
+router.get('/api/onboarding/me/requirements/:rid/document', safe(async (req, res) => {
+  const assignment = await myAssignment(req);
+  const requirement = await myRequirement(req, assignment);
+  if (!requirement || requirement.handler !== 'document_ack') return notFound(res);
+  const recordDocs = require('./onboarding-record-documents');
+  const doc = await recordDocs.forRequirement(assignment.id, requirement.template_code);
+  const bytes = doc ? await recordDocs.bytesOf(doc).catch(() => null) : null;
+  if (!bytes) return notFound(res);
+  res.set('Cache-Control', 'no-store');
+  res.set('Content-Type', doc.file_mime);
+  res.set('Content-Length', String(bytes.length));
+  res.set('X-Content-Type-Options', 'nosniff');
+  res.set('Content-Disposition', require('./content-disposition').contentDisposition(req.query.download ? 'attachment' : 'inline', doc.file_name));
+  res.send(bytes);
 }));
 
 /** Download evidence the caller uploaded themselves. Self-scoped by user id. */

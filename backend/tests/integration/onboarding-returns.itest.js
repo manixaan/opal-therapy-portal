@@ -108,7 +108,8 @@ describe('Phase 2 begins: the profile owner exists and internal setup is under w
     expect(rec.body.record.userId).toBeTruthy();
     expect(rec.body.profile.employment).toMatchObject({ position: 'Occupational Therapist', employmentType: 'full_time', hoursPerWeek: 38, payBasis: 'annual', payRate: 92000 });
     expect(rec.body.tasks.map((t) => t.code)).toEqual(expect.arrayContaining(['portal_account', 'work_email', 'payroll_setup', 'induction_walkthrough']));
-    expect(rec.body.tasks.find((t) => t.code === 'portal_account').status).toBe('done');
+    // No password of their own yet: the account task waits for it (audit B-3).
+    expect(rec.body.tasks.find((t) => t.code === 'portal_account').status).toBe('pending');
     expect(rec.body.journey.stages[2].state).toBe('parallel');
     expect(rec.body.journey.stage.key).toBe('documentation');
     expect(rec.body.journey.internalOpen.length).toBeGreaterThan(3);

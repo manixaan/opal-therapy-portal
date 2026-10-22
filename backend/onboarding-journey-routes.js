@@ -217,11 +217,13 @@ async function ensureInduction(assignment, tasks, { force = false } = {}) {
     // The checklist already exists: keep it in step with the current template
     // so a task added or retired since shows on every record, not only new ones.
     const delta = await jdb.reconcileTasks(assignment.organisation_id, assignment.id, list);
-    return delta.inserted || delta.updated || delta.removed ? jdb.listTasks(assignment.id) : tasks;
+    const changed = await syncAccountTask(assignment, tasks);
+    return delta.inserted || delta.updated || delta.removed || changed ? jdb.listTasks(assignment.id) : tasks;
   }
   await jdb.ensureTasks(assignment.organisation_id, assignment.id, list);
-  // The portal account itself exists as soon as the profile does.
-  if (assignment.user_id) await jdb.setTaskStatus(assignment.id, 'portal_account', { status: 'done', actorId: null, note: 'Pre-employee account created with the profile' }).catch(() => {});
+  // The portal account is "done" only when the starter can sign in with a
+  // password they chose (audit B-3) — not merely because a row exists.
+  await syncAccountTask(assignment, await jdb.listTasks(assignment.id));
   const { rows } = await odb.pool.query(
     `UPDATE onboarding_assignments SET induction_started_at = COALESCE(induction_started_at, NOW())
       WHERE id = $1 RETURNING induction_started_at`,
@@ -231,6 +233,23 @@ async function ensureInduction(assignment, tasks, { force = false } = {}) {
   // shows the stage as started without a second read.
   if (rows[0]) assignment.induction_started_at = rows[0].induction_started_at;
   return jdb.listTasks(assignment.id);
+}
+
+/**
+ * Tick "Opal Portal account" once the record's own pre-employee has a
+ * password they chose (the invitation accepted). Returns true if it changed.
+ */
+async function syncAccountTask(assignment, tasks) {
+  const t = (tasks || []).find((x) => x.code === 'portal_account');
+  if (!t || t.status === 'done' || t.status === 'skipped' || !assignment.user_id) return false;
+  const { rows } = await odb.pool.query(
+    'SELECT password_hash IS NOT NULL AS has_password, password_is_temporary, must_change_password FROM users WHERE id = $1',
+    [assignment.user_id]
+  );
+  const u = rows[0];
+  if (!u || !u.has_password || u.password_is_temporary || u.must_change_password) return false;
+  await jdb.setTaskStatus(assignment.id, 'portal_account', { status: 'done', actorId: null, note: 'The starter set their own password' }).catch(() => {});
+  return true;
 }
 
 /** The last induction task done closes the record. */
@@ -1204,6 +1223,115 @@ router.post('/api/onboarding/journey/records/:id/offer/skip', requirePermission(
   res.json({ ...(await recordDetail(req, await odb.getAssignment(orgOf(req), assignment.id))), prepared });
 }));
 
+// ── The record's own contract and position description (migration 079) ─────
+// The starter acknowledges exactly these files in the portal. Each is
+// refused while it still holds "[TO CONFIRM …]" gaps or is a placeholder
+// (owner decision 4), and is fixed once the starter has acknowledged it.
+
+const recordDocs = require('./onboarding-record-documents');
+const placeholderCheck = require('./onboarding-placeholder-check');
+const RECORD_DOC_MIMES = { 'application/pdf': ['pdf'], [offerDocx.DOCX_MIME]: ['docx'] };
+
+async function loadRecordDocContext(req, res) {
+  const assignment = await loadRecord(req);
+  if (!assignment) { notFound(res); return null; }
+  const kind = req.params.kind;
+  if (!recordDocs.KINDS.includes(kind)) { notFound(res); return null; }
+  return { assignment, kind, code: recordDocs.CODE_BY_KIND[kind] };
+}
+
+/** True when the starter has already acknowledged this kind of document. */
+async function recordDocAcknowledged(assignmentId, code) {
+  const { rows } = await odb.pool.query(
+    `SELECT 1 FROM onboarding_requirements WHERE assignment_id = $1 AND template_code = $2
+        AND status IN ('submitted', 'awaiting_verification', 'verified', 'complete') LIMIT 1`,
+    [assignmentId, code]
+  );
+  return rows.length > 0;
+}
+
+async function storeRecordDoc(req, res, ctx, { buffer, fileName, fileMime }) {
+  const { assignment, kind, code } = ctx;
+  if (['cancelled', 'archived'].includes(assignment.status)) return res.status(409).json({ error: 'This onboarding is closed.', code: 'closed' });
+  if (await recordDocAcknowledged(assignment.id, code)) {
+    return res.status(409).json({ error: `The starter has already acknowledged the ${recordDocs.LABELS[kind].toLowerCase()}. It cannot be replaced now.`, code: 'already_acknowledged' });
+  }
+  const why = await placeholderCheck.fileProblem({ buffer, mime: fileMime, fileName });
+  if (why) {
+    return res.status(400).json({ error: placeholderCheck.describe(recordDocs.LABELS[kind], why) + '. Finish the document, then attach it.', code: 'document_not_ready' });
+  }
+  let offer = await jdb.getCurrentOffer(assignment.id);
+  // A record from the older assignment route has no letter of offer; the
+  // documents still belong to the employment offer, recorded as not required.
+  if (!offer) {
+    offer = await jdb.createOfferDraft({
+      organisationId: assignment.organisation_id, assignmentId: assignment.id,
+      terms: termsFromAssignment(assignment), createdBy: req.user.id, status: 'not_required',
+    });
+  }
+  const doc = await jdb.storeOfferDocument({
+    organisationId: orgOf(req), offerId: offer.id, assignmentId: assignment.id, kind,
+    fileName, fileMime, buffer, uploadedBy: req.user.id,
+  });
+  await auditOnboarding(req, 'record_document_attached', {
+    targetType: 'onboarding_assignment', targetId: assignment.id,
+    metadata: { assignmentId: assignment.id, documentId: doc.id, kind, sha256: doc.file_sha256, bytes: doc.file_size_bytes },
+  });
+  return res.status(201).json(await recordDetail(req, await odb.getAssignment(orgOf(req), assignment.id)));
+}
+
+router.post('/api/onboarding/journey/records/:id/documents/:kind', requirePermission('onboarding.assign'), safe(async (req, res) => {
+  const ctx = await loadRecordDocContext(req, res);
+  if (!ctx) return;
+  const up = readUpload(req.body, RECORD_DOC_MIMES);
+  if (up.error) return res.status(400).json({ error: up.error });
+  return storeRecordDoc(req, res, ctx, up);
+}));
+
+/**
+ * The contract, composed from the practice's contract template (the library
+ * copy, else the shipped one) and this record's agreed terms — the same
+ * facts as the letter of offer.
+ */
+router.post('/api/onboarding/journey/records/:id/documents/contract/generate', requirePermission('onboarding.assign'), safe(async (req, res) => {
+  req.params.kind = 'contract';
+  const ctx = await loadRecordDocContext(req, res);
+  if (!ctx) return;
+  const built = await require('./onboarding-pack-routes')._internals.generateContractFor(ctx.assignment);
+  if (!built) return res.status(409).json({ error: 'No contract template with the portal\'s fields is available. Upload the contract instead.', code: 'no_template' });
+  return storeRecordDoc(req, res, ctx, built);
+}));
+
+async function serveRecordDoc(req, res, disposition) {
+  const ctx = await loadRecordDocContext(req, res);
+  if (!ctx) return;
+  const doc = await recordDocs.liveDocument(ctx.assignment.id, ctx.kind);
+  const bytes = doc ? await recordDocs.bytesOf(doc).catch(() => null) : null;
+  if (!bytes) return notFound(res);
+  noStore(res);
+  res.set('Content-Type', doc.file_mime);
+  res.set('Content-Length', String(bytes.length));
+  res.set('X-Content-Type-Options', 'nosniff');
+  res.set('Content-Disposition', contentDisposition(disposition, doc.file_name));
+  res.send(bytes);
+}
+router.get('/api/onboarding/journey/records/:id/documents/:kind/preview', requirePermission('onboarding.view'), safe((req, res) => serveRecordDoc(req, res, 'inline')));
+router.get('/api/onboarding/journey/records/:id/documents/:kind/download', requirePermission('onboarding.view'), safe((req, res) => serveRecordDoc(req, res, 'attachment')));
+
+router.delete('/api/onboarding/journey/records/:id/documents/:kind', requirePermission('onboarding.assign'), safe(async (req, res) => {
+  const ctx = await loadRecordDocContext(req, res);
+  if (!ctx) return;
+  if (await recordDocAcknowledged(ctx.assignment.id, ctx.code)) {
+    return res.status(409).json({ error: 'The starter has already acknowledged this document.', code: 'already_acknowledged' });
+  }
+  const { rowCount } = await odb.pool.query(
+    `UPDATE onboarding_offer_documents SET status = 'superseded', superseded_at = NOW()
+      WHERE assignment_id = $1 AND kind = $2 AND status = 'active'`, [ctx.assignment.id, ctx.kind]
+  );
+  if (rowCount) await auditOnboarding(req, 'record_document_removed', { targetType: 'onboarding_assignment', targetId: ctx.assignment.id, metadata: { assignmentId: ctx.assignment.id, kind: ctx.kind } });
+  res.json(await recordDetail(req, await odb.getAssignment(orgOf(req), ctx.assignment.id)));
+}));
+
 /** Derive the document pack for a record whose offer has just settled. Never fatal. */
 async function preparePackFor(req, assignment) {
   try {
@@ -1350,15 +1478,23 @@ router.post('/api/onboarding/journey/records/:id/tasks/:code/run', requirePermis
     });
   } catch (err) {
     if (err instanceof lifecycle.LifecycleError) {
+      // Already active (from the review screen, say): the task is simply done (audit B-11).
+      if (err.body?.code === 'already_activated') {
+        await jdb.setTaskStatus(assignment.id, task.code, { status: 'done', actorId: req.user.id, note: 'Portal access was already active' });
+        await lifecycle.completeIfFinished(assignment.id);
+        return res.json(await recordDetail(req, await odb.getAssignment(orgOf(req), assignment.id)));
+      }
+      // Not ready: the task stays open and says what it is waiting on — the
+      // button is not "failed", it is not yet pressable.
       await jdb.setTaskStatus(assignment.id, task.code, {
-        status: 'failed', actorId: req.user.id, note: err.body?.error || 'Activation refused',
+        status: 'pending', actorId: req.user.id, note: err.body?.error || 'Activation refused',
         detail: { blockers: (err.body?.blockers || []).map((x) => x.code) },
       });
       return res.status(err.status).json(err.body);
     }
     throw err;
   }
-  await jdb.setTaskStatus(assignment.id, task.code, { status: 'done', actorId: req.user.id, note: null, detail: { activatedRole: outcome.user.role } });
+  await jdb.setTaskStatus(assignment.id, task.code, { status: 'done', actorId: req.user.id, note: 'Activated by the Owner', detail: { activatedRole: outcome.user.role } });
 
   await auditOnboarding(req, 'employee_activated', {
     targetType: 'user', targetId: assignment.user_id,
@@ -1383,7 +1519,14 @@ router.post('/api/onboarding/journey/records/:id/tasks/:code/run', requirePermis
   const fresh = await odb.getAssignment(orgOf(req), assignment.id);
   const tasks = await jdb.listTasks(assignment.id);
   await maybeComplete(fresh, tasks);
-  res.json(await recordDetail(req, await odb.getAssignment(orgOf(req), assignment.id)));
+  const closed = await odb.getAssignment(orgOf(req), assignment.id);
+  if (closed.status === 'completed') {
+    await auditOnboarding(req, 'onboarding_completed', {
+      targetType: 'onboarding_assignment', targetId: assignment.id,
+      metadata: { assignmentId: assignment.id, subjectUserId: assignment.user_id, closedByTask: 'portal_access' },
+    });
+  }
+  res.json(await recordDetail(req, closed));
 }));
 
 module.exports = router;

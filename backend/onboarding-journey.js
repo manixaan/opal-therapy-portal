@@ -72,14 +72,14 @@ function buildInductionTasks(assignment, { now = new Date() } = {}) {
     {
       code: 'portal_account', sortOrder: 5,
       title: 'Opal Portal account',
-      description: 'The pre-employee account and employment profile, created with the document pack. Portal access (the staff role) is granted at activation.',
+      description: 'Done when the starter accepts the onboarding invitation and sets their own password. Portal access (the staff role) is granted only when the Owner presses Activate.',
       automation: 'portal_account',
       dueAt: soonest(beforeStart(14)),
     },
     {
       code: 'portal_access', sortOrder: 10,
       title: 'Activate portal access',
-      description: 'Turns the pre-employee account into a staff account with the agreed portal role. The portal does this itself.',
+      description: 'Turns the pre-employee account into a staff account with the agreed portal role. Only the Owner presses Activate, once every required item is done.',
       automation: 'activate_portal_access',
       dueAt: soonest(beforeStart(1)),
     },

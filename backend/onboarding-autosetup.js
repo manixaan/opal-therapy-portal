@@ -7,13 +7,12 @@
  * everything it needs to set the person up, so it does, in order:
  *
  *   1. the Internal Setup checklist exists (it is created here if not);
- *   2. "Opal Portal account" is ticked — the pre-employee login was created
- *      with the document pack;
+ *   2. (the account is ticked when the starter sets their password — not here);
  *   3. every requirement whose document has been verified in the pack is
  *      marked complete, so the activation gate sees what the pack saw;
- *   4. portal access is activated (the pre-employee becomes staff with the
- *      agreed role) — or, if a blocking requirement is still open, the task
- *      says exactly what it is waiting on and this runs again next time;
+ *   4. the "Activate portal access" task says what still stands between the
+ *      record and activation. It NEVER activates: activation is only ever the
+ *      Owner pressing Activate (owner decision 2, Oct 2026);
  *   5. if a Microsoft 365 account already exists for the person, "Create work
  *      email" is ticked and their manager is set on it in Microsoft 365.
  *
@@ -28,22 +27,11 @@
 const odb = require('./onboarding-db');
 const jdb = require('./onboarding-journey-db');
 const pdb = require('./onboarding-pack-db');
-const engine = require('./onboarding-engine');
 const lifecycle = require('./onboarding-lifecycle');
-const email = require('./email');
 const graphIdentity = require('./graph-identity');
-const { auditOnboarding } = require('./onboarding-audit');
 const log = require('./logger').createLogger('onboarding-autosetup');
 
 const CLOSED = new Set(['cancelled', 'archived']);
-
-/** Durable in-app notification; never throws. */
-function notify(userId, payload) {
-  if (!userId) return Promise.resolve();
-  return Promise.resolve()
-    .then(() => require('./app-routes').storeNotification(userId, payload))
-    .catch(() => {});
-}
 
 async function taskByCode(assignmentId, code) {
   return jdb.getTask(assignmentId, code).catch(() => null);
@@ -113,56 +101,28 @@ async function afterDocumentationComplete({ req, assignment, actor }) {
   const journeyRoutes = require('./onboarding-journey-routes');
   let tasks = await jdb.listTasks(assignment.id);
   tasks = await journeyRoutes._internals.ensureInduction(assignment, tasks, { force: true });
-  if (assignment.user_id) await finishTask(assignment.id, 'portal_account', { note: 'Pre-employee account created with the profile' });
+  // The account is "done" only once the starter has a password of their own
+  // (audit B-3) — that is ticked when they accept the invitation, not here.
 
   // 3. What the pack verified, the gate must see.
   await syncRequirementsFromPack(assignment.id);
 
-  // 4. Activation.
+  // 4. Activation is NOT performed here any more (owner decision 2, audit
+  //    B-2): it used to run the moment the last document was verified, before
+  //    the starter had a password or had read a single policy. The portal
+  //    only says what is still standing between the record and the Owner's
+  //    Activate button.
   if (!['activated', 'completed'].includes(assignment.status)) {
-    const requirements = await odb.listRequirements(assignment.id);
-    const gate = engine.evaluateActivation(requirements);
-    if (!gate.ok) {
-      summary.blockers = gate.blockers.map((b) => b.title || b.code);
-      const t = await taskByCode(assignment.id, 'portal_access');
-      if (t && t.status !== 'done') {
-        const shown = summary.blockers.slice(0, 3).join(', ') + (summary.blockers.length > 3 ? ` and ${summary.blockers.length - 3} more` : '');
-        await jdb.setTaskStatus(assignment.id, 'portal_access', {
-          status: 'pending', actorId: null,
-          note: `Waiting on ${summary.blockers.length === 1 ? '' : summary.blockers.length + ' items: '}${shown}`.replace('Waiting on 1 items: ', 'Waiting on: '),
-          detail: { blockers: gate.blockers.map((b) => b.code), waitingSince: new Date().toISOString() },
-        }).catch(() => {});
-      }
-    } else {
-      try {
-        const outcome = await lifecycle.activateAssignment({ assignment, actor: actor || { id: null, name: 'Opal Portal', email: null } });
-        summary.activated = true;
-        await jdb.setTaskStatus(assignment.id, 'portal_access', {
-          status: 'done', actorId, note: 'Activated by the portal when the documentation was complete', detail: { activatedRole: outcome.user.role, trigger: 'documentation_complete' },
-        }).catch(() => {});
-        if (req) {
-          await auditOnboarding(req, 'employee_activated', {
-            targetType: 'user', targetId: assignment.user_id,
-            metadata: { assignmentId: assignment.id, subjectUserId: assignment.user_id, role: assignment.proposed_role, previousRole: 'pre_employee', employmentType: assignment.employment_type, trigger: 'documentation_complete' },
-          });
-        }
-        await notify(assignment.user_id, {
-          type: `onboarding_activated_${assignment.id}`,
-          title: 'Your Opal Therapy account is active',
-          message: 'Your onboarding documentation is complete and your portal access is now active.',
-          severity: 'success', relatedEntity: 'onboarding_assignment', actionPayload: { assignmentId: assignment.id },
-        });
-        try { await email.sendAccountApprovedEmail({ toEmail: outcome.user.email, name: outcome.user.name, role: outcome.user.role }); } catch (err) { log.warn('activation email failed', { error: err, assignmentId: assignment.id }); }
-      } catch (err) {
-        if (err instanceof lifecycle.LifecycleError) {
-          summary.blockers = (err.body?.blockers || []).map((b) => b.title || b.code);
-          await jdb.setTaskStatus(assignment.id, 'portal_access', { status: 'failed', actorId: null, note: err.body?.error || 'Activation refused', detail: { blockers: (err.body?.blockers || []).map((b) => b.code) } }).catch(() => {});
-        } else if (err && err.code === 'ALREADY_ACTIVATED') {
-          summary.activated = true;
-        } else {
-          throw err;
-        }
-      }
+    const gate = await lifecycle.activationReadiness(assignment);
+    summary.blockers = gate.blockers.map((b) => b.title || b.code);
+    const t = await taskByCode(assignment.id, 'portal_access');
+    if (t && t.status !== 'done' && t.status !== 'skipped') {
+      const shown = summary.blockers.slice(0, 3).join(', ') + (summary.blockers.length > 3 ? ` and ${summary.blockers.length - 3} more` : '');
+      await jdb.setTaskStatus(assignment.id, 'portal_access', {
+        status: 'pending', actorId: null,
+        note: gate.ok ? 'Ready — waiting for the Owner to press Activate' : `Waiting on: ${shown}`,
+        detail: { blockers: gate.blockers.map((b) => b.code), checkedAt: new Date().toISOString() },
+      }).catch(() => {});
     }
   }
 

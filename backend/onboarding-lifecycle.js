@@ -165,7 +165,165 @@ async function checkReleasable(assignment) {
     });
   }
 
+  // Owner decision 4: nothing with gaps in it reaches a starter. (A contract
+  // or position description not yet attached does not stop the release — the
+  // starter cannot acknowledge it, and activation waits, until it is; audit B-5.)
+  const documentProblems = await documentProblemsFor(assignment, applied, { requireAttachments: false });
+  if (documentProblems.length) {
+    throw new LifecycleError(409, {
+      error: `These documents are not ready to send: ${documentProblems.map((d) => d.message).join('; ')}.`,
+      code: 'documents_not_ready',
+      message: 'Supply the practice\'s final wording for each, publish it, then release again.',
+      documents: documentProblems,
+    });
+  }
+
   return { version, settings };
+}
+
+/**
+ * Every acknowledgement this record would issue whose document is missing,
+ * a placeholder, or still holds "[TO CONFIRM …]" gaps. Named, so the Owner
+ * knows exactly which document to finish.
+ */
+async function documentProblemsFor(assignment, applied, { requireAttachments = true } = {}) {
+  const placeholder = require('./onboarding-placeholder-check');
+  const recordDocs = require('./onboarding-record-documents');
+  const problems = [];
+  for (const item of applied) {
+    if (item.handler !== 'document_ack') continue;
+    const title = item.document?.title || item.title;
+    if (item.document_id) {
+      if (!item.document_version_id) continue; // unpublished: refused above, or not issued if optional
+      const version = await odb.getDocumentVersion(item.document_version_id);
+      const why = await placeholder.versionProblem(version);
+      if (why) problems.push({ requirementCode: item.template_code, title, reason: why, message: placeholder.describe(title, why) });
+      continue;
+    }
+    // No library document: only the record's own contract / position description can answer it.
+    // (The older account route has no offer to attach them to; there the
+    // acknowledgement itself refuses until a document exists.)
+    if (!requireAttachments) continue;
+    const kind = recordDocs.kindFor(item.template_code);
+    const attached = kind ? await recordDocs.liveDocument(assignment.id, kind) : null;
+    if (!attached) {
+      const why = kind ? 'has not been attached to this record' : 'has no document behind it';
+      problems.push({ requirementCode: item.template_code, title, reason: why, message: placeholder.describe(title, why), attachKind: kind });
+    }
+  }
+  return problems;
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  ACTIVATION READINESS — owner decision 2 (Oct 2026)
+// ═════════════════════════════════════════════════════════════════════════════
+
+/**
+ * The statutory checks that can never be set aside — waived or marked not
+ * applicable — for a clinician (owner decision 3).
+ */
+const CLINICAL_STATUTORY_CODES = Object.freeze(['REQ_AHPRA', 'REQ_NDIS_SCREENING', 'REQ_WWCC']);
+
+/** A clinician / treating role: the record says so, or its role category or portal role does. */
+function isClinicalRole(assignment) {
+  return assignment.is_treating_therapist === true
+    || assignment.role_category === 'occupational_therapist'
+    || assignment.proposed_role === 'therapist';
+}
+
+/**
+ * Owner decision 3: a waiver — "not applicable" included — is the Owner's
+ * alone (by role, not by a delegable permission), and Ahpra registration,
+ * NDIS Worker Screening and the Working with Children Check can never be set
+ * aside for a clinician. Returns { status, body } to refuse, or null.
+ */
+function waiverRefusal(user, assignment, templateCode) {
+  if (!user || user.role !== 'owner') {
+    return { status: 403, body: { error: 'Only the practice owner can set an onboarding item aside.', code: 'owner_only' } };
+  }
+  if (CLINICAL_STATUTORY_CODES.includes(templateCode) && isClinicalRole(assignment)) {
+    return {
+      status: 409,
+      body: {
+        error: 'Ahpra registration, NDIS Worker Screening and the Working with Children Check cannot be waived or marked not applicable for a clinician. Verify it instead.',
+        message: 'These checks record what the issuing authority actually says; for a clinician they are always required.',
+        code: 'statutory_not_waivable',
+      },
+    };
+  }
+  return null;
+}
+
+/**
+ * Everything that must be true before the Owner may press Activate, as a
+ * list the screen can show. Nothing activates by itself any more: this is
+ * the gate the one Activate button passes through.
+ *
+ * @returns {Promise<{ ok: boolean, blockers: object[] }>}
+ */
+async function activationReadiness(assignment, q = odb.pool) {
+  const blockers = [];
+  const add = (code, title, reason, extra = {}) => blockers.push({ code, title, reason, ...extra });
+
+  // 1. The starter can sign in with a password they chose.
+  if (!assignment.user_id) {
+    add('not_released', 'Release the onboarding', 'The starter has not been invited yet');
+  } else {
+    const own = await guard.loadAndAssess(q, assignment, assignment.user_id);
+    if (!own.ok) add('account_not_owned', 'Portal account', own.error);
+    else if (!own.user.password_hash) add('password_not_set', 'Starter sets their password', 'The starter has not accepted the invitation and set their password yet');
+    else if (own.user.must_change_password || own.user.password_is_temporary) add('password_not_set', 'Starter sets their password', 'The starter is still on a temporary password and has not chosen their own');
+  }
+
+  // 2. The letter of offer, where the record has one.
+  const offer = await require('./onboarding-journey-db').getCurrentOffer(assignment.id).catch(() => null);
+  if (offer && !['accepted', 'not_required'].includes(offer.status)) {
+    add('offer_open', 'Letter of offer', 'The signed letter of offer has not been verified');
+  }
+
+  // 3. Every activation-blocking requirement: documents verified, policies
+  //    acknowledged, training complete.
+  const requirements = await odb.listRequirements(assignment.id);
+  if (!requirements.length && !assignment.pack_prepared_at) {
+    add('no_requirements', 'Onboarding items', 'No onboarding items have been issued — release the onboarding first');
+  }
+  const recordDocs = require('./onboarding-record-documents');
+  for (const b of engine.evaluateActivation(requirements).blockers) {
+    let reason = b.reason;
+    const kind = recordDocs.kindFor(b.code);
+    if (kind && !(await recordDocs.liveDocument(assignment.id, kind))) {
+      reason = `Attach the ${recordDocs.LABELS[kind].toLowerCase()} to the record — the starter acknowledges it in the portal`;
+    }
+    add(b.code, b.title, reason, { requirementId: b.id, section: b.section, attachKind: kind || undefined });
+  }
+  // A statutory check set aside on a clinician (by an old route, or by hand)
+  // still blocks: it can only be satisfied by verification.
+  if (isClinicalRole(assignment)) {
+    for (const r of requirements) {
+      if (CLINICAL_STATUTORY_CODES.includes(r.template_code) && (r.status === 'not_applicable' || r.waived === true)) {
+        add(r.template_code, r.title, 'Cannot be set aside for a clinician — it must be verified', { requirementId: r.id });
+      }
+    }
+  }
+
+  // 4. The paper pack, for a record on that route: every required return verified.
+  if (assignment.pack_prepared_at) {
+    const items = await require('./onboarding-pack-db').listItems(assignment.id, undefined, 'documentation');
+    for (const it of items) {
+      if (it.status !== 'included' || !it.required || !it.employee_returns) continue;
+      if (['verified', 'not_applicable'].includes(it.verification_status)) continue;
+      add(it.code, it.title, 'Returned document not yet verified', { packItemId: it.id });
+    }
+  }
+
+  // 5. The induction walkthrough.
+  const tasks = await require('./onboarding-journey-db').listTasks(assignment.id).catch(() => []);
+  const walk = tasks.find((t) => t.code === 'induction_walkthrough');
+  if (walk && !['done', 'skipped'].includes(walk.status)) {
+    add('induction_walkthrough', walk.title, 'Tick it once the induction walkthrough is assigned');
+  }
+
+  return { ok: blockers.length === 0, blockers };
 }
 
 /**
@@ -340,13 +498,15 @@ async function activateAssignment({ assignment, actor }) {
     });
   }
 
-  const requirements = await odb.listRequirements(assignment.id);
-  const activation = engine.evaluateActivation(requirements);
-  if (!activation.ok) {
+  // Owner decision 2: the Owner's deliberate press, and only when everything
+  // required is done — the starter's own password, the documents verified,
+  // the policies acknowledged, the induction complete. Says exactly what is left.
+  const readiness = await activationReadiness(assignment);
+  if (!readiness.ok) {
     throw new LifecycleError(409, {
-      error: 'Outstanding requirements must be resolved before activation',
+      error: 'Outstanding items must be resolved before activation',
       code: 'activation_blocked',
-      blockers: activation.blockers,
+      blockers: readiness.blockers,
     });
   }
 
@@ -394,11 +554,17 @@ async function activateAssignment({ assignment, actor }) {
               updated_at = NOW()
         WHERE user_id = $1`, [assignment.user_id]
     );
+    // Credentials whose requirement the practice verified are verified
+    // credential records on My Profile → Credentials (audit B-9; the old
+    // statement here could never match a row).
     await q.query(
-      `UPDATE credentials SET status = CASE WHEN status = 'pending_review' THEN 'active' ELSE status END,
-                              updated_at = NOW()
-        WHERE user_id = $1 AND source = 'onboarding' AND status = 'verified'`,
-      [assignment.user_id]
+      `UPDATE credentials c
+          SET status = 'verified', verified_at = COALESCE(c.verified_at, r.reviewed_at, NOW()),
+              verified_by_user_id = COALESCE(c.verified_by_user_id, r.reviewed_by), updated_at = NOW()
+         FROM onboarding_requirements r
+        WHERE c.user_id = $1 AND c.source = 'onboarding' AND c.status = 'pending_review'
+          AND r.id = c.onboarding_requirement_id AND r.assignment_id = $2 AND r.status = 'verified'`,
+      [assignment.user_id, assignment.id]
     );
     await q.query(
       `UPDATE user_invites SET status = 'accepted', accepted_at = COALESCE(accepted_at, NOW()),
@@ -409,7 +575,7 @@ async function activateAssignment({ assignment, actor }) {
     const { rows } = await q.query(
       `UPDATE onboarding_assignments
           SET status = 'activated', activated_at = NOW(), activated_by = $2,
-              completed_at = NOW(), last_activity_at = NOW(), updated_at = NOW()
+              last_activity_at = NOW(), updated_at = NOW()
         WHERE id = $1 RETURNING *`, [assignment.id, actor.id]
     );
     return { user: userRows[0], assignment: rows[0] };
@@ -421,14 +587,60 @@ async function activateAssignment({ assignment, actor }) {
   if (!outcome) {
     throw new LifecycleError(409, { error: 'This employee has already been activated', code: 'already_activated' });
   }
+
+  // The checklist follows the act, wherever it was pressed from (audit B-11):
+  // portal access is done, and so is the account the starter now signs in to.
+  // The record completes only when every other setup task is done too (B-8).
+  try {
+    const jdb = require('./onboarding-journey-db');
+    const tasks = await jdb.listTasks(assignment.id);
+    for (const code of ['portal_access', 'portal_account']) {
+      const t = tasks.find((x) => x.code === code);
+      if (t && t.status !== 'done' && t.status !== 'skipped') {
+        await jdb.setTaskStatus(assignment.id, code, {
+          status: 'done', actorId: actor.id || null,
+          note: code === 'portal_access' ? 'Activated by the Owner' : 'The starter signs in with their own password',
+          detail: code === 'portal_access' ? { activatedRole: outcome.user.role } : null,
+        });
+      }
+    }
+    await completeIfFinished(assignment.id);
+  } catch (err) {
+    log.warn('post-activation checklist update failed', { error: err, assignmentId: assignment.id });
+  }
   return outcome;
+}
+
+/**
+ * An activated record is COMPLETE only when every internal setup task is
+ * done or skipped — never while payroll or equipment is still open (B-8).
+ */
+async function completeIfFinished(assignmentId) {
+  const jdb = require('./onboarding-journey-db');
+  const tasks = await jdb.listTasks(assignmentId);
+  // No checklist (a record from the older assignment route): it stays activated.
+  if (!tasks.length) return false;
+  const open = tasks.some((t) => !['done', 'skipped'].includes(t.status));
+  if (open) return false;
+  const { rowCount } = await odb.pool.query(
+    `UPDATE onboarding_assignments SET status = 'completed', completed_at = COALESCE(completed_at, NOW()),
+            last_activity_at = NOW(), updated_at = NOW() WHERE id = $1 AND status = 'activated'`,
+    [assignmentId]
+  );
+  return rowCount > 0;
 }
 
 module.exports = {
   ONBOARDING_ROLES,
+  CLINICAL_STATUTORY_CODES,
   LifecycleError,
   materialiseRequirements,
   checkReleasable,
+  documentProblemsFor,
   releaseAssignment,
+  activationReadiness,
   activateAssignment,
+  completeIfFinished,
+  isClinicalRole,
+  waiverRefusal,
 };

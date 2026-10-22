@@ -95,6 +95,27 @@ async function start(agent, over = {}) {
 
 const tokenOf = (url) => new URL(url).searchParams.get('token');
 
+const OT = {
+  name: 'Olive Therapist', personalEmail: 'olive.ot@example.test', position: 'Occupational Therapist',
+  roleCategory: 'occupational_therapist', employmentType: 'full_time', proposedRole: 'therapist',
+  isTreatingTherapist: true, payBasis: 'annual', payRate: 85000, hoursPerWeek: 38,
+};
+
+/** A small, real PDF with the given lines of text in it. */
+async function pdfWith(...lines) {
+  const { PDFDocument, StandardFonts } = require('pdf-lib');
+  const pdf = await PDFDocument.create();
+  const page = pdf.addPage([595, 842]);
+  const font = await pdf.embedFont(StandardFonts.Helvetica);
+  lines.forEach((line, i) => page.drawText(line, { x: 50, y: 780 - i * 20, size: 11, font }));
+  return Buffer.from(await pdf.save()).toString('base64');
+}
+
+async function attach(owner, id, kind, ...lines) {
+  return owner.post(`/api/onboarding/journey/records/${id}/documents/${kind}`)
+    .send({ fileName: `${kind}.pdf`, fileMime: 'application/pdf', fileData: await pdfWith(...lines) });
+}
+
 /** Start a record and release it through the portal route. */
 async function released(owner, over = {}) {
   const body = await start(owner, over);
@@ -103,6 +124,11 @@ async function released(owner, over = {}) {
   const rel = await owner.post(`/api/onboarding/journey/records/${id}/release`);
   expect(rel.status).toBe(201);
   return { id, url: rel.body.release.onboardingUrl, body: rel.body };
+}
+
+async function requirementByCode(id, code) {
+  const { rows } = await db.pool.query('SELECT * FROM onboarding_requirements WHERE assignment_id = $1 AND template_code = $2', [id, code]);
+  return rows[0];
 }
 
 beforeAll(() => {
@@ -212,5 +238,124 @@ describe('B-4 — the temporary-password path keeps the record\'s route, status 
     expect(after.rows[0].proposed_role).toBe('read_only');
     const { rows: count1 } = await db.pool.query('SELECT COUNT(*)::int AS n FROM onboarding_requirements WHERE assignment_id = $1', [id]);
     expect(count1[0].n).toBe(count0[0].n);
+  });
+});
+
+describe('Owner decision 4 / B-5 — no placeholder or unattached document reaches a starter', () => {
+  test('a policy still holding "[TO CONFIRM …]" gaps blocks the release, and is named', async () => {
+    const { agent: owner } = await agentFor({ role: 'owner', email: 'owner@example.test' });
+    const odb = require('../../onboarding-db');
+    const doc = (await odb.listDocuments(org.id)).find((d) => d.code === 'POL_COLLECTION_NOTICE');
+    const v = await odb.createDocumentVersion(doc.id, {
+      title: doc.title, body: 'Employee Privacy Collection Notice\n\nContact: [TO CONFIRM: privacy officer name and role]',
+      effectiveDate: '2026-10-01', changeNote: 'Draft with gaps',
+    });
+    await odb.publishDocumentVersion(doc.id, v.id, null);
+    for (const pkg of await odb.listPackages(org.id, { kind: 'package' })) {
+      await odb.publishPackage(org.id, await odb.getPackage(org.id, pkg.id), null, 'Repin');
+    }
+    const { record } = await start(owner);
+    await owner.post(`/api/onboarding/journey/records/${record.id}/offer/skip`);
+    const rel = await owner.post(`/api/onboarding/journey/records/${record.id}/release`);
+    expect(rel.status).toBe(409);
+    expect(rel.body.code).toBe('documents_not_ready');
+    expect(rel.body.error).toMatch(/Collection Notice/);
+    expect(rel.body.error).toMatch(/TO CONFIRM/);
+  });
+
+  test('a contract with gaps cannot be attached; a finished one can, and only then can the starter acknowledge it', async () => {
+    const { agent: owner } = await agentFor({ role: 'owner', email: 'owner@example.test' });
+    const { id, url } = await released(owner);
+    const gaps = await attach(owner, id, 'contract', 'Contract of Employment', 'Notice period: [TO CONFIRM: weeks]');
+    expect(gaps.status).toBe(400);
+    expect(gaps.body.code).toBe('document_not_ready');
+
+    const starter = request.agent(server);
+    const acc = await starter.post('/api/onboarding-invite/accept').set('X-Forwarded-For', nextIp())
+      .send({ token: tokenOf(url), password: STARTER_PASSWORD });
+    expect(acc.status).toBe(200);
+    const contract = await requirementByCode(id, 'REQ_CONTRACT');
+    const early = await starter.post(`/api/onboarding/me/requirements/${contract.id}/acknowledge`).send({ acknowledged: true, typedLegalName: 'Dana Adopt' });
+    expect(early.status).toBe(409);
+    expect(early.body.code).toBe('document_not_attached');
+
+    expect((await attach(owner, id, 'contract', 'Contract of Employment', 'Agreed terms for Dana Adopt.')).status).toBe(201);
+    const detail = await starter.get(`/api/onboarding/me/requirements/${contract.id}`);
+    expect(detail.body.attachedDocument).toMatchObject({ fileName: 'contract.pdf' });
+    const file = await starter.get(detail.body.attachedDocument.url);
+    expect(file.status).toBe(200);
+    expect(file.headers['content-type']).toMatch(/pdf/);
+    const ack = await starter.post(`/api/onboarding/me/requirements/${contract.id}/acknowledge`).send({ acknowledged: true, typedLegalName: 'Dana Adopt' });
+    expect(ack.status).toBe(200);
+    const after = await requirementByCode(id, 'REQ_CONTRACT');
+    expect(after.data.attachedDocumentSha256).toMatch(/^[0-9a-f]{64}$/);
+    // Fixed once acknowledged.
+    expect((await attach(owner, id, 'contract', 'A different contract')).status).toBe(409);
+    // Another starter cannot read it; a viewer without onboarding.view cannot either.
+    const { agent: therapist } = await agentFor({ role: 'therapist', email: 't@example.test' });
+    expect((await therapist.get(`/api/onboarding/journey/records/${id}/documents/contract/preview`)).status).toBe(403);
+  });
+});
+
+describe('Owner decision 3 — waivers are the Owner\'s, with a reason, never a clinician\'s statutory checks', () => {
+  test('a reviewer cannot set anything aside; the Owner cannot set aside Ahpra, NDIS screening or the WWCC for an OT', async () => {
+    const { agent: owner } = await agentFor({ role: 'owner', email: 'owner@example.test' });
+    const { id } = await released(owner, OT);
+    const { agent: reviewer } = await agentFor({ role: 'admin', email: 'rev@example.test', permissions: ['onboarding.view', 'onboarding.review', 'onboarding.verify', 'onboarding.activate'] });
+    const vehicle = (await db.pool.query(
+      `SELECT id FROM onboarding_requirements WHERE assignment_id = $1 AND template_code NOT IN ('REQ_AHPRA','REQ_NDIS_SCREENING','REQ_WWCC','REQ_RIGHT_TO_WORK') AND blocks_activation = FALSE LIMIT 1`, [id])).rows[0];
+    expect((await reviewer.post(`/api/onboarding/assignments/${id}/requirements/${vehicle.id}/not-applicable`).send({ reason: 'n/a' })).status).toBe(403);
+    expect((await reviewer.post(`/api/onboarding/assignments/${id}/requirements/${vehicle.id}/waive`).send({ reason: 'n/a' })).status).toBe(403);
+
+    for (const code of ['REQ_AHPRA', 'REQ_NDIS_SCREENING', 'REQ_WWCC']) {
+      const r = await requirementByCode(id, code);
+      if (!r) continue;
+      const na = await owner.post(`/api/onboarding/assignments/${id}/requirements/${r.id}/not-applicable`).send({ reason: 'Not needed' });
+      expect(na.status).toBe(409);
+      expect(na.body.code).toBe('statutory_not_waivable');
+      const w = await owner.post(`/api/onboarding/assignments/${id}/requirements/${r.id}/waive`).send({ reason: 'Not needed' });
+      expect(w.status).toBe(409);
+    }
+    // The Owner may set a non-statutory item aside, with a reason only.
+    expect((await owner.post(`/api/onboarding/assignments/${id}/requirements/${vehicle.id}/not-applicable`).send({})).status).toBe(400);
+    expect((await owner.post(`/api/onboarding/assignments/${id}/requirements/${vehicle.id}/not-applicable`).send({ reason: 'Not part of this role' })).status).toBe(200);
+  });
+
+  test('a statutory check set aside on a clinician by hand still blocks activation', async () => {
+    const { agent: owner } = await agentFor({ role: 'owner', email: 'owner@example.test' });
+    const { id } = await released(owner, OT);
+    await db.pool.query(`UPDATE onboarding_requirements SET status = 'not_applicable' WHERE assignment_id = $1 AND template_code = 'REQ_AHPRA'`, [id]);
+    const readiness = await require('../../onboarding-lifecycle').activationReadiness(
+      (await db.pool.query('SELECT * FROM onboarding_assignments WHERE id = $1', [id])).rows[0]);
+    expect(readiness.blockers.find((b) => b.code === 'REQ_AHPRA').reason).toMatch(/clinician/);
+  });
+});
+
+describe('Owner decision 2 — activation is the Owner\'s press, only when everything required is done', () => {
+  test('before the starter sets a password, Activate is refused and says so; nothing activates by itself', async () => {
+    const { agent: owner } = await agentFor({ role: 'owner', email: 'owner@example.test' });
+    const { id } = await released(owner);
+    await db.pool.query(`UPDATE onboarding_requirements SET status = 'complete' WHERE assignment_id = $1`, [id]);
+    const act = await owner.post(`/api/onboarding/assignments/${id}/activate`);
+    expect(act.status).toBe(409);
+    expect(act.body.blockers.map((b) => b.code)).toContain('password_not_set');
+    const { rows } = await db.pool.query('SELECT u.role FROM users u JOIN onboarding_assignments a ON a.user_id = u.id WHERE a.id = $1', [id]);
+    expect(rows[0].role).toBe('pre_employee');
+  });
+
+  test('B-9: verifying a credential requirement makes it a verified credential record', async () => {
+    const { agent: owner } = await agentFor({ role: 'owner', email: 'owner@example.test' });
+    const { id, url } = await released(owner, OT);
+    const starter = request.agent(server);
+    await starter.post('/api/onboarding-invite/accept').set('X-Forwarded-For', nextIp()).send({ token: tokenOf(url), password: STARTER_PASSWORD });
+    const ahpra = await requirementByCode(id, 'REQ_AHPRA');
+    const sub = await starter.post(`/api/onboarding/me/requirements/${ahpra.id}/credential`).send({ registrationNumber: 'OCC0009999999', expiryDate: '2027-11-30' });
+    expect(sub.status).toBe(200);
+    const ver = await owner.post(`/api/onboarding/assignments/${id}/requirements/${ahpra.id}/verify`).send({ reference: 'Ahpra register checked' });
+    expect(ver.status).toBe(200);
+    const { rows } = await db.pool.query(
+      'SELECT status, lifecycle_status, verified_by_user_id FROM credentials WHERE onboarding_requirement_id = $1', [ahpra.id]);
+    expect(rows[0]).toMatchObject({ status: 'verified', lifecycle_status: 'current' });
+    expect(rows[0].verified_by_user_id).toBeTruthy();
   });
 });

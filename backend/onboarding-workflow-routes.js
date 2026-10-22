@@ -1440,6 +1440,21 @@ router.post('/api/onboarding/assignments/:id/account',
     if (!version) return res.status(409).json({ error: 'The pinned package version is missing' });
     const settings = await odb.getOnboardingSettings();
 
+    // The requirement list this path issues is held to the release's own
+    // rule: no document with "[TO CONFIRM …]" gaps or a placeholder file
+    // reaches the starter (owner decision 4).
+    if (!credentialOnly) {
+      const lifecycle = require('./onboarding-lifecycle');
+      const { applied } = engine.selectApplicable(version.content, assignment.facts || {});
+      const problems = await lifecycle.documentProblemsFor(assignment, applied, { requireAttachments: false });
+      if (problems.length) {
+        return res.status(409).json({
+          error: `These documents are not ready to send: ${problems.map((d) => d.message).join('; ')}.`,
+          code: 'documents_not_ready', documents: problems,
+        });
+      }
+    }
+
     const tempPassword = accounts.generateTemporaryPassword();
     const passwordHash = await accounts.hashPassword(tempPassword);
     const expiresAt = accounts.temporaryPasswordExpiry(req.body?.expiresInDays);

@@ -318,10 +318,49 @@ async function shippedFileSuperseded(doc, shippedPath) {
 }
 function offerDocxMime() { return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'; }
 
-/** The attachments in the pack that still have no file at all — nothing is sent while any remain. */
+/**
+ * The attachments in the pack that cannot go to a starter — no file at all,
+ * a "PLACEHOLDER - …" stand-in, or a file still holding "[TO CONFIRM …]"
+ * gaps (owner decision 4). Nothing is sent while any remain; each is named.
+ */
 async function missingFilesFor(assignment, phase) {
+  const placeholder = require('./onboarding-placeholder-check');
   const rows = (await pdb.listItems(assignment.id, undefined, phase)).filter((r) => r.status === 'included' && r.sends_document);
-  return rows.filter((r) => { const f = pdb.describeItemFile(r); return f.source === 'none' || f.source === 'link'; }).map((r) => r.title);
+  const out = [];
+  for (const r of rows) {
+    const f = pdb.describeItemFile(r);
+    if (f.source === 'none' || f.source === 'link') { out.push(r.title); continue; }
+    if (placeholder.isPlaceholderName(f.fileName)) { out.push(`${r.title} (a placeholder, not the practice document)`); continue; }
+    const file = await pdb.readItemFile(r).catch(() => null);
+    const why = file ? await placeholder.fileProblem({ buffer: file.bytes, mime: file.mime, fileName: file.fileName }) : null;
+    if (why) out.push(`${r.title} (${why})`);
+  }
+  return out;
+}
+
+/**
+ * The record's contract, composed from the practice's contract template (the
+ * library copy of DOC_CONTRACT_TEMPLATE, else the shipped master) and the
+ * agreed terms. Null when no template with the portal's fields exists.
+ */
+async function generateContractFor(assignment) {
+  const fs = require('fs'); const path = require('path');
+  const contractDocx = require('./onboarding-contract-docx');
+  let templateBytes = null;
+  const doc = await odb.getDocumentByCode(assignment.organisation_id, 'DOC_CONTRACT_TEMPLATE').catch(() => null);
+  if (doc) {
+    const v = await odb.getCurrentDocumentVersion(doc.id).catch(() => null);
+    if (v && v.file_data) templateBytes = Buffer.from(v.file_data, 'base64');
+  }
+  if (!templateBytes || !(await contractDocx.isContractTemplate(templateBytes))) {
+    const shipped = path.join(__dirname, 'onboarding-templates', 'stage2', 'contract-of-employment.docx');
+    templateBytes = fs.existsSync(shipped) ? fs.readFileSync(shipped) : null;
+  }
+  if (!templateBytes || !(await contractDocx.isContractTemplate(templateBytes))) return null;
+  const file = await personaliseItemFile(assignment, { code: 'PACK_CONTRACT' }, {
+    bytes: templateBytes, mime: offerDocxMime(), fileName: 'Contract of Employment.docx',
+  });
+  return { buffer: file.bytes, fileName: file.fileName, fileMime: offerDocxMime() };
 }
 
 /** A users row for the record, created once; the employment profile from the offer terms. */
@@ -895,4 +934,4 @@ registerPackRoutes('documentation');
 registerPackRoutes('induction');
 
 module.exports = router;
-module.exports._internals = { PHASES, preparePack, ensureProfileOwner, ensurePlaceholderDocuments, packDetail, buildZipForRecord, itemRow, readUpload, packEditable, readinessFor };
+module.exports._internals = { PHASES, preparePack, ensureProfileOwner, generateContractFor, missingFilesFor, ensurePlaceholderDocuments, packDetail, buildZipForRecord, itemRow, readUpload, packEditable, readinessFor };

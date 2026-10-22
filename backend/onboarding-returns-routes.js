@@ -317,19 +317,16 @@ async function syncProgress(req, assignment) {
   return { documentationComplete: docDone, induction: ind };
 }
 
-/** Everything required is done: activate the person and close the record. */
+/**
+ * The induction pack is complete. This NEVER activates anyone (owner decision
+ * 2): activation is the Owner's Activate button. An already-activated record
+ * closes here only if every internal setup task is also done (audit B-8).
+ */
 async function completeOnboarding(req, assignment) {
-  const lifecycle = require('./onboarding-lifecycle');
-  const jdb = require('./onboarding-journey-db');
-  if (['activated', 'completed', 'cancelled', 'archived'].includes(assignment.status)) return;
-  try {
-    const outcome = await lifecycle.activateAssignment({ assignment, actor: { id: req.user.id, name: req.user.name, email: req.user.email } });
-    await jdb.setTaskStatus(assignment.id, 'portal_access', { status: 'done', actorId: req.user.id, note: 'Activated when the induction completed', detail: { activatedRole: outcome.user.role } }).catch(() => {});
-    await odb.pool.query(`UPDATE onboarding_assignments SET status = 'completed', completed_at = COALESCE(completed_at, NOW()), last_activity_at = NOW(), updated_at = NOW() WHERE id = $1`, [assignment.id]);
-    await auditOnboarding(req, 'onboarding_completed', { targetType: 'onboarding_assignment', targetId: assignment.id, metadata: { assignmentId: assignment.id, subjectUserId: assignment.user_id, role: outcome.user.role } });
-  } catch (err) {
-    log.warn('completion could not activate the account', { error: err, assignmentId: assignment.id });
-    await jdb.setTaskStatus(assignment.id, 'portal_access', { status: 'failed', actorId: req.user.id, note: err.body?.error || 'Activation refused' }).catch(() => {});
+  if (assignment.status !== 'activated') return;
+  const closed = await require('./onboarding-lifecycle').completeIfFinished(assignment.id);
+  if (closed) {
+    await auditOnboarding(req, 'onboarding_completed', { targetType: 'onboarding_assignment', targetId: assignment.id, metadata: { assignmentId: assignment.id, subjectUserId: assignment.user_id } });
   }
 }
 
@@ -622,7 +619,9 @@ for (const [verb, status] of [['verify', 'verified'], ['reject', 'rejected']]) {
       }
     }
     await auditOnboarding(req, `pack_item_${status}`, { targetType: 'onboarding_assignment', targetId: assignment.id, metadata: { assignmentId: assignment.id, itemId: item.id, code: item.code } });
-    res.json({ ok: true, attention: await attentionFor(assignment) });
+    // Verifying the last item moves the record on, exactly as a return does (audit B-7).
+    await syncProgress(req, await odb.getAssignment(orgOf(req), assignment.id)).catch((err) => { log.warn('sync after verify failed', { error: err }); });
+    res.json({ ok: true, attention: await attentionFor(await odb.getAssignment(orgOf(req), assignment.id)) });
   }));
 }
 
@@ -641,7 +640,16 @@ for (const [verb, applicable] of [['not-applicable', false], ['applicable', true
     if (item.status !== 'included' || item.item_kind !== 'document' || !item.employee_returns) return res.status(409).json({ error: 'Only a document expected back can be marked not applicable.', code: 'not_returnable' });
     if (!applicable && item.verification_status === 'verified') return res.status(409).json({ error: 'This document has already been verified.', code: 'already_verified' });
     if (applicable && item.verification_status !== 'not_applicable') return res.status(409).json({ error: 'This document is not marked as not applicable.', code: 'not_marked' });
-    await rdb.setItemVerification(item.id, { status: applicable ? 'pending' : 'not_applicable', mode: applicable ? null : 'owner', actorId: req.user.id, reason: null, note: applicable ? null : str(req.body?.note, 1000) });
+    // Setting a document aside is a waiver (owner decision 3): the Owner only,
+    // with a recorded reason, and never a clinician's statutory check.
+    let reasonNote = null;
+    if (!applicable) {
+      const refusal = require('./onboarding-lifecycle').waiverRefusal(req.user, assignment, item.code);
+      if (refusal) return res.status(refusal.status).json(refusal.body);
+      reasonNote = str(req.body?.note || req.body?.reason, 1000);
+      if (!reasonNote) return res.status(400).json({ error: 'A reason is required to set a document aside.', code: 'reason_required' });
+    }
+    await rdb.setItemVerification(item.id, { status: applicable ? 'pending' : 'not_applicable', mode: applicable ? null : 'owner', actorId: req.user.id, reason: null, note: applicable ? null : reasonNote });
     await auditOnboarding(req, applicable ? 'pack_item_applicable' : 'pack_item_not_applicable', { targetType: 'onboarding_assignment', targetId: assignment.id, metadata: { assignmentId: assignment.id, itemId: item.id, code: item.code } });
     await syncProgress(req, assignment).catch((err) => { log.warn('sync after not-applicable failed', { error: err }); });
     res.json({ ok: true, attention: await attentionFor(await odb.getAssignment(orgOf(req), assignment.id)) });

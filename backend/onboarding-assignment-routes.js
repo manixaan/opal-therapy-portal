@@ -585,6 +585,23 @@ async function applyReview(req, res, {
     },
   });
 
+  // A credential the practice has verified IS a verified credential record on
+  // the person's My Profile → Credentials (audit B-9) — not "pending review"
+  // for ever. The authority's own vocabulary for NDIS screening is a clearance.
+  if (toStatus === 'verified' && requirement.credential_id && assignment.user_id) {
+    const creds = await odb.listCredentialsForUser(assignment.user_id);
+    const cred = creds.find((c) => c.id === requirement.credential_id);
+    if (cred) {
+      await odb.verifyCredential(cred.id, assignment.user_id, {
+        status: 'verified',
+        lifecycleStatus: cred.credential_type === 'ndis_worker_screening' ? 'clearance' : 'current',
+        verificationMethod: 'onboarding_verification',
+        verificationReference: str(req.body?.reference, 200),
+        expiryDate: odb.dateOrNull(req.body?.expiresAt),
+      }, req.user.id).catch((err) => log.warn('credential not promoted on verify', { error: err }));
+    }
+  }
+
   // Tell the employee when they have something to do again.
   if (toStatus === 'correction_required' && assignment.user_id) {
     await notify(assignment.user_id, {
@@ -626,11 +643,23 @@ router.post('/api/onboarding/assignments/:id/requirements/:rid/request-correctio
     eventType: 'correction_requested',
   })));
 
+/**
+ * "Not applicable" is a waiver by another name (owner decision 3, audit
+ * B-22): the Owner only, with a recorded reason, and never Ahpra, NDIS
+ * Worker Screening or the WWCC for a clinician — a reviewer used to be able
+ * to clear every statutory item this way.
+ */
 router.post('/api/onboarding/assignments/:id/requirements/:rid/not-applicable',
-  requirePermission('onboarding.review'), safe((req, res) => applyReview(req, res, {
-    toStatus: 'not_applicable', decision: 'not_applicable', reasonRequired: true,
-    eventType: 'requirement_marked_not_applicable',
-  })));
+  requirePermission('onboarding.review'), safe(async (req, res) => {
+    const pair = await loadPair(req);
+    if (!pair) return notFound(res);
+    const refusal = lifecycle.waiverRefusal(req.user, pair.assignment, pair.requirement.template_code);
+    if (refusal) return res.status(refusal.status).json(refusal.body);
+    return applyReview(req, res, {
+      toStatus: 'not_applicable', decision: 'not_applicable', reasonRequired: true,
+      eventType: 'requirement_marked_not_applicable',
+    });
+  }));
 
 /**
  * Waive an activation-blocking requirement.
@@ -650,6 +679,8 @@ router.post('/api/onboarding/assignments/:id/requirements/:rid/waive',
     }
     const pair = await loadPair(req);
     if (!pair) return notFound(res);
+    const refusal = lifecycle.waiverRefusal(req.user, pair.assignment, pair.requirement.template_code);
+    if (refusal) return res.status(refusal.status).json(refusal.body);
     if (STATUTORY_CODES.has(pair.requirement.template_code)) {
       return res.status(409).json({
         error: 'This requirement cannot be waived',
