@@ -1,10 +1,10 @@
 # Feature folders — index
 
 One line per tracker idea. "Addressed" = touched by a commit since the last
-audit (2026-10-22, commit `d64389c0`). Tonight's window held **zero commits**
-— `develop` is frozen at the same commit audited last night — so every
-feature below was re-verified against unchanged code; see the morning brief
-§6.
+audit (2026-10-23, commit `d64389c0`). Tonight's window held **zero commits**
+— `develop` is frozen at the same commit audited last night, the 2nd quiet
+night running — so every feature below was re-verified against unchanged
+code; see the morning brief §6.
 
 | Folder | Stage | Evidence | Addressed this window | START.md |
 |---|---|---|---|---|
@@ -12,7 +12,7 @@ feature below was re-verified against unchanged code; see the morning brief
 | `update-opal-docs-register` | idea | untouched | No | [START.md](update-opal-docs-register/START.md) |
 | `report-templates` | idea | tab-unproven | No | [START.md](report-templates/START.md) |
 | `professional-development` | idea | needs-refinement | No | [START.md](professional-development/START.md) |
-| `portal-splose-outlook-integration-works` | idea | **broken** (7th night) | No | [START.md](portal-splose-outlook-integration-works/START.md) |
+| `portal-splose-outlook-integration-works` | idea | **broken** (8th night) | No | [START.md](portal-splose-outlook-integration-works/START.md) |
 | `portal-onboarding-workflow` | idea | needs-refinement | No | [START.md](portal-onboarding-workflow/START.md) |
 | `password-master-document` | idea | untouched | No | [START.md](password-master-document/START.md) |
 | `opa-mobile-companion` | idea | needs-refinement | No | [START.md](opa-mobile-companion/START.md) |

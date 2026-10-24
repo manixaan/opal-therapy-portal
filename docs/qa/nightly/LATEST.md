@@ -1,25 +1,26 @@
-# Nightly tracker audit — 2026-10-23
+# Nightly tracker audit — 2026-10-24
 
 ## 1. Status line
 
-**RAN** · 2026-10-23 18:13 UTC · commit audited `d64389c014e300dff17e342b1c4c7b4658600231` (branch `develop`)
+**RAN** · 2026-10-24 18:23 UTC · commit audited `d64389c014e300dff17e342b1c4c7b4658600231` (branch `develop`)
 
 Counts: **tab-unproven: 4 · needs-refinement: 6 · broken: 1 · untouched: 2 · proven: 0 · built-untested: 0** (13 features total)
 
-Tonight is a quiet night: `origin/develop`'s HEAD is byte-for-byte the same
-commit audited last night (`d64389c0`) — **zero commits** in the window.
-Every feature below was re-verified end to end against that same, unchanged
-code (locations re-confirmed, guards re-checked, every targeted unit and
-integration test re-run), not carried over unexamined from last night's
-brief. No classification changed. Every step — fetching the tracker,
-re-verifying code and tests, writing the feature folders and this brief, the
-tracker write-back, and the git push — was carried out directly in this one
-session, with no sub-task delegation. Nothing under `backend/`, `frontend/`,
-`deploy/`, `e2e/` or `.github/` was touched by this audit itself.
+Tonight is the 2nd quiet night running: `origin/develop`'s HEAD is byte-for-byte
+the same commit audited both last night and the night before (`d64389c0`) —
+**zero commits** in the window, for the second night in a row. Every feature
+below was re-verified end to end against that same, unchanged code (locations
+re-confirmed, guards re-checked, every targeted unit and integration test
+re-run), not carried over unexamined from last night's brief. No classification
+changed. Every step — fetching the tracker, re-verifying code and tests,
+writing the feature folders and this brief, the tracker write-back, and the
+git push — was carried out directly in this one session, with no sub-task
+delegation. Nothing under `backend/`, `frontend/`, `deploy/`, `e2e/` or
+`.github/` was touched by this audit itself.
 
 ## 2. Do this first
 
-1. **`broken` — the same bug, 7th consecutive night.** `GET /api/outlook/categories`
+1. **`broken` — the same bug, 8th consecutive night.** `GET /api/outlook/categories`
    (`backend/routes.js:1466`) still returns a raw `500` instead of a clean
    response when the calling user isn't connected to Outlook
    (`getValidAccessToken`, `routes.js:151`, throws `Error('Outlook not
@@ -28,11 +29,11 @@ session, with no sub-task delegation. Nothing under `backend/`, `frontend/`,
    no regression test anywhere. This bug has also sat in
    `docs/qa/BROWSER_QA_RESULTS.md` as a known "Medium" console error since
    the original browser QA pass on 2026-08-01 — now nearly three months old.
-2. **`tab-unproven` since 2026-10-22, still unactioned.** Clinical Resources'
-   Library view was rebuilt from scratch two nights ago (any-depth folders,
-   recycle bin, version history) and has still not been opened by a human —
-   the code and tests remain solid. Five minutes with an Owner/Admin account
-   and a therapist account would very likely move this back to `proven`.
+2. **`tab-unproven` since 2026-10-22, still unactioned, 3rd night flagged.**
+   Clinical Resources' Library view was rebuilt from scratch and has still
+   not been opened by a human — the code and tests remain solid. Five
+   minutes with an Owner/Admin account and a therapist account would very
+   likely move this back to `proven`.
 3. **`needs-refinement`, unchanged — worth keeping visible.** Portal
    Onboarding Workflow's Stage 2/3 moved a long way forward on 2026-10-22
    (release, invitation, induction, an Owner-only Activate gate; an
@@ -59,9 +60,9 @@ session, with no sub-task delegation. Nothing under `backend/`, `frontend/`,
 |---|---|---|---|---|
 | Xero Integration Works | idea | tab-unproven | Financial Dashboard built+guarded+tested, never browser-checked connected; Payroll Automation built+tested (tracker checklist stale) — unchanged, re-verified tonight | unit: pass · integration: pass |
 | Update Opal Docs Register | idea | untouched | Off-platform Excel register, no code | none |
-| Report Templates | idea | tab-unproven | FCA/Letter/Client-Agreement engines built+tested; generation screens unproven in a browser — unchanged, re-verified tonight | unit: pass (1 isolated-run flake, see §7) · integration: pass |
+| Report Templates | idea | tab-unproven | FCA/Letter/Client-Agreement engines built+tested; generation screens unproven in a browser — unchanged, re-verified tonight (no flake this time) | unit: pass · integration: pass |
 | Professional Development | idea | needs-refinement | Two unrelated CPD systems exist; Resource Hub's is tested, My Profile's has no dedicated test — unchanged tonight | unit: n/a (route code) · integration: pass (Resource Hub CPD) |
-| Portal - Splose - Outlook \| Integration Works | idea | **broken** | Same confirmed `/api/outlook/categories` 500 bug, now 7th night running; 2026-10-22's two-way match/link/ignore reconciliation unchanged and still passing | unit: pass · integration: pass |
+| Portal - Splose - Outlook \| Integration Works | idea | **broken** | Same confirmed `/api/outlook/categories` 500 bug, now 8th night running; 2026-10-22's two-way match/link/ignore reconciliation unchanged and still passing | unit: pass · integration: pass |
 | Portal Onboarding Workflow | idea | needs-refinement | 2026-10-22's Stage 2/3 portal flow and account-takeover fix hold; SharePoint storage for Stage 2 documents remains the one gap exactly as described — unchanged tonight | unit: pass · integration: pass |
 | Password Master Document | idea | untouched | Off-platform OneDrive document, no code | none |
 | Opa Mobile Companion | idea | needs-refinement | Case noting and Calendar View both built+guarded+tested; no mobile client in this repo to confirm real integration — unchanged tonight | unit: pass · integration: pass |
@@ -73,7 +74,7 @@ session, with no sub-task delegation. Nothing under `backend/`, `frontend/`,
 
 ## 4. Prompts for the morning
 
-**1. `/opal-fast-change`** — fix the Outlook-categories 500 (7th night running).
+**1. `/opal-fast-change`** — fix the Outlook-categories 500 (8th night running).
 > Files: `backend/routes.js` (route at line ~1466, `getValidAccessToken` at line ~151). Make `GET /api/outlook/categories` answer cleanly (e.g. `200 { categories: [] }` or a specific 4xx) when `getValidAccessToken` throws `Error('Outlook not connected')`, instead of falling through to the generic 500 handler. Add a regression test near `tests/outlook-mirror.test.js` or `tests/travel-sync-routes.test.js`. Done when: a new test asserts a clean (non-500) response for a disconnected user.
 
 **2. `/opal-feature`** — prove the rebuilt Resource Library screen in a browser.
@@ -93,16 +94,15 @@ session, with no sub-task delegation. Nothing under `backend/`, `frontend/`,
 All 13 feature folders already existed on `claude/nightly-audit` from prior
 nights; none were created fresh tonight, and no `START.md` needed a
 substantive rewrite — only the Portal/Splose/Outlook card's "night count"
-line was bumped (6th → 7th). Every `STATUS.md` was rewritten tonight to
+line was bumped again (7th → 8th). Every `STATUS.md` was rewritten tonight to
 record a pure re-verification against unchanged code: locations, guard
 checks and test results were all re-confirmed, not carried over unexamined.
 
 ## 6. What changed since last audit
 
-Nothing. `origin/develop`'s HEAD is unchanged at `d64389c0` — the same
-commit audited on 2026-10-22. Zero commits in `backend/` or
-`frontend/current/` since then. This is the first fully quiet night (no new
-commits at all) since the long freeze that ended on 2026-10-22.
+Nothing. `origin/develop`'s HEAD is unchanged at `d64389c0` — the same commit
+audited on 2026-10-23 and on 2026-10-22 before that. Zero commits in
+`backend/` or `frontend/current/` since then, for the second night running.
 
 ## 7. Technical detail
 
@@ -140,28 +140,19 @@ node --check <every backend/*.js module>
 node scripts/check-asset-pins.js
   → every pin matches the shell this commit would ship
 
-Unit tests (61 files covering every located feature), run as one batch:
-  2,462 total — 2,449 passed, 1 failed on the first run, 12 skipped.
-  The one failure, fca-wizard-behaviour.test.js's debounce-timing assertion
-  ("several rapid changes compose once"), did not reproduce when the file
-  was re-run alone (58/58 passed) — a CPU-contention flake from running 64
-  suites in parallel, not a code regression (code is unchanged since last
-  night). See Report Templates' folder.
+Unit tests (64 files covering every located feature), run as one batch:
+  2,462 total — 2,450 passed, 12 skipped, 0 failed. Clean on the first run —
+  no flake tonight (2026-10-23's single fca-wizard-behaviour.test.js
+  CPU-contention flake did not recur).
 
-Integration tests (DB_NAME=therapy_scheduler_auditnight1023*, DB_PASSWORD=audit,
---runInBand), 36 files covering every located feature:
-  First attempt (all 36 files in one batch) was killed by this sandbox's own
-  background-command time limit partway through the slow
-  `onboarding.itest.js` file (which seeds dozens of synthetic organisations
-  and runs long). The kill severed live Postgres connections mid-query,
-  which cascaded into "Connection terminated unexpectedly" and "deadlock
-  detected" errors on every test running at that moment — a sandbox-tooling
-  artifact, not a product or test defect, and not reported against any
-  feature. Re-run in two batches instead: 35 files together (693 tests,
-  692 passed, 1 known-environmental failure — see below), and
-  `onboarding.itest.js` alone with a longer allowance (49/49 passed).
-  Final result: 36 suites, 741 passed, 1 known-environmental failure
-  (readonly-and-hardening.itest.js, see below), 0 real failures.
+Integration tests (DB_NAME=therapy_scheduler_auditnight1024, DB_PASSWORD=audit,
+--runInBand), 36 files covering every located feature, run in two batches
+(the slow onboarding.itest.js separately, as on prior nights):
+  Batch 1 — 35 files, 693 tests: 34 suites passed, 1 failed (see below),
+  692 passed, 1 failed. Time: 484.9s.
+  Batch 2 — onboarding.itest.js alone: 49/49 passed. Time: 59.5s.
+  Combined: 36 suites, 741 passed, 1 known-environmental failure, 0 real
+  failures — the same result as 2026-10-23.
 ```
 
 **The one integration-test failure**: `tests/integration/readonly-and-hardening.itest.js`,
@@ -173,10 +164,11 @@ independently documented by every audit since 2026-10-16. Not a product
 defect, and not the basis for any feature's classification.
 
 Guard checks (`requireAuth`/`requireRole`/`requirePermission` on every
-located route) and a `TODO`/`FIXME` sweep of every located file were both
-run tonight — no unguarded endpoint, no new TODO/FIXME anywhere.
+located route) and a `TODO`/`FIXME` sweep of every located file — and,
+tonight, a repo-wide sweep of all of `backend/` outside `tests/` — were both
+run tonight: no unguarded endpoint, no TODO/FIXME anywhere.
 
-Today (2026-10-23, Friday UTC) is not a Sunday, so the weekly deep run
+Today (2026-10-24, Saturday UTC) is not a Sunday, so the weekly deep run
 (`npm test` / `npm run test:integration` in full) was correctly not
 executed — only targeted, per-feature tests as the testing policy requires.
 

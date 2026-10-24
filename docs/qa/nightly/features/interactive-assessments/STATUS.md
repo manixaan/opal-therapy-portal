@@ -3,7 +3,7 @@
 - Tracker stage: idea
 - Tracker environment: none
 - Evidence label: **tab-unproven**
-- Addressed in change window (since last audit, 2026-10-22): no — zero commits in the window; develop is frozen at the commit audited last night
+- Addressed in change window (since last audit, 2026-10-23): no — zero commits in the window; develop is frozen at the same commit audited last night
 - Created (code exists): yes
 
 ## Located files
@@ -14,8 +14,8 @@
 All routes behind `requireAuth` plus `requireClinicalRead`/`requireClinicalWrite`/`requireCatalogue` — solid, appropriate for clinical data.
 
 ## Tests and results
-Unit: `assessment-catalogue.test.js`, `assessment-surface-guards.test.js`, `whodas-external-completion.test.js`, `whodas-frontend-guards.test.js`, `whodas-scoring.test.js`, `whodas-templates.test.js` — **pass** (re-run tonight, 2026-10-23).
-Integration: `tests/integration/assessments.itest.js`, `whodas.itest.js` — **all pass** (re-run tonight, 2026-10-23).
+Unit: `assessment-catalogue.test.js`, `assessment-surface-guards.test.js`, `whodas-external-completion.test.js`, `whodas-frontend-guards.test.js`, `whodas-scoring.test.js`, `whodas-templates.test.js` — **pass** (re-run tonight, 2026-10-24).
+Integration: `tests/integration/assessments.itest.js`, `whodas.itest.js` — **all pass** (re-run tonight, 2026-10-24).
 
 **Browser/E2E proof for the assessment-taking wizard itself: none.** No `e2e/tests/*.spec.js` match; `docs/qa/BROWSER_QA_RESULTS.md` doesn't cover it (its closest entry, Flow I, only touches Leave/CPD/documents rendering).
 

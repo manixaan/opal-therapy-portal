@@ -2,11 +2,11 @@
 
 - Tracker stage: idea
 - Tracker environment: none
-- Evidence label: **needs-refinement** (Stage 2's literal SharePoint-storage gap is still genuine; everything else moved a long way forward last night)
-- Addressed in change window (since last audit, 2026-10-22): no — zero commits in the window; develop is frozen at the commit audited last night. Last night's 8-commit "onboarding production-ready" push (see "Recent history" below) predates this window.
-- Created (code exists): yes for Stage 1 and 2; Stage 3 (induction/setup/Activate) is now substantially built, as of last night
+- Evidence label: **needs-refinement** (Stage 2's literal SharePoint-storage gap is still genuine; everything else moved a long way forward on 2026-10-22)
+- Addressed in change window (since last audit, 2026-10-23): no — zero commits in the window; develop is frozen at the same commit audited last night. The 2026-10-22 8-commit "onboarding production-ready" push (see "Recent history" below) predates this window.
+- Created (code exists): yes for Stage 1 and 2; Stage 3 (induction/setup/Activate) is now substantially built, as of 2026-10-22
 
-## Recent history (2026-10-22, not tonight)
+## Recent history (2026-10-22, two nights ago now)
 Eight commits (`fba7eface`, `96324d99`, `f1439654`, `41e81787`, `db8fb6c4`,
 `51f585b6`, `73adb13f`, plus merge `273de152`) under the heading "onboarding
 production-ready" — none of this changed again tonight; re-verified below
@@ -65,11 +65,11 @@ Unchanged. `backend/onboarding-journey-routes.js` + `onboarding-offer-{letter,do
 ### Stage 2 (documents + dynamic contract) — needs-refinement, unchanged tonight
 - **SharePoint storage: still genuinely does not exist.** Re-confirmed tonight: `onboarding-record-documents.js` stores the contract/PD in `onboarding_offer_documents` (a Postgres table), not SharePoint; grepped the file again for `sharepoint`/`graph.microsoft` — no hits. The tracker checklist item "Finalise the onboarding documents and store them in SharePoint" is still open and still accurate. **Do not confuse this with Clinical Resources' "SharePoint-style" document library (`resourcelibrary.js`) — that is a different, unrelated module with a similar name, and it is not Microsoft SharePoint either.**
 - **Dynamic employee contract**: still built (`onboarding-contract-docx.js`, unchanged), as reported previously.
-- **"Check the flow from Stage 1 into Stage 2, make every button work"**: substantially addressed by last night's Stage 2/3 portal-route work (release, contract/PD attach-generate-preview-remove, invitation flow) — still unchecked in the tracker, but the gap it describes is much smaller than the checklist suggests.
+- **"Check the flow from Stage 1 into Stage 2, make every button work"**: substantially addressed by 2026-10-22's Stage 2/3 portal-route work (release, contract/PD attach-generate-preview-remove, invitation flow) — still unchecked in the tracker, but the gap it describes is much smaller than the checklist suggests.
 - Placeholder-document refusal and the file-hash acknowledgement remain in place, tested, unchanged tonight.
 
 ### Stage 3 — substantially built, unchanged tonight
-Built last night (2026-10-22): the Stage 2/3 portal-route commit (`f1439654`) and the Owner-only activation commit (`96324d99`) together build a real Stage 3 — induction stage, internal setup tasks, activation readiness/blockers, and the Activate gate. The tracker's "stage 3" task still has an empty `explanation`/`notes` and no checklist at all, so there is nothing in the tracker to tick against this — see Disagreement.
+Built 2026-10-22: the Stage 2/3 portal-route commit (`f1439654`) and the Owner-only activation commit (`96324d99`) together build a real Stage 3 — induction stage, internal setup tasks, activation readiness/blockers, and the Activate gate. The tracker's "stage 3" task still has an empty `explanation`/`notes` and no checklist at all, so there is nothing in the tracker to tick against this — see Disagreement.
 
 ## Guard check (re-run tonight)
 Every route in `onboarding-journey-routes.js`, `onboarding-employee-routes.js`,
@@ -86,7 +86,7 @@ hashed, expiring token in place of a session) — not a guard gap. No new
 unguarded endpoint found tonight. No TODO/FIXME in any changed file.
 
 ## Tests and results
-Unit (re-run tonight, 2026-10-23): `onboarding-practice.test.js`,
+Unit (re-run tonight, 2026-10-24): `onboarding-practice.test.js`,
 `onboarding-placeholder-check.test.js`, `onboarding-accounts.test.js`,
 `onboarding-journey.test.js`, `onboarding-offer-docx.test.js`,
 `onboarding-offer-pdf.test.js`, `onboarding-offer-template.test.js`,
@@ -96,10 +96,10 @@ Integration (`DB_NAME=therapy_scheduler_auditnight1023`, `DB_PASSWORD=audit`):
 `onboarding-journey.itest.js`, `onboarding-portal-route.itest.js`,
 `onboarding-workflow.itest.js`, `onboarding-defaults.itest.js`,
 `onboarding-pack.itest.js`, `onboarding-returns.itest.js`,
-`onboarding.itest.js` — **all pass** (re-run tonight, 2026-10-23).
+`onboarding.itest.js` — **all pass** (re-run tonight, 2026-10-24).
 
 Browser QA: `docs/qa/BROWSER_QA_RESULTS.md` row C still only covers the
-onboarding→profile chain as it stood before last night's work (login
+onboarding→profile chain as it stood before 2026-10-22's work (login
 routing, setup-card render) — it predates and does not exercise the
 release/invitation/Activate/induction screens built 2026-10-22. No E2E spec
 for onboarding exists.
@@ -112,7 +112,7 @@ layout" open; c7/c5 dynamic-contract-scope decision and build — c5 is done,
 c7's decision step is still open), stage 3 (empty — no checklist at all).
 
 ## Commits in window that touched it
-None tonight (zero commits since last audit). Last night's `fba7eface`,
+None tonight (zero commits since last audit, 2nd quiet night running). The 2026-10-22 commits `fba7eface`,
 `96324d99`, `f1439654`, `41e81787`, `db8fb6c4`, `51f585b6`, `73adb13f`, merge
 `273de152` predate this window — see "Recent history" above.
 

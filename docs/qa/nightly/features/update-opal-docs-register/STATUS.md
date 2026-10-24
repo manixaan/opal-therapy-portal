@@ -3,11 +3,11 @@
 - Tracker stage: idea
 - Tracker environment: none
 - Evidence label: **untouched**
-- Addressed in change window (since last audit, 2026-10-22): no
+- Addressed in change window (since last audit, 2026-10-23): no
 - Created (code exists): no
 
 ## Located files
-None. Searched `backend/*.js` and `frontend/current/*.js` for "docs register" / "document register" — the hits were unrelated uses of the word "register" (e.g. a credential-verification comment in `profile-routes.js`, a "WHO source document is not registered" message in `whodas-routes.js`). Nothing relates to an Excel documentation register.
+None. Re-searched tonight (2026-10-24): `backend/*.js` and `frontend/current/*.js` for "docs register" / "document register" — no hits at all tonight (the codebase has nothing relating to an Excel documentation register).
 
 ## Tests and results
 No test exists; none is expected — this is an Excel/SharePoint document-organising task outside the portal's code.

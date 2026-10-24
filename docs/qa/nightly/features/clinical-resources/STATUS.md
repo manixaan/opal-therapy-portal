@@ -3,7 +3,7 @@
 - Tracker stage: idea
 - Tracker environment: none
 - Evidence label: **tab-unproven** (downgraded from `proven` on 2026-10-22 — see Disagreement; unchanged tonight)
-- Addressed in change window (since last audit, 2026-10-22): no — zero commits in the window; develop is frozen at the commit audited last night. Last night's rebuild (see "Recent history" below) predates this window.
+- Addressed in change window (since last audit, 2026-10-23): no — zero commits in the window; develop is frozen at the same commit audited last night. The 2026-10-22 rebuild (see "Recent history" below) predates this window.
 - Created (code exists): yes
 
 ## Recent history (2026-10-22, not tonight)
@@ -62,7 +62,7 @@ endpoint found. `backend/resources-routes.js`'s pre-existing guard (admin
 hard-denied, owner/therapist differentiated) is unchanged.
 
 ## Tests and results
-Unit (re-run tonight, 2026-10-23): `tests/resource-library-rules.test.js`,
+Unit (re-run tonight, 2026-10-24): `tests/resource-library-rules.test.js`,
 `tests/resource-library-frontend-guards.test.js`, `tests/resource-seed-guards.test.js`,
 `tests/resource-hub-badge-guards.test.js`, `tests/resource-governance.test.js`,
 `tests/resource-privacy-scan.test.js`, `tests/resource-source-scan.test.js`,
@@ -70,7 +70,7 @@ Unit (re-run tonight, 2026-10-23): `tests/resource-library-rules.test.js`,
 `tests/resource-hub-final.test.js`, `tests/resource-ingestion.test.js` —
 **all pass**.
 
-Integration (re-run tonight, 2026-10-23, `DB_NAME=therapy_scheduler_auditnight1023`):
+Integration (re-run tonight, 2026-10-24, `DB_NAME=therapy_scheduler_auditnight1024`):
 `tests/integration/resources.itest.js`, `resource-hub-v1.itest.js`,
 `resource-library.itest.js`, `resource-file-upload.itest.js`,
 `resource-ingestion.itest.js`, `resource-library-sharepoint.itest.js` (despite
@@ -101,11 +101,11 @@ itself is unproven.
 None recorded.
 
 ## Commits in window that touched it
-None tonight (zero commits since last audit). Last night's `06c677792`
-(frontend rebuild), `0195cb30` (backend rebuild + migrations), `dd958d0c9`
-(fixes), `40d88a6ec` (UI polish) predate this window — see "Recent history"
-above. None are recorded against this card in the tracker, which still has
-no tasks listed for it.
+None tonight (zero commits since last audit, 2nd quiet night running). The
+2026-10-22 commits `06c677792` (frontend rebuild), `0195cb30` (backend rebuild
++ migrations), `dd958d0c9` (fixes), `40d88a6ec` (UI polish) predate this
+window — see "Recent history" above. None are recorded against this card in
+the tracker, which still has no tasks listed for it.
 
 ## Disagreement
 Two, in opposite directions:
