@@ -69,14 +69,16 @@ describe('reversible flows are wired into the stack', () => {
     const gateSrc = cp.slice(cp.indexOf('if (_bookedFor) {'), cp.indexOf("console.log('✅ Outlook event created:'"));
     const bookedFor = (meId, targetUserId) => new Function('window', '_outlookTherapistUserId', '_bspSelectedTherapist',
       declSrc + '; return _bookedFor;')({ APP_USER: { id: meId } }, targetUserId, { displayName: 'Ann Smith', userId: targetUserId });
-    const followUps = (forOther) => {
+    // Async: Make room's saves are awaited inside the gate (24 Oct 2026).
+    const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+    const followUps = async (forOther) => {
       const calls = [];
       const STATE = { travelFrom: { dbId: 'db-prev' }, chainAfter: { kind: 'home' } };
-      new Function('_bookedFor', 'oResult', '_outlookTitle', 'BOOKING_STATE', '__registerBookingUndo',
-        'applyTravelChainAfterBooking', 'travelChainInherit', 'bspCommitBetweenChoice', gateSrc)(
+      await new AsyncFunction('_bookedFor', 'oResult', '_outlookTitle', 'BOOKING_STATE', '__registerBookingUndo',
+        'applyTravelChainAfterBooking', 'travelChainInherit', 'bspCommitBetweenChoice', 'bspCommitSqueeze', gateSrc)(
         forOther ? 'Ann Smith' : null, { dbId: 42 }, 'Client Appointment — Ada Client', STATE,
         (id) => calls.push('undo:' + id), (id) => calls.push('chain:' + id), (id) => calls.push('inherit:' + id),
-        () => calls.push('between'));
+        () => calls.push('between'), async () => calls.push('squeeze'));
       return { calls, STATE };
     };
 
@@ -88,11 +90,11 @@ describe('reversible flows are wired into the stack', () => {
       expect(bookedFor(7, '7')).toBeNull();   // your own calendar, id as a string
       expect(bookedFor(7, null)).toBeNull();
     });
-    test('registers no undo and writes no travel; its own booking still does', () => {
-      const other = followUps(true);
+    test('registers no undo and writes no travel; its own booking still does', async () => {
+      const other = await followUps(true);
       expect(other.calls).toEqual([]);
       expect(other.STATE).toEqual({ travelFrom: null, chainAfter: null });
-      expect(followUps(false).calls).toEqual(['undo:42', 'chain:42', 'between']);
+      expect((await followUps(false)).calls).toEqual(['undo:42', 'chain:42', 'between', 'squeeze']);
     });
     test('offers no "What next?" continuation for a row that is not on this grid', () => {
       expect(cp).toContain('dbId: _bookedFor ? null : newDbId');

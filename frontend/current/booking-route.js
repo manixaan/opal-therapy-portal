@@ -684,7 +684,7 @@
       label: info.patientName || 'previous client', patientId: info.patientId || null,
       therapistId: info.therapistId || null, travelMin: null,
     };
-    if (rs) { rs.context = ctx; rs.manualStart = false; rs.manualTiming = false; rs.lastClamp = null; }
+    if (rs) { rs.context = ctx; rs.manualStart = false; rs.manualTiming = false; rs.lastClamp = null; rs.squeeze = null; }
     var start = global.ceilToSlot ? global.ceilToSlot(info.endMin) : info.endMin;
     var end = start + (info.durationMin || 60);
     global.openBookingPanel({ day: info.day, date: (typeof DAY_DATES !== 'undefined' && DAY_DATES) ? DAY_DATES[info.day] : null,
@@ -903,7 +903,7 @@
     wrapGlobal('closeBookingPanel', function () {
       var rs = routeState();
       if (!(rs && rs.keepOnClose)) resetHome();
-      if (rs && !rs.keepOnClose) { rs.context = null; rs.manualStart = false; rs.manualTiming = false; rs.lastClamp = null; rs.viaMode = 'auto'; var b = bookingState(); if (b) b.travelFrom = null; }
+      if (rs && !rs.keepOnClose) { rs.context = null; rs.manualStart = false; rs.manualTiming = false; rs.lastClamp = null; rs.squeeze = null; rs.viaMode = 'auto'; var b = bookingState(); if (b) b.travelFrom = null; }
       if (fn('setBspRouteStatus')) global.setBspRouteStatus('hidden');
       var n = $('bsp-wl-notice'); if (n) n.hidden = true;
     });

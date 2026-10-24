@@ -103,7 +103,7 @@
 <link rel="stylesheet" href="/onboarding-journey.css?v=42" />
 <link rel="stylesheet" href="/employees.css?v=1" />
 <link rel="stylesheet" href="/people.css?v=2" />
-<link rel="stylesheet" href="/booking-route.css?v=3" />
+<link rel="stylesheet" href="/booking-route.css?v=4" />
 <link rel="stylesheet" href="/recurrence.css?v=1" />
 <link rel="stylesheet" href="/nf2f.css?v=3" />
 <!-- Last stylesheet: night-mode token overrides must win over every feature sheet. -->
@@ -165,17 +165,17 @@
      store and computeDayTravelSegments(), the calendar leg overlays and the
      travel details panel. Deferred and loaded ahead of profile.js and
      reports.js, both of which reach into it. -->
-<script src="/travel.js?v=45" defer></script>
+<script src="/travel.js?v=46" defer></script>
 <!-- Route-aware Smart Booking: client location selector, work-location
      notice, and the "What next?" continuation after a booking. Extends the
      booking panel; the route maths live in travel.js, loaded just above. -->
-<script src="/booking-route.js?v=11" defer></script>
+<script src="/booking-route.js?v=12" defer></script>
 <script src="/recurrence.js?v=1" defer></script>
 <script src="/nf2f.js?v=5" defer></script>
 <!-- Splose draft-and-publish sync: Sync Splose button, review panel, unsynced
      tiles, tab-leave prompt, and "changed inside Splose" alerts. Wraps
      switchTab and commitMove once the shell has defined them. -->
-<script src="/splose-sync.js?v=9" defer></script>
+<script src="/splose-sync.js?v=10" defer></script>
 <!-- My Profile: leave, CPD, professional-development documents, credentials,
      work schedule and notification preferences. Deferred, so it runs after
      the shell's inline scripts and keeps the same globals they expect. -->
@@ -13049,6 +13049,9 @@ async function confirmBooking() {
           // "Go direct" / "Go home in between" chosen in the route line is kept
           // on the previous stop, so the calendar shows the trip as booked.
           if (typeof bspCommitBetweenChoice === 'function') bspCommitBetweenChoice();
+          // Make room: the blocks shortened for this appointment are saved
+          // now, before the reload below reads the calendar back (travel.js).
+          if (typeof bspCommitSqueeze === 'function') await bspCommitSqueeze();
         }
         console.log('✅ Outlook event created:', outlookId);
       } else {
@@ -15957,8 +15960,15 @@ function commitMove() {
   s.element.style.height = (duration / 60 * HOUR_PX - 4) + 'px';
   if (typeof applySessionDensity === 'function') applySessionDensity(s.element, duration);
   s.element.classList.remove('dragging', 'resizing');
-  // Also update the displayed label timestamp in title
-  s.element.querySelector('.s-title').textContent = `${fmtTime(sh, sm)} ${titleBase(s)}`;
+  // The tile's time line follows the move. The title is the event's own and
+  // stays: rewriting it as "<start> <type>" (24 Oct 2026) turned "Contact
+  // NDIS" into "9:00 AM Admin" and left the old range showing under it.
+  const _range = `${fmtTime(sh, sm)}–${fmtTime(eh, em)}`;
+  const _timeEl = s.element.querySelector('.s-time');
+  if (_timeEl) {
+    if (s.element.title && _timeEl.textContent) s.element.title = s.element.title.replace(_timeEl.textContent, _range);
+    _timeEl.textContent = _range;
+  }
   // Remove ghost if present
   if (drag && drag.ghost && drag.ghost.parentElement) drag.ghost.parentElement.removeChild(drag.ghost);
   // Travel + gap overlays need to be refreshed now that the block has moved/resized

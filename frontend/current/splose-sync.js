@@ -750,13 +750,17 @@
         var endIso = perthIso(ymd, s.endH, s.endM || 0);
         s.startTimeIso = new Date(startIso).toISOString();
         s.endTimeIso = new Date(endIso).toISOString();
-        fetchJson('/api/outlook/events/' + encodeURIComponent(snapshot.dbId), { method: 'PATCH', body: { startTime: startIso, endTime: endIso } })
+        // The save is handed back on the move (pm.persisted) so a caller that
+        // moves several blocks at once (Make room, travel.js) can wait for
+        // them; pm.quiet leaves the one summary toast to that caller.
+        pm.persisted = fetchJson('/api/outlook/events/' + encodeURIComponent(snapshot.dbId), { method: 'PATCH', body: { startTime: startIso, endTime: endIso } })
           .then(function (r) {
             if (!r.ok) {
               toast(r.json.error || 'The move could not be saved', true);
               if (typeof global.loadOutlookEventsToCalendar === 'function') global.loadOutlookEventsToCalendar();
-              return;
+              return r;
             }
+            if (pm.quiet) { refreshPending(); return r; }
             var tail = S.autoSync ? 'Splose will follow shortly.' : 'Sync Splose when the week is right.';
             // Say what actually happened to Outlook (10 Oct 2026): with write-back
             // off, or on a portal-only row, nothing will "catch up".
@@ -766,6 +770,7 @@
               : os === 'not_linked' ? 'Moved — saved. ' + tail
               : 'Moved — saved. Outlook will catch up; ' + tail);
             refreshPending();
+            return r;
           });
       } catch (e) { /* the visual move already happened; nothing else to undo */ }
       return out;

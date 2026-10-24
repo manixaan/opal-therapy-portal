@@ -78,6 +78,36 @@
 @keyframes bsp-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .bsp-route-spin { animation: none; } }
 
+/* Make room: shorten the flexible blocks before a client whose time is fixed */
+.bsp-squeeze { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border); color: var(--ink); }
+.bsp-sq-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.bsp-sq-title { font-weight: 700; }
+.bsp-sq-modes { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+.bsp-sq-mode { padding: 3px 10px; font: inherit; font-size: 11.5px; font-weight: 600; border: 0; background: var(--panel); color: var(--ink-soft); cursor: pointer; }
+.bsp-sq-mode + .bsp-sq-mode { border-left: 1px solid var(--border); }
+.bsp-sq-mode[aria-pressed="true"] { background: var(--accent, #0f766e); color: #fff; }
+.bsp-sq-mode:focus-visible { outline: none; box-shadow: inset var(--focus-ring, 0 0 0 3px rgba(15, 118, 110, 0.22)); }
+.bsp-sq-sum { margin-top: 5px; }
+.bsp-sq-list { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; }
+.bsp-sq-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name step" "time step"; column-gap: 8px; align-items: center;
+  padding: 5px 7px; border: 1px solid var(--border); border-radius: 7px; background: var(--panel); }
+.bsp-sq-name { grid-area: name; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bsp-sq-time { grid-area: time; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.bsp-sq-step { grid-area: step; display: inline-flex; align-items: center; gap: 4px; }
+.bsp-sq-step .bsp-sq-btn { margin: 0; width: 26px; padding: 3px 0; text-align: center; }
+.bsp-sq-step .bsp-sq-btn:disabled { opacity: .4; cursor: default; }
+.bsp-sq-cut { min-width: 52px; text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; }
+.bsp-sq-foot { margin-top: 6px; color: var(--ink-soft); }
+/* On the calendar: where each shortened block will sit; the real tile dims */
+.session.bsp-squeeze-src { opacity: .35; }
+.bsp-squeeze-ghost {
+  position: absolute; left: 3px; right: 3px; z-index: 4; pointer-events: none; overflow: hidden;
+  display: flex; flex-direction: column; padding: 2px 6px; border-radius: 4px; font-size: 11px; line-height: 1.25;
+  border: 1.5px dashed var(--warn-ink, #7a4e0b); background: var(--warn-soft, #faf0da); color: var(--ink);
+}
+.bsp-squeeze-ghost .g-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bsp-squeeze-ghost .g-time { color: var(--ink-soft); white-space: nowrap; }
+
 /* Proposed travel on the calendar: compact; a tight leg reads red */
 .travel-overlay.preview .t-ico { font-size: 10px; font-weight: 600; opacity: .7; }
 .travel-overlay.preview.tight { border-left-color: var(--danger, #9c3322); }

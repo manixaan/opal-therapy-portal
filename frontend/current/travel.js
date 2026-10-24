@@ -1074,10 +1074,92 @@ function placeProposalTravel(out, prevEnd, busy) {
   return out;
 }
 
+/* ─── Make room (24 Oct 2026) ─────────────────────────────────────────────
+   A client's time is fixed; the reports, admin and custom blocks before it
+   are not. When the drive does not fit, the run of flexible blocks after the
+   last fixed one can be shortened so the therapist leaves in time — evenly,
+   or by what the clinician sets on each block. Each block keeps its place in
+   the run: the time cut from one moves every later block up by as much, and
+   the run still starts where it did. Client sessions, meetings, leave and
+   travel are never touched. Nothing is saved until Create appointment. */
+var MAKE_ROOM_CONFIG = { minBlockMin: 15, stepMin: 5 };
+const FLEX_BLOCK_TYPES = new Set(['report', 'admin', 'casenote', 'cpd', 'lunch']);
+function isFlexibleBlock(s) {
+  if (!s || s.cancelled || !s.dbId || isTravelBlock(s)) return false;
+  if (FLEX_BLOCK_TYPES.has(s.type)) return true;
+  // An uncategorised event of the clinician's own (a Custom block). One with
+  // a client attached is someone's appointment, not admin time.
+  return s.type === 'outlook' && !s.patient;
+}
+
+/* PURE — in:  items [{ id, startMin, endMin, label, flexible }] (the day,
+               travel excluded), desiredStartMin, travelMin, bufferMin,
+               mode 'even' | 'custom', cuts { id: minutes } (custom),
+               minBlockMin
+           out: { ok, reason, leaveByMin, needMin, freedMin, shortMin,
+                  maxFreeMin, blocks: [{ id, label, startMin, endMin,
+                  newStartMin, newEndMin, cutMin, maxCutMin }] }
+   reason: 'fixed' (a fixed block ends after the leave-by time), 'none' (no
+   flexible block before), 'fits' (nothing to make room for). */
+function planMakeRoom(input) {
+  const i = input || {};
+  const minBlock = i.minBlockMin != null ? i.minBlockMin : MAKE_ROOM_CONFIG.minBlockMin;
+  const desired = Number(i.desiredStartMin);
+  const leaveBy = desired - Math.max(0, Math.round(Number(i.travelMin) || 0)) - Math.max(0, Math.round(Number(i.bufferMin) || 0));
+  const out = { ok: false, reason: null, leaveByMin: leaveBy, needMin: 0, freedMin: 0, shortMin: 0, maxFreeMin: 0, blocks: [] };
+  const before = (i.items || []).filter(b => b && b.startMin < desired)
+    .slice().sort((a, b) => a.startMin - b.startMin || a.endMin - b.endMin);
+  const fixed = before.filter(b => !b.flexible);
+  if (fixed.some(b => b.endMin > leaveBy)) { out.reason = 'fixed'; return out; }
+  const anchorEnd = fixed.length ? Math.max.apply(null, fixed.map(b => b.endMin)) : -Infinity;
+  const group = before.filter(b => b.flexible && b.startMin >= anchorEnd);
+  if (!group.length) { out.reason = 'none'; return out; }
+  const groupEnd = Math.max.apply(null, group.map(b => b.endMin));
+  out.needMin = groupEnd - leaveBy;
+  if (out.needMin <= 0) { out.reason = 'fits'; out.needMin = 0; return out; }
+  const caps = group.map(b => Math.max(0, (b.endMin - b.startMin) - minBlock));
+  out.maxFreeMin = caps.reduce((a, c) => a + c, 0);
+  let cuts;
+  if (i.mode === 'custom') {
+    const set = i.cuts || {};
+    cuts = group.map((b, k) => Math.min(caps[k], Math.max(0, Math.round(Number(set[b.id]) || 0))));
+  } else {
+    // Evenly: the same minutes off each block; one that reaches its minimum
+    // stops and the rest share what is left. An odd minute goes to the
+    // earliest block.
+    cuts = group.map(() => 0);
+    let left = out.needMin;
+    for (let guard = 0; left > 0 && guard < 64; guard++) {
+      const open = group.map((b, k) => k).filter(k => cuts[k] < caps[k]);
+      if (!open.length) break;
+      const share = Math.floor(left / open.length);
+      let extra = left - share * open.length;
+      open.forEach(k => {
+        const want = share + (extra > 0 ? 1 : 0);
+        if (extra > 0) extra--;
+        const take = Math.min(want, caps[k] - cuts[k]);
+        cuts[k] += take; left -= take;
+      });
+    }
+  }
+  let shift = 0;
+  out.blocks = group.map((b, k) => {
+    const row = { id: b.id, label: b.label, startMin: b.startMin, endMin: b.endMin,
+                  newStartMin: b.startMin - shift, newEndMin: b.endMin - shift - cuts[k], cutMin: cuts[k], maxCutMin: caps[k] };
+    shift += cuts[k];
+    return row;
+  });
+  out.freedMin = shift;
+  out.shortMin = Math.max(0, out.needMin - shift);
+  out.ok = out.shortMin === 0;
+  return out;
+}
+
 /* The live state of the route preview. `context` is the previous CONFIRMED
    stop when continuing a route ("Book another client"); manualStart is set
    when the clinician types a start or drags the proposed block. */
-var BOOKING_ROUTE = { context: null, manualStart: false, manualTiming: false, lastClamp: null, status: null, seq: 0, timer: null, viaMode: 'auto', lastPredId: null, shownMode: null, suggestedStartMin: null };
+var BOOKING_ROUTE = { context: null, manualStart: false, manualTiming: false, lastClamp: null, status: null, seq: 0, timer: null, viaMode: 'auto', lastPredId: null, shownMode: null, suggestedStartMin: null,
+                     squeeze: null, squeezePlan: null, squeezeOffer: null };
 
 function _sessionByDbId(dbId) {
   if (!dbId || !window.SESSIONS) return null;
@@ -1161,7 +1243,8 @@ function _bspIsClientBooking() {
   return !(typeof BOOKING_STATE !== 'undefined' && BOOKING_STATE && BOOKING_STATE.category && BOOKING_STATE.category !== 'client');
 }
 function clearBspTravelPreview() {
-  document.querySelectorAll('.travel-overlay.preview').forEach(el => el.remove());
+  document.querySelectorAll('.travel-overlay.preview, .bsp-squeeze-ghost').forEach(el => el.remove());
+  document.querySelectorAll('.session.bsp-squeeze-src').forEach(el => el.classList.remove('bsp-squeeze-src'));
   document.querySelectorAll('.travel-overlay.suppressed').forEach(el => el.classList.remove('suppressed'));
 }
 function _hhmm(min) { return String(Math.floor(min / 60)).padStart(2, '0') + ':' + String(min % 60).padStart(2, '0'); }
@@ -1210,6 +1293,10 @@ function runBspRoutePreview(opts) {
   const [sh, sm] = startEl.value.split(':').map(Number);
   const startMin = sh * 60 + (sm || 0);
   const dur = parseInt((document.getElementById('bsp-dur-slider') || {}).value || '60', 10) || 60;
+  // Make room belongs to one start on one day: another pick drops it.
+  BOOKING_ROUTE.squeezePlan = null; BOOKING_ROUTE.squeezeOffer = null;
+  const sq0 = BOOKING_ROUTE.squeeze;
+  if (sq0 && (sq0.day !== day || sq0.desiredStartMin !== startMin)) BOOKING_ROUTE.squeeze = null;
   let pred = _bspPredecessor(day, startMin);
   if (!pred) { setBspRouteStatus('hidden'); return; }
   BOOKING_ROUTE.lastPredId = pred.s && pred.s.id ? pred.s.id : null;
@@ -1328,18 +1415,37 @@ function runBspRoutePreview(opts) {
     return;
   }
 
+  // Make room: the flexible blocks before the proposal, shortened as the
+  // clinician chose, stand in for the real ones in everything below — and the
+  // start they made room for is held.
+  const dayItems = sessionsForDay(day).filter(s => !isTravelBlock(s) && !s.cancelled)
+    .map(s => ({ id: s.id, startMin: sessionStartMin(s), endMin: sessionEndMin(s), label: _blockName(s), flexible: isFlexibleBlock(s) }));
+  const roomTravel = route.durationMin + (pred.viaHome ? (homePlan.toBase || 0) : 0);
+  const sq = BOOKING_ROUTE.squeeze;
+  const room = sq ? planMakeRoom({ items: dayItems, desiredStartMin: sq.desiredStartMin, travelMin: roomTravel,
+                                   bufferMin: routeBufferMin(), mode: sq.mode, cuts: sq.cuts }) : null;
+  const moved = {};
+  if (room && room.blocks.length) { room.blocks.forEach(b => { moved[b.id] = b; }); BOOKING_ROUTE.squeezePlan = room; }
+  else if (sq) BOOKING_ROUTE.squeeze = null;   // nothing left to shorten
+  const hold = !!BOOKING_ROUTE.squeeze;
+  if (hold && predS && moved[predS.id]) pred = Object.assign({}, pred, { endMin: pred.endMin - (moved[predS.id].endMin - moved[predS.id].newEndMin) });
+
   const busy = sessionsForDay(day)
-    .filter(s => s !== pred.s && !isTravelBlock(s) && sessionEndMin(s) > pred.endMin)
-    .map(s => ({ id: s.id, startMin: sessionStartMin(s), endMin: sessionEndMin(s), label: s.patient || s.title || 'appointment' }));
+    .filter(s => s !== pred.s && !isTravelBlock(s))
+    .map(s => { const m = moved[s.id];
+      return { id: s.id, startMin: m ? m.newStartMin : sessionStartMin(s), endMin: m ? m.newEndMin : sessionEndMin(s), label: s.patient || s.title || 'appointment' }; })
+    .filter(b => b.endMin > pred.endMin);
   const plan = planNextStop({
     prevEndMin: pred.endMin, travelMin: route.durationMin, bufferMin: routeBufferMin(), durationMin: dur,
-    desiredStartMin: (pred.explicit && !BOOKING_ROUTE.manualStart) ? null : startMin,
+    desiredStartMin: hold || !(pred.explicit && !BOOKING_ROUTE.manualStart) ? startMin : null,
     busy, dayEndMin: (typeof END_H !== 'undefined' ? END_H : 24) * 60,
+    // A held start is to the minute: the room was made for exactly it.
+    slotMin: hold ? 1 : undefined,
   });
 
   // An explicit route moves the proposal; an implicit neighbour only advises.
   let shownStart = startMin;
-  if (pred.explicit && plan.startMin !== startMin) {
+  if (pred.explicit && !hold && plan.startMin !== startMin) {
     shownStart = plan.startMin;
     startEl.value = _hhmm(plan.startMin);
     if (typeof _bspRecomputeEnd === 'function') _bspRecomputeEnd();
@@ -1380,12 +1486,16 @@ function runBspRoutePreview(opts) {
   const notes = [];
   // A clamp is remembered until the clinician picks another start, so the
   // follow-up repaint (which now sees the clamped time) keeps the warning.
-  if (pred.explicit && plan.clampedFromMin != null) BOOKING_ROUTE.lastClamp = { from: plan.clampedFromMin, to: plan.startMin };
-  const clamp = pred.explicit && BOOKING_ROUTE.lastClamp && BOOKING_ROUTE.lastClamp.to === shownStart ? BOOKING_ROUTE.lastClamp : null;
+  if (pred.explicit && !hold && plan.clampedFromMin != null) BOOKING_ROUTE.lastClamp = { from: plan.clampedFromMin, to: plan.startMin };
+  const clamp = pred.explicit && !hold && BOOKING_ROUTE.lastClamp && BOOKING_ROUTE.lastClamp.to === shownStart ? BOOKING_ROUTE.lastClamp : null;
   if (clamp) { kind = 'warn'; notes.push(fmt(clamp.from) + ' is earlier than the drive allows — moved to ' + fmt(clamp.to) + '.'); }
   if (plan.movedForConflicts.length) notes.push('Moved to ' + fmt(plan.startMin) + ': ' + plan.movedForConflicts.map(b => esc(b.label)).join(', ') + ' is already booked then.');
   if (plan.conflicts.length) { kind = 'warn'; notes.push('Overlaps ' + plan.conflicts.map(b => esc(b.label)).join(', ') + '.'); }
-  if (!pred.explicit && tight) {
+  if (hold && tight) {
+    kind = 'warn';
+    notes.push('Still not enough time to get here from ' + fromName + ' — shorten the blocks more, or keep them as they are.');
+  }
+  if (!pred.explicit && !hold && tight) {
     // Too early for the drive (6 Oct 2026): say when it CAN start — the first
     // free slot after the drive, for the way chosen above. Flipping Direct ⇄
     // Via home re-runs this, so the suggested time follows the switch.
@@ -1400,7 +1510,116 @@ function runBspRoutePreview(opts) {
       : ' There is no free time left on this day after the drive.'));
   }
   if (!plan.fits) { kind = 'warn'; notes.push('No free slot left on this day after the drive.'); }
-  setBspRouteStatus(kind, parts.join(' · ') + switchBtn + (notes.length ? '<div class="bsp-route-note">' + notes.join(' ') + '</div>' : ''));
+  // The client's time cannot move (24 Oct 2026)? Offer to make room for it
+  // by shortening the reports, admin and custom blocks before it instead.
+  const want = hold ? null : (!pred.explicit && tight) ? startMin : (clamp ? clamp.from : null);
+  if (want != null) {
+    const offer = planMakeRoom({ items: dayItems, desiredStartMin: want, travelMin: roomTravel, bufferMin: routeBufferMin(), mode: 'even' });
+    if (offer.blocks.length && offer.ok) {
+      BOOKING_ROUTE.squeezeOffer = { day, desiredStartMin: want };
+      notes.push('<button type="button" class="bsp-route-btn" data-route="squeeze">Make room — keep ' + fmt(want) + '</button>');
+    } else if (offer.blocks.length) {
+      notes.push('Shortening the blocks before it frees at most ' + offer.maxFreeMin + ' of the ' + offer.needMin + ' min needed.');
+    }
+  }
+  if (hold && room) _bspDrawSqueeze(col, room, fmt);
+  setBspRouteStatus(kind, parts.join(' · ') + switchBtn + (notes.length ? '<div class="bsp-route-note">' + notes.join(' ') + '</div>' : '') +
+    (hold && room ? _bspSqueezeHtml(room, BOOKING_ROUTE.squeeze, fmt) : ''));
+}
+
+/* A block's name for the Make room list: its own title, else its client. */
+function _blockName(s) {
+  return String((s && s.title) || '').trim() || _stopName(s) || 'Block';
+}
+/* The shortened blocks, drawn dashed where they will be; the real tiles dim. */
+function _bspDrawSqueeze(col, room, fmt) {
+  if (!col || !room) return;
+  room.blocks.forEach(b => {
+    if (b.newStartMin === b.startMin && b.newEndMin === b.endMin) return;
+    const s = window.SESSIONS && window.SESSIONS[b.id];
+    if (s && s.element) s.element.classList.add('bsp-squeeze-src');
+    const el = document.createElement('div');
+    el.className = 'bsp-squeeze-ghost';
+    el.style.top = tToY(Math.floor(b.newStartMin / 60), b.newStartMin % 60) + 'px';
+    el.style.height = Math.max(12, (b.newEndMin - b.newStartMin) / 60 * HOUR_PX - 4) + 'px';
+    if (s && s.element && s.element.style.left) { el.style.left = s.element.style.left; el.style.width = s.element.style.width; }
+    el.innerHTML = '<span class="g-title">' + _tpEsc(b.label) + '</span><span class="g-time">' + fmt(b.newStartMin) + '–' + fmt(b.newEndMin) +
+      (b.cutMin ? ' · −' + b.cutMin + ' min' : '') + '</span>';
+    el.title = b.label + ' · ' + fmt(b.startMin) + '–' + fmt(b.endMin) + ' → ' + fmt(b.newStartMin) + '–' + fmt(b.newEndMin);
+    col.appendChild(el);
+  });
+}
+/* The Make room editor under the route line: Evenly / Custom, and on each
+   block how many minutes come off it (±5, never below the minimum). */
+function _bspSqueezeHtml(room, sq, fmt) {
+  const esc = _tpEsc;
+  const step = MAKE_ROOM_CONFIG.stepMin;
+  const custom = sq && sq.mode === 'custom';
+  const rows = room.blocks.map(b => {
+    const changed = b.newStartMin !== b.startMin || b.newEndMin !== b.endMin;
+    return '<li class="bsp-sq-row">' +
+      '<span class="bsp-sq-name" title="' + esc(b.label) + '">' + esc(b.label) + '</span>' +
+      '<span class="bsp-sq-time">' + fmt(b.startMin) + '–' + fmt(b.endMin) +
+        (changed ? ' → <strong>' + fmt(b.newStartMin) + '–' + fmt(b.newEndMin) + '</strong>' : '') + '</span>' +
+      '<span class="bsp-sq-step">' +
+        '<button type="button" class="bsp-route-btn bsp-sq-btn" data-route="squeeze-step" data-id="' + esc(b.id) + '" data-delta="-' + step + '"' +
+          ' aria-label="Take ' + step + ' minutes less off ' + esc(b.label) + '"' + (b.cutMin <= 0 ? ' disabled' : '') + '>−</button>' +
+        '<span class="bsp-sq-cut">' + (b.cutMin ? '−' + b.cutMin : '0') + ' min</span>' +
+        '<button type="button" class="bsp-route-btn bsp-sq-btn" data-route="squeeze-step" data-id="' + esc(b.id) + '" data-delta="' + step + '"' +
+          ' aria-label="Take ' + step + ' more minutes off ' + esc(b.label) + '"' + (b.cutMin >= b.maxCutMin ? ' disabled' : '') + '>+</button>' +
+      '</span></li>';
+  }).join('');
+  const sum = room.ok
+    ? 'Frees <strong>' + room.freedMin + ' min</strong> — leave by <strong>' + fmt(room.leaveByMin) + '</strong>.'
+    : '<strong>' + room.shortMin + ' min short</strong> — frees ' + room.freedMin + ' of the ' + room.needMin + ' min needed (leave by ' + fmt(room.leaveByMin) + ').';
+  return '<div class="bsp-squeeze" role="group" aria-label="Make room">' +
+    '<div class="bsp-sq-head"><span class="bsp-sq-title">Make room</span>' +
+      '<span class="bsp-sq-modes" role="group" aria-label="How to shorten the blocks">' +
+        '<button type="button" class="bsp-sq-mode" data-route="squeeze-even" aria-pressed="' + !custom + '">Evenly</button>' +
+        '<button type="button" class="bsp-sq-mode" data-route="squeeze-custom" aria-pressed="' + custom + '">Custom</button>' +
+      '</span></div>' +
+    '<div class="bsp-sq-sum">' + sum + '</div>' +
+    '<ul class="bsp-sq-list">' + rows + '</ul>' +
+    '<div class="bsp-sq-foot">No block goes under ' + MAKE_ROOM_CONFIG.minBlockMin + ' min; each later block moves up by what comes off the ones before it. ' +
+      'Saved to Outlook and Splose when you create the appointment.' +
+      '<br><button type="button" class="bsp-route-btn" data-route="squeeze-off">Keep the blocks as they are</button></div>' +
+    '</div>';
+}
+
+/* Create appointment: the shortened blocks are saved exactly as a drag or an
+   edge-resize is — window.commitMove, whose splose-sync wrapper PATCHes the
+   event (Outlook write-back + the Splose queue) and registers a Cmd+Z step.
+   Resolves once every save has answered, so the calendar reload that follows
+   the booking reads the new times. Returns how many blocks changed. */
+async function bspCommitSqueeze() {
+  const sq = BOOKING_ROUTE.squeeze, room = BOOKING_ROUTE.squeezePlan;
+  BOOKING_ROUTE.squeeze = null; BOOKING_ROUTE.squeezePlan = null; BOOKING_ROUTE.squeezeOffer = null;
+  if (!sq || !room || typeof window.commitMove !== 'function') return 0;
+  const changed = room.blocks.filter(b => b.newStartMin !== b.startMin || b.newEndMin !== b.endMin);
+  const saves = [];
+  let done = 0;
+  // Earliest first: every block only shrinks or moves up, into time the one
+  // before it has just given back, so nothing overlaps on the way.
+  for (const b of changed) {
+    const s = window.SESSIONS && window.SESSIONS[b.id];
+    if (!s || !s.element) continue;
+    const prev = window.pendingMove;
+    const pm = { id: b.id, day: s.day, startMin: b.newStartMin, duration: b.newEndMin - b.newStartMin,
+                 impact: { verdict: 'ok', impacts: [] }, quiet: true };
+    window.pendingMove = pm;
+    try { window.commitMove(); done++; } finally { window.pendingMove = prev; }
+    if (pm.persisted) saves.push(pm.persisted);
+  }
+  const results = await Promise.all(saves.map(p => Promise.resolve(p).catch(() => null)));
+  const failed = results.filter(r => !r || !r.ok).length;
+  if (done && typeof showToast === 'function' && !failed) {
+    const fmt = (m) => (typeof fmtTime === 'function') ? fmtTime(Math.floor(m / 60), m % 60) : _hhmm(m);
+    showToast('Made room — ' + done + ' block' + (done === 1 ? '' : 's') + ' shortened',
+      changed.map(b => b.label + ' ' + fmt(b.newStartMin) + '–' + fmt(b.newEndMin)).join(' · '));
+  } else if (failed && typeof showToast === 'function') {
+    showToast('Some blocks were not shortened', 'The appointment is booked. Check the blocks before it on the calendar.', 'warn');
+  }
+  return done;
 }
 
 function _bspClientName() {
@@ -1484,6 +1703,34 @@ document.addEventListener('click', e => {
   if (b.dataset.route === 'retry') { BOOKING_ROUTE.manualTiming = false; runBspRoutePreview({ fresh: true }); }
   if (b.dataset.route === 'manual') { BOOKING_ROUTE.manualTiming = true; runBspRoutePreview(); }
   if (b.dataset.route === 'direct' || b.dataset.route === 'home') { BOOKING_ROUTE.viaMode = b.dataset.route; runBspRoutePreview(); }
+  if (b.dataset.route === 'squeeze' && BOOKING_ROUTE.squeezeOffer) {
+    const o = BOOKING_ROUTE.squeezeOffer;
+    BOOKING_ROUTE.squeeze = { day: o.day, desiredStartMin: o.desiredStartMin, mode: 'even', cuts: {} };
+    const el = document.getElementById('bsp-start');
+    if (el && el.value !== _hhmm(o.desiredStartMin)) {
+      // Booking on from a stop moved the start for the drive: put back the
+      // time the room is being made for.
+      el.value = _hhmm(o.desiredStartMin);
+      if (typeof window.bspOnStartChange === 'function') window.bspOnStartChange();
+      else el.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    runBspRoutePreview();
+  }
+  const sq = BOOKING_ROUTE.squeeze;
+  if (sq && /^squeeze-/.test(b.dataset.route)) {
+    // Custom starts from what is shown, so switching never jumps.
+    const seed = () => { const c = {}; ((BOOKING_ROUTE.squeezePlan || {}).blocks || []).forEach(x => { c[x.id] = x.cutMin; }); return c; };
+    if (b.dataset.route === 'squeeze-off') BOOKING_ROUTE.squeeze = null;
+    if (b.dataset.route === 'squeeze-even') { sq.mode = 'even'; sq.cuts = {}; }
+    if (b.dataset.route === 'squeeze-custom' && sq.mode !== 'custom') { sq.cuts = seed(); sq.mode = 'custom'; }
+    if (b.dataset.route === 'squeeze-step') {
+      if (sq.mode !== 'custom') { sq.cuts = seed(); sq.mode = 'custom'; }
+      const row = ((BOOKING_ROUTE.squeezePlan || {}).blocks || []).find(x => x.id === b.dataset.id);
+      const cap = row ? row.maxCutMin : 0;
+      sq.cuts[b.dataset.id] = Math.min(cap, Math.max(0, (Number(sq.cuts[b.dataset.id]) || 0) + Number(b.dataset.delta || 0)));
+    }
+    runBspRoutePreview();
+  }
   if (b.dataset.route === 'earliest' && BOOKING_ROUTE.suggestedStartMin != null) {
     // Same path as typing the time: the panel, the proposal and the end follow.
     const el = document.getElementById('bsp-start');

@@ -1548,3 +1548,195 @@ describe('no address on a lunch, admin… = where the therapist already is (18 O
     expect(SHELL).toContain('if (newDbId && _chainNc && typeof travelChainInherit === \'function\') await travelChainInherit(newDbId, _chainNc);');
   });
 });
+
+describe('Make room — shorten the flexible blocks before a client whose time is fixed (24 Oct 2026)', () => {
+  // The day from the report: Progress Report 7:00–9:00, a custom block
+  // 9:00–9:30 (where the drive starts), and the client at 9:30, 19 min away.
+  const DAY = [
+    { id: 'R', startMin: 420, endMin: 540, label: 'Progress Report', flexible: true },
+    { id: 'C', startMin: 540, endMin: 570, label: 'Contact NDIS', flexible: true },
+  ];
+  const plan = (env, extra) => env.ev(`planMakeRoom(${JSON.stringify(Object.assign({ items: DAY, desiredStartMin: 570, travelMin: 19, bufferMin: 0 }, extra))})`);
+
+  test('evenly: 19 min comes off the two blocks, the later one moves up — 7:00–8:50 and 8:50–9:11', () => {
+    const env = makeEnv();
+    const r = plan(env, { mode: 'even' });
+    expect(r.ok).toBe(true);
+    expect(r.leaveByMin).toBe(551);
+    expect(r.blocks.map(b => [b.id, b.newStartMin, b.newEndMin, b.cutMin])).toEqual([['R', 420, 530, 10], ['C', 530, 551, 9]]);
+  });
+
+  test('evenly never takes a block under 15 min: the rest is shared by the others', () => {
+    const env = makeEnv();
+    const r = plan(env, { mode: 'even', items: [DAY[0], { id: 'C', startMin: 540, endMin: 560, label: 'Emails', flexible: true }], desiredStartMin: 560 });
+    expect(r.blocks.find(b => b.id === 'C').cutMin).toBe(5);              // 20 → 15
+    expect(r.blocks.find(b => b.id === 'R').cutMin).toBe(14);
+    expect(r.ok).toBe(true);
+  });
+
+  test('custom: the minutes set on each block, clamped to its minimum; too little says how short', () => {
+    const env = makeEnv();
+    const r = plan(env, { mode: 'custom', cuts: { R: 30, C: 99 } });
+    expect(r.blocks.map(b => [b.id, b.newStartMin, b.newEndMin])).toEqual([['R', 420, 510], ['C', 510, 525]]);   // C clamped to 15 off
+    expect(r.ok).toBe(true);
+    const short = plan(env, { mode: 'custom', cuts: { C: 5 } });
+    expect(short.ok).toBe(false);
+    expect(short.shortMin).toBe(14);
+  });
+
+  test('a client session is never shortened: a fixed block ending too late means no offer', () => {
+    const env = makeEnv();
+    const r = plan(env, { items: [DAY[0], { id: 'T', startMin: 540, endMin: 570, label: 'Ada Client', flexible: false }] });
+    expect(r.reason).toBe('fixed');
+    expect(r.blocks).toEqual([]);
+    // Only the blocks after the last fixed one are in play.
+    const after = plan(env, { items: [{ id: 'T', startMin: 360, endMin: 420, label: 'Ada', flexible: false }].concat(DAY) });
+    expect(after.blocks.map(b => b.id)).toEqual(['R', 'C']);
+  });
+
+  test('what counts as flexible: reports, admin, lunch, CPD and the clinician\'s own events — not clients, meetings or travel', () => {
+    const env = makeEnv();
+    const f = (s) => env.ev(`isFlexibleBlock(${JSON.stringify(Object.assign({ dbId: 'db' }, s))})`);
+    expect(f({ type: 'report', patient: 'Alan S' })).toBe(true);
+    expect(f({ type: 'admin' })).toBe(true);
+    expect(f({ type: 'outlook', title: 'Contact NDIS' })).toBe(true);
+    expect(f({ type: 'outlook', patient: 'Ada' })).toBe(false);
+    expect(f({ type: 'therapy' })).toBe(false);
+    expect(f({ type: 'meeting' })).toBe(false);
+    expect(f({ type: 'travel' })).toBe(false);
+    expect(f({ type: 'admin', cancelled: true })).toBe(false);
+    expect(env.ev("isFlexibleBlock({ type: 'admin' })")).toBe(false);   // unsaved: nothing to write back to
+  });
+
+  function reportDay(env) {
+    env.ev(`SESSIONS.R = { id: 'R', day: 'mon', type: 'report', title: 'Progress Report — Alan S', patient: 'Alan S', startH: 7, startM: 0, endH: 9, endM: 0,
+        address: ${JSON.stringify(A_ADDR)}, dbId: 'db-R', element: document.createElement('div') };
+      SESSIONS.C = { id: 'C', day: 'mon', type: 'outlook', title: 'Contact NDIS re: application', startH: 9, startM: 0, endH: 9, endM: 30,
+        address: ${JSON.stringify(A_ADDR)}, dbId: 'db-C', element: document.createElement('div') };
+      BOOKING_STATE.selectedPatient = { first: 'Raynash', last: 'Bharath' };
+      document.getElementById('booking-side-panel').classList.add('open'); bspSelectDay('mon');
+      document.getElementById('bsp-start').value = '09:30';`);
+  }
+  const click = (env, sel) => { const b = env.win.document.querySelector('#bsp-route-status ' + sel); expect(b).not.toBeNull(); b.click(); };
+
+  test('the panel offers Make room beside Move to, and keeps 9:30 once it is chosen', async () => {
+    const env = makeEnv({ routes: { [A_ADDR + '|' + CV_ADDR]: 19 } });
+    reportDay(env);
+    await chooseLocation(env, CV_ADDR);
+    expect(status(env).textContent).toContain('Not enough time to get here');
+    expect(status(env).querySelector('[data-route="earliest"]')).not.toBeNull();
+    click(env, '[data-route="squeeze"]');
+    await settled(env);
+    expect(start(env)).toBe('09:30');
+    expect(status(env).className).toContain('ok');
+    expect(status(env).textContent).not.toContain('Not enough time');
+    const rows = Array.from(status(env).querySelectorAll('.bsp-sq-time')).map(e => e.textContent);
+    expect(rows).toEqual(['7:00 AM–9:00 AM → 7:00 AM–8:50 AM', '9:00 AM–9:30 AM → 8:50 AM–9:11 AM']);
+    expect(env.win.document.querySelectorAll('#day-mon .bsp-squeeze-ghost').length).toBe(2);
+    expect(env.ev('SESSIONS.R.element.classList.contains("bsp-squeeze-src")')).toBe(true);
+    // Nothing is written until Create appointment.
+    expect(env.log.filter(c => c.method === 'PATCH')).toEqual([]);
+    expect(env.ev('SESSIONS.R.endH')).toBe(9);
+  });
+
+  test('custom: + on a block takes 5 more off it and moves the next one up; Keep the blocks as they are undoes it all', async () => {
+    const env = makeEnv({ routes: { [A_ADDR + '|' + CV_ADDR]: 19 } });
+    reportDay(env);
+    await chooseLocation(env, CV_ADDR);
+    click(env, '[data-route="squeeze"]');
+    await settled(env);
+    click(env, '[data-route="squeeze-step"][data-id="R"][data-delta="5"]');
+    await settled(env);
+    expect(env.ev('BOOKING_ROUTE.squeeze.mode')).toBe('custom');
+    expect(status(env).querySelector('[data-route="squeeze-custom"]').getAttribute('aria-pressed')).toBe('true');
+    expect(Array.from(status(env).querySelectorAll('.bsp-sq-time')).map(e => e.textContent))
+      .toEqual(['7:00 AM–9:00 AM → 7:00 AM–8:45 AM', '9:00 AM–9:30 AM → 8:45 AM–9:06 AM']);
+    // Too little off: the shortfall is said, the start stays.
+    click(env, '[data-route="squeeze-step"][data-id="R"][data-delta="-5"]');
+    click(env, '[data-route="squeeze-step"][data-id="R"][data-delta="-5"]');
+    click(env, '[data-route="squeeze-step"][data-id="R"][data-delta="-5"]');
+    await settled(env);
+    expect(status(env).textContent).toContain('min short');
+    expect(status(env).textContent).toContain('Still not enough time');
+    expect(start(env)).toBe('09:30');
+    click(env, '[data-route="squeeze-off"]');
+    await settled(env);
+    expect(env.ev('BOOKING_ROUTE.squeeze')).toBeNull();
+    expect(env.win.document.querySelectorAll('.bsp-squeeze-ghost').length).toBe(0);
+    expect(status(env).querySelector('[data-route="squeeze"]')).not.toBeNull();
+  });
+
+  test('another start drops it', async () => {
+    const env = makeEnv({ routes: { [A_ADDR + '|' + CV_ADDR]: 19 } });
+    reportDay(env);
+    await chooseLocation(env, CV_ADDR);
+    click(env, '[data-route="squeeze"]');
+    await settled(env);
+    env.ev("document.getElementById('bsp-start').value = '11:00'; bspOnStartChange();");
+    await settled(env);
+    expect(env.ev('BOOKING_ROUTE.squeeze')).toBeNull();
+    expect(env.win.document.querySelectorAll('.bsp-squeeze-ghost').length).toBe(0);
+  });
+
+  test('Create appointment saves each block through commitMove — earliest first — and waits for the saves', async () => {
+    const env = makeEnv({ routes: { [A_ADDR + '|' + CV_ADDR]: 19 } });
+    reportDay(env);
+    env.ev(`var pendingMove = null; var __moves = []; var __resolve = [];
+      window.commitMove = function () { const pm = pendingMove; __moves.push([pm.id, pm.startMin, pm.duration, !!pm.quiet]);
+        pm.persisted = new Promise(r => __resolve.push(() => r({ ok: true }))); };`);
+    await chooseLocation(env, CV_ADDR);
+    click(env, '[data-route="squeeze"]');
+    await settled(env);
+    let finished = false;
+    env.ev('bspCommitSqueeze()').then(() => { finished = true; });
+    await flush();
+    expect(env.ev('__moves')).toEqual([['R', 420, 110, true], ['C', 530, 21, true]]);
+    expect(finished).toBe(false);                                  // still waiting on the saves
+    env.ev('__resolve.forEach(f => f())');
+    await flush();
+    expect(finished).toBe(true);
+    expect(env.ev('BOOKING_ROUTE.squeeze')).toBeNull();
+    expect(env.ev('pendingMove')).toBeNull();
+    expect(env.ev('__calls.toasts')[0][0]).toBe('Made room — 2 blocks shortened');
+  });
+
+  test('the shell saves it with the booking, before the calendar reloads', () => {
+    const at = SHELL.indexOf('if (typeof bspCommitSqueeze === \'function\') await bspCommitSqueeze();');
+    expect(at).toBeGreaterThan(SHELL.indexOf('if (typeof bspCommitBetweenChoice === \'function\') bspCommitBetweenChoice();'));
+    expect(at).toBeLessThan(SHELL.indexOf('reload so the saved appointment is what the grid shows'));
+  });
+
+  test('splose-sync hands the save back on the move, and a quiet move leaves the toast to its caller', () => {
+    const sync = fs.readFileSync(path.join(FRONTEND, 'splose-sync.js'), 'utf8');
+    expect(sync).toContain("pm.persisted = fetchJson('/api/outlook/events/'");
+    expect(sync).toContain('if (pm.quiet) { refreshPending(); return r; }');
+  });
+});
+
+describe('a dragged block\'s text follows it (24 Oct 2026)', () => {
+  test('commitMove updates the time line and tooltip, and leaves the title alone', () => {
+    const body = SHELL.slice(SHELL.indexOf('function commitMove()'), SHELL.indexOf('// Cmd+Z for the calendar'));
+    const dom = new JSDOM('<div id="day-mon"></div>');
+    const doc = dom.window.document;
+    const el = doc.createElement('div');
+    el.innerHTML = '<span class="s-title">Contact NDIS re: application</span><span class="s-time">9:00 AM–9:30 AM</span><span class="s-sub"></span>';
+    el.title = 'Contact NDIS re: application · 9:00 AM–9:30 AM ·  · click for details';
+    doc.getElementById('day-mon').appendChild(el);
+    const ctx = {
+      document: doc, HOUR_PX: 72,
+      SESSIONS: { C: { id: 'C', day: 'mon', type: 'outlook', title: 'Contact NDIS re: application', startH: 9, startM: 0, endH: 9, endM: 30, element: el } },
+      pendingMove: { id: 'C', day: 'mon', startMin: 600, duration: 30 },
+      drag: null, __calMoveUndoReplaying: true,
+      sessionStartMin: (s) => s.startH * 60 + s.startM, durMin: (s) => (s.endH * 60 + s.endM) - (s.startH * 60 + s.startM),
+      tToY: (h, m) => (h * 60 + m) * 1.2,
+      fmtTime: (h, m) => (h % 12 || 12) + ':' + String(m).padStart(2, '0') + (h < 12 ? ' AM' : ' PM'),
+      __registerMoveUndo: () => {}, setTimeout,
+    };
+    vm.createContext(ctx);
+    vm.runInContext(body + '\ncommitMove();', ctx);
+    expect(el.querySelector('.s-title').textContent).toBe('Contact NDIS re: application');
+    expect(el.querySelector('.s-time').textContent).toBe('10:00 AM–10:30 AM');
+    expect(el.title).toContain('10:00 AM–10:30 AM');
+    expect(el.title).not.toContain('9:00 AM');
+  });
+});
