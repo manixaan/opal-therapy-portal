@@ -1084,12 +1084,20 @@ function placeProposalTravel(out, prevEnd, busy) {
    travel are never touched. Nothing is saved until Create appointment. */
 var MAKE_ROOM_CONFIG = { minBlockMin: 15, stepMin: 5 };
 const FLEX_BLOCK_TYPES = new Set(['report', 'admin', 'casenote', 'cpd', 'lunch']);
+// Outlook-synced tiles often arrive typed plain 'outlook' with no client on
+// them (25 Oct 2026: "Client Appointment - Raynash Bharath" was 'outlook'), so
+// the category and the title decide too — and anything they cannot place is
+// left alone. Portal bookings always carry a category (Custom → Admin).
+const FIXED_BLOCK_CATEGORY = /client\s*appointment|meeting|travel|leave|holiday|do\s*not\s*book|cancellation/i;
+const FLEX_BLOCK_CATEGORY = /report\s*writing|case\s*management|business\s*related|\badmin\b|\bpd\b|professional\s*dev|lunch|\bbreak\b/i;
 function isFlexibleBlock(s) {
   if (!s || s.cancelled || !s.dbId || isTravelBlock(s)) return false;
-  if (FLEX_BLOCK_TYPES.has(s.type)) return true;
-  // An uncategorised event of the clinician's own (a Custom block). One with
-  // a client attached is someone's appointment, not admin time.
-  return s.type === 'outlook' && !s.patient;
+  if (CLIENT_ROUTE_TYPES.has(s.type) || /meeting|leave/.test(s.type || '')) return false;
+  if (s.booking && CLIENT_ROUTE_TYPES.has(s.booking.type)) return false;
+  if (/^client\s+appointment\b/i.test(String(s.title || '').trim())) return false;
+  const cats = (Array.isArray(s.categories) ? s.categories : []).join('|');
+  if (FIXED_BLOCK_CATEGORY.test(cats)) return false;
+  return FLEX_BLOCK_TYPES.has(s.type) || FLEX_BLOCK_CATEGORY.test(cats);
 }
 
 /* PURE — in:  items [{ id, startMin, endMin, label, flexible }] (the day,
@@ -1110,7 +1118,8 @@ function planMakeRoom(input) {
   const before = (i.items || []).filter(b => b && b.startMin < desired)
     .slice().sort((a, b) => a.startMin - b.startMin || a.endMin - b.endMin);
   const fixed = before.filter(b => !b.flexible);
-  if (fixed.some(b => b.endMin > leaveBy)) { out.reason = 'fixed'; return out; }
+  const late = fixed.filter(b => b.endMin > leaveBy);
+  if (late.length) { out.reason = 'fixed'; out.blockedBy = late[late.length - 1].label; return out; }
   const anchorEnd = fixed.length ? Math.max.apply(null, fixed.map(b => b.endMin)) : -Infinity;
   const group = before.filter(b => b.flexible && b.startMin >= anchorEnd);
   if (!group.length) { out.reason = 'none'; return out; }
@@ -1519,7 +1528,12 @@ function runBspRoutePreview(opts) {
       BOOKING_ROUTE.squeezeOffer = { day, desiredStartMin: want };
       notes.push('<button type="button" class="bsp-route-btn" data-route="squeeze">Make room — keep ' + fmt(want) + '</button>');
     } else if (offer.blocks.length) {
-      notes.push('Shortening the blocks before it frees at most ' + offer.maxFreeMin + ' of the ' + offer.needMin + ' min needed.');
+      notes.push('Make room: shortening the blocks before it frees at most ' + offer.maxFreeMin + ' of the ' + offer.needMin + ' min needed.');
+    } else if (offer.reason === 'fixed') {
+      // Say why there is no Make room, rather than leaving it to be missed.
+      notes.push('Make room is not available: ' + esc(offer.blockedBy) + ' cannot be shortened (client appointments, meetings and uncategorised events stay as they are).');
+    } else if (offer.reason === 'none') {
+      notes.push('Make room is not available: there is no report, admin or custom block before it to shorten.');
     }
   }
   if (hold && room) _bspDrawSqueeze(col, room, fmt);

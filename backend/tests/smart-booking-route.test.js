@@ -1599,7 +1599,16 @@ describe('Make room — shorten the flexible blocks before a client whose time i
     const f = (s) => env.ev(`isFlexibleBlock(${JSON.stringify(Object.assign({ dbId: 'db' }, s))})`);
     expect(f({ type: 'report', patient: 'Alan S' })).toBe(true);
     expect(f({ type: 'admin' })).toBe(true);
-    expect(f({ type: 'outlook', title: 'Contact NDIS' })).toBe(true);
+    // A portal Custom block is saved with the Admin category.
+    expect(f({ type: 'outlook', title: 'Contact NDIS re: application', categories: ['Admin'] })).toBe(true);
+    // Outlook-synced rows often keep the plain 'outlook' type (25 Oct 2026):
+    // the category and the title decide.
+    expect(f({ type: 'outlook', title: 'Progress Report - Alan Subin', categories: ['Report Writing'] })).toBe(true);
+    expect(f({ type: 'outlook', title: 'Client Appointment - Raynash Bharath', categories: ['Client Appointments'] })).toBe(false);
+    expect(f({ type: 'outlook', title: 'Client Appointment - Raynash Bharath', categories: [] })).toBe(false);
+    expect(f({ type: 'outlook', title: 'OT/EA Meeting - Leighthan', categories: ['Client Appointments'] })).toBe(false);
+    expect(f({ type: 'admin', title: 'Do not book', categories: ['Do Not Book'] })).toBe(false);
+    expect(f({ type: 'outlook', title: 'Robert', categories: [] })).toBe(false);        // uncategorised: could be anyone
     expect(f({ type: 'outlook', patient: 'Ada' })).toBe(false);
     expect(f({ type: 'therapy' })).toBe(false);
     expect(f({ type: 'meeting' })).toBe(false);
@@ -1611,7 +1620,7 @@ describe('Make room — shorten the flexible blocks before a client whose time i
   function reportDay(env) {
     env.ev(`SESSIONS.R = { id: 'R', day: 'mon', type: 'report', title: 'Progress Report — Alan S', patient: 'Alan S', startH: 7, startM: 0, endH: 9, endM: 0,
         address: ${JSON.stringify(A_ADDR)}, dbId: 'db-R', element: document.createElement('div') };
-      SESSIONS.C = { id: 'C', day: 'mon', type: 'outlook', title: 'Contact NDIS re: application', startH: 9, startM: 0, endH: 9, endM: 30,
+      SESSIONS.C = { id: 'C', day: 'mon', type: 'outlook', title: 'Contact NDIS re: application', categories: ['Admin'], startH: 9, startM: 0, endH: 9, endM: 30,
         address: ${JSON.stringify(A_ADDR)}, dbId: 'db-C', element: document.createElement('div') };
       BOOKING_STATE.selectedPatient = { first: 'Raynash', last: 'Bharath' };
       document.getElementById('booking-side-panel').classList.add('open'); bspSelectDay('mon');
@@ -1664,6 +1673,16 @@ describe('Make room — shorten the flexible blocks before a client whose time i
     expect(env.ev('BOOKING_ROUTE.squeeze')).toBeNull();
     expect(env.win.document.querySelectorAll('.bsp-squeeze-ghost').length).toBe(0);
     expect(status(env).querySelector('[data-route="squeeze"]')).not.toBeNull();
+  });
+
+  test('no Make room behind a client appointment — and the panel says why', async () => {
+    const env = makeEnv({ routes: { [A_ADDR + '|' + CV_ADDR]: 19 } });
+    reportDay(env);
+    env.ev("SESSIONS.C.title = 'Client Appointment - Ada Client'; SESSIONS.C.categories = ['Client Appointments']; delete SESSIONS.C.__loc;");
+    await chooseLocation(env, CV_ADDR);
+    expect(status(env).querySelector('[data-route="squeeze"]')).toBeNull();
+    expect(status(env).textContent).toContain('Make room is not available: Client Appointment - Ada Client cannot be shortened');
+    expect(status(env).querySelector('[data-route="earliest"]')).not.toBeNull();
   });
 
   test('another start drops it', async () => {
