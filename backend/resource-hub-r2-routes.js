@@ -1482,7 +1482,7 @@ router.post('/api/rh2/resources/:id/files', safe(async (req, res) => {
         privacy: stored.privacy, identifiers: stored.identifiers,
       });
     }
-    return res.status(stored.status).json({ error: stored.error, code: stored.code });
+    return res.status(stored.status).json({ error: stored.error, code: stored.code, reasons: stored.reasons });
   }
 
   const fileRow = stored.file;

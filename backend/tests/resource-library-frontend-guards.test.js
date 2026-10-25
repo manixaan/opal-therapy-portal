@@ -363,6 +363,30 @@ describe('uploads', () => {
     expect(LIB).toContain('id="rhl-dup-all"');
   });
 
+  it('shows a privacy refusal as a tickable checklist: what, how often, which pages, the fix', () => {
+    expect(T.pageRanges([4, 5, 6, 9, 41, 42])).toBe('4–6, 9, 41–42');
+    expect(T.pageRanges([7])).toBe('7');
+    const html = T.renderReasons({
+      reasons: [
+        { id: 'ndis-number', type: 'personal', title: 'NDIS participant number', count: 43,
+          pages: [4, 5, 6], repeatsOnEveryPage: true, fix: 'Replace it.' },
+        { id: 'email', type: 'pattern', title: 'Email address', count: 1, pages: [41], fix: 'Remove <it>.' },
+      ],
+      ticked: { email: true },
+    }, 0);
+    expect(html).toContain('Why it was refused');
+    expect(html).toContain('(1 of 2 ticked)');
+    expect(html).toContain('found 43 times · PDF pages 4–6 — on almost every page, so check the header and footer');
+    expect(html).toContain('found 1 time · PDF page 41');
+    expect(html).toContain("RHLib.tickReason(0,'ndis-number',this.checked)");
+    expect(html).toContain('rhl-reason-pattern is-done');
+    expect(html).toContain('Remove &lt;it&gt;.');
+    // Wired: the refusal keeps the server's reasons, and the row renders them.
+    expect(LIB).toContain('entry.reasons = privacy && Array.isArray(r.data.reasons)');
+    expect(LIB).toContain('renderReasons(u, ui)');
+    expect(LIBCSS).toContain('.rhl-reasons');
+  });
+
   it('accepts the formats the server accepts, and no more', () => {
     expect(LIB).toContain("var UPLOAD_ACCEPT = '.pdf,.docx,.xlsx,.pptx,.png,.jpg,.jpeg'");
   });

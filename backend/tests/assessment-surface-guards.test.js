@@ -638,7 +638,9 @@ describe('changed assets are cache-busted', () => {
       ['resourcehub.js', 'r56'], ['resourcehub.css', 'r31'],
       // resourcelibrary 1: the document library — folder tree, breadcrumbs,
       // list/tiles, command bar, menus, drag-and-drop, recycle bin, versions.
-      ['resourcelibrary.js', 2], ['resourcelibrary.css', 2],
+      // 3: a privacy-refused upload shows a tickable checklist of why — kind,
+      // count, PDF pages, what to change (25 Oct 2026).
+      ['resourcelibrary.js', 3], ['resourcelibrary.css', 3],
       // 2: the Resource Hub walkthrough lost the step that spotlighted the
       // Home collections grid, because the grid it pointed at is gone.
       // 3: the Splose induction — eight screenshot-led lessons in module

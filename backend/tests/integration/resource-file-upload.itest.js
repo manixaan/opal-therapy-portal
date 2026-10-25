@@ -110,6 +110,10 @@ describe('upload gates', () => {
       .send(uploadBody(filled, 'plan.docx', 'docx'));
     expect(res.status).toBe(422);
     expect(res.body.code).toBe('privacy_rejected');
+    // The checklist says what to change — kinds and counts, never the values.
+    expect(res.body.reasons.map((r) => r.id)).toContain('ndis-number');
+    expect(res.body.reasons.find((r) => r.id === 'ndis-number').type).toBe('personal');
+    expect(JSON.stringify(res.body)).not.toMatch(/430001234|Alex Sample/);
     // Nothing stored: no row, no blob.
     const { rows } = await db.pool.query('SELECT 1 FROM resource_files WHERE resource_id = $1', [resource.id]);
     expect(rows.length).toBe(0);

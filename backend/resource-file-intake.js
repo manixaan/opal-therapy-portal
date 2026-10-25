@@ -29,6 +29,7 @@ const { pool } = require('./database');
 const fileStorage = require('./resource-file-storage');
 const qualityGate = require('./resource-file-quality');
 const previewService = require('./resource-preview-service');
+const { buildChecklist } = require('./resource-privacy-reasons');
 const log = require('./logger').createLogger('resource-file-intake');
 
 const MAX_BYTES = 25 * 1024 * 1024;
@@ -105,6 +106,9 @@ async function storeFile(resource, upload, ctx = {}) {
         // Counts and kinds only — never content. The caller audits this.
         privacy: assessment.report.privacy,
         identifiers: assessment.report.identifierFindings,
+        // What to change, and on which pages — kinds, counts and page
+        // numbers only, safe to hand back to the person uploading.
+        reasons: buildChecklist(assessment.report),
       };
     }
     // An image-only PDF is allowed through as a warning: plenty of legitimate

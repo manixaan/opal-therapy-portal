@@ -241,9 +241,11 @@ async function assessFile(buffer, opts = {}) {
     if (opts.expectPageCount && pdf.pages !== opts.expectPageCount) {
       warnings.push(`Expected ${opts.expectPageCount} pages, found ${pdf.pages}.`);
     }
-    const text = pdf.perPage.length ? await pdfText(buffer) : '';
+    const pageTexts = pdf.perPage.length ? await pdfPageTexts(buffer) : [];
+    const text = pageTexts.map((t) => ` ${t}`).join('');
     report.identifierFindings = scanForIdentifiers(text);
     report.privacy = scanTextForClientContent(text);
+    report.findingPages = locateFindings(pageTexts);
   } else if (declaredFormat === 'docx') {
     if (report.magic !== 'zip' && report.magic !== 'ole') {
       failures.push(`Declared DOCX but the file begins with a ${report.magic} signature.`);
@@ -281,9 +283,28 @@ async function assessFile(buffer, opts = {}) {
   return { passed: failures.length === 0, failures, warnings, report };
 }
 
-async function pdfText(buffer) {
-  const texts = await pdfPageTexts(buffer);
-  return texts.map((t) => ` ${t}`).join('');
+/**
+ * Which PDF pages each finding kind turns up on, so a refusal can say WHERE
+ * to look. Page numbers and kinds only — the same never-the-content rule as
+ * the findings themselves. Each page is scanned on its own, so a label split
+ * across a page break may not be located; the whole-document scan above stays
+ * the authority on whether the file is refused.
+ *
+ * @param {string[]} pageTexts one string per page, in order
+ * @returns {Object<string, number[]>} kind → 1-based page numbers
+ */
+function locateFindings(pageTexts) {
+  const pages = {};
+  const note = (kind, n) => {
+    const list = (pages[kind] = pages[kind] || []);
+    if (list[list.length - 1] !== n) list.push(n); // both scanners can see one page
+  };
+  (pageTexts || []).forEach((t, i) => {
+    for (const f of scanForIdentifiers(t)) note(f.kind, i + 1);
+    const p = scanTextForClientContent(t);
+    for (const f of p.strong.concat(p.weak)) note(f.kind, i + 1);
+  });
+  return pages;
 }
 
 module.exports = {
@@ -293,6 +314,7 @@ module.exports = {
   sha256,
   sniffMagic,
   scanForIdentifiers,
+  locateFindings,
   inspectPdf,
   inspectDocx,
   assessFile,

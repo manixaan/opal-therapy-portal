@@ -1464,9 +1464,12 @@
         return;
       }
       entry.state = 'error';
-      entry.message = r.status === 422 && r.data && r.data.code === 'privacy_rejected'
+      var privacy = r.status === 422 && r.data && r.data.code === 'privacy_rejected';
+      entry.message = privacy
         ? (r.data.error || 'Refused: it appears to contain a person’s details.')
         : errorText(r.status, r.data);
+      entry.reasons = privacy && Array.isArray(r.data.reasons) ? r.data.reasons : null;
+      entry.ticked = {};
       return;
     }
     entry.state = 'error';
@@ -1515,7 +1518,7 @@
       + '<div class="rhl-uploads-head"><strong>' + esc(head) + '</strong>'
       + (busy ? '' : '<button type="button" class="rh2-btn rh2-btn-quiet" onclick="RHLib.dismissUploads()">Dismiss</button>')
       + '</div><ul class="rhl-uplist">'
-      + ups.map(function (u) {
+      + ups.map(function (u, ui) {
         var mark = u.state === 'done' ? '✓' : u.state === 'error' ? '✗' : u.state === 'skipped' ? '–' : '·';
         var pct = Math.round((u.progress || 0) * 100);
         return '<li class="rhl-up rhl-up-' + esc(u.state) + '">'
@@ -1525,10 +1528,68 @@
             ? '<span class="rhl-up-bar" role="progressbar" aria-label="Uploading ' + esc(u.name) + '" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + pct + '"><span style="width:' + pct + '%"></span></span>'
             : '')
           + (u.message ? '<span class="rhl-up-msg">' + esc(u.message) + '</span>' : '')
+          + (u.reasons && u.reasons.length ? renderReasons(u, ui) : '')
           + '</li>';
       }).join('') + '</ul>'
       + (failed ? '<p class="rhl-note">Refused files were not stored. Nothing else was affected.</p>' : '')
       + '</div>';
+  }
+
+  /** "4", "4, 9", "4–46" — consecutive pages collapse into a range. */
+  function pageRanges(pages) {
+    var out = [];
+    for (var i = 0; i < pages.length; i++) {
+      var a = pages[i], b = a;
+      while (i + 1 < pages.length && pages[i + 1] === b + 1) { b = pages[++i]; }
+      out.push(a === b ? String(a) : a + '–' + b);
+    }
+    return out.join(', ');
+  }
+
+  /**
+   * The refusal checklist: one item per kind of finding the privacy gate hit —
+   * what, how many, which PDF pages, what to change. The server sends kinds,
+   * counts and page numbers only, never the matched text. Ticks are the
+   * person's own progress through their source document; they change nothing
+   * on the server, and a re-upload is checked from scratch either way.
+   */
+  function renderReasons(u, ui) {
+    var items = u.reasons;
+    var done = items.filter(function (it) { return u.ticked && u.ticked[it.id]; }).length;
+    return '<div class="rhl-reasons">'
+      + '<p class="rhl-reasons-head"><strong>Why it was refused</strong> — fix these in your original document, then upload it again'
+      + ' <span class="rhl-reasons-count">(' + done + ' of ' + items.length + ' ticked)</span></p>'
+      + '<ul class="rhl-reasons-list">'
+      + items.map(function (it) {
+        var pages = Array.isArray(it.pages) ? it.pages : [];
+        var where = pages.length
+          ? (pages.length === 1 ? 'PDF page ' : 'PDF pages ') + pageRanges(pages)
+          : '';
+        if (it.repeatsOnEveryPage) where += ' — on almost every page, so check the header and footer';
+        var on = !!(u.ticked && u.ticked[it.id]);
+        return '<li class="rhl-reason rhl-reason-' + (it.type === 'pattern' ? 'pattern' : 'personal') + (on ? ' is-done' : '') + '">'
+          + '<label class="rhl-reason-row">'
+          + '<input type="checkbox"' + (on ? ' checked' : '')
+          + ' onchange="RHLib.tickReason(' + ui + ',\'' + esc(it.id) + '\',this.checked)" />'
+          + '<span class="rhl-reason-title">' + esc(it.title)
+          + ' <span class="rhl-reason-meta">· found ' + esc(String(it.count)) + (it.count === 1 ? ' time' : ' times')
+          + (where ? ' · ' + esc(where) : '') + '</span></span>'
+          + '</label>'
+          + '<span class="rhl-reason-tag">' + (it.type === 'pattern'
+            ? 'Often harmless, but the check cannot tell it from a client’s — it still has to go'
+            : 'Identifies a client') + '</span>'
+          + '<span class="rhl-reason-fix">' + esc(it.fix) + '</span>'
+          + '</li>';
+      }).join('')
+      + '</ul></div>';
+  }
+
+  function tickReason(index, id, on) {
+    var u = L.uploads[index];
+    if (!u || !u.reasons) return;
+    u.ticked = u.ticked || {};
+    u.ticked[id] = !!on;
+    paintUploads();
   }
 
   function dismissUploads() { L.uploads = []; paint(); }
@@ -1944,7 +2005,7 @@
     menuFor: menuFor, more: more, ctx: ctx, closeMenu: closeMenu, menuPick: menuPick, act: act,
     copyFolderLink: copyFolderLink,
     moveChoose: moveChoose, moveConfirm: moveConfirm, closeDialog: closeDialog, dialogKey: dialogKey,
-    dupPick: dupPick, dismissUploads: dismissUploads,
+    dupPick: dupPick, dismissUploads: dismissUploads, tickReason: tickReason,
     dragStart: dragStart, dragEnd: dragEnd, dragOver: dragOver, dragLeave: dragLeave, drop: drop,
     togglePane: togglePane, detailsTab: detailsTab, restoreVersion: restoreVersion,
     binToggle: binToggle, binAll: binAll, binRestore: binRestore, binPurge: binPurge,
@@ -1952,7 +2013,7 @@
     // Pure rules, for the unit tests.
     _test: {
       sortItems: sortItems, rangeKeys: rangeKeys, filterItems: filterItems, typeLabel: typeLabel,
-      fmtSize: fmtSize, actionsFor: actionsFor, moveTargets: moveTargets, errorText: errorText,
+      fmtSize: fmtSize, pageRanges: pageRanges, renderReasons: renderReasons, actionsFor: actionsFor, moveTargets: moveTargets, errorText: errorText,
       state: L, setTree: function (t) { L.tree = t; },
     },
   };

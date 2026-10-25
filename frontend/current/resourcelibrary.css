@@ -182,6 +182,22 @@
 .rhl-up-where { color: var(--muted); font-size: 12px; }
 .rhl-up-msg { grid-column: 2 / -1; font-size: 12px; color: var(--ink-soft); }
 .rhl-up-error .rhl-up-msg { color: var(--danger, #b42318); }
+/* Refusal checklist — what the privacy gate found, where, and how to fix it */
+.rhl-reasons { grid-column: 2 / -1; margin: 6px 0 4px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm, 8px); background: var(--bg, transparent); color: var(--ink); }
+.rhl-reasons-head { margin: 0 0 6px; font-size: 12.5px; }
+.rhl-reasons-count { color: var(--muted); font-weight: 400; }
+.rhl-reasons-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.rhl-reason { display: flex; flex-direction: column; gap: 2px; border-left: 3px solid var(--border); padding-left: 8px; }
+.rhl-reason-personal { border-left-color: var(--danger, #b42318); }
+.rhl-reason-pattern { border-left-color: var(--warn, #b54708); }
+.rhl-reason-row { display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 13px; }
+.rhl-reason-row input { margin: 2px 0 0; width: 16px; height: 16px; flex: none; }
+.rhl-reason-title { font-weight: 600; overflow-wrap: anywhere; }
+.rhl-reason-meta { font-weight: 400; color: var(--ink-soft); }
+.rhl-reason-tag, .rhl-reason-fix { font-size: 12px; padding-left: 24px; }
+.rhl-reason-tag { color: var(--muted); }
+.rhl-reason-fix { color: var(--ink-soft); }
+.rhl-reason.is-done .rhl-reason-title, .rhl-reason.is-done .rhl-reason-fix { text-decoration: line-through; color: var(--muted); }
 .rhl-up-bar { width: 120px; height: 6px; border-radius: 3px; background: var(--border-soft); overflow: hidden; }
 .rhl-up-bar span { display: block; height: 100%; background: var(--accent); }
 

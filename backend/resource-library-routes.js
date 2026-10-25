@@ -1060,7 +1060,7 @@ async function replaceDocument(req, res, resource, fileName, fileData) {
       await audit(req, 'resource_library.upload_privacy_rejected', resource.id,
         { replace: true, privacy: stored.privacy, identifiers: stored.identifiers });
     }
-    return res.status(stored.status).json({ error: stored.error, code: stored.code });
+    return res.status(stored.status).json({ error: stored.error, code: stored.code, reasons: stored.reasons });
   }
   await pool.query('UPDATE resources SET updated_at = NOW(), updated_by = $2 WHERE id = $1',
     [resource.id, req.user.id]);
@@ -1234,7 +1234,7 @@ router.post('/api/rh2/library/folders/:id/upload', requireManager, safe(async (r
       await audit(req, 'resource_library.upload_privacy_rejected', null,
         { folder: folder.rows[0].name, privacy: stored.privacy, identifiers: stored.identifiers });
     }
-    return res.status(stored.status).json({ error: stored.error, code: stored.code });
+    return res.status(stored.status).json({ error: stored.error, code: stored.code, reasons: stored.reasons });
   }
 
   await audit(req, 'resource_library.file_uploaded', resource.id, {
