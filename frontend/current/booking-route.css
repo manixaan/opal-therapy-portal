@@ -84,14 +84,20 @@
 .bsp-sq-title { font-weight: 700; }
 .bsp-sq-sum { margin-top: 5px; }
 .bsp-sq-list { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; }
-.bsp-sq-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name step" "time step"; column-gap: 8px; align-items: center;
+.bsp-sq-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name step" "time step" "err err"; column-gap: 8px; align-items: center;
   padding: 5px 7px; border: 1px solid var(--border); border-radius: 7px; background: var(--panel); }
 .bsp-sq-name { grid-area: name; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bsp-sq-time { grid-area: time; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
 .bsp-sq-step { grid-area: step; display: inline-flex; align-items: center; gap: 4px; }
 .bsp-sq-step .bsp-sq-btn { margin: 0; width: 26px; padding: 3px 0; text-align: center; }
 .bsp-sq-step .bsp-sq-btn:disabled { opacity: .4; cursor: default; }
-.bsp-sq-cut { min-width: 52px; text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; }
+.bsp-sq-cut { display: inline-flex; align-items: center; gap: 2px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bsp-sq-input { width: 3.2em; padding: 3px 4px; font: inherit; font-weight: 600; text-align: center; font-variant-numeric: tabular-nums;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--ink); }
+.bsp-sq-input:focus-visible { outline: none; border-color: var(--accent, #0f766e); box-shadow: var(--focus-ring, 0 0 0 3px rgba(15, 118, 110, 0.22)); }
+.bsp-sq-input.is-invalid { border-color: var(--danger, #c2412e); background: var(--danger-soft, #fbe9e6); }
+.bsp-sq-err { grid-area: err; margin-top: 4px; font-size: 11.5px; color: var(--danger-ink, #9c3322); }
+.bsp-sq-err[hidden] { display: none; }
 .bsp-sq-head .bsp-sq-even { margin: 0; }
 .bsp-sq-head .bsp-sq-even:disabled { opacity: .45; cursor: default; }
 .bsp-sq-row.is-set { border-color: var(--accent, #0f766e); }

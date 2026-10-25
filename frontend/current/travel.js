@@ -1579,10 +1579,13 @@ function _bspSqueezeHtml(room, sq, fmt) {
       '<span class="bsp-sq-step">' +
         '<button type="button" class="bsp-route-btn bsp-sq-btn" data-route="squeeze-step" data-id="' + esc(b.id) + '" data-delta="-' + step + '"' +
           ' aria-label="Take ' + step + ' minutes less off ' + esc(b.label) + '"' + (b.cutMin <= 0 ? ' disabled' : '') + '>−</button>' +
-        '<span class="bsp-sq-cut">' + (b.cutMin ? '−' + b.cutMin : '0') + ' min</span>' +
+        '<label class="bsp-sq-cut"><input type="text" inputmode="numeric" class="bsp-sq-input" data-id="' + esc(b.id) + '"' +
+          ' value="' + b.cutMin + '" data-was="' + b.cutMin + '" size="3" autocomplete="off"' +
+          ' aria-label="Minutes to take off ' + esc(b.label) + '" aria-describedby="bsp-sq-err-' + esc(b.id) + '"> min</label>' +
         '<button type="button" class="bsp-route-btn bsp-sq-btn" data-route="squeeze-step" data-id="' + esc(b.id) + '" data-delta="' + step + '"' +
           ' aria-label="Take ' + step + ' more minutes off ' + esc(b.label) + '"' + (b.cutMin >= b.maxCutMin ? ' disabled' : '') + '>+</button>' +
-      '</span></li>';
+      '</span>' +
+      '<span class="bsp-sq-err" id="bsp-sq-err-' + esc(b.id) + '" role="alert" hidden></span></li>';
   }).join('');
   const sum = room.ok
     ? 'Frees <strong>' + room.freedMin + ' min</strong> — leave by <strong>' + fmt(room.leaveByMin) + '</strong>.'
@@ -1598,6 +1601,67 @@ function _bspSqueezeHtml(room, sq, fmt) {
       'Saved to Outlook and Splose when you create the appointment.' +
       '<br><button type="button" class="bsp-route-btn" data-route="squeeze-off">Keep the blocks as they are</button></div>' +
     '</div>';
+}
+
+/* PURE — a typed cut for one Make room block. Whole minutes only, and no
+   more than the block can give: its length less the minimum it keeps.
+   row: { label, startMin, endMin, maxCutMin } → { ok, value } | { ok: false, error } */
+function validateSqueezeCut(raw, row) {
+  const t = String(raw == null ? '' : raw).trim();
+  if (!t) return { ok: false, error: 'Enter the minutes to take off — 0 to leave it as it is.' };
+  if (!/^\d+$/.test(t)) return { ok: false, error: 'Use whole minutes, like 10.' };
+  const n = parseInt(t, 10);
+  const len = row ? row.endMin - row.startMin : 0;
+  const max = row ? row.maxCutMin : 0;
+  if (n > max) {
+    return { ok: false, error: max > 0
+      ? 'At most ' + max + ' min can come off — this block is ' + len + ' min and keeps at least ' + MAKE_ROOM_CONFIG.minBlockMin + '.'
+      : 'This block is ' + len + ' min — it is already at the ' + MAKE_ROOM_CONFIG.minBlockMin + '-min minimum.' };
+  }
+  return { ok: true, value: n };
+}
+function _bspSqueezeRow(id) {
+  return ((BOOKING_ROUTE.squeezePlan || {}).blocks || []).find(x => x.id === id) || null;
+}
+function _bspShowCutError(input, error) {
+  const err = document.getElementById('bsp-sq-err-' + input.dataset.id);
+  input.setAttribute('aria-invalid', error ? 'true' : 'false');
+  input.classList.toggle('is-invalid', !!error);
+  if (err) { err.textContent = error || ''; err.hidden = !error; }
+}
+/* Typing checks as it goes; Enter or leaving the field applies a valid value
+   (the block is then set, like a −/+), Escape puts the shown value back. */
+document.addEventListener('input', e => {
+  const t = e.target;
+  if (!t || !t.classList || !t.classList.contains('bsp-sq-input')) return;
+  const v = validateSqueezeCut(t.value, _bspSqueezeRow(t.dataset.id));
+  _bspShowCutError(t, v.ok ? '' : v.error);
+});
+document.addEventListener('keydown', e => {
+  const t = e.target;
+  if (!t || !t.classList || !t.classList.contains('bsp-sq-input')) return;
+  if (e.key === 'Enter') { e.preventDefault(); _bspApplyCut(t, true); }
+  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); t.value = t.dataset.was || '0'; _bspShowCutError(t, ''); }
+});
+document.addEventListener('change', e => {
+  const t = e.target;
+  if (t && t.classList && t.classList.contains('bsp-sq-input')) _bspApplyCut(t);
+});
+function _bspApplyCut(input, keepFocus) {
+  const sq = BOOKING_ROUTE.squeeze;
+  const row = _bspSqueezeRow(input.dataset.id);
+  if (!sq || !row) return;
+  const v = validateSqueezeCut(input.value, row);
+  if (!v.ok) { _bspShowCutError(input, v.error); return; }   // nothing applied until it makes sense
+  if (v.value === row.cutMin && row.locked) return;
+  sq.cuts[input.dataset.id] = v.value;
+  const id = input.dataset.id;
+  runBspRoutePreview();
+  // Enter redrew the editor under the cursor: keep the clinician's place.
+  if (keepFocus) {
+    const next = Array.from(document.querySelectorAll('#bsp-route-status .bsp-sq-input')).find(x => x.dataset.id === id);
+    if (next) { try { next.focus(); next.select(); } catch (_) {} }
+  }
 }
 
 /* Create appointment: the shortened blocks are saved exactly as a drag or an

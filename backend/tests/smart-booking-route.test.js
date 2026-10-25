@@ -1684,6 +1684,47 @@ describe('Make room — shorten the flexible blocks before a client whose time i
     expect(status(env).querySelector('[data-route="squeeze"]')).not.toBeNull();
   });
 
+  test('typed minutes: whole numbers only, no more than the block can give', () => {
+    const env = makeEnv();
+    const row = { label: 'Progress Report', startMin: 420, endMin: 540, maxCutMin: 105 };   // 120 min, keeps 15
+    const v = (raw, r = row) => env.ev(`validateSqueezeCut(${JSON.stringify(raw)}, ${JSON.stringify(r)})`);
+    expect(v('10')).toEqual({ ok: true, value: 10 });
+    expect(v(' 0 ')).toEqual({ ok: true, value: 0 });
+    expect(v('105')).toEqual({ ok: true, value: 105 });
+    expect(v('106')).toEqual({ ok: false, error: 'At most 105 min can come off — this block is 120 min and keeps at least 15.' });
+    expect(v('').ok).toBe(false);
+    ['10.5', '-5', 'ten', '1e2', '5 min'].forEach(raw => expect(v(raw)).toEqual({ ok: false, error: 'Use whole minutes, like 10.' }));
+    expect(v('5', { label: 'Emails', startMin: 540, endMin: 555, maxCutMin: 0 }))
+      .toEqual({ ok: false, error: 'This block is 15 min — it is already at the 15-min minimum.' });
+  });
+
+  test('typing a value sets the block; a bad value is flagged and not applied', async () => {
+    const env = makeEnv({ routes: { [A_ADDR + '|' + CV_ADDR]: 19 } });
+    reportDay(env);
+    await chooseLocation(env, CV_ADDR);
+    click(env, '[data-route="squeeze"]');
+    await settled(env);
+    const input = (id) => Array.from(status(env).querySelectorAll('.bsp-sq-input')).find(x => x.dataset.id === id);
+    const type = (id, val, evt) => { const el = input(id); el.value = val; el.dispatchEvent(new env.win.Event(evt, { bubbles: true })); };
+    const times = () => Array.from(status(env).querySelectorAll('.bsp-sq-time')).map(e => e.textContent);
+    type('R', '12.5', 'input');
+    expect(input('R').getAttribute('aria-invalid')).toBe('true');
+    expect(env.win.document.getElementById('bsp-sq-err-R').textContent).toBe('Use whole minutes, like 10.');
+    type('R', '12.5', 'change');
+    await settled(env);
+    expect(times()[0]).toBe('7:00 AM–9:00 AM → 7:00 AM–8:50 AM');      // unchanged
+    expect(env.ev('BOOKING_ROUTE.squeeze.cuts')).toEqual({});
+    type('R', '16', 'change');
+    await settled(env);
+    expect(times()).toEqual(['7:00 AM–9:00 AM → 7:00 AM–8:44 AM', '9:00 AM–9:30 AM → 8:44 AM–9:11 AM']);   // C takes the other 3
+    expect(input('R').value).toBe('16');
+    expect(status(env).querySelector('.bsp-sq-row.is-set .bsp-sq-input').dataset.id).toBe('R');
+    type('C', '99', 'change');                                       // C is 30 min: at most 15
+    await settled(env);
+    expect(env.win.document.getElementById('bsp-sq-err-C').textContent).toContain('At most 15 min can come off');
+    expect(env.ev('BOOKING_ROUTE.squeeze.cuts')).toEqual({ R: 16 });
+  });
+
   test('no Make room behind a client appointment — and the panel says why', async () => {
     const env = makeEnv({ routes: { [A_ADDR + '|' + CV_ADDR]: 19 } });
     reportDay(env);
