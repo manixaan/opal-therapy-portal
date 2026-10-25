@@ -1594,24 +1594,24 @@ describe('Make room — shorten the flexible blocks before a client whose time i
     expect(after.blocks.map(b => b.id)).toEqual(['R', 'C']);
   });
 
-  test('what counts as flexible: reports, admin, lunch, CPD and the clinician\'s own events — not clients, meetings or travel', () => {
+  test('what can be shortened: everything but a direct service (and travel)', () => {
     const env = makeEnv();
     const f = (s) => env.ev(`isFlexibleBlock(${JSON.stringify(Object.assign({ dbId: 'db' }, s))})`);
     expect(f({ type: 'report', patient: 'Alan S' })).toBe(true);
     expect(f({ type: 'admin' })).toBe(true);
-    // A portal Custom block is saved with the Admin category.
     expect(f({ type: 'outlook', title: 'Contact NDIS re: application', categories: ['Admin'] })).toBe(true);
-    // Outlook-synced rows often keep the plain 'outlook' type (25 Oct 2026):
-    // the category and the title decide.
     expect(f({ type: 'outlook', title: 'Progress Report - Alan Subin', categories: ['Report Writing'] })).toBe(true);
+    expect(f({ type: 'meeting', title: 'Team meeting' })).toBe(true);
+    expect(f({ type: 'outlook', title: 'Robert', categories: [] })).toBe(true);
+    expect(f({ type: 'admin', title: 'Do not book', categories: ['Do Not Book'] })).toBe(true);
+    // Direct services, however they arrive. Outlook-synced rows often keep the
+    // plain 'outlook' type (25 Oct 2026): the category and the title decide.
+    expect(f({ type: 'therapy' })).toBe(false);
+    expect(f({ type: 'mdt' })).toBe(false);
+    expect(f({ type: 'outlook', booking: { type: 'initial' } })).toBe(false);
     expect(f({ type: 'outlook', title: 'Client Appointment - Raynash Bharath', categories: ['Client Appointments'] })).toBe(false);
     expect(f({ type: 'outlook', title: 'Client Appointment - Raynash Bharath', categories: [] })).toBe(false);
     expect(f({ type: 'outlook', title: 'OT/EA Meeting - Leighthan', categories: ['Client Appointments'] })).toBe(false);
-    expect(f({ type: 'admin', title: 'Do not book', categories: ['Do Not Book'] })).toBe(false);
-    expect(f({ type: 'outlook', title: 'Robert', categories: [] })).toBe(false);        // uncategorised: could be anyone
-    expect(f({ type: 'outlook', patient: 'Ada' })).toBe(false);
-    expect(f({ type: 'therapy' })).toBe(false);
-    expect(f({ type: 'meeting' })).toBe(false);
     expect(f({ type: 'travel' })).toBe(false);
     expect(f({ type: 'admin', cancelled: true })).toBe(false);
     expect(env.ev("isFlexibleBlock({ type: 'admin' })")).toBe(false);   // unsaved: nothing to write back to
@@ -1681,7 +1681,7 @@ describe('Make room — shorten the flexible blocks before a client whose time i
     env.ev("SESSIONS.C.title = 'Client Appointment - Ada Client'; SESSIONS.C.categories = ['Client Appointments']; delete SESSIONS.C.__loc;");
     await chooseLocation(env, CV_ADDR);
     expect(status(env).querySelector('[data-route="squeeze"]')).toBeNull();
-    expect(status(env).textContent).toContain('Make room is not available: Client Appointment - Ada Client cannot be shortened');
+    expect(status(env).textContent).toContain('Make room is not available: Client Appointment - Ada Client is a direct service and cannot be shortened.');
     expect(status(env).querySelector('[data-route="earliest"]')).not.toBeNull();
   });
 

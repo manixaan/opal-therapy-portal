@@ -1075,29 +1075,30 @@ function placeProposalTravel(out, prevEnd, busy) {
 }
 
 /* ─── Make room (24 Oct 2026) ─────────────────────────────────────────────
-   A client's time is fixed; the reports, admin and custom blocks before it
-   are not. When the drive does not fit, the run of flexible blocks after the
+   A client's time is fixed; every other block before it is not. When the drive does not fit, the run of flexible blocks after the
    last fixed one can be shortened so the therapist leaves in time — evenly,
    or by what the clinician sets on each block. Each block keeps its place in
    the run: the time cut from one moves every later block up by as much, and
-   the run still starts where it did. Client sessions, meetings, leave and
-   travel are never touched. Nothing is saved until Create appointment. */
+   the run still starts where it did. Direct services and travel are never
+   touched. Nothing is saved until Create appointment. */
 var MAKE_ROOM_CONFIG = { minBlockMin: 15, stepMin: 5 };
-const FLEX_BLOCK_TYPES = new Set(['report', 'admin', 'casenote', 'cpd', 'lunch']);
-// Outlook-synced tiles often arrive typed plain 'outlook' with no client on
-// them (25 Oct 2026: "Client Appointment - Raynash Bharath" was 'outlook'), so
-// the category and the title decide too — and anything they cannot place is
-// left alone. Portal bookings always carry a category (Custom → Admin).
-const FIXED_BLOCK_CATEGORY = /client\s*appointment|meeting|travel|leave|holiday|do\s*not\s*book|cancellation/i;
-const FLEX_BLOCK_CATEGORY = /report\s*writing|case\s*management|business\s*related|\badmin\b|\bpd\b|professional\s*dev|lunch|\bbreak\b/i;
+// Everything but a direct service can give time (25 Oct 2026, Antony's call):
+// reports, admin, meetings, custom and uncategorised events alike. A direct
+// service is a client appointment — by its type, its booking, its Outlook
+// category or its title, because Outlook-synced tiles often arrive typed
+// plain 'outlook' with no client on them ("Client Appointment - Raynash
+// Bharath" was 'outlook'). Travel is the drive itself, never a block to cut.
+const DIRECT_SERVICE_CATEGORY = /client\s*appointment/i;
+function isDirectService(s) {
+  if (!s) return false;
+  if (CLIENT_ROUTE_TYPES.has(s.type)) return true;
+  if (s.booking && CLIENT_ROUTE_TYPES.has(s.booking.type)) return true;
+  if (/^client\s+appointment\b/i.test(String(s.title || '').trim())) return true;
+  return DIRECT_SERVICE_CATEGORY.test((Array.isArray(s.categories) ? s.categories : []).join('|'));
+}
 function isFlexibleBlock(s) {
   if (!s || s.cancelled || !s.dbId || isTravelBlock(s)) return false;
-  if (CLIENT_ROUTE_TYPES.has(s.type) || /meeting|leave/.test(s.type || '')) return false;
-  if (s.booking && CLIENT_ROUTE_TYPES.has(s.booking.type)) return false;
-  if (/^client\s+appointment\b/i.test(String(s.title || '').trim())) return false;
-  const cats = (Array.isArray(s.categories) ? s.categories : []).join('|');
-  if (FIXED_BLOCK_CATEGORY.test(cats)) return false;
-  return FLEX_BLOCK_TYPES.has(s.type) || FLEX_BLOCK_CATEGORY.test(cats);
+  return !isDirectService(s);
 }
 
 /* PURE — in:  items [{ id, startMin, endMin, label, flexible }] (the day,
@@ -1531,9 +1532,9 @@ function runBspRoutePreview(opts) {
       notes.push('Make room: shortening the blocks before it frees at most ' + offer.maxFreeMin + ' of the ' + offer.needMin + ' min needed.');
     } else if (offer.reason === 'fixed') {
       // Say why there is no Make room, rather than leaving it to be missed.
-      notes.push('Make room is not available: ' + esc(offer.blockedBy) + ' cannot be shortened (client appointments, meetings and uncategorised events stay as they are).');
+      notes.push('Make room is not available: ' + esc(offer.blockedBy) + ' is a direct service and cannot be shortened.');
     } else if (offer.reason === 'none') {
-      notes.push('Make room is not available: there is no report, admin or custom block before it to shorten.');
+      notes.push('Make room is not available: there is no block before it that can be shortened.');
     }
   }
   if (hold && room) _bspDrawSqueeze(col, room, fmt);
