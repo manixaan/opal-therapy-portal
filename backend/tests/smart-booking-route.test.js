@@ -1560,7 +1560,7 @@ describe('Make room — shorten the flexible blocks before a client whose time i
 
   test('evenly: 19 min comes off the two blocks, the later one moves up — 7:00–8:50 and 8:50–9:11', () => {
     const env = makeEnv();
-    const r = plan(env, { mode: 'even' });
+    const r = plan(env, {});
     expect(r.ok).toBe(true);
     expect(r.leaveByMin).toBe(551);
     expect(r.blocks.map(b => [b.id, b.newStartMin, b.newEndMin, b.cutMin])).toEqual([['R', 420, 530, 10], ['C', 530, 551, 9]]);
@@ -1568,18 +1568,20 @@ describe('Make room — shorten the flexible blocks before a client whose time i
 
   test('evenly never takes a block under 15 min: the rest is shared by the others', () => {
     const env = makeEnv();
-    const r = plan(env, { mode: 'even', items: [DAY[0], { id: 'C', startMin: 540, endMin: 560, label: 'Emails', flexible: true }], desiredStartMin: 560 });
+    const r = plan(env, { items: [DAY[0], { id: 'C', startMin: 540, endMin: 560, label: 'Emails', flexible: true }], desiredStartMin: 560 });
     expect(r.blocks.find(b => b.id === 'C').cutMin).toBe(5);              // 20 → 15
     expect(r.blocks.find(b => b.id === 'R').cutMin).toBe(14);
     expect(r.ok).toBe(true);
   });
 
-  test('custom: the minutes set on each block, clamped to its minimum; too little says how short', () => {
+  test('a block you set keeps its value; the others share what is still needed evenly', () => {
     const env = makeEnv();
-    const r = plan(env, { mode: 'custom', cuts: { R: 30, C: 99 } });
-    expect(r.blocks.map(b => [b.id, b.newStartMin, b.newEndMin])).toEqual([['R', 420, 510], ['C', 510, 525]]);   // C clamped to 15 off
+    const r = plan(env, { cuts: { R: 15 } });                     // R set to 15 → C takes the other 4
+    expect(r.blocks.map(b => [b.id, b.newStartMin, b.newEndMin, b.cutMin, b.locked])).toEqual([['R', 420, 525, 15, true], ['C', 525, 551, 4, false]]);
     expect(r.ok).toBe(true);
-    const short = plan(env, { mode: 'custom', cuts: { C: 5 } });
+    const both = plan(env, { cuts: { R: 30, C: 99 } });          // both set: kept, C clamped to its 15-min minimum
+    expect(both.blocks.map(b => [b.id, b.newStartMin, b.newEndMin])).toEqual([['R', 420, 510], ['C', 510, 525]]);
+    const short = plan(env, { cuts: { R: 0, C: 5 } });            // all set, too little: says how short
     expect(short.ok).toBe(false);
     expect(short.shortMin).toBe(14);
   });
@@ -1648,26 +1650,33 @@ describe('Make room — shorten the flexible blocks before a client whose time i
     expect(env.ev('SESSIONS.R.endH')).toBe(9);
   });
 
-  test('custom: + on a block takes 5 more off it and moves the next one up; Keep the blocks as they are undoes it all', async () => {
+  test('+ on a block sets it; the next one re-shares, keeps its own value once set; Split evenly starts over', async () => {
     const env = makeEnv({ routes: { [A_ADDR + '|' + CV_ADDR]: 19 } });
     reportDay(env);
     await chooseLocation(env, CV_ADDR);
     click(env, '[data-route="squeeze"]');
     await settled(env);
-    click(env, '[data-route="squeeze-step"][data-id="R"][data-delta="5"]');
+    const times = () => Array.from(status(env).querySelectorAll('.bsp-sq-time')).map(e => e.textContent);
+    expect(status(env).querySelector('[data-route="squeeze-even"]').disabled).toBe(true);   // nothing to undo yet
+    click(env, '[data-route="squeeze-step"][data-id="R"][data-delta="5"]');                // 10 → 15
     await settled(env);
-    expect(env.ev('BOOKING_ROUTE.squeeze.mode')).toBe('custom');
-    expect(status(env).querySelector('[data-route="squeeze-custom"]').getAttribute('aria-pressed')).toBe('true');
-    expect(Array.from(status(env).querySelectorAll('.bsp-sq-time')).map(e => e.textContent))
-      .toEqual(['7:00 AM–9:00 AM → 7:00 AM–8:45 AM', '9:00 AM–9:30 AM → 8:45 AM–9:06 AM']);
-    // Too little off: the shortfall is said, the start stays.
+    expect(times()).toEqual(['7:00 AM–9:00 AM → 7:00 AM–8:45 AM', '9:00 AM–9:30 AM → 8:45 AM–9:11 AM']);   // C 9 → 4
+    expect(status(env).querySelectorAll('.bsp-sq-row.is-set').length).toBe(1);
+    click(env, '[data-route="squeeze-step"][data-id="C"][data-delta="5"]');                // 4 → 9; R stays 15
+    await settled(env);
+    expect(times()).toEqual(['7:00 AM–9:00 AM → 7:00 AM–8:45 AM', '9:00 AM–9:30 AM → 8:45 AM–9:06 AM']);
+    // Both set, then too little off: the shortfall is said, the start stays.
     click(env, '[data-route="squeeze-step"][data-id="R"][data-delta="-5"]');
     click(env, '[data-route="squeeze-step"][data-id="R"][data-delta="-5"]');
     click(env, '[data-route="squeeze-step"][data-id="R"][data-delta="-5"]');
     await settled(env);
-    expect(status(env).textContent).toContain('min short');
+    expect(status(env).textContent).toContain('10 min short');
     expect(status(env).textContent).toContain('Still not enough time');
     expect(start(env)).toBe('09:30');
+    click(env, '[data-route="squeeze-even"]');
+    await settled(env);
+    expect(times()).toEqual(['7:00 AM–9:00 AM → 7:00 AM–8:50 AM', '9:00 AM–9:30 AM → 8:50 AM–9:11 AM']);
+    expect(status(env).querySelectorAll('.bsp-sq-row.is-set').length).toBe(0);
     click(env, '[data-route="squeeze-off"]');
     await settled(env);
     expect(env.ev('BOOKING_ROUTE.squeeze')).toBeNull();

@@ -82,11 +82,6 @@
 .bsp-squeeze { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border); color: var(--ink); }
 .bsp-sq-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .bsp-sq-title { font-weight: 700; }
-.bsp-sq-modes { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
-.bsp-sq-mode { padding: 3px 10px; font: inherit; font-size: 11.5px; font-weight: 600; border: 0; background: var(--panel); color: var(--ink-soft); cursor: pointer; }
-.bsp-sq-mode + .bsp-sq-mode { border-left: 1px solid var(--border); }
-.bsp-sq-mode[aria-pressed="true"] { background: var(--accent, #0f766e); color: #fff; }
-.bsp-sq-mode:focus-visible { outline: none; box-shadow: inset var(--focus-ring, 0 0 0 3px rgba(15, 118, 110, 0.22)); }
 .bsp-sq-sum { margin-top: 5px; }
 .bsp-sq-list { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; }
 .bsp-sq-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name step" "time step"; column-gap: 8px; align-items: center;
@@ -97,6 +92,11 @@
 .bsp-sq-step .bsp-sq-btn { margin: 0; width: 26px; padding: 3px 0; text-align: center; }
 .bsp-sq-step .bsp-sq-btn:disabled { opacity: .4; cursor: default; }
 .bsp-sq-cut { min-width: 52px; text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; }
+.bsp-sq-head .bsp-sq-even { margin: 0; }
+.bsp-sq-head .bsp-sq-even:disabled { opacity: .45; cursor: default; }
+.bsp-sq-row.is-set { border-color: var(--accent, #0f766e); }
+.bsp-sq-set { margin-left: 4px; padding: 0 5px; border-radius: 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+  background: var(--accent-soft, #e4f2ec); color: var(--accent-deep, #0a5d51); vertical-align: 1px; }
 .bsp-sq-foot { margin-top: 6px; color: var(--ink-soft); }
 /* On the calendar: where each shortened block will sit; the real tile dims */
 .session.bsp-squeeze-src { opacity: .35; }

@@ -1103,11 +1103,12 @@ function isFlexibleBlock(s) {
 
 /* PURE — in:  items [{ id, startMin, endMin, label, flexible }] (the day,
                travel excluded), desiredStartMin, travelMin, bufferMin,
-               mode 'even' | 'custom', cuts { id: minutes } (custom),
-               minBlockMin
+               cuts { id: minutes } — the blocks the clinician set
+               (kept exactly; the rest of the need is shared evenly by the
+               others), minBlockMin
            out: { ok, reason, leaveByMin, needMin, freedMin, shortMin,
                   maxFreeMin, blocks: [{ id, label, startMin, endMin,
-                  newStartMin, newEndMin, cutMin, maxCutMin }] }
+                  newStartMin, newEndMin, cutMin, maxCutMin, locked }] }
    reason: 'fixed' (a fixed block ends after the leave-by time), 'none' (no
    flexible block before), 'fits' (nothing to make room for). */
 function planMakeRoom(input) {
@@ -1129,33 +1130,30 @@ function planMakeRoom(input) {
   if (out.needMin <= 0) { out.reason = 'fits'; out.needMin = 0; return out; }
   const caps = group.map(b => Math.max(0, (b.endMin - b.startMin) - minBlock));
   out.maxFreeMin = caps.reduce((a, c) => a + c, 0);
-  let cuts;
-  if (i.mode === 'custom') {
-    const set = i.cuts || {};
-    cuts = group.map((b, k) => Math.min(caps[k], Math.max(0, Math.round(Number(set[b.id]) || 0))));
-  } else {
-    // Evenly: the same minutes off each block; one that reaches its minimum
-    // stops and the rest share what is left. An odd minute goes to the
-    // earliest block.
-    cuts = group.map(() => 0);
-    let left = out.needMin;
-    for (let guard = 0; left > 0 && guard < 64; guard++) {
-      const open = group.map((b, k) => k).filter(k => cuts[k] < caps[k]);
-      if (!open.length) break;
-      const share = Math.floor(left / open.length);
-      let extra = left - share * open.length;
-      open.forEach(k => {
-        const want = share + (extra > 0 ? 1 : 0);
-        if (extra > 0) extra--;
-        const take = Math.min(want, caps[k] - cuts[k]);
-        cuts[k] += take; left -= take;
-      });
-    }
+  // A block the clinician set keeps that value however the others change
+  // (25 Oct 2026). What is still needed is shared evenly by the rest: the
+  // same minutes off each, one that reaches its minimum stops and the others
+  // take what is left, an odd minute goes to the earliest.
+  const set = i.cuts || {};
+  const locked = group.map(b => Object.prototype.hasOwnProperty.call(set, b.id));
+  const cuts = group.map((b, k) => locked[k] ? Math.min(caps[k], Math.max(0, Math.round(Number(set[b.id]) || 0))) : 0);
+  let left = out.needMin - cuts.reduce((a, c) => a + c, 0);
+  for (let guard = 0; left > 0 && guard < 64; guard++) {
+    const open = group.map((b, k) => k).filter(k => !locked[k] && cuts[k] < caps[k]);
+    if (!open.length) break;
+    const share = Math.floor(left / open.length);
+    let extra = left - share * open.length;
+    open.forEach(k => {
+      const want = share + (extra > 0 ? 1 : 0);
+      if (extra > 0) extra--;
+      const take = Math.min(want, caps[k] - cuts[k]);
+      cuts[k] += take; left -= take;
+    });
   }
   let shift = 0;
   out.blocks = group.map((b, k) => {
     const row = { id: b.id, label: b.label, startMin: b.startMin, endMin: b.endMin,
-                  newStartMin: b.startMin - shift, newEndMin: b.endMin - shift - cuts[k], cutMin: cuts[k], maxCutMin: caps[k] };
+                  newStartMin: b.startMin - shift, newEndMin: b.endMin - shift - cuts[k], cutMin: cuts[k], maxCutMin: caps[k], locked: locked[k] };
     shift += cuts[k];
     return row;
   });
@@ -1433,7 +1431,7 @@ function runBspRoutePreview(opts) {
   const roomTravel = route.durationMin + (pred.viaHome ? (homePlan.toBase || 0) : 0);
   const sq = BOOKING_ROUTE.squeeze;
   const room = sq ? planMakeRoom({ items: dayItems, desiredStartMin: sq.desiredStartMin, travelMin: roomTravel,
-                                   bufferMin: routeBufferMin(), mode: sq.mode, cuts: sq.cuts }) : null;
+                                   bufferMin: routeBufferMin(), cuts: sq.cuts }) : null;
   const moved = {};
   if (room && room.blocks.length) { room.blocks.forEach(b => { moved[b.id] = b; }); BOOKING_ROUTE.squeezePlan = room; }
   else if (sq) BOOKING_ROUTE.squeeze = null;   // nothing left to shorten
@@ -1524,7 +1522,7 @@ function runBspRoutePreview(opts) {
   // by shortening the reports, admin and custom blocks before it instead.
   const want = hold ? null : (!pred.explicit && tight) ? startMin : (clamp ? clamp.from : null);
   if (want != null) {
-    const offer = planMakeRoom({ items: dayItems, desiredStartMin: want, travelMin: roomTravel, bufferMin: routeBufferMin(), mode: 'even' });
+    const offer = planMakeRoom({ items: dayItems, desiredStartMin: want, travelMin: roomTravel, bufferMin: routeBufferMin() });
     if (offer.blocks.length && offer.ok) {
       BOOKING_ROUTE.squeezeOffer = { day, desiredStartMin: want };
       notes.push('<button type="button" class="bsp-route-btn" data-route="squeeze">Make room — keep ' + fmt(want) + '</button>');
@@ -1564,16 +1562,18 @@ function _bspDrawSqueeze(col, room, fmt) {
     col.appendChild(el);
   });
 }
-/* The Make room editor under the route line: Evenly / Custom, and on each
-   block how many minutes come off it (±5, never below the minimum). */
+/* The Make room editor under the route line: on each block how many minutes
+   come off it (±5, never below the minimum). A block you change keeps your
+   value; the others share the rest evenly. Split evenly starts over. */
 function _bspSqueezeHtml(room, sq, fmt) {
   const esc = _tpEsc;
   const step = MAKE_ROOM_CONFIG.stepMin;
-  const custom = sq && sq.mode === 'custom';
+  const edited = room.blocks.some(b => b.locked);
   const rows = room.blocks.map(b => {
     const changed = b.newStartMin !== b.startMin || b.newEndMin !== b.endMin;
-    return '<li class="bsp-sq-row">' +
-      '<span class="bsp-sq-name" title="' + esc(b.label) + '">' + esc(b.label) + '</span>' +
+    return '<li class="bsp-sq-row' + (b.locked ? ' is-set' : '') + '">' +
+      '<span class="bsp-sq-name" title="' + esc(b.label) + '">' + esc(b.label) +
+        (b.locked ? ' <span class="bsp-sq-set" title="You set this one — it stays as it is">set</span>' : '') + '</span>' +
       '<span class="bsp-sq-time">' + fmt(b.startMin) + '–' + fmt(b.endMin) +
         (changed ? ' → <strong>' + fmt(b.newStartMin) + '–' + fmt(b.newEndMin) + '</strong>' : '') + '</span>' +
       '<span class="bsp-sq-step">' +
@@ -1589,13 +1589,12 @@ function _bspSqueezeHtml(room, sq, fmt) {
     : '<strong>' + room.shortMin + ' min short</strong> — frees ' + room.freedMin + ' of the ' + room.needMin + ' min needed (leave by ' + fmt(room.leaveByMin) + ').';
   return '<div class="bsp-squeeze" role="group" aria-label="Make room">' +
     '<div class="bsp-sq-head"><span class="bsp-sq-title">Make room</span>' +
-      '<span class="bsp-sq-modes" role="group" aria-label="How to shorten the blocks">' +
-        '<button type="button" class="bsp-sq-mode" data-route="squeeze-even" aria-pressed="' + !custom + '">Evenly</button>' +
-        '<button type="button" class="bsp-sq-mode" data-route="squeeze-custom" aria-pressed="' + custom + '">Custom</button>' +
-      '</span></div>' +
+      '<button type="button" class="bsp-route-btn bsp-sq-even" data-route="squeeze-even"' + (edited ? '' : ' disabled') +
+        ' title="Clear your changes and share the time evenly again">Split evenly</button>' +
+      '</div>' +
     '<div class="bsp-sq-sum">' + sum + '</div>' +
     '<ul class="bsp-sq-list">' + rows + '</ul>' +
-    '<div class="bsp-sq-foot">No block goes under ' + MAKE_ROOM_CONFIG.minBlockMin + ' min; each later block moves up by what comes off the ones before it. ' +
+    '<div class="bsp-sq-foot">Change a block and it keeps your value; the others share the rest evenly. No block goes under ' + MAKE_ROOM_CONFIG.minBlockMin + ' min. ' +
       'Saved to Outlook and Splose when you create the appointment.' +
       '<br><button type="button" class="bsp-route-btn" data-route="squeeze-off">Keep the blocks as they are</button></div>' +
     '</div>';
@@ -1720,7 +1719,7 @@ document.addEventListener('click', e => {
   if (b.dataset.route === 'direct' || b.dataset.route === 'home') { BOOKING_ROUTE.viaMode = b.dataset.route; runBspRoutePreview(); }
   if (b.dataset.route === 'squeeze' && BOOKING_ROUTE.squeezeOffer) {
     const o = BOOKING_ROUTE.squeezeOffer;
-    BOOKING_ROUTE.squeeze = { day: o.day, desiredStartMin: o.desiredStartMin, mode: 'even', cuts: {} };
+    BOOKING_ROUTE.squeeze = { day: o.day, desiredStartMin: o.desiredStartMin, cuts: {} };
     const el = document.getElementById('bsp-start');
     if (el && el.value !== _hhmm(o.desiredStartMin)) {
       // Booking on from a stop moved the start for the drive: put back the
@@ -1733,16 +1732,14 @@ document.addEventListener('click', e => {
   }
   const sq = BOOKING_ROUTE.squeeze;
   if (sq && /^squeeze-/.test(b.dataset.route)) {
-    // Custom starts from what is shown, so switching never jumps.
-    const seed = () => { const c = {}; ((BOOKING_ROUTE.squeezePlan || {}).blocks || []).forEach(x => { c[x.id] = x.cutMin; }); return c; };
     if (b.dataset.route === 'squeeze-off') BOOKING_ROUTE.squeeze = null;
-    if (b.dataset.route === 'squeeze-even') { sq.mode = 'even'; sq.cuts = {}; }
-    if (b.dataset.route === 'squeeze-custom' && sq.mode !== 'custom') { sq.cuts = seed(); sq.mode = 'custom'; }
+    if (b.dataset.route === 'squeeze-even') sq.cuts = {};
     if (b.dataset.route === 'squeeze-step') {
-      if (sq.mode !== 'custom') { sq.cuts = seed(); sq.mode = 'custom'; }
+      // The step starts from what the block shows, and from then on that
+      // block keeps its value; the others re-share what is still needed.
       const row = ((BOOKING_ROUTE.squeezePlan || {}).blocks || []).find(x => x.id === b.dataset.id);
       const cap = row ? row.maxCutMin : 0;
-      sq.cuts[b.dataset.id] = Math.min(cap, Math.max(0, (Number(sq.cuts[b.dataset.id]) || 0) + Number(b.dataset.delta || 0)));
+      sq.cuts[b.dataset.id] = Math.min(cap, Math.max(0, (row ? row.cutMin : 0) + Number(b.dataset.delta || 0)));
     }
     runBspRoutePreview();
   }
