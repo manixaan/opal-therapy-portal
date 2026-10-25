@@ -673,3 +673,91 @@ describe('deleting a document a learning workflow uses', () => {
     expect(items[0].resource_removed).toBe(true);
   });
 });
+
+describe('a privacy refusal: the checklist, and "upload anyway" for bare patterns only', () => {
+  const builder = require('../../opal-document-builder');
+  const textPdf = async (text) => (await builder.buildPdf({
+    title: 'Example report', sections: [{ heading: 'Body', paragraphs: [text] }],
+  })).toString('base64');
+  // The shape of the 25 Oct 2026 wheelchair report: a business contact and a
+  // session date, no client identifier at all.
+  const PATTERNS_ONLY = 'Plan manager email: mail@example.com.au. Reviewed on 24/06/2026.';
+  const WITH_NDIS = 'NDIS 430782072. Contact mail@example.com.au.';
+
+  let agent; let folder;
+  beforeEach(async () => {
+    const org = await seedOrganisation();
+    ({ agent } = await agentFor('owner', org.id));
+    folder = await makeFolder(agent, 'Examples');
+  });
+
+  const docCount = async () => (await db.pool.query(
+    `SELECT COUNT(*)::int AS n FROM resource_folder_assignments WHERE folder_id = $1`, [folder.id])).rows[0].n;
+
+  it('refuses bare patterns with an overridable checklist, and stores nothing', async () => {
+    const res = await upload(agent, folder.id, 'Example.pdf', await textPdf(PATTERNS_ONLY));
+    expect(res.status).toBe(422);
+    expect(res.body.code).toBe('privacy_rejected');
+    expect(res.body.overridable).toBe(true);
+    expect(res.body.reasons.map((r) => r.id).sort()).toEqual(['date', 'email']);
+    expect(res.body.reasons.every((r) => r.type === 'pattern' && r.pages.length === 1)).toBe(true);
+    expect(JSON.stringify(res.body)).not.toMatch(/mail@example|24\/06\/2026/);
+    expect(await docCount()).toBe(0);
+  });
+
+  it('acknowledging only some items is still refused', async () => {
+    const res = await upload(agent, folder.id, 'Example.pdf', await textPdf(PATTERNS_ONLY),
+      { privacyAcknowledged: ['email'] });
+    expect(res.status).toBe(422);
+    expect(await docCount()).toBe(0);
+  });
+
+  it('acknowledging every item uploads it, and the override is audited without content', async () => {
+    const res = await upload(agent, folder.id, 'Example.pdf', await textPdf(PATTERNS_ONLY),
+      { privacyAcknowledged: ['email', 'date'] });
+    expect(res.status).toBe(201);
+    expect(res.body.privacyOverridden).toBe(true);
+    expect(await docCount()).toBe(1);
+    const { rows } = await db.pool.query(
+      `SELECT target_id, metadata::text AS m FROM audit_logs
+        WHERE action = 'resource_library.upload_privacy_overridden'`);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].target_id).toBe(res.body.resource.id);
+    expect(rows[0].m).toMatch(/"email"/);
+    expect(rows[0].m).not.toMatch(/mail@example|24\/06\/2026/);
+  });
+
+  it('a client identifier is never overridable, whatever is acknowledged', async () => {
+    const res = await upload(agent, folder.id, 'Example.pdf', await textPdf(WITH_NDIS),
+      { privacyAcknowledged: ['ndis-number', 'email', 'date', 'phone'] });
+    expect(res.status).toBe(422);
+    expect(res.body.overridable).toBe(false);
+    expect(res.body.reasons[0]).toMatchObject({ id: 'ndis-number', type: 'personal' });
+    expect(await docCount()).toBe(0);
+    const { rows } = await db.pool.query(
+      `SELECT 1 FROM audit_logs WHERE action = 'resource_library.upload_privacy_overridden'`);
+    expect(rows).toHaveLength(0);
+  });
+
+  it('a replacement can be overridden the same way, and only the same way', async () => {
+    const first = (await upload(agent, folder.id, 'Example.pdf', samplePdf('clean'))).body;
+    const url = `/api/rh2/library/resources/${first.resource.id}/replace`;
+    const data = await textPdf(PATTERNS_ONLY);
+    const refused = await agent.post(url).send({ fileName: 'Example.pdf', fileData: data });
+    expect(refused.status).toBe(422);
+    expect(refused.body.overridable).toBe(true);
+    const ok = await agent.post(url).send({ fileName: 'Example.pdf', fileData: data, privacyAcknowledged: ['date', 'email'] });
+    expect(ok.status).toBe(200);
+    expect(ok.body.privacyOverridden).toBe(true);
+  });
+
+  it('a therapist cannot upload at all, acknowledgement or not', async () => {
+    const org = await seedOrganisation();
+    const { agent: owner } = await agentFor('owner', org.id);
+    const f = await makeFolder(owner, 'Theirs');
+    const { agent: therapist } = await agentFor('therapist', org.id);
+    const res = await upload(therapist, f.id, 'Example.pdf', await textPdf(PATTERNS_ONLY),
+      { privacyAcknowledged: ['email', 'date'] });
+    expect(res.status).toBe(403);
+  });
+});

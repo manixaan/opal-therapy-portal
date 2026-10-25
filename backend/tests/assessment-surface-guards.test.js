@@ -639,7 +639,8 @@ describe('changed assets are cache-busted', () => {
       // resourcelibrary 1: the document library — folder tree, breadcrumbs,
       // list/tiles, command bar, menus, drag-and-drop, recycle bin, versions.
       // 3: a privacy-refused upload shows a tickable checklist of why — kind,
-      // count, PDF pages, what to change (25 Oct 2026).
+      // count, PDF pages, what to change — and "Upload anyway" when every
+      // finding is a bare email/date/phone (25 Oct 2026).
       ['resourcelibrary.js', 3], ['resourcelibrary.css', 3],
       // 2: the Resource Hub walkthrough lost the step that spotlighted the
       // Home collections grid, because the grid it pointed at is gone.

@@ -1054,13 +1054,11 @@ async function replaceDocument(req, res, resource, fileName, fileData) {
   if (!format) return unsupported(res);
   const stored = await intake.storeFile(resource, {
     fileName, format, fileData, isPrimary: true,
-  }, { userId: req.user.id, deferDerivatives: true });
-  if (!stored.ok) {
-    if (stored.code === 'privacy_rejected') {
-      await audit(req, 'resource_library.upload_privacy_rejected', resource.id,
-        { replace: true, privacy: stored.privacy, identifiers: stored.identifiers });
-    }
-    return res.status(stored.status).json({ error: stored.error, code: stored.code, reasons: stored.reasons });
+  }, { userId: req.user.id, deferDerivatives: true, privacyAcknowledged: acknowledgedOf(req) });
+  if (!stored.ok) return refused(req, res, stored, resource.id, { replace: true });
+  if (stored.privacyOverride) {
+    await audit(req, 'resource_library.upload_privacy_overridden', resource.id,
+      { replace: true, fileName, findings: overrideSummary(stored.privacyOverride) });
   }
   await pool.query('UPDATE resources SET updated_at = NOW(), updated_by = $2 WHERE id = $1',
     [resource.id, req.user.id]);
@@ -1072,6 +1070,33 @@ async function replaceDocument(req, res, resource, fileName, fileData) {
     resource: { id: resource.id, title: resource.title, slug: resource.slug },
     file: stored.file, versionNo: stored.versionNo,
     warnings: stored.warnings, privacyScanned: stored.privacyScanned,
+    privacyOverridden: !!stored.privacyOverride,
+  });
+}
+
+/**
+ * The ids a person confirmed are not a client's details ("upload anyway").
+ * Only the Library's owner/admin doors read this; intake decides whether the
+ * acknowledgement is enough (resource-file-intake.js canOverride).
+ */
+function acknowledgedOf(req) {
+  const a = req.body && req.body.privacyAcknowledged;
+  return Array.isArray(a) ? a.filter((x) => typeof x === 'string').slice(0, 50) : null;
+}
+
+/** Kinds, counts and pages for the audit trail — never content. */
+function overrideSummary(reasons) {
+  return reasons.map((r) => ({ id: r.id, count: r.count, pages: r.pages.slice(0, 100) }));
+}
+
+/** Send a refusal from intake, auditing a privacy one. Returns a sent response. */
+async function refused(req, res, stored, targetId, meta) {
+  if (stored.code === 'privacy_rejected') {
+    await audit(req, 'resource_library.upload_privacy_rejected', targetId,
+      { ...meta, privacy: stored.privacy, identifiers: stored.identifiers });
+  }
+  return res.status(stored.status).json({
+    error: stored.error, code: stored.code, reasons: stored.reasons, overridable: stored.overridable,
   });
 }
 
@@ -1212,7 +1237,7 @@ router.post('/api/rh2/library/folders/:id/upload', requireManager, safe(async (r
       // and entirely optional. Somebody dropping twenty files should not wait
       // for twenty renders; the cards lazy-load thumbnails and fall back to a
       // file-type glyph when one is not there yet.
-    }, { userId: req.user.id, deferDerivatives: true });
+    }, { userId: req.user.id, deferDerivatives: true, privacyAcknowledged: acknowledgedOf(req) });
 
     if (stored.ok) {
       await pool.query(
@@ -1230,11 +1255,12 @@ router.post('/api/rh2/library/folders/:id/upload', requireManager, safe(async (r
 
   if (!stored.ok) {
     await discard();
-    if (stored.code === 'privacy_rejected') {
-      await audit(req, 'resource_library.upload_privacy_rejected', null,
-        { folder: folder.rows[0].name, privacy: stored.privacy, identifiers: stored.identifiers });
-    }
-    return res.status(stored.status).json({ error: stored.error, code: stored.code, reasons: stored.reasons });
+    return refused(req, res, stored, null, { folder: folder.rows[0].name });
+  }
+
+  if (stored.privacyOverride) {
+    await audit(req, 'resource_library.upload_privacy_overridden', resource.id,
+      { folder: folder.rows[0].name, fileName, findings: overrideSummary(stored.privacyOverride) });
   }
 
   await audit(req, 'resource_library.file_uploaded', resource.id, {
@@ -1247,6 +1273,7 @@ router.post('/api/rh2/library/folders/:id/upload', requireManager, safe(async (r
     resource: { id: resource.id, title: resource.title, slug: resource.slug },
     file: stored.file,
     folder: folder.rows[0].name,
+    privacyOverridden: !!stored.privacyOverride,
     renamedTo: clash ? fileName : null,
     warnings: stored.warnings,
     // Said plainly so the client can be honest about what was and was not

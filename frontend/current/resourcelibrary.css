@@ -197,6 +197,10 @@
 .rhl-reason-tag, .rhl-reason-fix { font-size: 12px; padding-left: 24px; }
 .rhl-reason-tag { color: var(--muted); }
 .rhl-reason-fix { color: var(--ink-soft); }
+.rhl-reasons-foot { margin-top: 8px; }
+.rhl-reasons-override { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.rhl-reasons-override .rhl-note { flex: 1 1 260px; }
+.rhl-reasons-override .rh2-btn[disabled] { opacity: .5; cursor: not-allowed; }
 .rhl-reason.is-done .rhl-reason-title, .rhl-reason.is-done .rhl-reason-fix { text-decoration: line-through; color: var(--muted); }
 .rhl-up-bar { width: 120px; height: 6px; border-radius: 3px; background: var(--border-soft); overflow: hidden; }
 .rhl-up-bar span { display: block; height: 100%; background: var(--accent); }

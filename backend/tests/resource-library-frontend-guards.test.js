@@ -387,6 +387,25 @@ describe('uploads', () => {
     expect(LIBCSS).toContain('.rhl-reasons');
   });
 
+  it('offers "Upload anyway" only when the server says overridable, and only once every item is ticked', () => {
+    const reasons = [
+      { id: 'date', type: 'pattern', title: 'Date', count: 1, pages: [20], fix: 'x' },
+      { id: 'email', type: 'pattern', title: 'Email', count: 1, pages: [5], fix: 'x' },
+    ];
+    const half = T.renderReasons({ reasons, overridable: true, ticked: { date: true } }, 2);
+    expect(half).toContain('RHLib.uploadAnyway(2)');
+    expect(half).toMatch(/class="rh2-btn" disabled onclick="RHLib\.uploadAnyway/);
+    const all = T.renderReasons({ reasons, overridable: true, ticked: { date: true, email: true } }, 2);
+    expect(all).not.toMatch(/disabled onclick="RHLib\.uploadAnyway/);
+    expect(all).toContain('recorded in the audit log');
+    const blocked = T.renderReasons({ reasons, overridable: false, ticked: { date: true, email: true } }, 2);
+    expect(blocked).not.toContain('uploadAnyway');
+    expect(blocked).toContain('cannot be uploaded anyway');
+    // The retry carries the acknowledgement; the server decides again.
+    expect(LIB).toContain('if (entry.acknowledge) body.privacyAcknowledged = entry.acknowledge;');
+    expect(LIB).toContain('entry.overridable = !!(privacy && r.data.overridable);');
+  });
+
   it('accepts the formats the server accepts, and no more', () => {
     expect(LIB).toContain("var UPLOAD_ACCEPT = '.pdf,.docx,.xlsx,.pptx,.png,.jpg,.jpeg'");
   });

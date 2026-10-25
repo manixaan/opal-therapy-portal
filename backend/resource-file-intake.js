@@ -52,6 +52,36 @@ const EXPECTED_MAGIC = Object.freeze({ pptx: 'zip', xlsx: 'zip', png: 'png', jpg
 const fail = (status, error, code) => ({ ok: false, status, error, code });
 
 /**
+ * THE OVERRIDE — "it's not confidential, upload it anyway".
+ *
+ * The identifier check refuses ANY email address, dd/mm/yyyy date or phone
+ * number, labelled or not, so a de-identified example report is refused for
+ * the practice's own email or a session date. A person may confirm those
+ * away — but only those:
+ *
+ *   - every item on the checklist must be a 'pattern' item. One client
+ *     identifier (an NDIS or Medicare number, a filled-in name, date of
+ *     birth, address, guardian or labelled phone) and nothing is overridable;
+ *   - an empty checklist is not overridable either — a refusal nobody can
+ *     explain is not one anybody can confirm away;
+ *   - the person must acknowledge every item by id. The file is re-scanned
+ *     on the upload that carries the acknowledgement, so a confirmation given
+ *     for one file cannot carry a different file through.
+ *
+ * Only callers that pass ctx.privacyAcknowledged offer it (the Library's
+ * owner/admin doors); everything else stays strict.
+ */
+function canOverride(reasons) {
+  return reasons.length > 0 && reasons.every((r) => r.type === 'pattern');
+}
+
+function acknowledgesAll(reasons, acknowledged) {
+  if (!Array.isArray(acknowledged) || !acknowledged.length) return false;
+  const ack = new Set(acknowledged.slice(0, 50).map((a) => String(a)));
+  return reasons.every((r) => ack.has(r.id));
+}
+
+/**
  * Check and store one uploaded file against an existing resource.
  *
  * Never throws for a bad file — a rejection is a result, not an exception, so
@@ -60,7 +90,7 @@ const fail = (status, error, code) => ({ ok: false, status, error, code });
  *
  * @param {object} resource   the resources row the file attaches to
  * @param {object} upload     { fileName, format, fileData (base64), isPrimary }
- * @param {object} ctx        { userId, onAudit }
+ * @param {object} ctx        { userId, onAudit, privacyAcknowledged }
  * @returns {Promise<{ok:true, file, warnings, privacyScanned}|{ok:false, status, error, code}>}
  */
 async function storeFile(resource, upload, ctx = {}) {
@@ -91,6 +121,7 @@ async function storeFile(resource, upload, ctx = {}) {
 
   // ── the gate ────────────────────────────────────────────────────────────
   let assessment = null;
+  let privacyOverride = null;
   const privacyScanned = READABLE.includes(format);
 
   if (privacyScanned) {
@@ -99,22 +130,32 @@ async function storeFile(resource, upload, ctx = {}) {
     const privacyBlocked = assessment.report.privacy
       && assessment.report.privacy.verdict !== 'no-obvious-pii';
     if (privacyBlocked || (assessment.report.identifierFindings || []).length) {
-      return {
-        ok: false, status: 422, code: 'privacy_rejected',
-        error: 'This file appears to contain a person\'s completed details and was not stored. '
-          + 'Remove client information and try again, or contact an administrator.',
-        // Counts and kinds only — never content. The caller audits this.
-        privacy: assessment.report.privacy,
-        identifiers: assessment.report.identifierFindings,
-        // What to change, and on which pages — kinds, counts and page
-        // numbers only, safe to hand back to the person uploading.
-        reasons: buildChecklist(assessment.report),
-      };
+      // What to change, and on which pages — kinds, counts and page numbers
+      // only, safe to hand back to the person uploading.
+      const reasons = buildChecklist(assessment.report);
+      const overridable = canOverride(reasons);
+      if (overridable && acknowledgesAll(reasons, ctx.privacyAcknowledged)) {
+        // Every finding is a bare pattern and the person confirmed, item by
+        // item, that none of them is a client's. The caller audits this.
+        privacyOverride = reasons;
+      } else {
+        return {
+          ok: false, status: 422, code: 'privacy_rejected',
+          error: 'This file appears to contain a person\'s completed details and was not stored. '
+            + 'Remove client information and try again, or contact an administrator.',
+          // Counts and kinds only — never content. The caller audits this.
+          privacy: assessment.report.privacy,
+          identifiers: assessment.report.identifierFindings,
+          reasons,
+          overridable,
+        };
+      }
     }
     // An image-only PDF is allowed through as a warning: plenty of legitimate
     // published worksheets are scans, and the privacy scan has nothing to read
-    // either way.
-    const blocking = assessment.failures.filter((f) => !/text layer/i.test(f));
+    // either way. An overridden privacy finding is not a quality failure.
+    const blocking = assessment.failures.filter((f) => !/text layer/i.test(f)
+      && !(privacyOverride && /^Possible client identifiers detected/.test(f)));
     if (blocking.length) return fail(422, blocking.join(' '), 'quality_rejected');
   } else {
     const magic = qualityGate.sniffMagic(buffer);
@@ -230,6 +271,7 @@ async function storeFile(resource, upload, ctx = {}) {
     versionNo,
     sizeBytes: buffer.length,
     privacyScanned,
+    privacyOverride,
     warnings: assessment ? assessment.warnings : [],
     previews: previews ? previews.results : null,
     file: {

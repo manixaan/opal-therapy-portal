@@ -1440,6 +1440,7 @@
         : '/api/rh2/library/folders/' + encodeURIComponent(entry.folderId) + '/upload';
       var body = { fileName: entry.name, fileData: base64 };
       if (onConflict) body.onConflict = onConflict;
+      if (entry.acknowledge) body.privacyAcknowledged = entry.acknowledge;
       var lastPaint = 0;
       var r = await postWithProgress(url, body, function (p) {
         entry.progress = p;
@@ -1460,6 +1461,10 @@
         entry.message = d.replaced || entry.replaceId ? 'New version ' + (d.versionNo || '') + ' is live.'
           : d.renamedTo ? 'Kept both — saved as “' + d.renamedTo + '”.'
             : (d.privacyScanned === false ? 'Uploaded. (This format is not text-scanned.)' : '');
+        if (d.privacyOverridden) {
+          entry.message = 'Uploaded after you confirmed the flagged items are not a client’s details. This is recorded in the audit log.'
+            + (entry.message ? ' ' + entry.message : '');
+        }
         if ((d.warnings || []).length) entry.message += (entry.message ? ' ' : '') + d.warnings.join(' ');
         return;
       }
@@ -1469,6 +1474,8 @@
         ? (r.data.error || 'Refused: it appears to contain a person’s details.')
         : errorText(r.status, r.data);
       entry.reasons = privacy && Array.isArray(r.data.reasons) ? r.data.reasons : null;
+      entry.overridable = !!(privacy && r.data.overridable);
+      entry.acknowledge = null;
       entry.ticked = {};
       return;
     }
@@ -1557,7 +1564,10 @@
     var items = u.reasons;
     var done = items.filter(function (it) { return u.ticked && u.ticked[it.id]; }).length;
     return '<div class="rhl-reasons">'
-      + '<p class="rhl-reasons-head"><strong>Why it was refused</strong> — fix these in your original document, then upload it again'
+      + '<p class="rhl-reasons-head"><strong>Why it was refused</strong> — '
+      + (u.overridable
+        ? 'fix these in your original document and upload it again, or tick each one you have checked is not a client’s details'
+        : 'fix these in your original document, then upload it again')
       + ' <span class="rhl-reasons-count">(' + done + ' of ' + items.length + ' ticked)</span></p>'
       + '<ul class="rhl-reasons-list">'
       + items.map(function (it) {
@@ -1581,7 +1591,38 @@
           + '<span class="rhl-reason-fix">' + esc(it.fix) + '</span>'
           + '</li>';
       }).join('')
-      + '</ul></div>';
+      + '</ul>'
+      + renderOverride(u, ui, done === items.length)
+      + '</div>';
+  }
+
+  /**
+   * "Not confidential — upload anyway". Offered only when the server says the
+   * refusal is overridable: every finding is a bare email / date / phone,
+   * none a client identifier. The server re-scans and decides again on the
+   * retry; this button is convenience, not the rule.
+   */
+  function renderOverride(u, ui, allTicked) {
+    if (!u.overridable) {
+      return '<p class="rhl-note rhl-note-warn rhl-reasons-foot">This file contains a client identifier, so it cannot be uploaded anyway. Remove it from the document first.</p>';
+    }
+    return '<div class="rhl-reasons-override">'
+      + '<p class="rhl-note rhl-reasons-foot">Not a client’s details — say the practice’s own email or a report date? Tick every item above to confirm you have checked it, then upload it anyway. Your name and what was flagged are recorded in the audit log.</p>'
+      + '<button type="button" class="rh2-btn"' + (allTicked ? '' : ' disabled')
+      + ' onclick="RHLib.uploadAnyway(' + ui + ')">Upload anyway</button>'
+      + '</div>';
+  }
+
+  function uploadAnyway(index) {
+    var u = L.uploads[index];
+    if (!u || !u.overridable || !u.reasons) return;
+    var all = u.reasons.every(function (it) { return u.ticked && u.ticked[it.id]; });
+    if (!all) return;
+    u.acknowledge = u.reasons.map(function (it) { return it.id; });
+    u.reasons = null; u.overridable = false; u.ticked = {};
+    u.state = 'waiting'; u.message = ''; u.progress = 0;
+    paint();
+    if (!L.uploading) runQueue();
   }
 
   function tickReason(index, id, on) {
@@ -2005,7 +2046,7 @@
     menuFor: menuFor, more: more, ctx: ctx, closeMenu: closeMenu, menuPick: menuPick, act: act,
     copyFolderLink: copyFolderLink,
     moveChoose: moveChoose, moveConfirm: moveConfirm, closeDialog: closeDialog, dialogKey: dialogKey,
-    dupPick: dupPick, dismissUploads: dismissUploads, tickReason: tickReason,
+    dupPick: dupPick, dismissUploads: dismissUploads, tickReason: tickReason, uploadAnyway: uploadAnyway,
     dragStart: dragStart, dragEnd: dragEnd, dragOver: dragOver, dragLeave: dragLeave, drop: drop,
     togglePane: togglePane, detailsTab: detailsTab, restoreVersion: restoreVersion,
     binToggle: binToggle, binAll: binAll, binRestore: binRestore, binPurge: binPurge,
