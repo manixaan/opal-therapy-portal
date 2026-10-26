@@ -3,11 +3,11 @@
 - Tracker stage: idea
 - Tracker environment: none
 - Evidence label: **untouched**
-- Addressed in change window (since last audit, 2026-10-23): no
+- Addressed in change window (since last audit, 2026-10-24): no
 - Created (code exists): no
 
 ## Located files
-None. Re-searched tonight (2026-10-24): `backend/*.js` and `frontend/current/*.js` for "password master", "master document" and "onedrive" — the only hit is still `graph-identity.js`'s comment about OneDrive mailbox retention (Outlook account offboarding), not a credential document.
+None. Re-searched tonight: `backend/*.js` and `frontend/current/*.js` for "password master", "master document" and "onedrive" — the only hit is still `graph-identity.js`'s comment about OneDrive mailbox retention (Outlook account offboarding), not a credential document.
 
 ## Tests and results
 No test exists; none is expected — this is a OneDrive document outside the portal, not an in-app feature.

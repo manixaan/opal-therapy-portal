@@ -23,11 +23,15 @@ Clinical resources
 
 ## Where it lives today
 The flat Saved/All Resources list (`backend/resources-routes.js`, `frontend/current/resourcehub.js`)
-is unchanged and was browser-proven before tonight. The folder-browsing
-"Library" view was rebuilt tonight as a new module — `backend/resource-library-routes.js`
-+ `backend/resource-recycle-bin.js` (any-depth folders, recycle bin, version
-history, Owner+Admin management) and `frontend/current/resourcelibrary.js`
-(tree navigation, list/tiles, drag-and-drop, command bar). It is fully
+is unchanged and was browser-proven before the rebuild. The folder-browsing
+"Library" view was rebuilt from scratch (2026-10-22) as a new module —
+`backend/resource-library-routes.js` + `backend/resource-recycle-bin.js`
+(any-depth folders, recycle bin, version history, Owner+Admin management)
+and `frontend/current/resourcelibrary.js` (tree navigation, list/tiles,
+drag-and-drop, command bar). On 2026-10-25 it gained a tested "Upload
+anyway" privacy-override checklist (`backend/resource-privacy-reasons.js`,
+`backend/resource-file-quality.js`) for refusals that are only bare patterns
+(email/date/phone), never for a client identifier. All of it is fully
 unit- and integration-tested but has never been opened in a real browser —
 the old UI it replaced had browser proof, but that proof is for a screen
 that no longer exists.
@@ -36,7 +40,10 @@ that no longer exists.
 Open the Resources tab as an Owner or Admin in a real browser, browse into
 the Library, and walk the core paths: open a folder, upload a file, rename
 and move an item, delete it to the recycle bin and restore it, view version
-history. Then repeat the read-only paths as a therapist (browse, no mutate
+history. Then deliberately trigger a privacy refusal (upload a document
+containing an email, date or phone number but no client identifier), tick
+the checklist, and confirm "Upload anyway" succeeds and is visible in the
+audit log. Then repeat the read-only paths as a therapist (browse, no mutate
 buttons) and read-only role (browse, refused on any write attempt). Add a
 `docs/qa/BROWSER_QA_RESULTS.md` row (or an `e2e/tests/*.spec.js` spec) once
 confirmed.

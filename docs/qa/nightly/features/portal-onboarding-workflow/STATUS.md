@@ -3,7 +3,7 @@
 - Tracker stage: idea
 - Tracker environment: none
 - Evidence label: **needs-refinement** (Stage 2's literal SharePoint-storage gap is still genuine; everything else moved a long way forward on 2026-10-22)
-- Addressed in change window (since last audit, 2026-10-23): no — zero commits in the window; develop is frozen at the same commit audited last night. The 2026-10-22 8-commit "onboarding production-ready" push (see "Recent history" below) predates this window.
+- Addressed in change window (since last audit, 2026-10-24): no — no commit this window touched any `onboarding-*.js` file. The 2026-10-22 8-commit "onboarding production-ready" push (see "Recent history" below) predates this window.
 - Created (code exists): yes for Stage 1 and 2; Stage 3 (induction/setup/Activate) is now substantially built, as of 2026-10-22
 
 ## Recent history (2026-10-22, two nights ago now)
@@ -86,17 +86,17 @@ hashed, expiring token in place of a session) — not a guard gap. No new
 unguarded endpoint found tonight. No TODO/FIXME in any changed file.
 
 ## Tests and results
-Unit (re-run tonight, 2026-10-24): `onboarding-practice.test.js`,
+Unit (re-run tonight): `onboarding-practice.test.js`,
 `onboarding-placeholder-check.test.js`, `onboarding-accounts.test.js`,
 `onboarding-journey.test.js`, `onboarding-offer-docx.test.js`,
 `onboarding-offer-pdf.test.js`, `onboarding-offer-template.test.js`,
 `onboarding-contract-docx.test.js` — **all pass**.
 
-Integration (`DB_NAME=therapy_scheduler_auditnight1023`, `DB_PASSWORD=audit`):
+Integration (`DB_NAME=therapy_scheduler_auditnight1026`, `DB_PASSWORD=audit`):
 `onboarding-journey.itest.js`, `onboarding-portal-route.itest.js`,
 `onboarding-workflow.itest.js`, `onboarding-defaults.itest.js`,
 `onboarding-pack.itest.js`, `onboarding-returns.itest.js`,
-`onboarding.itest.js` — **all pass** (re-run tonight, 2026-10-24).
+`onboarding.itest.js` — **all pass** (re-run tonight).
 
 Browser QA: `docs/qa/BROWSER_QA_RESULTS.md` row C still only covers the
 onboarding→profile chain as it stood before 2026-10-22's work (login
@@ -112,7 +112,8 @@ layout" open; c7/c5 dynamic-contract-scope decision and build — c5 is done,
 c7's decision step is still open), stage 3 (empty — no checklist at all).
 
 ## Commits in window that touched it
-None tonight (zero commits since last audit, 2nd quiet night running). The 2026-10-22 commits `fba7eface`,
+None — tonight's 8 commits (resource privacy/upload, booking "Make room", a
+dependency patch) touched no `onboarding-*.js` file. The 2026-10-22 commits `fba7eface`,
 `96324d99`, `f1439654`, `41e81787`, `db8fb6c4`, `51f585b6`, `73adb13f`, merge
 `273de152` predate this window — see "Recent history" above.
 
