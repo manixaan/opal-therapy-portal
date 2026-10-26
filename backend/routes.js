@@ -933,8 +933,11 @@ router.post(
 
           // Trigger an immediate delta sync for this user so changes appear at once
           console.log(`🔔 Webhook notification received — triggering delta sync for ${userId}`);
+          // Live accounts only (audit M-4), as the 90-second poller: a
+          // suspended or deactivated user's tokens are never refreshed or used.
           const { rows } = await db.pool.query(
-            'SELECT id, email, access_token, refresh_token, token_expires_at FROM users WHERE id = $1',
+            `SELECT id, email, access_token, refresh_token, token_expires_at FROM users
+              WHERE id = $1 AND is_active = TRUE AND account_status = 'active'`,
             [userId]
           );
           if (!rows.length) continue;
@@ -950,13 +953,19 @@ router.post(
           let   accessToken;
           try {
             if (!user.access_token) throw new Error('no token');
+            // Tokens are stored encrypted ("enc:…") when TOKEN_ENCRYPTION_KEY is
+            // set — staging and production. This raw read must decrypt them as
+            // db.getUser() and the poller do; sending the ciphertext to Graph got
+            // a 401 on every push, so changes waited for the 90-second poll.
+            // decrypt() passes plaintext (development) through unchanged.
+            const { decrypt } = require('./crypto-utils');
             const exp = user.token_expires_at ? new Date(user.token_expires_at) : null;
             if (!exp || (exp - Date.now()) < 60000) {
-              const refreshed = await outlookApi.refreshAccessToken(user.refresh_token);
+              const refreshed = await outlookApi.refreshAccessToken(decrypt(user.refresh_token));
               await db.updateUserTokens(userId, refreshed.accessToken, refreshed.refreshToken, refreshed.expiresIn);
               accessToken = refreshed.accessToken;
             } else {
-              accessToken = user.access_token;
+              accessToken = decrypt(user.access_token);
             }
           } catch (_) { continue; }
 
