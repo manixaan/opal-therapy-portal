@@ -112,7 +112,12 @@ function autoSync() {
  */
 function notifyQueued(userId) {
   if (!userId || !flags.isSploseAutoSyncEnabled()) return false;
-  autoSync().touch(userId);
+  // Sync settings (081): only a calendar whose portal → Splose sync is set to
+  // run automatically publishes on its own; the rest wait for "Sync Splose".
+  const prefsMod = require('./sync-preferences');
+  prefsMod.effectiveOrNull(db, userId)
+    .then((p) => { if (prefsMod.allows(p, 'portal_to_splose')) autoSync().touch(userId); })
+    .catch(() => {});
   return true;
 }
 
@@ -613,7 +618,11 @@ async function applyExternalChange(alert, userId) {
     );
     const eventId = r.rows[0].id;
     let outlook = false;
-    if (flags.isOutlookWriteEnabled()) {
+    // Sync settings (081): Splose → Outlook off, manual-only or before its
+    // sync-from date leaves the copy to "Sync now".
+    const sp81 = require('./sync-preferences');
+    const prefs = await sp81.effectiveOrNull(db, userId);
+    if (flags.isOutlookWriteEnabled() && sp81.allows(prefs, 'splose_to_outlook', { start: d.start })) {
       const token = await outlookTokenFor(userId);
       if (token) {
         try {

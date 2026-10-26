@@ -18,6 +18,8 @@ if (!poolDbName || !poolDbName.endsWith('_test')) {
 }
 
 const ALL_TABLES = [
+  // Sync settings (migration 081) — practice rows have no user, so truncate explicitly.
+  'sync_settings',
   // Practice integration connections (migration 069) — references users.
   'integration_connections',
   // Opal Assist (migration 070) — turns before threads, threads before users.

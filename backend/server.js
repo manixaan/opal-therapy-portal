@@ -579,6 +579,8 @@ app.use('/', require('./travel-routes'));
 // Splose draft-and-publish sync (migration 058): queued calendar changes,
 // "Sync Splose" publishing, and alerts for changes made inside Splose.
 app.use('/', require('./splose-sync-routes'));
+// Sync settings (081): per-direction Outlook/Splose sync choices and "Sync now".
+app.use('/', require('./sync-settings-routes'));
 
 // Snapshot Day (personal reminders + daily tasks; strictly user-scoped)
 app.use('/', require('./snapshot-routes'));
@@ -806,13 +808,19 @@ let deltaRunning = false; // prevent overlapping runs
 // periodic full reconciliation without a separate timer.
 const _reconcileCounter = {};
 
-async function runDeltaSyncForAllUsers() {
+async function runDeltaSyncForAllUsers(opts = {}) {
+  // opts.manual  — a person pressed "Sync now": Outlook → portal runs even when
+  //                set to manual-only (never when switched off).
+  // opts.userId  — run for one person only (Sync settings page).
   // Aggregate stats returned to the manual "Sync now" route (and useful in logs).
   const stats = {
-    skipped: false, usersProcessed: 0,
+    skipped: false, usersProcessed: 0, usersHeld: 0, skippedOld: 0,
     upserted: 0, cancelled: 0, removed: 0,
     blockedDeletions: 0, warnings: [], errors: [],
   };
+  const syncPrefs = require('./sync-preferences');
+  const manual = !!(opts && opts.manual === true);
+  const onlyUserId = opts && opts.userId ? String(opts.userId) : null;
   if (deltaRunning) {
     console.log('⏭️  Delta sync already running — skipping this tick');
     stats.skipped = true;
@@ -833,15 +841,26 @@ async function runDeltaSyncForAllUsers() {
     const outlookApi = require('./outlook-oauth');
 
     for (const user of result.rows) {
+      if (onlyUserId && String(user.id) !== onlyUserId) continue;
       try {
+        // Sync settings (081): Outlook → portal off, or manual-only on a timer
+        // tick, skips this person. The delta token is kept, so turning it back
+        // on catches up on everything that changed meanwhile.
+        const prefs = await syncPrefs.effectiveOrNull(db, user.id);
+        if (!syncPrefs.allows(prefs, 'outlook_to_portal', { manual })) { stats.usersHeld++; continue; }
         const accessToken = await getValidTokenForUser(user);
         const state = await db.getDeltaState(user.id);
         const storedToken = state ? state.delta_token : null;
 
-        const { changed, deleted, deltaToken: newToken } = await outlookApi.getOutlookCalendarDelta(
+        const delta = await outlookApi.getOutlookCalendarDelta(
           accessToken,
           storedToken
         );
+        const { deleted, deltaToken: newToken } = delta;
+        // Outlook events before the sync-from date stay out of the portal.
+        const cut = await syncPrefs.applyOutlookCutoff(db, user.id, delta.changed, prefs.outlook_to_portal.syncFrom);
+        const changed = cut.kept;
+        stats.skippedOld += cut.skippedOld;
 
         let upserted = 0, cancelled = 0, removed = 0;
 
@@ -1058,9 +1077,17 @@ require('./splose-credentials').apply().then((conn) => {
   console.log(`🔑 Splose connection: ${conn.source}`);
   if (require('./feature-flags').isSploseDraftSyncEnabled() && sploseApi.isConfigured()) {
     const { createWatcher } = require('./splose-draft-sync');
+    const syncPrefs = require('./sync-preferences');
     const watcher = createWatcher({
       db, sploseApi, io,
       log: (m) => console.log('👀 ' + m),
+      // Sync settings (081): a new Splose appointment is only offered when
+      // Splose → portal is on and it is on or after the sync-from date, and is
+      // brought in without asking when that direction runs automatically. A
+      // portal booking is only flagged "not in Splose" when portal → Splose is
+      // on for it. Moves and cancellations of linked appointments always ask.
+      decideAlert: async (alert, userId) => (userId ? syncPrefs.alertDecision(await syncPrefs.effectiveOrNull(db, userId), alert) : 'keep'),
+      autoApply: (alert, userId) => require('./sync-settings-routes')._backfill().autoImport(userId, alert.sploseAppointmentId),
     });
     app.set('sploseWatcher', watcher);
     const guarded = () => { if (sploseApi.isConfigured()) watcher.run().catch(() => {}); };

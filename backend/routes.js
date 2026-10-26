@@ -789,6 +789,12 @@ router.post('/api/events', requireAuth, async (req, res) => {
 router.post('/api/sync/outlook-delta', requireAuth, async (req, res) => {
   try {
     const userId = req.session.userId;
+    // Sync settings (081): a manual run, so only on/off applies, plus the cutoff.
+    const syncPrefsMod = require('./sync-preferences');
+    const deltaPrefs = await syncPrefsMod.effectiveOrNull(db, userId);
+    if (!syncPrefsMod.allows(deltaPrefs, 'outlook_to_portal', { manual: true })) {
+      return res.status(409).json({ error: 'Outlook → portal sync is switched off in your Sync settings', code: 'sync_held' });
+    }
     const user = await db.getUser(userId);
     const accessToken = await getValidAccessToken(user);
     const state = await db.getDeltaState(userId);
@@ -810,7 +816,8 @@ router.post('/api/sync/outlook-delta', requireAuth, async (req, res) => {
         throw deltaErr;
       }
     }
-    const { changed, deleted, deltaToken: newToken } = deltaResult;
+    const { deleted, deltaToken: newToken } = deltaResult;
+    const { kept: changed } = await syncPrefsMod.applyOutlookCutoff(db, userId, deltaResult.changed, deltaPrefs.outlook_to_portal.syncFrom);
 
     let upserted = 0, cancelled = 0, removed = 0;
 
@@ -931,6 +938,10 @@ router.post(
             [userId]
           );
           if (!rows.length) continue;
+          // Sync settings (081): a push is automatic — off or manual-only skips it.
+          const hookPrefsMod = require('./sync-preferences');
+          const hookPrefs = await hookPrefsMod.effectiveOrNull(db, userId);
+          if (!hookPrefsMod.allows(hookPrefs, 'outlook_to_portal')) continue;
 
           const outlookApi  = require('./outlook-oauth');
           const state       = await db.getDeltaState(userId);
@@ -950,8 +961,9 @@ router.post(
           } catch (_) { continue; }
 
           try {
-            const { changed, deleted, deltaToken: newToken } =
-              await outlookApi.getOutlookCalendarDelta(accessToken, storedToken);
+            const hookDelta = await outlookApi.getOutlookCalendarDelta(accessToken, storedToken);
+            const { deleted, deltaToken: newToken } = hookDelta;
+            const { kept: changed } = await hookPrefsMod.applyOutlookCutoff(db, userId, hookDelta.changed, hookPrefs.outlook_to_portal.syncFrom);
 
             let upserted = 0, removed = 0;
             const BATCH = 20;
@@ -2408,7 +2420,13 @@ async function createBookingCore(req, body) {
   // 2. Draft-and-publish (058): a client booking that names its Splose client
   //    is queued for "Sync Splose" — nothing is written to Splose here.
   let sploseQueued = null;
-  if (body.splose && body.splose.patientId && flagsDraft().isSploseDraftSyncEnabled()) {
+  // Sync settings (081): which directions this calendar runs, and from when.
+  // Unreadable settings → null → nothing is copied anywhere (the booking is
+  // still saved here, and "Sync now" can carry it later).
+  const syncPrefs = await require('./sync-preferences').effectiveOrNull(db, targetUser.id);
+  const sp81 = require('./sync-preferences');
+  if (body.splose && body.splose.patientId && flagsDraft().isSploseDraftSyncEnabled()
+      && sp81.allows(syncPrefs, 'portal_to_splose', { manual: true, start: startTime })) {
     try {
       const sp = body.splose;
       const qrow = await draftSync.enqueueChange(db, {
@@ -2435,7 +2453,11 @@ async function createBookingCore(req, body) {
   //    person's delta sync as a duplicate appointment on their calendar.
   let outlookId = null;
   let outlookStatus = 'not_connected';
-  if (targetUser && targetUser.access_token) {
+  if (targetUser && targetUser.access_token && !sp81.allows(syncPrefs, 'portal_to_outlook', { start: startTime })) {
+    // Switched off, manual-only, or before the sync-from date: kept in the
+    // portal; "Sync now" on the Sync settings page can still send it.
+    outlookStatus = 'held';
+  } else if (targetUser && targetUser.access_token) {
     try {
       const accessToken = await getValidAccessToken(targetUser);
       const result = await outlookApi.createOutlookEvent(accessToken, {
@@ -2607,6 +2629,12 @@ router.patch('/api/outlook/events/:dbId/location', requireAuth, async (req, res)
       return res.json({ ok: true, savedToDb: true, savedToOutlook: false, reason: 'no_outlook_id' });
     }
 
+    // Sync settings (081): portal → Outlook switched off or manual-only.
+    const locPrefs = await require('./sync-preferences').effectiveOrNull(db, req.session.userId);
+    if (!require('./sync-preferences').allowsLinked(locPrefs, 'portal_to_outlook')) {
+      return res.json({ ok: true, savedToDb: true, savedToOutlook: false, reason: 'sync_held' });
+    }
+
     // The location is saved; Outlook is a best-effort mirror.
     try {
       const user = await db.getUser(req.session.userId);
@@ -2684,7 +2712,11 @@ router.patch('/api/outlook/events/:dbId', requireAuth, async (req, res) => {
 
     const outlookId = ev.rows[0].outlook_id;
     const flags = require('./feature-flags');
-    const mirrorToOutlook = !!outlookId && flags.isOutlookWriteEnabled();
+    // Sync settings (081): portal → Outlook off or manual-only holds the row
+    // 'pending' exactly like write-back off; "Sync now" sends it later.
+    const editPrefs = await require('./sync-preferences').effectiveOrNull(db, req.session.userId);
+    const mirrorToOutlook = !!outlookId && flags.isOutlookWriteEnabled()
+      && require('./sync-preferences').allowsLinked(editPrefs, 'portal_to_outlook');
 
     // 1. Persist the local change FIRST — it must survive an Outlook failure.
     //    An Outlook-linked row that will not be mirrored now (write-back off)
@@ -2697,7 +2729,8 @@ router.patch('/api/outlook/events/:dbId', requireAuth, async (req, res) => {
 
     // Draft-and-publish (058): a time change on a Splose-linked (or Splose-
     // queued) appointment is queued for the next "Sync Splose".
-    if ((startTime || endTime) && flagsDraft().isSploseDraftSyncEnabled()) {
+    if ((startTime || endTime) && flagsDraft().isSploseDraftSyncEnabled()
+        && require('./sync-preferences').allowsLinked(editPrefs, 'portal_to_splose', { manual: true })) {
       try {
         const link = await db.pool.query(
           `SELECT e.splose_id, e.start_time, e.end_time, e.user_id,
@@ -2839,7 +2872,10 @@ router.delete('/api/outlook/events/:dbId', requireAuth, async (req, res) => {
     // Splose cancellation (reason chosen at review); a pending create that
     // never reached Splose is simply discarded. The local soft-delete below
     // still happens, so the queue row survives via the events FK (soft delete).
-    if (flagsDraft().isSploseDraftSyncEnabled()) {
+    // Sync settings (081): a direction switched off leaves the other side as it is.
+    const delPrefs = await require('./sync-preferences').effectiveOrNull(db, req.session.userId);
+    if (flagsDraft().isSploseDraftSyncEnabled()
+        && require('./sync-preferences').allowsLinked(delPrefs, 'portal_to_splose', { manual: true })) {
       try {
         const live = await db.pool.query(
           `SELECT id FROM splose_sync_queue WHERE event_id = $1 AND status IN ('pending','failed') LIMIT 1`, [dbId]);
@@ -2863,7 +2899,10 @@ router.delete('/api/outlook/events/:dbId', requireAuth, async (req, res) => {
       ...(outlookId ? [{ outlookId, title, isMain: true }] : []),
       ...cascade.filter((b) => b.outlook_id).map((b) => ({ outlookId: b.outlook_id, title: b.title, isMain: false })),
     ];
-    if (outlookTargets.length) {
+    if (outlookTargets.length && !require('./sync-preferences').allowsLinked(delPrefs, 'portal_to_outlook')) {
+      // Held: the Outlook copies stay; "Sync now" offers to remove them later.
+      outlookStatus = outlookId ? 'held' : outlookStatus;
+    } else if (outlookTargets.length) {
       // Only the calendar owner's own token (10 Oct 2026), as the create path:
       // the rows live in their mailbox, and another person's token can only
       // miss (404) or act on that person's calendar instead.

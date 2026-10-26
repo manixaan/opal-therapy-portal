@@ -501,6 +501,11 @@ function createWatcher(deps) {
     recentHours = 24,
     now = () => new Date(),
     log = () => {},
+    // Sync settings (081), both optional:
+    //   decideAlert(alert, userId) → 'keep' | 'drop' | 'auto'
+    //   autoApply(alert, userId)   → { outcome: 'linked'|'imported'|'ask'|'skipped' }
+    decideAlert = null,
+    autoApply = null,
   } = deps;
 
   let running = false;
@@ -556,6 +561,12 @@ function createWatcher(deps) {
       const notify = new Map();
       for (const a of alerts) {
         const userId = a.userId || await userForPractitioner(a.practitionerId);
+        let verdict = 'keep';
+        if (decideAlert) {
+          // Unreadable settings must not silence a warning: fall back to asking.
+          try { verdict = (await decideAlert(a, userId)) || 'keep'; } catch (_) { verdict = 'keep'; }
+        }
+        if (verdict === 'drop') continue;
         const r = await db.pool.query(
           `INSERT INTO splose_change_alerts (user_id, event_id, splose_appointment_id, kind, fingerprint, details)
            VALUES ($1, $2, $3, $4, $5, $6::jsonb)
@@ -565,6 +576,18 @@ function createWatcher(deps) {
         );
         if (r.rows.length) {
           inserted++;
+          if (verdict === 'auto' && autoApply && userId) {
+            // Recorded first, so the import is on file either way; closed only
+            // when it really happened.
+            let out = null;
+            try { out = await autoApply(a, userId); } catch (err) { log('Splose auto-import failed: ' + summariseError(err)); }
+            if (out && (out.outcome === 'linked' || out.outcome === 'imported' || out.outcome === 'skipped')) {
+              await db.pool.query(
+                `UPDATE splose_change_alerts SET acknowledged_at = NOW(), verdict = 'valid', note = $2 WHERE id = $1`,
+                [r.rows[0].id, out.outcome === 'skipped' ? 'Already in the portal' : 'Brought in automatically (Sync settings)']);
+              continue;
+            }
+          }
           if (userId) notify.set(userId, (notify.get(userId) || 0) + 1);
         }
       }

@@ -1265,7 +1265,7 @@ router.post('/api/sync/force', requireAuth, requireRole('owner', 'admin'), async
       return res.status(503).json({ ok: false, error: 'Sync runner unavailable' });
     }
 
-    const stats = await runner();
+    const stats = await runner({ manual: true });
 
     const dbMod = require('./database');
     await dbMod.logAuditEvent({

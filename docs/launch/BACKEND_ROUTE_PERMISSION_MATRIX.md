@@ -35,6 +35,7 @@ flag-gated-write · public(auth pages) · deferred.
 | Auth (auth.js) | login/logout/verify/reset/resend | public by design with rate limits + enumeration safety | unchanged |
 | Registration (register-routes.js) | register/complete-profile/onboarding steps | invite-token or allowlist enforced server-side | unchanged |
 | Profile: leave/CPD/documents/credentials (profile-routes.js) | 18 | own-record CRUD; approvals owner/admin via `canApprove`; downloads ownership-checked + audited | unchanged (already used choke point) |
+| Calendar sync settings (sync-settings-routes.js, migration 081) | PUT `/api/sync-settings`, PUT `/practice`, POST `/:direction/plan`, POST `/:direction/apply`, POST `/outlook/pull` | therapist-own (owner/admin may name `?userId=` in their org); read_only + pre_employee blocked; `/practice` owner-only; plan reads only; apply re-plans and accepts only offered items; every write goes through the flag-gated Outlook/Splose functions; audited (ids + counts) | new (26 Oct 2026) |
 | Admin users (app-routes.js `/api/admin/*`) | 8 | owner-only (pre-existing, tested) | unchanged |
 | Settings/notifications/search (app-routes.js) | 9 | authenticated, own-scoped; read_only blocked from writes | unchanged (already choke point) |
 | Resources (resources-routes.js) | 8 | role model + governance lifecycle (pre-existing, tested) | unchanged |
