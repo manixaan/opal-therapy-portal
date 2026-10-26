@@ -90,7 +90,7 @@ describe('Graph webhook receiver (raw-body regression)', () => {
     process.env.WEBHOOK_CLIENT_STATE = 'test-client-state';
     webhookSubscriptions.set('sub-1', 'user-1');
     db.pool.query.mockImplementation(async (sql) => {
-      if (/FROM users WHERE id/.test(sql)) {
+      if (/FROM users\s+WHERE id/.test(sql)) {
         return { rows: [{ id: 'user-1', email: 'u@test.invalid', access_token: 'tok', refresh_token: 'r', token_expires_at: new Date(Date.now() + 3600e3) }] };
       }
       return { rows: [{ n: 0 }], rowCount: 0 };
@@ -112,6 +112,58 @@ describe('Graph webhook receiver (raw-body regression)', () => {
     expect(outlookApi.getOutlookCalendarDelta).toHaveBeenCalledWith('tok', 'stored-token');
     expect(db.saveDeltaState).toHaveBeenCalledWith('user-1', 'new-token');
     delete process.env.WEBHOOK_CLIENT_STATE;
+  });
+
+  // Regression (26 Oct 2026): with TOKEN_ENCRYPTION_KEY set (staging and
+  // production) tokens are stored as "enc:…". The receiver read them raw and
+  // sent the ciphertext to Graph — a 401 on every push, so Outlook changes
+  // only arrived with the 90-second poll.
+  describe('encrypted tokens are decrypted before Graph sees them', () => {
+    const KEY = 'ab'.repeat(32);
+    let saved;
+    beforeAll(() => { saved = process.env.TOKEN_ENCRYPTION_KEY; process.env.TOKEN_ENCRYPTION_KEY = KEY; });
+    afterAll(() => { if (saved === undefined) delete process.env.TOKEN_ENCRYPTION_KEY; else process.env.TOKEN_ENCRYPTION_KEY = saved; });
+
+    async function push(userRow) {
+      process.env.WEBHOOK_CLIENT_STATE = 'test-client-state';
+      webhookSubscriptions.set('sub-1', 'user-1');
+      db.pool.query.mockImplementation(async (sql) => {
+        if (/FROM users\s+WHERE id/.test(sql)) return { rows: userRow ? [userRow] : [] };
+        return { rows: [{ n: 0 }], rowCount: 0 };
+      });
+      const res = await request(buildApp())
+        .post('/api/webhooks/outlook')
+        .set('Content-Type', 'application/json')
+        .send(JSON.stringify({ value: [{ subscriptionId: 'sub-1', clientState: 'test-client-state', changeType: 'updated' }] }));
+      expect(res.status).toBe(202);
+      await flushAsync();
+      delete process.env.WEBHOOK_CLIENT_STATE;
+    }
+
+    test('a stored "enc:" access token reaches Graph decrypted', async () => {
+      const { encrypt } = require('../crypto-utils');
+      const stored = encrypt('real-access-token');
+      expect(stored).toMatch(/^enc:/);
+      await push({ id: 'user-1', email: 'u@test.invalid', access_token: stored, refresh_token: encrypt('real-refresh'), token_expires_at: new Date(Date.now() + 3600e3) });
+      expect(outlookApi.getOutlookCalendarDelta).toHaveBeenCalledWith('real-access-token', 'stored-token');
+      expect(outlookApi.getOutlookCalendarDelta.mock.calls[0][0]).not.toMatch(/^enc:/);
+    });
+
+    test('an expired token is refreshed with the DECRYPTED refresh token', async () => {
+      const { encrypt } = require('../crypto-utils');
+      await push({ id: 'user-1', email: 'u@test.invalid', access_token: encrypt('old'), refresh_token: encrypt('real-refresh'), token_expires_at: new Date(Date.now() - 1000) });
+      expect(outlookApi.refreshAccessToken).toHaveBeenCalledWith('real-refresh');
+      expect(outlookApi.getOutlookCalendarDelta).toHaveBeenCalledWith('a2', 'stored-token');
+    });
+
+    test('a suspended or deactivated account is never synced (the query asks for live accounts only)', async () => {
+      await push(null);
+      const userQuery = db.pool.query.mock.calls.map(c => c[0]).find(sql => /FROM users/.test(sql));
+      expect(userQuery).toMatch(/is_active = TRUE/);
+      expect(userQuery).toMatch(/account_status = 'active'/);
+      expect(outlookApi.refreshAccessToken).not.toHaveBeenCalled();
+      expect(outlookApi.getOutlookCalendarDelta).not.toHaveBeenCalled();
+    });
   });
 
   test('clientState mismatch is ignored (no sync, still 202)', async () => {
