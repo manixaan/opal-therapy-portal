@@ -33,3 +33,6 @@ None — tonight's 8 commits touched none of this feature's files.
 
 ## Disagreement
 None against tracker stage. One internal note: the tracker treats "Client Agreement Form" as its own generator, but it actually lives inside the shared Templates system alongside other document templates — worth knowing before assigning separate work to it.
+
+## Re-verified 2026-10-27
+No commit since last night's audit (`896ace1`) touched this feature's files — the true window (`896ace1..41f45ed`) holds only Calendar sync-settings/Outlook/Splose work (see Portal - Splose - Outlook's folder). Re-ran the unit suite tonight (interview-templates, templates-*, whodas-templates): 218/218 passed, same as last night. Evidence label unchanged.

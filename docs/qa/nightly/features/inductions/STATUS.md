@@ -39,3 +39,6 @@ predate this window.
 
 ## Disagreement
 None against tracker stage. The disagreement is internal to the tracker: the "Splose Inductions" task reads as unscoped/unstarted, but content that could satisfy a literal reading of its title already exists.
+
+## Re-verified 2026-10-27
+No commit since last night's audit (`896ace1`) touched this feature's files — the true window (`896ace1..41f45ed`) holds only Calendar sync-settings/Outlook/Splose work (see Portal - Splose - Outlook's folder). Re-ran the unit suite tonight: 223/223 passed, same as last night. `e2e/tests/tutorials.spec.js` still proves the walkthrough tab. Evidence label unchanged.

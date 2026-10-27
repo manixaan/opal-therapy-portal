@@ -31,3 +31,6 @@ a dependency patch) touched neither `profile-routes.js` nor `profile.js`.
 
 ## Disagreement
 None on tracker stage (card doesn't claim more than "idea"). The gap is real and matches the tracker's own next_action: the leave/CPD approve-reject round trip has no test.
+
+## Re-verified 2026-10-27
+No commit since last night's audit (`896ace1`) touched `profile-routes.js` or `profile.js` — the true window (`896ace1..41f45ed`) holds only Calendar sync-settings/Outlook/Splose work. Re-confirmed tonight: still no dedicated test for the leave/CPD submit→approve→reject round trip. Evidence label unchanged.

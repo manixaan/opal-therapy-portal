@@ -29,3 +29,6 @@ None.
 
 ## Disagreement
 None against tracker stage. The tracker's own next_action already separates the two pieces correctly: decide if the 24-hour client reminder is still wanted and on what channel, then build the scheduled job — nothing to disagree with there.
+
+## Re-verified 2026-10-27
+No commit since last night's audit (`896ace1`) touched `snapshot-routes.js` or `reports.js` — the true window (`896ace1..41f45ed`) holds only Calendar sync-settings/Outlook/Splose work. Re-ran `tests/integration/snapshot.itest.js` (6/6) tonight — same as last night. Still no code anywhere for client appointment reminders. Evidence label unchanged.

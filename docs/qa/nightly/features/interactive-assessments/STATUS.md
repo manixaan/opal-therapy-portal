@@ -29,3 +29,6 @@ None — tonight's 8 commits touched none of this feature's route or frontend fi
 
 ## Disagreement
 None against tracker stage. The gap matches the tracker's own next_action: nobody has opened the assessment wizard in a browser to confirm it completes end to end.
+
+## Re-verified 2026-10-27
+No commit since last night's audit (`896ace1`) touched this feature's files — the true window (`896ace1..41f45ed`) holds only Calendar sync-settings/Outlook/Splose work (see Portal - Splose - Outlook's folder). Re-ran the unit suite tonight (assessment-catalogue, assessment-surface-guards, fca-*, letter-*, whodas-*): 897/897 passed, same as last night. Evidence label unchanged.

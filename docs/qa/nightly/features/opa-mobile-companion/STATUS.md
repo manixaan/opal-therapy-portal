@@ -31,3 +31,6 @@ None directly. (See note above on the unrelated booking-panel commits.)
 
 ## Disagreement
 None against tracker stage. The gap matches the tracker's own next_action: confirm with the real mobile client codebase that it successfully calls these APIs — something only verifiable from outside this repository.
+
+## Re-verified 2026-10-27
+No commit since last night's audit (`896ace1`) touched this feature's files — the true window (`896ace1..41f45ed`) holds only Calendar sync-settings/Outlook/Splose work (see Portal - Splose - Outlook's folder). Re-ran `mobile-routes.test.js` (41/41) and `clinical-note-provider.test.js` (10/10) tonight — same as last night. Evidence label unchanged.

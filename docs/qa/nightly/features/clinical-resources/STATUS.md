@@ -130,3 +130,6 @@ Two, in opposite directions:
    year's worth of real, tested functionality sitting behind it, now
    including a deliberately-scoped privacy-control relaxation that a human
    should be aware exists.
+
+## Re-verified 2026-10-27
+No commit since last night's audit (`896ace1`) touched this feature's files — the true window (`896ace1..41f45ed`) holds only Calendar sync-settings/Outlook/Splose work (see Portal - Splose - Outlook's folder). Re-ran the full unit suite listed above tonight: 398 passed, 12 skipped, 0 failed — same as last night. Evidence label unchanged.

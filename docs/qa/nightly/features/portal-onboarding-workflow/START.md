@@ -33,7 +33,16 @@ description is a new, separate DB-backed store
 SharePoint**. SharePoint storage itself: still nothing.
 
 ## Start here
-The remaining gap is unchanged: literal SharePoint storage for finished
+**First, tonight's new item:** run `cd backend && npx jest
+tests/onboarding-document-reader.test.js` and confirm whether
+`@tesseract.js-data/eng` is genuinely missing from the real (Azure)
+deployment's `node_modules`, not just this sandbox's. If it's missing
+there too, OCR document extraction is silently broken in production — fix
+the dependency install, don't patch around it in code. If it's present in
+the real deployment, this was sandbox-only noise and the next audit should
+revert the evidence label to `needs-refinement`.
+
+**Then, the unchanged gap:** literal SharePoint storage for finished
 Stage 2 documents. Before writing code, confirm which integration method the
 practice wants (Microsoft Graph API, same auth pattern as
 `backend/outlook-oauth.js` / `backend/graph-identity.js`, or a simpler

@@ -2,9 +2,29 @@
 
 - Tracker stage: idea
 - Tracker environment: none
-- Evidence label: **needs-refinement** (Stage 2's literal SharePoint-storage gap is still genuine; everything else moved a long way forward on 2026-10-22)
-- Addressed in change window (since last audit, 2026-10-24): no — no commit this window touched any `onboarding-*.js` file. The 2026-10-22 8-commit "onboarding production-ready" push (see "Recent history" below) predates this window.
+- Evidence label: **broken** tonight (escalated from `needs-refinement` — see "New tonight" below; Stage 2's literal SharePoint-storage gap is still genuine on top of this)
+- Addressed in change window (since last audit, 2026-10-26 `896ace1`): no — the true window (`896ace1..41f45ed`) holds only Calendar sync-settings/Outlook/Splose commits, none touching any `onboarding-*.js` file. The 2026-10-22 8-commit "onboarding production-ready" push (see "Recent history" below) predates this window.
 - Created (code exists): yes for Stage 1 and 2; Stage 3 (induction/setup/Activate) is now substantially built, as of 2026-10-22
+
+## New tonight (2026-10-27) — a test fails, likely a sandbox gap
+`npx jest tests/onboarding-document-reader.test.js` fails tonight: "the OCR
+language data is shipped with the portal, not fetched when a document
+arrives" — `Cannot find module '@tesseract.js-data/eng/package.json'`. This
+package is declared in `backend/package.json` (`"@tesseract.js-data/eng":
+"^1.0.0"`) but is genuinely absent from this sandbox's `backend/node_modules`
+(confirmed: `ls node_modules/@tesseract.js-data/` → no such directory). Ran
+twice tonight — reproducible both times, not a flake. **No prior audit
+(2026-10-16 through 2026-10-26) ever reported this failure**, which points
+to tonight's sandbox provisioning being incomplete rather than a code
+regression — this audit's own hard limits forbid running `npm install`/`npm
+ci` to fix it. Escalating the whole feature's evidence label to `broken` for
+tonight rather than silently absorbing it into the unchanged
+`needs-refinement` narrative below, because a concretely reproduced test
+failure is stronger evidence than an open product decision — but this
+needs a human to confirm whether `@tesseract.js-data/eng` is actually
+present in the real (Azure) deployment's `node_modules` before treating it
+as a production defect. If it's confirmed present there, this is sandbox
+noise and the label should revert to `needs-refinement` next audit.
 
 ## Recent history (2026-10-22, two nights ago now)
 Eight commits (`fba7eface`, `96324d99`, `f1439654`, `41e81787`, `db8fb6c4`,
@@ -86,17 +106,24 @@ hashed, expiring token in place of a session) — not a guard gap. No new
 unguarded endpoint found tonight. No TODO/FIXME in any changed file.
 
 ## Tests and results
-Unit (re-run tonight): `onboarding-practice.test.js`,
+Unit (re-run tonight, full 27-file `onboarding-*.test.js` set): **653/654
+passed, 1 failed** — the new `onboarding-document-reader.test.js` failure
+above. Every other file, including `onboarding-practice.test.js`,
 `onboarding-placeholder-check.test.js`, `onboarding-accounts.test.js`,
 `onboarding-journey.test.js`, `onboarding-offer-docx.test.js`,
 `onboarding-offer-pdf.test.js`, `onboarding-offer-template.test.js`,
-`onboarding-contract-docx.test.js` — **all pass**.
+`onboarding-contract-docx.test.js` — **all pass**, same as every prior
+night.
 
-Integration (`DB_NAME=therapy_scheduler_auditnight1026`, `DB_PASSWORD=audit`):
-`onboarding-journey.itest.js`, `onboarding-portal-route.itest.js`,
+Integration tests for this feature were not re-run tonight (this session's
+effort went into the new sync-settings feature on the Splose/Outlook card
+and chasing down the OCR failure above); the 8 `onboarding-*.itest.js`
+files are unchanged since they last passed on 2026-10-26
+(`onboarding-journey.itest.js`, `onboarding-portal-route.itest.js`,
 `onboarding-workflow.itest.js`, `onboarding-defaults.itest.js`,
 `onboarding-pack.itest.js`, `onboarding-returns.itest.js`,
-`onboarding.itest.js` — **all pass** (re-run tonight).
+`onboarding.itest.js`) and should be re-run by whoever picks up either
+item above.
 
 Browser QA: `docs/qa/BROWSER_QA_RESULTS.md` row C still only covers the
 onboarding→profile chain as it stood before 2026-10-22's work (login
@@ -112,10 +139,12 @@ layout" open; c7/c5 dynamic-contract-scope decision and build — c5 is done,
 c7's decision step is still open), stage 3 (empty — no checklist at all).
 
 ## Commits in window that touched it
-None — tonight's 8 commits (resource privacy/upload, booking "Make room", a
-dependency patch) touched no `onboarding-*.js` file. The 2026-10-22 commits `fba7eface`,
-`96324d99`, `f1439654`, `41e81787`, `db8fb6c4`, `51f585b6`, `73adb13f`, merge
-`273de152` predate this window — see "Recent history" above.
+None — the true window (`896ace1..41f45ed`) holds only Calendar
+sync-settings/Outlook/Splose commits (`11aa73f`, `971cac1`, `3ef3965`,
+`ab75330`, `41f45ed`), none touching any `onboarding-*.js` file. The
+2026-10-22 commits `fba7eface`, `96324d99`, `f1439654`, `41e81787`,
+`db8fb6c4`, `51f585b6`, `73adb13f`, merge `273de152` predate this window —
+see "Recent history" above.
 
 ## Disagreement
 The tracker checklist is now further behind the code than at any prior

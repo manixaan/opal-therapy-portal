@@ -28,3 +28,6 @@ dependency patch) touched none of this feature's files.
 
 ## Disagreement
 Payroll Automation's tracker checklist shows every item unchecked, but substantial guarded, tested code already exists — the evidence is ahead of the tracker here, the opposite of most other cards in this snapshot.
+
+## Re-verified 2026-10-27
+No commit since last night's audit (`896ace1`) touched this feature's files — the true window (`896ace1..41f45ed`) holds only Calendar sync-settings/Outlook/Splose work (see Portal - Splose - Outlook's folder). Re-ran the unit suite (81/81) and the integration suite (accounting-phase2, accounting-routes, finance-routes, invoicing, onboarding-payroll-xero: 63/63) tonight — same results as last night. Evidence label unchanged.

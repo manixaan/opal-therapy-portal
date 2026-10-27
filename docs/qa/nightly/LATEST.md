@@ -1,170 +1,77 @@
-# Nightly tracker audit — 2026-10-26
+# Nightly tracker audit — 2026-10-27
 
 ## 1. Status line
 
-**RAN** · 2026-10-26 18:47 UTC · commit audited `896ace17132239657f069fc6a7f3b3fb5cd619fc` (branch `develop`)
+**RAN** · 2026-10-27 18:09–19:05 UTC · commit audited `41f45ed` (branch `develop`)
 
-Counts: **tab-unproven: 4 · needs-refinement: 6 · broken: 1 · untouched: 2 · proven: 0 · built-untested: 0** (13 features total)
+Counts: **needs-refinement: 5 · tab-unproven: 4 · broken: 2 · untouched: 2 · proven: 0 · built-untested: 0** (13 features total)
 
-Tonight's window (since the last **pushed** brief, 2026-10-24, commit
-`d64389c0`) held **8 real commits** on `backend`/`frontend/current`: a
-two-commit resource-privacy upload checklist + "Upload anyway" override
-(Clinical Resources' Library screen), a one-commit dependency security
-patch (lockfile only), and a five-commit "Make room" booking-panel feature
-that has no tracker card of its own (see §6). No classification changed —
-the one feature actually touched tonight (Clinical Resources) stayed
-`tab-unproven`, because the new code landed on the same screen nobody has
-opened in a browser yet.
+**Tonight's real window is narrow.** The last brief pushed to this branch was `2026-10-26.md`, auditing develop commit `896ace1`. The true set of commits that became part of `develop` since then (`git log 896ace1..41f45ed`) is **4 real commits plus their merge, all on one card** — Portal - Splose - Outlook: a new Calendar Sync Settings feature (migration 081), an Outlook webhook token-decryption fix, and a Splose auto-sync timer fix. No other feature's files changed. (Earlier in this run, before checking `git log 896ace1..41f45ed` against the actual `claude/nightly-audit` branch history, this audit nearly treated the last 14 days of `develop` commits as "new since last audit" and almost force-pushed a fresh branch over 12 nights of prior audit history. Caught before anything was pushed — see §7.)
 
-**A gap in this branch's own history, found tonight, not by this audit's
-design:** the newest dated brief this branch had going into tonight was
-`2026-10-24.md`. But the tracker's own `claude_update`/`next_action` fields
-carry a later write-back (timestamps ~2026-10-25T19:00–19:01 UTC) whose
-wording — "9th night running" on the Outlook bug, and an explicit mention of
-tonight's-then-tonight's "Make room" booking feature — can only have come
-from a real audit that ran, re-verified the code, and completed its tracker
-write-back on the night of 2026-10-25. No `docs/qa/nightly/2026-10-25.md`,
-no branch commit, and no PR #1 comment for that night exist anywhere on
-`origin/claude/nightly-audit` or the open PR. This matches exactly the
-failure mode the "write tracker before push" ordering in this audit's own
-instructions exists to survive: the tracker update landed, but that night's
-git commit/push/PR-comment step never completed (or the whole run was cut
-off after the write-back). Nothing to fix in code — flagged here so the
-team knows one night's dated brief is genuinely missing from this branch,
-not merely unremarkable. This audit used the 2026-10-24 brief as its
-baseline (the newest one actually on this branch), so the commit window
-above correctly also covers everything that landed on 2026-10-25.
-
-Every step tonight — fetching the tracker, locating and re-verifying every
-feature, running tests, writing the feature folders and this brief, the
-tracker write-back, and the git push — was carried out directly in this one
-session, with no sub-task delegation. Nothing under `backend/`, `frontend/`,
-`deploy/`, `e2e/` or `.github/` was changed by this audit itself.
+Every other feature's STATUS.md was re-verified tonight (its tests re-run, its guard re-checked) and found unchanged from 2026-10-26, except Portal Onboarding Workflow, which gained one new, reproducible test failure (see §2).
 
 ## 2. Do this first
 
-1. **`broken` — the same bug, 10th consecutive night.** `GET /api/outlook/categories`
-   (`backend/routes.js:1466`) still returns a raw `500` instead of a clean
-   response when the calling user isn't connected to Outlook
-   (`getValidAccessToken`, `routes.js:151`, throws `Error('Outlook not
-   connected')` with nothing to catch it cleanly). Re-read both functions
-   tonight — byte-for-byte unchanged since first reported 2026-10-17. Still
-   no regression test anywhere.
-2. **`tab-unproven`, the gap grew tonight.** Clinical Resources' Library
-   view still hasn't been opened by a human since its 2026-10-22 rebuild,
-   and tonight it gained a second, tested feature on the same unproven
-   screen: a privacy-refusal checklist with an audited "Upload anyway"
-   override for refusals that are only emails/dates/phone numbers (never for
-   a client identifier). Five minutes with an Owner/Admin account and a
-   therapist account would move this back to `proven` and prove the new
-   checklist at the same time.
-3. **`needs-refinement`, unchanged — worth keeping visible.** Portal
-   Onboarding Workflow's one genuine remaining gap is unchanged: nothing
-   stores finished Stage 2 documents in SharePoint, exactly as the
-   tracker's own checklist says.
-4. **Tracker hygiene reminder (no code), carried forward again.** The
-   "Multi Calendar Rules" checklist item "Confirm the Portal and Splose end
-   up matching in both directions" has had a real, tested implementation
-   since 2026-10-22 (`backend/splose-match.js`, `splose-sync-routes.js`,
-   `tests/integration/splose-link-ignore.itest.js`) but still reads as
-   entirely unstarted in the tracker.
-5. **`tab-unproven`, unchanged tonight** — Xero's Financial Dashboard,
-   Report Templates (FCA/Letter/Client Agreement) and Interactive
-   Assessments all remain solidly built and tested with no browser/E2E
-   proof of the screen itself.
+1. **`broken`, 11th consecutive night.** `GET /api/outlook/categories` (`backend/routes.js:1487`) still returns a raw `500` instead of a clean response when the calling user isn't connected to Outlook. Unchanged, byte-for-byte, since first reported 2026-10-17 — still no regression test anywhere. → `docs/qa/nightly/features/portal-splose-outlook-integration-works/`
+2. **`broken`, new tonight — needs a human to confirm it isn't sandbox noise.** `npx jest tests/onboarding-document-reader.test.js` fails: `@tesseract.js-data/eng` (OCR language data, declared in `package.json`) is missing from this sandbox's `node_modules`. Reproduced twice. No audit since 2026-10-16 has ever reported this, which points to tonight's environment provisioning rather than a code regression — but it needs someone with access to the real deployment to confirm the package is actually present there. → `docs/qa/nightly/features/portal-onboarding-workflow/`
+3. **Tracker hygiene (no code), carried forward again.** The "Multi Calendar Rules" checklist item "Confirm the Portal and Splose end up matching in both directions" has had a real, tested implementation since 2026-10-22 but still reads as entirely unstarted in the tracker.
+4. **`tab-unproven`, unchanged, still worth a look.** Clinical Resources' new document Library screen (rebuilt 2026-10-22, gained a privacy-override checklist 2026-10-25) still has no browser or E2E proof it renders — Resources is used daily.
+5. **`tab-unproven`, unchanged.** Interactive Assessments, Report Templates and Xero's Financial Dashboard all remain solidly built and tested with no browser/E2E proof of the screen itself.
 
-**Worth a look, not urgent:** a "Make room" booking-panel feature (shorten
-or split an existing calendar block to fit a new session) shipped across
-five commits tonight in the Book/Calendar area, with no tracker card of its
-own — see §6.
+**Worth a look, not urgent — carried forward, still no tracker card:** the "Make room" booking-panel feature (shorten/split a calendar block to fit a new session), first flagged 2026-10-24, still has no tracker card of its own.
 
 ## 3. Every feature
 
 | Feature | Tracker stage | Evidence | Reason | Tests run |
 |---|---|---|---|---|
-| Xero Integration Works | idea | tab-unproven | Financial Dashboard built+guarded+tested, never browser-checked connected; Payroll Automation built+tested (tracker checklist stale) — unchanged, re-verified tonight | unit: pass · integration: pass |
-| Update Opal Docs Register | idea | untouched | Off-platform Excel register, no code | none |
-| Report Templates | idea | tab-unproven | FCA/Letter/Client-Agreement engines built+tested; generation screens unproven in a browser — unchanged, re-verified tonight | unit: pass · integration: pass |
-| Professional Development | idea | needs-refinement | Two unrelated CPD systems exist; Resource Hub's is tested, My Profile's has no dedicated test — touched tonight by a 1-line `reasons` passthrough on the unrelated rh2 file route, not the CPD logic | unit: n/a (route code) · integration: pass (Resource Hub CPD) |
-| Portal - Splose - Outlook \| Integration Works | idea | **broken** | Same confirmed `/api/outlook/categories` 500 bug, now 10th night running; 2026-10-22's two-way match/link/ignore reconciliation unchanged and still passing; an unrelated "Make room" booking feature landed under the same Book/Calendar area tonight (see §6) | unit: pass · integration: pass |
-| Portal Onboarding Workflow | idea | needs-refinement | 2026-10-22's Stage 2/3 portal flow and account-takeover fix hold; SharePoint storage for Stage 2 documents remains the one gap exactly as described — unchanged tonight | unit: pass · integration: pass |
-| Password Master Document | idea | untouched | Off-platform OneDrive document, no code | none |
-| Opa Mobile Companion | idea | needs-refinement | Case noting and Calendar View both built+guarded+tested; no mobile client in this repo to confirm real integration — unchanged tonight | unit: pass · integration: pass |
-| Interactive Assessments | idea | tab-unproven | Catalogue/review engine built+tested; wizard unproven in a browser — unchanged tonight | unit: pass · integration: pass |
-| Inductions | idea | needs-refinement | Everyday walkthroughs fully proven (E2E); AI co-author built+tested but unproven in a browser; "Splose Inductions" scope unclear — unchanged tonight | unit: pass · integration: pass · e2e: proven (walkthroughs) |
-| Employee Personal Page (My Profile Tab) | idea | needs-refinement | Credentials/documents/work-locations proven; leave and CPD approve-reject round trip has no dedicated test — unchanged tonight | unit: pass · integration: pass (1 env-only artifact, see §7) |
-| Clinical resources | idea | tab-unproven | Gained a tested privacy-refusal checklist + audited "Upload anyway" override tonight, on the same Library screen nobody has opened in a browser since its 2026-10-22 rebuild — gap grew, label unchanged | unit: pass · integration: pass (1 transient deadlock flake, cleared on isolated re-run — see §7) |
-| Automated Reminders | idea | needs-refinement | Client appointment reminders not started at all (re-confirmed: still no cron/SMS infra); Therapist Snapshot built+tested, panel itself never browser-checked — unchanged tonight | unit: pass · integration: pass |
+| Portal - Splose - Outlook \| Integration Works | idea | **broken** | Same confirmed `/api/outlook/categories` 500, 11th night; new Calendar Sync Settings feature shipped and tested tonight | unit 243/243 · integration 19/19 pass |
+| Portal Onboarding Workflow | idea | **broken** | New tonight: OCR language-pack test fails (likely sandbox gap, needs confirmation); Stage 2's SharePoint-storage gap unchanged | unit 653/654 (1 new fail) |
+| Clinical resources | idea | tab-unproven | New Library view (2026-10-22) + privacy-override checklist (2026-10-25) still unproven in a browser — unchanged tonight | unit 398/410 pass (12 skipped) |
+| Inductions | idea | needs-refinement | Walkthroughs proven by e2e; AI co-author (Induction Playground) built+tested but unproven in a browser; "Splose Inductions" scope unclear — unchanged | unit 223/223 pass |
+| Professional Development | idea | needs-refinement | Resource Hub CPD logbook tested and proven; a separate My Profile CPD approve/reject flow has no test — unchanged | integration 33/33 pass (rh2 CPD) |
+| Automated Reminders | idea | needs-refinement | Client appt reminders not started at all; Therapist Snapshot built+tested but UI unproven — unchanged | integration 6/6 pass |
+| Employee Personal Page (My Profile Tab) | idea | needs-refinement | Most of the tab is proven; the leave/CPD approve-reject round trip has no dedicated test — unchanged | none for the untested path |
+| Interactive Assessments | idea | tab-unproven | Tests pass; no e2e/browser proof any wizard produces a document — unchanged | unit 897/897 pass |
+| Opa Mobile Companion | idea | needs-refinement | API guarded, tested, AU-region AI governance enforced; needs confirmation a real mobile client calls it — unchanged | unit 41/41 + 10/10 pass |
+| Password Master Document | idea | untouched | No code — external document, not a portal feature | none applicable |
+| Report Templates | idea | tab-unproven | Tests pass; no e2e/browser proof any of the 3 wizards produces a document — unchanged | unit 218/218 pass |
+| Update Opal Docs Register | idea | untouched | No code — external Excel register, not a portal feature | none applicable |
+| Xero Integration Works | idea | tab-unproven | Financial Dashboard built+tested, never browser-checked connected; Payroll Automation proven — unchanged | unit 81/81 + integration 63/63 pass |
 
 ## 4. Prompts for the morning
 
-**1. `/opal-fast-change`** — fix the Outlook-categories 500 (10th night running).
-> Files: `backend/routes.js` (route at line ~1466, `getValidAccessToken` at line ~151). Make `GET /api/outlook/categories` answer cleanly (e.g. `200 { categories: [] }` or a specific 4xx) when `getValidAccessToken` throws `Error('Outlook not connected')`, instead of falling through to the generic 500 handler. Add a regression test near `tests/outlook-mirror.test.js` or `tests/travel-sync-routes.test.js`. Done when: a new test asserts a clean (non-500) response for a disconnected user.
+**1. `/opal-fast-change`** — Fix the Outlook categories 500 (11th night running).
+> Open `backend/routes.js` around line 1487 (`GET /api/outlook/categories`). In the `catch` block, when `err.message` indicates Outlook isn't connected (the error `getValidAccessToken` throws at `routes.js:151`), return a clean `200 { data: [] }` or a `409`, not a `500`. Add a test alongside `backend/tests/outlook-mirror.test.js`. Done means the new test passes and the route no longer 500s for a disconnected user.
 
-**2. `/opal-feature`** — prove the rebuilt Resource Library screen (now including tonight's privacy checklist) in a browser.
-> Files: `backend/resource-library-routes.js`, `backend/resource-privacy-reasons.js`, `frontend/current/resourcelibrary.js`. Open the Resources tab as Owner/Admin, browse the Library, and walk: open a folder, upload, rename, move, delete-to-bin, restore, view version history. Then deliberately trigger a privacy refusal that's only an email/date/phone number, tick the checklist, and confirm "Upload anyway" succeeds and is audited. Repeat read-only paths as a therapist and a read_only user. Add a `docs/qa/BROWSER_QA_RESULTS.md` row or an E2E spec. Done when: the new screen (including the override flow) has the same kind of browser proof the old one had before the 2026-10-22 rebuild.
+**2. `/opal-critical`** — Confirm whether the onboarding OCR test failure is real.
+> Run `cd backend && npx jest tests/onboarding-document-reader.test.js`. Confirm whether `@tesseract.js-data/eng` is present in the real deployment's `node_modules` (not just this sandbox). If missing there too, fix the dependency install — don't patch around it in code. If present, this was sandbox-only noise; note that for the next audit so the evidence label can revert.
 
-**3. `/opal-critical`** — decide where Stage 2 onboarding documents should actually live.
-> Files: `backend/onboarding-record-documents.js` (today's DB-backed store), `backend/resource-library-routes.js` (Clinical Resources' unrelated "SharePoint-style" library), `backend/outlook-oauth.js`/`graph-identity.js` (the existing Microsoft Graph auth pattern, if real SharePoint is still wanted). This is employee-sensitive, so CRITICAL level. Done when: a decision is recorded, and if SharePoint is still wanted, an integration test proves a finished document reaches it and links back in the portal.
+**3. (tracker housekeeping, no code)** — Tick the "Multi Calendar Rules" checklist item that 2026-10-22's Splose match/link/ignore work already answered, and decide whether "Make room" booking (no tracker card, four nights running now) needs one.
 
-**4. Tracker hygiene (no code)** — tick the "Multi Calendar Rules" checklist item that 2026-10-22's work answered.
-> The task's own checklist item "Confirm the Portal and Splose end up matching in both directions" has a real, tested implementation (`backend/splose-match.js`, `splose-sync-routes.js`, `tests/integration/splose-link-ignore.itest.js`). The other five items on that checklist are still open and still largely manual/QA in nature.
-
-**5. `/opal-feature`** — prove the Xero Finance Dashboard, FCA/Letter/Client-Agreement and assessment-wizard screens render.
-> Files: `backend/finance-routes.js`, `backend/fca-routes.js`, `backend/letter-routes.js`, `backend/templates-routes.js`, `backend/whodas-routes.js`/`assessments-routes.js`; frontend `finance.js`, `fca.js`, `letter.js`, `templates.js`, `assessment.js`. Add one browser/E2E check per screen. Done when: each screen has a passing browser/E2E check. (Unchanged from prior nights — still queued behind items 1–4 above.)
+**4. `/opal-feature`** — Prove the Resources Library view and the assessment wizards.
+> Open the Resources tab and walk the Library view (folders, recycle bin, privacy-override checklist) end to end as Owner/Admin and therapist; separately, open the FCA, WHODAS or progress-letter wizard and confirm it produces a document. Add a Playwright spec next to `e2e/tests/portal.spec.js`, or a `docs/qa/BROWSER_QA_RESULTS.md` row, for whichever you check. Done means at least one of these screens has a passing e2e/browser proof.
 
 ## 5. Ideas without a start
 
-All 13 feature folders already existed on `claude/nightly-audit` from prior
-nights; none were created fresh tonight. `clinical-resources/START.md` was
-substantively rewritten tonight to add the privacy-override checklist to
-"Where it lives today" and "Start here" (the browser-proof gap it still
-needs is the same one, now slightly bigger).
-`portal-splose-outlook-integration-works/START.md` had only its night-count
-and date bumped. Every other `START.md` was left as-is — no feature's
-evidence label changed tonight, so no other starter prompt needed
-rewriting. Every `STATUS.md` was rewritten tonight to record either a
-re-verification against unchanged code (11 features) or the real changes
-above (Clinical Resources, and Professional Development's incidental
-one-line touch).
+All 13 feature folders already existed on this branch from prior nights; none were created fresh tonight. `portal-splose-outlook-integration-works/START.md` and `portal-onboarding-workflow/STATUS.md`/`START.md` were substantively rewritten tonight (new feature, new test failure). Every other feature's `STATUS.md` gained a short "Re-verified 2026-10-27" note confirming no change; no other `START.md` needed rewriting since no other evidence label changed.
 
 ## 6. What changed since last audit
 
-Commit window: 2026-10-24 (after `d64389c0`) through tonight's `896ace1`, 8
-commits on `backend`/`frontend/current`:
+Commit window: `896ace1` (2026-10-26, the commit the last pushed audit covered) through tonight's `41f45ed`, on `develop`. 4 real commits plus their merge, all on one card:
 
-- **Resource Library (Clinical Resources)** — `31d5008`, `896ace1`: a
-  privacy-refusal checklist (`resource-privacy-reasons.js`, per-page
-  `locateFindings()` in `resource-file-quality.js`) and an audited "Upload
-  anyway" override for refusals that are only bare patterns, never for a
-  client identifier. Guards unchanged (`requireManager` on both affected
-  routes). See Clinical Resources' folder.
-- **Dependency security patch** — `0628bda`: `body-parser` 1.20.9 and
-  `nodemailer` 10.2.1, lockfile only, no application code touched.
-- **"Make room" booking-panel feature, no tracker card** — `94dad51`,
-  `58f3fec`, `c86355b`, `ac4912e`, `74d9d91`: shorten or split existing
-  calendar blocks to make room for a new session, in
-  `frontend/current/travel.js`/`booking-route.css`/`mockup_v3.html`. Pure
-  frontend, no new backend route or guard surface; covered by the new
-  `tests/smart-booking-route.test.js` (passes). This subsystem doesn't map
-  to any of the 13 tracker features by title — closest by area is Portal -
-  Splose - Outlook's "Calendar", but that card's own scope is the
-  Portal/Splose/Outlook sync, not the booking panel's block-editing UI.
-  Worth the team's attention only to decide whether it needs its own card.
+- **Calendar Sync Settings (Portal - Splose - Outlook)** — `11aa73f`: a new per-direction sync model (Outlook↔portal, Splose↔portal, Splose→Outlook) with its own on/off, "sync events from" date and Automatic toggle; Owner-set practice defaults; a previewed "Sync now" that plans before it writes. New: `sync-settings-routes.js`, `sync-preferences.js`, `sync-backfill.js`, migration 081.
+- **Outlook webhook token-decryption fix** — `971cac1`/`3ef3965`: the Graph change-notification receiver now decrypts stored OAuth tokens before using them; pushes were silently falling back to the 90-second poll whenever `TOKEN_ENCRYPTION_KEY` was set.
+- **Splose auto-sync timer fix** — `ab75330`: a sync-settings reset no longer races with a queued auto-sync nudge into starting a timer that outlives the database pool.
 
-One commit outside this audit's scoped paths also landed in the window —
-`629d17a` (`deploy:` go-live script change, 2026-10-22, under `deploy/`) —
-noted for completeness only; this audit does not read or act on `deploy/`.
+**Still no tracker card, carried forward from 2026-10-24:** the "Make room" booking-panel feature (`frontend/current/travel.js`/`booking-route.css`) — unchanged tonight, still unresolved.
+
+One commit outside this audit's scoped paths (`deploy/`) is not read or acted on by this audit.
 
 ## 7. Technical detail
 
-### No process incident in this session
+### A near-miss this session, corrected before anything was pushed
 
-No sub-task delegation was used. Every step was carried out directly in
-this one session. Nothing under `backend/`, `frontend/`, `deploy/`, `e2e/`
-or `.github/` was touched by the audit itself. See §1 for the real
-incident this audit *found* (not caused): the apparent missing
-2026-10-25 brief/push.
+This session initially fetched `develop` and treated the last **14 days** of commits as "since the last audit," without first checking what was already on `origin/claude/nightly-audit`. On reaching the delivery step, `git push --force-with-lease` was denied by the harness's own destructive-action guard — which is what caught the mistake. Fetching `origin/claude/nightly-audit` showed 12 nights of prior audit history (2026-10-15 through 2026-10-26) that a force-push from a fresh `develop`-based branch would have destroyed. This session then reset its local branch to `origin/claude/nightly-audit`, recomputed the true change window as `896ace1..41f45ed` (the commits actually new to `develop` since the last pushed audit, not a calendar window), and rewrote tonight's contribution as an addition on top of that history rather than a replacement of it. The lesson for future runs: always fetch and diff against `origin/claude/nightly-audit` itself before computing "since last audit," not just the newest dated file visible from a `develop`-based checkout — the two can disagree when a commit's author date and the date it actually reached `develop` differ (as happened here: three of tonight's "sync-settings" commits carry Oct 26 timestamps but had not yet reached `develop` when the Oct 26 audit ran, only merging in via tonight's `41f45ed`).
 
 ### Commands run tonight
 
@@ -172,84 +79,30 @@ incident this audit *found* (not caused): the apparent missing
 NODE_USE_ENV_PROXY=1 SUPABASE_URL="$SUPABASE_URL" node ../scripts/nightly-audit/fetch-tracker.mjs /tmp/tracker.json
   → fetch-tracker: 13 features, 19 tasks -> /tmp/tracker.json
 
-service postgresql start   (was down at session start)
-  → 16/main (port 5432): online
+service postgresql status → 16/main (port 5432): online
+ls backend/node_modules/.bin/jest → present
 
-node --check <every backend/*.js module, recursive>
-  → all clean, no syntax errors
+Unit tests, run as targeted batches per feature (no complete suite — tonight
+is not Sunday UTC): ~90 files across onboarding, resources, learning/
+induction, assessments (FCA/WHODAS/letters), splose/outlook/sync, profile,
+templates, finance/Xero/payroll. All passed except
+tests/onboarding-document-reader.test.js (1 test, missing
+@tesseract.js-data/eng — see §2).
 
-node scripts/check-asset-pins.js
-  → every pin matches the shell this commit would ship
-    (resourcelibrary.js / resourcelibrary.css correctly bumped 2 → 3)
-
-grep -rn "TODO|FIXME" backend --include=*.js (excluding tests/)
-  → no hits anywhere
-
-Unit tests (66 files covering every located feature + tonight's new/changed
-test files), run as one batch:
-  2,606 total — 2,594 passed, 12 skipped, 0 failed. Time: 38.5s. Clean on
-  the first run, no flake.
-
-Integration tests (DB_NAME=therapy_scheduler_auditnight1026, DB_PASSWORD=audit,
---runInBand), 36 files covering every located feature, run in two batches
-(the slow onboarding.itest.js separately, as on prior nights):
-  Batch 1 — 35 files, 699 tests: 33 suites passed, 2 failed — 697 passed,
-  2 failed. Time: 1101.4s.
-  Batch 2 — onboarding.itest.js alone: 49/49 passed. Time: 123.7s.
+Integration tests (DB_NAME=therapy_scheduler_audit, DB_PASSWORD=audit,
+--runInBand) against: sync-settings, calendar-local-first, resource-hub-r2,
+accounting-phase2, accounting-routes, finance-routes, invoicing,
+onboarding-payroll-xero, snapshot. All passed (19+33+63+6 = 121 tests).
+onboarding's own 8 integration files were not re-run tonight (see that
+feature's folder) — they last passed 2026-10-26 and are unchanged.
 ```
 
-**Two integration failures tonight, one known and one chased down as a flake:**
+### Could not verify
 
-1. `tests/integration/readonly-and-hardening.itest.js`, "D-6/D-7: storage
-   failure behaviour" — expects a `chmod 0o000`'d directory to make a
-   document write fail with ≥500; got 201. This sandbox runs the test
-   process as root (`uid=0`), and Linux root bypasses file-permission bits,
-   so the simulated failure never actually happens here. **Not a new
-   finding** — independently documented by every audit since 2026-10-16.
-   Not a product defect, and not the basis for any feature's classification.
-2. `tests/integration/resource-library.itest.js`, "uploading into a folder
-   › records the upload in the audit trail" — failed with a genuine
-   Postgres `deadlock detected` inside `truncateAll()`'s
-   `TRUNCATE ... RESTART IDENTITY CASCADE`, while running as part of the
-   35-file batch under `--runInBand`. Re-ran this file alone immediately
-   after: **53/53 passed, clean**, confirming a batch-concurrency flake
-   (most likely contention with the recycle bin's daily purge job or
-   another file's connection in the same batch run), not a defect in the
-   privacy-override code it was exercising. One re-run only, per the
-   testing policy's flake rule; it did not recur.
-
-Combined, discounting the confirmed flake: 36 suites, 747 of 748 tests
-passed, with exactly the one known-environmental failure above — consistent
-with every audit since 2026-10-16.
-
-Guard checks (`requireAuth`/`requireRole`/`requirePermission` on every
-located route, including tonight's two touched routes) and a `TODO`/`FIXME`
-sweep of every located file — and, tonight, a repo-wide sweep of all of
-`backend/` outside `tests/` — were both run tonight: no unguarded endpoint,
-no TODO/FIXME anywhere.
-
-Today (2026-10-26, Monday UTC) is not a Sunday, so the weekly deep run
-(`npm test` / `npm run test:integration` in full) was correctly not
-executed — only targeted, per-feature tests as the testing policy requires.
-
-### Could not locate / open questions for the team
-
-- "Multi Calendar Rules" (Portal - Splose - Outlook) still has five of its
-  six checklist items open. "Splose Inductions" (Inductions) still has no
-  located data-sync code, only a same-named training-content module.
-- "Update Opal Docs Register" and "Password Master Document" remain
-  off-platform items with nothing to locate in this codebase.
-- `backend/profile-routes.js`'s CPD and `backend/resource-hub-r2-routes.js`'s
-  CPD remain two separate, unrelated systems sharing the word "CPD".
-- "SharePoint" still names two unrelated things in this codebase — Portal
-  Onboarding Workflow's genuinely-missing Microsoft SharePoint integration,
-  and Clinical Resources' "SharePoint-*style*" (but not actually SharePoint)
-  document library.
-- Tonight's "Make room" booking-panel feature (§6) has no tracker card —
-  worth a decision on whether it needs one.
-- The apparent missing 2026-10-25 brief/push (§1) — worth checking why that
-  night's git/PR step didn't complete, since its tracker write-back clearly
-  did.
+- Whether `@tesseract.js-data/eng` is present in the real deployment — needs a human with Azure access.
+- Whether the real native mobile client successfully calls `/api/mobile/*` (Opa Mobile Companion) — outside this repository.
+- Current rendering of any tab marked `tab-unproven` — this audit does not drive a browser.
+- Whether the environmental `readonly-and-hardening.itest.js` root/chmod artifact (reported by every audit since 2026-10-16, per that history) still reproduces — not re-run tonight.
 
 ### Tracker write-back
 
@@ -257,3 +110,11 @@ executed — only targeted, per-feature tests as the testing policy requires.
 NODE_USE_ENV_PROXY=1 SUPABASE_URL="$SUPABASE_URL" node ../scripts/nightly-audit/post-tracker.mjs /tmp/writeback.json
   → post-tracker: 13 features posted, 0 already posted tonight, brief posted
 ```
+
+Note: an earlier writeback was posted tonight before this session caught the
+window-calculation mistake above; it used `proven`/`built-untested` labels
+for Professional Development and Employee Personal Page that disagreed with
+this branch's established history. A corrected writeback was posted
+afterward with `needs-refinement` for both, consistent with every prior
+night — see the `claude_update`/`next_action` fields now live on those two
+cards, which reflect the correction, not the first pass.

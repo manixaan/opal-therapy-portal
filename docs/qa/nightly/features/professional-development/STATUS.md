@@ -26,3 +26,6 @@ touches to the shared governance `transition()` helper predate this window.
 
 ## Disagreement
 The tracker card's title is ambiguous between two unrelated systems. Only the My Profile CPD approve/reject flow lacks test coverage — the Resource Hub CPD logbook is tested. This overlaps directly with the Employee Personal Page (My Profile Tab) feature's own gap — the same underlying work (a test for `profile-routes.js`'s CPD approve/reject) would close both cards.
+
+## Re-verified 2026-10-27
+No commit since last night's audit (`896ace1`) touched either CPD system's files — the true window (`896ace1..41f45ed`) holds only Calendar sync-settings/Outlook/Splose work. Re-ran `tests/integration/resource-hub-r2.itest.js` (33/33, includes the rh2 CPD logbook) tonight — same as last night. The My Profile CPD approve/reject flow still has no dedicated test. Evidence label unchanged.
