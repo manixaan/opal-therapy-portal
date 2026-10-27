@@ -114,9 +114,13 @@ function notifyQueued(userId) {
   if (!userId || !flags.isSploseAutoSyncEnabled()) return false;
   // Sync settings (081): only a calendar whose portal → Splose sync is set to
   // run automatically publishes on its own; the rest wait for "Sync Splose".
+  // The instance is taken NOW: the settings read is async, and a reset (or
+  // shutdown) in between stops this instance, so a late touch is a no-op
+  // instead of starting a fresh timer that outlives the database pool.
   const prefsMod = require('./sync-preferences');
+  const runner = autoSync();
   prefsMod.effectiveOrNull(db, userId)
-    .then((p) => { if (prefsMod.allows(p, 'portal_to_splose')) autoSync().touch(userId); })
+    .then((p) => { if (prefsMod.allows(p, 'portal_to_splose')) runner.touch(userId); })
     .catch(() => {});
   return true;
 }
