@@ -445,3 +445,129 @@ describe('past days are not mirrored to Outlook (11 Oct 2026)', () => {
     expect([c.travelDayIsPast('mon'), c.travelDayIsPast('tue'), c.travelDayIsPast('wed'), c.travelDayIsPast('sun')]).toEqual([true, false, false, false]);
   });
 });
+
+describe('desk work happens at home when there is time (28 Oct 2026)', () => {
+  // Home is Willetton. Osborne Park ↔ home 25 min.
+  const RP = { title: 'Resource Preparation', booking: { kind: 'resource-prep', group: 'nf2f' }, type: 'custom' };
+
+  test('a session, then desk work with time to get home → one drive home ending at it; no Direct ⇄ switch', () => {
+    const c = load();
+    const a = add(c, { at: '09:30', to: '10:30', s: { address: OSBORNE, patient: 'Adon' } });
+    const d = add(c, { at: '11:00', to: '11:45', s: RP });
+    const L = legs(c);
+    const toHome = L.find((x) => x.kind === 'between');
+    expect([toHome.fromSessionId, toHome.gapToSessionId, toHome.toLoc.suburb, toHome.toHome]).toEqual([a.id, d.id, 'Willetton', true]);
+    expect([hhmm(toHome.startMin), hhmm(toHome.endMin)]).toEqual(['10:30', '10:55']);   // leaves when the session ends
+    expect(L.some((x) => x.kind === 'end')).toBe(false);                                   // already home
+    expect(c.deskWorkPlan(d)).toMatchObject({ mode: 'home', auto: true, reason: 'time', driveMin: 25 });
+  });
+
+  test('not enough time to get home → done where you are: no stop, the drive home comes after', () => {
+    const c = load();
+    const a = add(c, { at: '09:30', to: '10:30', s: { address: OSBORNE, patient: 'Adon' } });
+    const d = add(c, { at: '10:40', to: '11:30', s: RP });                                  // 10 min free < 25 min drive
+    expect(c.deskWorkPlan(d)).toMatchObject({ mode: 'here', reason: 'notime', driveMin: 25, gapMin: 10 });
+    const L = legs(c);
+    expect(L.map((x) => x.kind)).toEqual(['start', 'end']);
+    expect(L[1].fromSessionId).toBe(a.id);
+  });
+
+  test('the next client after desk work at home is reached from home', () => {
+    const c = load();
+    add(c, { at: '09:00', to: '10:00', s: { address: OSBORNE, patient: 'A' } });
+    const d = add(c, { at: '11:00', to: '12:00', s: RP });
+    const b = add(c, { at: '13:00', to: '14:00', s: { address: JOONDALUP, patient: 'B' } });
+    const out = legs(c).find((x) => x.kind === 'between' && x.toSessionId === b.id);
+    expect([out.fromSessionId, out.fromLoc.suburb, out.travelMin]).toEqual([d.id, 'Willetton', 40]);
+  });
+
+  test('the therapist\'s choice wins; no base for the day → where you are', () => {
+    const c = load();
+    add(c, { at: '09:30', to: '10:30', s: { address: OSBORNE, patient: 'Adon' } });
+    const d = add(c, { at: '11:00', to: '11:45', s: Object.assign({}, RP, { travel: { desk: 'here' } }) });
+    expect(c.deskWorkPlan(d)).toMatchObject({ mode: 'here', auto: false, reason: 'chosen' });
+    expect(legs(c).some((x) => x.gapToSessionId === d.id)).toBe(false);
+    c.SESSIONS[d.id].travel = { desk: 'home' };
+    c.SESSIONS[d.id].startH = 10; c.SESSIONS[d.id].startM = 35;                            // no time, but chosen
+    expect(c.deskWorkPlan(d)).toMatchObject({ mode: 'home', reason: 'chosen' });
+    vm.runInContext('calendarWeekLocations = function () { return {}; };', c);
+    expect(c.deskWorkPlan(d)).toMatchObject({ mode: 'here', reason: 'nobase', homeAvailable: false });
+  });
+
+  test('what counts as desk work: non-face-to-face and reports; never a client session, lunch, CPD or a block with an address', () => {
+    const c = load();
+    expect(c.isDeskWork({ booking: { group: 'nf2f' } })).toBe(true);
+    expect(c.isDeskWork({ booking: { group: 'report' } })).toBe(true);
+    for (const t of ['admin', 'casenote', 'report']) expect(c.isDeskWork({ type: t })).toBe(true);
+    for (const t of ['lunch', 'cpd', 'therapy', 'outlook']) expect(c.isDeskWork({ type: t })).toBe(false);
+    expect(c.isDeskWork({ type: 'admin', title: 'Client Appointment - X' })).toBe(false);
+    const c2 = load();
+    add(c2, { at: '09:00', to: '10:00', s: { address: OSBORNE, patient: 'A' } });
+    const d = add(c2, { at: '11:00', to: '12:00', s: Object.assign({}, RP, { address: JOONDALUP }) });
+    expect(c2.sessionLocation(d).source).toBe('session.address');                        // its own place wins
+  });
+
+  test('saving where it happens PATCHes travel.desk only; failure restores it', async () => {
+    const c = load();
+    const d = add(c, { at: '11:00', to: '12:00', s: RP });
+    expect(await c.setDeskWorkPlace(d.id, 'here')).toBe(true);
+    expect(JSON.parse(c.fetch.mock.calls[0][1].body)).toEqual({ desk: 'here' });
+    expect(c.SESSIONS[d.id].travel).toEqual({ desk: 'here' });
+    c.fetch.mockImplementationOnce(async () => ({ ok: false, status: 500, json: async () => ({ error: 'down' }) }));
+    expect(await c.setDeskWorkPlace(d.id, null)).toBe(false);
+    expect(c.SESSIONS[d.id].travel).toEqual({ desk: 'here' });
+  });
+});
+
+describe('a drive whose next stop IS home has no Direct ⇄ Via home switch (28 Oct 2026 bug)', () => {
+  test('the leg to an appointment at home is flagged toHome and the overlay draws no switch', () => {
+    const c = load();
+    const a = add(c, { at: '09:30', to: '10:30', s: { address: OSBORNE, patient: 'Adon' } });
+    add(c, { at: '11:00', to: '11:45', s: { address: HOME.addr, title: 'Resource Preparation', type: 'custom' } });
+    const leg = legs(c).find((x) => x.kind === 'between');
+    expect([leg.via, leg.toHome, leg.homeAvailable, leg.gapFromSessionId]).toEqual(['home-return', true, false, a.id]);
+    const appended = [];
+    const col = { appendChild: (n) => appended.push(n) };
+    const made = [];
+    c.document.createElement = () => { const n = { style: {}, dataset: {}, classList: { add() {}, remove() {}, toggle() {} }, addEventListener() {}, setAttribute() {}, appendChild: (k) => made.push(k), querySelector: () => null, querySelectorAll: () => [] }; return n; };
+    c.renderSegmentOverlay(col, leg);
+    expect(made.some((n) => n.className === 't-switch')).toBe(false);
+  });
+});
+
+describe('the travel panel names the real next stop (28 Oct 2026)', () => {
+  function panelFor(c, pick) {
+    const body = { innerHTML: '', querySelector: () => null, querySelectorAll: () => [] };
+    c.document.getElementById = (id) => (id === 'travel-panel-body' ? body : null);
+    c._renderTravelPanel(legs(c).find(pick));
+    return body.innerHTML;
+  }
+  test('session → desk work: where it happens, not Direct / Via home; never "next client"', () => {
+    const c = load();
+    add(c, { at: '09:30', to: '10:30', s: { address: OSBORNE, patient: 'Adon Palliveettil' } });
+    const d = add(c, { at: '11:00', to: '11:45', s: { title: 'Resource Preparation', booking: { kind: 'resource-prep', group: 'nf2f' }, type: 'custom' } });
+    const html = panelFor(c, (x) => x.gapToSessionId === d.id);
+    expect(html).toContain('to Home · 11:00');
+    expect(html).toContain('>Do it at home</button>');
+    expect(html).toContain('>Do it here (no drive)</button>');
+    expect(html).toContain('Suggested: there is time to get home first (25 min drive).');
+    expect(html).not.toContain('data-mode="home"');
+    expect(html).not.toMatch(/next client/);
+  });
+  test('desk work done where you are shows in the gap with one click to move it home', () => {
+    const c = load();
+    add(c, { at: '09:30', to: '10:30', s: { address: OSBORNE, patient: 'A' } });
+    add(c, { at: '10:40', to: '11:30', s: { title: 'Case Noting', booking: { kind: 'case-noting', group: 'nf2f' }, type: 'custom' } });
+    const html = panelFor(c, (x) => x.kind === 'end');
+    expect(html).toContain('Desk work in this gap');
+    expect(html).toContain('not enough time to get home first (25 min drive, 10 min free)');
+    expect(html).toContain('data-desk-set="home"');
+  });
+  test('between two clients the direct option names the next client', () => {
+    const c = load();
+    add(c, { at: '10:00', to: '11:00', s: { address: OSBORNE, patient: 'A' } });
+    const b = add(c, { at: '12:00', to: '13:00', s: { address: JOONDALUP, patient: 'Sam Pell' } });
+    expect(panelFor(c, (x) => x.kind === 'between' && x.toSessionId === b.id)).toContain('>Go direct to Sam Pell</button>');
+  });
+});
+

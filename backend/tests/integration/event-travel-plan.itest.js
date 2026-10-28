@@ -63,6 +63,24 @@ describe('PATCH /api/events/:dbId/travel', () => {
     expect(list.body.events.find(e => e.id === ev.id).custom_metadata.travel).toEqual({});
   });
 
+  test('desk work: where it happens is stored alone (home / here / null), keeps the other answers, and rejects anything else', async () => {
+    const app = buildApp();
+    const { agent, user } = await agentFor(app);
+    const ev = await seedEvent(user.id);
+    await agent.patch(`/api/events/${ev.id}/travel`).send({ next: 'direct', afterOffsetMin: 10 });
+    const r1 = await agent.patch(`/api/events/${ev.id}/travel`).send({ desk: 'here' });
+    expect(r1.status).toBe(200);
+    expect(r1.body.travel).toEqual({ next: 'direct', afterOffsetMin: 10, desk: 'here' });
+    const r2 = await agent.patch(`/api/events/${ev.id}/travel`).send({ desk: 'home' });
+    expect(r2.body.travel.desk).toBe('home');
+    const r3 = await agent.patch(`/api/events/${ev.id}/travel`).send({ desk: null });
+    expect(r3.body.travel).toEqual({ next: 'direct', afterOffsetMin: 10 });
+    expect((await agent.patch(`/api/events/${ev.id}/travel`).send({ desk: 'cafe' })).status).toBe(400);
+    const { agent: ro, user: roUser } = await agentFor(app, 'read_only');
+    const roEv = await seedEvent(roUser.id);
+    expect((await ro.patch(`/api/events/${roEv.id}/travel`).send({ desk: 'home' })).status).toBe(403);
+  });
+
   test('rejects malformed specs, another user\'s event, and read-only accounts', async () => {
     const app = buildApp();
     const { agent, user } = await agentFor(app);

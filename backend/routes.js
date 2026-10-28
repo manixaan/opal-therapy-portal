@@ -2576,12 +2576,17 @@ router.patch('/api/events/:dbId/travel', requireAuth, async (req, res) => {
     // home in between. null = automatic (home when there is time).
     const next = 'next' in body ? (body.next === null ? null : (body.next === 'direct' || body.next === 'home' ? body.next : undefined)) : null;
     if (next === undefined) return res.status(400).json({ error: 'next must be null, "direct" or "home"' });
+    // Where a desk-work block happens (28 Oct 2026): at home, where the
+    // therapist already is, or null = automatic (home when there is time).
+    const desk = 'desk' in body ? (body.desk === null ? null : (body.desk === 'home' || body.desk === 'here' ? body.desk : undefined)) : null;
+    if (desk === undefined) return res.status(400).json({ error: 'desk must be null, "home" or "here"' });
     const travel = {}, replaced = [];
     if ('before' in body) { replaced.push('before'); if (before) travel.before = before; }
     if ('after'  in body) { replaced.push('after');  if (after)  travel.after  = after; }
     if ('beforeOffsetMin' in body) { replaced.push('beforeOffsetMin'); if (beforeOffset !== null) travel.beforeOffsetMin = beforeOffset; }
     if ('afterOffsetMin'  in body) { replaced.push('afterOffsetMin');  if (afterOffset  !== null) travel.afterOffsetMin  = afterOffset; }
     if ('next' in body) { replaced.push('next'); if (next) travel.next = next; }
+    if ('desk' in body) { replaced.push('desk'); if (desk) travel.desk = desk; }
     const r = await db.pool.query(
       `UPDATE events
           SET custom_metadata = COALESCE(custom_metadata, '{}'::jsonb) || jsonb_build_object('travel',

@@ -499,7 +499,20 @@ function sploseLocationForSession(s) {
       kind:   'visit'
     };
   }
-  // 4) No address: the therapist stays where they were. 'unknown' marks a
+  // 4) Desk work with no address of its own happens at the day's base (home)
+  //    when there is time to get there, or when the therapist said so.
+  if (isDeskWork(s)) {
+    const plan = deskWorkPlan(s);
+    if (plan.mode === 'home') {
+      const b = plan.base;
+      return {
+        source: 'desk-home', address: b.addr || null, suburb: b.suburb || null,
+        label: b.label || 'Home', region: b.region || (b.suburb ? suburbRegion(b.suburb) : 'central'),
+        kind: 'desk'
+      };
+    }
+  }
+  // 5) No address: the therapist stays where they were. 'unknown' marks a
   //    client session whose place may be set later; 'none' is everything else.
   const clientish = s.locationUnknown || CLIENT_ROUTE_TYPES.has(s.type);
   return {
@@ -519,9 +532,77 @@ function isPhysicalStop(s) {
 }
 
 function sessionLocation(s) {
+  // Desk work is not cached: where it happens follows the day (its base, and
+  // whether there is time to get there from the stop before).
+  if (isDeskWork(s) && !(s.address && isPlaceAddress(s.address))) return sploseLocationForSession(s);
   // Cached per session so overlays don't re-compute each scroll.
   if (!s.__loc) s.__loc = sploseLocationForSession(s);
   return s.__loc;
+}
+
+/* ---------- Desk work (28 Oct 2026, Antony's rule) ----------
+   A non-face-to-face block — resource preparation, case noting, a report,
+   emails, admin — with no address of its own. It happens at the day's base
+   (home) when there is time to get there from the stop before, so the drive
+   home ends at it and the next client is reached from home. The therapist
+   can say otherwise on the block (travel.desk):
+     'home'  do it at home, whatever the time
+     'here'  do it where I already am (no drive)
+     null    automatic: home when the drive fits in the gap before it
+   No base for the day → where they already are (nothing to drive to).
+   Lunch and CPD are not desk work: lunch is eaten where you are, and a
+   course is wherever it is held. */
+const DESK_TYPES = new Set(['admin', 'casenote', 'report']);
+function isDeskWork(s) {
+  if (!s || isTravelBlock(s) || isDirectService(s)) return false;
+  if (s.booking && (s.booking.group === 'nf2f' || s.booking.group === 'report')) return true;
+  return DESK_TYPES.has(s.type);
+}
+/* Where a desk block happens: { mode: 'home'|'here', auto, base, homeAvailable,
+   reason: 'chosen'|'start'|'time'|'notime'|'nobase', driveMin, gapMin, prevId }. */
+function deskWorkPlan(s) {
+  const choice = s && s.travel && (s.travel.desk === 'home' || s.travel.desk === 'here') ? s.travel.desk : null;
+  const base = s && s.day ? dayAnchorBase(s.day) : null;
+  const baseKey = base && !base.unset && !base.remote ? (base.addr || base.suburb) : null;
+  if (!baseKey) return { mode: 'here', auto: !choice, base: null, homeAvailable: false, reason: 'nobase' };
+  if (choice) return { mode: choice, auto: false, base, homeAvailable: true, reason: 'chosen' };
+  // The last stop with a place of its own before this block (other desk
+  // blocks are skipped: they would only ask the same question).
+  const start = sessionStartMin(s);
+  const prior = sessionsForDay(s.day).filter(x => x !== s && !isTravelBlock(x) && !isDeskWork(x)
+    && sessionEndMin(x) <= start && isPhysicalLocation(sessionLocation(x)));
+  const prev = prior.length ? prior[prior.length - 1] : null;
+  if (!prev) return { mode: 'home', auto: true, base, homeAvailable: true, reason: 'start' };
+  const prevKey = locTravelKey(sessionLocation(prev));
+  const driveMin = canonAddr(prevKey) === canonAddr(baseKey) ? 0 : travelMinutes(prevKey, baseKey);
+  const gapMin = start - sessionEndMin(prev);
+  const fits = !(driveMin > 0) || gapMin >= driveMin;
+  return { mode: fits ? 'home' : 'here', auto: true, base, homeAvailable: true,
+           reason: fits ? 'time' : 'notime', driveMin, gapMin, prevId: prev.id };
+}
+/* Save where a desk block happens. mode: 'home' | 'here' | null (automatic). */
+async function setDeskWorkPlace(sessionId, mode) {
+  const s = window.SESSIONS && window.SESSIONS[sessionId];
+  if (!s || !s.dbId) { showToast('Not saved', 'This block has no saved appointment behind it yet.', 'warn'); return false; }
+  const prev = Object.assign({}, s.travel || {});
+  const next = Object.assign({}, prev);
+  if (mode) next.desk = mode; else delete next.desk;
+  s.travel = next;
+  if (typeof refreshDayOverlays === 'function') refreshDayOverlays(s.day);
+  try {
+    const r = await fetch('/api/events/' + encodeURIComponent(s.dbId) + '/travel', {
+      method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ desk: mode || null }),
+    });
+    if (!r.ok) throw new Error(((await r.json().catch(() => ({}))).error) || ('HTTP ' + r.status));
+    registerTravelUndo(s, prev, mode === 'home' ? 'Do it at home' : mode === 'here' ? 'Do it here' : 'Where desk work happens');
+    return true;
+  } catch (e) {
+    s.travel = prev;
+    if (typeof refreshDayOverlays === 'function') refreshDayOverlays(s.day);
+    showToast('Could not change where this happens', e.message, 'warn');
+    return false;
+  }
 }
 function stripSuburb(s) {
   // "Willetton 6155" → "Willetton"; keeps bare names untouched.
@@ -2092,7 +2173,9 @@ function computeDayTravelSegments(day) {
       if (travel > 0 && homeKey && canonAddr(homeKey) === canonAddr(toKey)) {
         const ret = placeTravelLeg({ kind: 'end', anchorMin: sessionEndMin(curr), travelMin: travel, offsetMin: offsetOf(curr, 'after'), busy: busyFor(curr, next) });
         segs.push({
-          day, kind: 'between', via: 'home-return', plan: 'home', auto: plan.auto, homeAvailable: false,
+          // toHome: there is no other way to go — no Direct ⇄ Via home switch
+          // (28 Oct 2026: it was drawn here, and a click changed nothing).
+          day, kind: 'between', via: 'home-return', plan: 'home', auto: plan.auto, homeAvailable: false, toHome: true,
           fromLoc: locOf(from), toLoc: locOf(to),
           startMin: ret.startMin, endMin: ret.endMin, travelMin: travel, freeMin: 0,
           moved: ret.moved, tight: ret.tight || ret.endMin > sessionStartMin(next),
@@ -2280,7 +2363,8 @@ function renderSegmentOverlay(col, seg) {
   // a via-home gap — one switch per gap.
   const gapFrom = seg.kind === 'between' && seg.via !== 'home-out' && seg.via !== 'place-out' && seg.gapFromSessionId && window.SESSIONS
     ? window.SESSIONS[seg.gapFromSessionId] : null;
-  if (gapFrom && gapFrom.dbId && (seg.via === 'home-return' || seg.via === 'place-in' || seg.homeAvailable)) {
+  // Never on a drive whose next stop IS home: both ways would be the same drive.
+  if (gapFrom && gapFrom.dbId && !seg.toHome && (seg.via === 'home-return' || seg.via === 'place-in' || seg.homeAvailable)) {
     // Via home or via a saved place flips to Direct; Direct flips to home.
     const viaHome = seg.via === 'home-return' || seg.via === 'place-in';
     const viaName = seg.via === 'place-in' ? 'Via ' + (seg.toLoc.label || 'stop') : 'Via home';
@@ -2730,7 +2814,33 @@ function _renderTravelPanel(seg) {
   // Between two sessions: straight to the next client, or home in between.
   var gapFrom = seg.gapFromSessionId && window.SESSIONS ? window.SESSIONS[seg.gapFromSessionId] : null;
   var gapTo   = seg.gapToSessionId && window.SESSIONS ? window.SESSIONS[seg.gapToSessionId] : null;
-  if (gapFrom && gapTo) {
+  var deskTo = gapFrom && gapTo && isDeskWork(gapTo) && !(gapTo.address && isPlaceAddress(gapTo.address));
+  if (gapFrom && gapTo && deskTo) {
+    // Desk work next (28 Oct 2026): the question is where it happens, not
+    // which way to drive — at home (this drive), where I am, or elsewhere.
+    var dp = deskWorkPlan(gapTo);
+    var deskAt = function (x) { return _tpEsc(_tpFmtTime(x.startH, x.startM || 0) + ' ' + (_stopName(x) || x.title || 'desk work')); };
+    var deskWhy = dp.reason === 'chosen' ? 'Your choice: at home.'
+      : dp.reason === 'start' ? 'Suggested: you start the day at home.'
+      : 'Suggested: there is time to get home first (' + (dp.driveMin || 0) + ' min drive).';
+    html += '<div class="tp-section-title">Travel from ' + deskAt(gapFrom) + ' to Home · ' + deskAt(gapTo) + '</div>';
+    html += '<div class="tp-plan-opts tp-desk" data-desk-session="' + _tpEsc(gapTo.id) + '">' +
+      '<button type="button" class="tp-plan-opt on" data-desk="home">Do it at home</button>' +
+      '<button type="button" class="tp-plan-opt" data-desk="here">Do it here (no drive)</button>' +
+      '<button type="button" class="tp-plan-opt" data-desk-else>Somewhere else…</button>' +
+      '</div><div class="tp-plan-hint">' + _tpEsc(deskWhy) + '</div>' +
+      '<div class="tp-plan-oneoff tp-desk-else" hidden><input type="text" class="tp-addr" data-desk-addr placeholder="Where will you do it? Type an address" aria-label="Where this desk work happens" autocomplete="off">' +
+      '<div class="tp-plan-hint">Pick a suggestion or press Enter. It is saved on ' + _tpEsc(gapTo.title || 'the block') + ' and travel is recalculated.</div></div>';
+  } else if (gapFrom && gapTo && seg.toHome) {
+    // The next stop IS home: one drive home, no Direct / Via home choice.
+    var homeAt = function (x) { return _tpEsc(_tpFmtTime(x.startH, x.startM || 0) + ' ' + (_stopName(x) || 'session')); };
+    html += '<div class="tp-section-title">Travel from ' + homeAt(gapFrom) + ' to Home · ' + homeAt(gapTo) + '</div>';
+    html += '<div class="tp-plan-opts tp-between" data-between="' + _tpEsc(gapFrom.id) + '">' +
+      '<button type="button" class="tp-plan-opt" data-else-open>Go somewhere else in between</button>' +
+      '</div><div class="tp-plan-hint">' + _tpEsc((_stopName(gapTo) || 'The next appointment') + ' is at home, so this is the drive home.') + '</div>' +
+      '<div class="tp-plan-oneoff tp-else" hidden><input type="text" class="tp-addr" data-else-addr placeholder="Where are you going? Type an address" aria-label="Place to go in between" autocomplete="off">' +
+      '<div class="tp-plan-hint">Pick a suggestion or press Enter. Travel there and on home is recalculated.</div></div>';
+  } else if (gapFrom && gapTo) {
     var plan = betweenTravelPlan(gapFrom, gapTo, dayAnchorBase(seg.day));
     var goingHome = !!plan.home;
     var placeName = plan.placeAvailable ? (resolveTravelPoint(sessionTravelOverride(gapFrom, 'after'), seg.day) || {}).label || 'the saved place' : '';
@@ -2744,7 +2854,7 @@ function _renderTravelPanel(seg) {
     var stopAt = function (x) { return _tpEsc(_tpFmtTime(x.startH, x.startM || 0) + ' ' + (_stopName(x) || 'session')); };
     html += '<div class="tp-section-title">Travel from ' + stopAt(gapFrom) + ' to ' + stopAt(gapTo) + '</div>';
     html += '<div class="tp-plan-opts tp-between" data-between="' + _tpEsc(gapFrom.id) + '">' +
-      '<button type="button" class="tp-plan-opt' + (plan.mode === 'direct' ? ' on' : '') + '" data-mode="direct">Go direct to next client</button>' +
+      '<button type="button" class="tp-plan-opt' + (plan.mode === 'direct' ? ' on' : '') + '" data-mode="direct">Go direct to ' + _tpEsc(_stopName(gapTo) || 'the next stop') + '</button>' +
       (plan.homeAvailable ? '<button type="button" class="tp-plan-opt' + (plan.mode === 'home' ? ' on' : '') + '" data-mode="home">Go home in between</button>' : '') +
       // A saved Go Somewhere Else place is its own way; choosing it clears the
       // Direct / Home choice so the place applies again.
@@ -2755,6 +2865,8 @@ function _renderTravelPanel(seg) {
       '<div class="tp-plan-oneoff tp-else" hidden><input type="text" class="tp-addr" data-else-addr placeholder="Where are you going? Type an address" aria-label="Place to go in between" autocomplete="off">' +
       '<div class="tp-plan-hint">Pick a suggestion or press Enter. Travel there and on to ' + _tpEsc(_stopName(gapTo) || 'the next client') + ' is recalculated.</div></div>';
   }
+
+  html += _deskHereList(seg);
 
   // What the leg belongs to, and whose time it keeps. The association is
   // computed from the day; only the time can be moved (drag on the calendar).
@@ -2849,6 +2961,7 @@ function _renderTravelPanel(seg) {
   body.innerHTML = html;
   _wireTravelPlan(body, seg);
   _wireRouteAddressEdits(body, seg);
+  _wireDeskChoices(body, seg);
   var between = body.querySelector('.tp-between');
   if (between) _wireBetweenElsewhere(body, between);
   if (between) between.querySelectorAll('[data-mode]').forEach(function (b) {
@@ -2939,6 +3052,87 @@ function _wireBetweenElsewhere(body, between) {
   if (typeof attachPlacesAutocomplete === 'function') attachPlacesAutocomplete(addr, apply);
   addr.addEventListener('keydown', function (e) {
     if (e.key === 'Enter') { e.preventDefault(); apply(addr.value, addr.dataset.lat, addr.dataset.lng, addr.dataset.placeId); }
+  });
+}
+
+/* Desk work done where the therapist already is, inside this leg's gap (or
+   after the day's last stop): each can be moved home with one click. */
+function _deskHereList(seg) {
+  if (!seg || !window.SESSIONS) return '';
+  var fromS = seg.gapFromSessionId ? window.SESSIONS[seg.gapFromSessionId] : (seg.kind === 'end' ? window.SESSIONS[seg.fromSessionId] : null);
+  var toS = seg.gapToSessionId ? window.SESSIONS[seg.gapToSessionId] : null;
+  if (!fromS) return '';
+  var lo = sessionEndMin(fromS), hi = toS ? sessionStartMin(toS) : 24 * 60;
+  var rows = sessionsForDay(seg.day).filter(function (x) {
+    if (!isDeskWork(x) || (x.address && isPlaceAddress(x.address))) return false;
+    var st = sessionStartMin(x);
+    if (st < lo || st >= hi) return false;
+    var p = deskWorkPlan(x);
+    return p.mode === 'here' && p.homeAvailable;
+  });
+  if (!rows.length) return '';
+  var html = '<div class="tp-section-title">Desk work in this gap</div><div class="tp-desk-here">';
+  rows.forEach(function (x) {
+    var p = deskWorkPlan(x);
+    var why = p.reason === 'chosen' ? 'done where you are — your choice'
+      : 'done where you are — not enough time to get home first (' + (p.driveMin || 0) + ' min drive, ' + Math.max(0, p.gapMin || 0) + ' min free)';
+    html += '<div class="tp-desk-row" data-desk-session="' + _tpEsc(x.id) + '">' +
+      '<div><strong>' + _tpEsc(_tpFmtTime(x.startH, x.startM || 0) + ' ' + (x.title || 'Desk work')) + '</strong>' +
+      '<div class="tp-plan-hint">' + _tpEsc(why) + '</div></div>' +
+      '<button type="button" class="tp-plan-opt" data-desk-set="home">Do it at home</button>' +
+      '</div>';
+  });
+  return html + '</div>';
+}
+/* Wire the desk-work controls: the three choices for the block this leg
+   leads to, "Somewhere else…" (saves an address on the block), and the
+   "Desk work in this gap" rows. Every change re-renders the panel. */
+function _wireDeskChoices(body, seg) {
+  var rerender = function (deskId) {
+    var x = window.SESSIONS && window.SESSIONS[deskId];
+    var day = (x && x.day) || seg.day;
+    var segs = computeDayTravelSegments(day);
+    var again = segs.find(function (y) { return y.gapToSessionId === deskId && y.kind === 'between'; })
+      || segs.find(function (y) { return seg.gapFromSessionId && y.gapFromSessionId === seg.gapFromSessionId; })
+      || segs.find(function (y) { return y.kind === seg.kind && y.fromSessionId === seg.fromSessionId; });
+    if (again) _renderTravelPanel(again); else closeTravelPanel();
+  };
+  body.querySelectorAll('.tp-desk [data-desk]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var id = b.closest('[data-desk-session]').getAttribute('data-desk-session');
+      var mode = b.getAttribute('data-desk');
+      var x = window.SESSIONS && window.SESSIONS[id];
+      var current = x && x.travel && x.travel.desk ? x.travel.desk : null;
+      if (mode === 'home' && current !== 'here') return;            // already at home
+      setDeskWorkPlace(id, mode).then(function (ok) { if (ok) rerender(id); });
+    });
+  });
+  body.querySelectorAll('[data-desk-set]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var id = b.closest('[data-desk-session]').getAttribute('data-desk-session');
+      setDeskWorkPlace(id, b.getAttribute('data-desk-set') || null).then(function (ok) { if (ok) rerender(id); });
+    });
+  });
+  var open = body.querySelector('[data-desk-else]');
+  var box = body.querySelector('.tp-desk-else');
+  var addr = box && box.querySelector('[data-desk-addr]');
+  if (!open || !box || !addr) return;
+  var id = open.closest('[data-desk-session]').getAttribute('data-desk-session');
+  open.addEventListener('click', function () {
+    box.hidden = !box.hidden;
+    open.classList.toggle('on', !box.hidden);
+    if (!box.hidden) addr.focus();
+  });
+  var busy = false;
+  var apply = function (a, lat, lng) {
+    a = String(a || '').trim();
+    if (!a || busy) return;
+    busy = true;
+    saveSessionAddress(id, a, lat, lng).then(function (ok) { busy = false; if (ok) rerender(id); });
+  };
+  if (typeof attachPlacesAutocomplete === 'function') attachPlacesAutocomplete(addr, apply);
+  addr.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); apply(addr.value, addr.dataset.lat, addr.dataset.lng); }
   });
 }
 
