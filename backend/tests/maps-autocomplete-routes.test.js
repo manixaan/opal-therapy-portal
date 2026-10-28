@@ -43,12 +43,23 @@ describe('maps autocomplete routes', () => {
     const r = await request(app).post('/api/maps/autocomplete').send({ input: '64 Talb', sessionToken: TOKEN });
 
     expect(r.status).toBe(200);
-    expect(r.body.suggestions).toEqual([{ placeId: 'ChIJabc', name: '64 Talbot Ave', addr: '64 Talbot Ave, Como WA, Australia' }]);
+    expect(r.body.suggestions).toEqual([{ placeId: 'ChIJabc', name: '64 Talbot Ave', addr: '64 Talbot Ave, Como WA, Australia', isPlace: false }]);
     const [url, body, opts] = axios.post.mock.calls[0];
     expect(url).toBe('https://places.googleapis.com/v1/places:autocomplete');
     expect(body).toMatchObject({ input: '64 Talb', includedRegionCodes: ['au'], sessionToken: TOKEN });
     expect(body.locationRestriction.rectangle.low.latitude).toBeLessThan(body.locationRestriction.rectangle.high.latitude);
     expect(opts.headers['X-Goog-Api-Key']).toBe('test-key-abcdefghijklmnop');
+  });
+
+  test('a named place (school, hospital) is flagged so the picker keeps its name; a street address is not', async () => {
+    axios.post.mockResolvedValue({ data: { suggestions: [
+      { placePrediction: { placeId: 'ChIJxav', text: { text: 'Xavier Catholic College, Forrest Road, Hilbert WA, Australia' },
+        structuredFormat: { mainText: { text: 'Xavier Catholic College' } }, types: ['school', 'point_of_interest', 'establishment'] } },
+      { placePrediction: { placeId: 'ChIJst', text: { text: '271 Forrest Rd, Hilbert WA, Australia' },
+        structuredFormat: { mainText: { text: '271 Forrest Rd' } }, types: ['street_address', 'geocode'] } },
+    ] } });
+    const r = await request(app).post('/api/maps/autocomplete').send({ input: 'xavier', sessionToken: TOKEN });
+    expect(r.body.suggestions.map(s => [s.name, s.isPlace])).toEqual([['Xavier Catholic College', true], ['271 Forrest Rd', false]]);
   });
 
   test('autocomplete drops a malformed session token and rejects empty input', async () => {

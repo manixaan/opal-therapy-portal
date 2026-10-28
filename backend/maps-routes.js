@@ -168,7 +168,7 @@ router.post('/api/maps/places', requireAuth, async (req, res) => {
  * Body: { input: string, sessionToken?: string }
  * Proxies to Place Autocomplete (New) — matches partial words as the user
  * types, restricted to Australia and to WA. Returns
- * { suggestions: [{ placeId, name, addr }] }; coordinates come from
+ * { suggestions: [{ placeId, name, addr, isPlace }] }; coordinates come from
  * GET /api/maps/place/:placeId once one is picked.
  */
 router.post('/api/maps/autocomplete', requireAuth, async (req, res) => {
@@ -197,6 +197,10 @@ router.post('/api/maps/autocomplete', requireAuth, async (req, res) => {
         placeId: p.placeId,
         name: p.structuredFormat?.mainText?.text || p.text?.text || '',
         addr: p.text?.text || '',
+        // A named place (school, hospital, day program…), not a street
+        // address: the picker keeps its name in front of the street address
+        // that Place Details returns. Types come free with the prediction.
+        isPlace: Array.isArray(p.types) && p.types.some((t) => t === 'establishment' || t === 'point_of_interest'),
       }));
     res.json({ suggestions });
   } catch (err) {

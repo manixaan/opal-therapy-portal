@@ -54,6 +54,20 @@ function haversineMetres(a, b) {
 const hasCoords = (x) => x && Number.isFinite(Number(x.lat)) && Number.isFinite(Number(x.lng))
   && !(Number(x.lat) === 0 && Number(x.lng) === 0);
 
+/**
+ * A saved row holding only the street address, matched again by the same
+ * place picked WITH its name ("Xavier Catholic College, 271 Forrest Rd…"):
+ * the saved text takes the named form. Only ever a pure prefix added in front
+ * of the same address — never a different address. Returns
+ * { address, normalized } or null.
+ */
+function namedUpgrade(row, cand) {
+  const old = row && row.normalized_address;
+  const next = cand && cand.normalized;
+  if (!old || !next || next === old || !next.endsWith(' ' + old)) return null;
+  return { address: cand.address, normalized: next };
+}
+
 /** The row in `rows` that `cand` duplicates, or null. Rows use DB column names. */
 function findDuplicate(rows, cand) {
   const norm = normaliseAddress(cand.address);
@@ -128,12 +142,15 @@ async function addClientLocation(pool, { clientId, organisationId, userId, input
   const existing = await listSavedClientLocations(pool, { clientId, organisationId });
   const dup = findDuplicate(existing, input);
   if (dup) {
+    const named = namedUpgrade(dup, input);
     const { rows } = await pool.query(
       `UPDATE client_service_locations
           SET place_id = COALESCE(place_id, $2), lat = COALESCE(lat, $3), lng = COALESCE(lng, $4),
+              formatted_address = COALESCE($5, formatted_address),
+              normalized_address = COALESCE($6, normalized_address),
               updated_at = NOW()
         WHERE id = $1 RETURNING *`,
-      [dup.id, input.placeId, input.lat, input.lng]);
+      [dup.id, input.placeId, input.lat, input.lng, named && named.address, named && named.normalized]);
     return { location: toClientLocation(rows[0] || dup), duplicate: true, of: 'saved' };
   }
   const label = LABELS.includes(input.label) ? input.label : (input.label || 'Other');
@@ -185,12 +202,15 @@ async function upsertDestination(pool, { userId, input }) {
   const existing = await listDestinations(pool, { userId });
   const dup = findDuplicate(existing, input);
   if (dup) {
+    const named = namedUpgrade(dup, input);
     const { rows } = await pool.query(
       `UPDATE travel_destinations
           SET use_count = use_count + 1, last_used_at = NOW(), updated_at = NOW(),
-              place_id = COALESCE(place_id, $2), lat = COALESCE(lat, $3), lng = COALESCE(lng, $4)
+              place_id = COALESCE(place_id, $2), lat = COALESCE(lat, $3), lng = COALESCE(lng, $4),
+              formatted_address = COALESCE($6, formatted_address),
+              normalized_address = COALESCE($7, normalized_address)
         WHERE id = $1 AND user_id = $5 RETURNING *`,
-      [dup.id, input.placeId, input.lat, input.lng, userId]);
+      [dup.id, input.placeId, input.lat, input.lng, userId, named && named.address, named && named.normalized]);
     return { destination: toDestination(rows[0] || dup), duplicate: true };
   }
   const { rows } = await pool.query(
@@ -209,7 +229,7 @@ async function upsertDestination(pool, { userId, input }) {
 
 module.exports = {
   DUP_RADIUS_M, LABELS,
-  normaliseAddress, haversineMetres, findDuplicate, cleanLocationInput,
+  normaliseAddress, haversineMetres, findDuplicate, namedUpgrade, cleanLocationInput,
   toClientLocation, toDestination,
   listSavedClientLocations, previousBookingAddresses, addClientLocation, markClientLocationUsed,
   listDestinations, upsertDestination,
