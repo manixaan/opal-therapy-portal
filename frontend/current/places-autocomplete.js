@@ -48,6 +48,10 @@
         .catch(function () { return {}; })
         .then(function (d) {
           var addr = d.addr || it.addr;
+          // A named place keeps its name: Place Details returns the street
+          // address only, so "Xavier Catholic College" would become
+          // "271 Forrest Rd, Hilbert WA 6112". Street addresses are unchanged.
+          if (it.isPlace && it.name && addr.toLowerCase().indexOf(it.name.toLowerCase()) === -1) addr = it.name + ', ' + addr;
           var lat = d.lat != null ? String(d.lat) : '', lng = d.lng != null ? String(d.lng) : '';
           inputEl.value = addr;
           if (lat && lng) { inputEl.dataset.lat = lat; inputEl.dataset.lng = lng; }

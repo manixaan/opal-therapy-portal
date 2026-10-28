@@ -65,6 +65,22 @@ describe('client_service_locations', () => {
     expect(saved[0].normalized_address).toBe('20 example road canning vale 6155');
   });
 
+  test('a place saved as its bare street address takes its name when picked again with it — never a different address', async () => {
+    const app = buildApp();
+    const { agent } = await agentFor(app);
+    const r1 = await agent.post('/api/client-locations/501').send({ address: '271 Forrest Rd, Hilbert WA 6112, Australia', label: 'Other', placeId: 'ChIJxav' });
+    expect(r1.status).toBe(201);
+    const r2 = await agent.post('/api/client-locations/501').send({ address: 'Xavier Catholic College, 271 Forrest Rd, Hilbert WA 6112, Australia', label: 'School', placeId: 'ChIJxav' });
+    expect(r2.status).toBe(200);
+    expect(r2.body).toMatchObject({ duplicate: true, location: { id: r1.body.location.id, address: 'Xavier Catholic College, 271 Forrest Rd, Hilbert WA 6112, Australia' } });
+    // Same place id but an unrelated address: matched as the same place, text left alone.
+    const r3 = await agent.post('/api/client-locations/501').send({ address: 'Somewhere else entirely', placeId: 'ChIJxav' });
+    expect(r3.body.location.address).toBe('Xavier Catholic College, 271 Forrest Rd, Hilbert WA 6112, Australia');
+    const saved = await rows('client_service_locations');
+    expect(saved).toHaveLength(1);
+    expect(saved[0].normalized_address).toBe('xavier catholic college 271 forrest road hilbert 6112');
+  });
+
   test('the Splose address is never copied into the portal', async () => {
     const { agent } = await agentFor(buildApp());
     const r = await agent.post('/api/client-locations/501').send({ address: '12 Example St, Willetton WA 6155' });
