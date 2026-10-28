@@ -31,3 +31,12 @@ Payroll Automation's tracker checklist shows every item unchecked, but substanti
 
 ## Re-verified 2026-10-27
 No commit since last night's audit (`896ace1`) touched this feature's files — the true window (`896ace1..41f45ed`) holds only Calendar sync-settings/Outlook/Splose work (see Portal - Splose - Outlook's folder). Re-ran the unit suite (81/81) and the integration suite (accounting-phase2, accounting-routes, finance-routes, invoicing, onboarding-payroll-xero: 63/63) tonight — same results as last night. Evidence label unchanged.
+
+## Re-verified 2026-10-28
+Real window tonight is `41f45ed..15acf0c` (travel desk-work, place-names autocomplete, a
+dependency patch — see the morning brief §6); none of it touches `finance-routes.js`,
+`accounting-routes.js` or any `xero-*.js` file. Re-ran the unit set (`finance-flags`,
+`finance-routes`, `xero-payroll-api`, `xero-payroll-mapping`, `xero-payroll-sync`,
+`onboarding-payroll` — 77/77) and the integration set (`finance-routes`,
+`accounting-routes`, `accounting-phase2`, `invoicing`, `onboarding-payroll-xero` —
+63/63) tonight — same results as every prior night. Evidence label unchanged.

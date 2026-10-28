@@ -32,3 +32,12 @@ None against tracker stage. The tracker's own next_action already separates the 
 
 ## Re-verified 2026-10-27
 No commit since last night's audit (`896ace1`) touched `snapshot-routes.js` or `reports.js` — the true window (`896ace1..41f45ed`) holds only Calendar sync-settings/Outlook/Splose work. Re-ran `tests/integration/snapshot.itest.js` (6/6) tonight — same as last night. Still no code anywhere for client appointment reminders. Evidence label unchanged.
+
+## Re-verified 2026-10-28
+Real window tonight is `41f45ed..15acf0c` (a desk-work travel feature, a place-names
+autocomplete feature, and a dependency patch — see the morning brief §6); none of it
+touches `snapshot-routes.js` or `reports.js`. Re-ran `tests/integration/snapshot.itest.js`
+(6/6) and `tests/frontend-stage3-guards.test.js` (part of a 1597-pass/12-skip batch)
+tonight — same as every prior night. Still no cron/scheduler, SMS/email-reminder
+wiring, or "reminded" flag anywhere for client appointment reminders. Evidence label
+unchanged.

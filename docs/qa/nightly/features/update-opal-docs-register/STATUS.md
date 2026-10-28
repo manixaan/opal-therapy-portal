@@ -23,3 +23,7 @@ None. The tracker's own next_action already states this correctly: update the Ex
 
 ## Re-verified 2026-10-27
 Re-searched tonight; still no code anywhere matches this card. Unchanged.
+
+## Re-verified 2026-10-28
+Re-searched tonight (`backend/*.js`, `frontend/current/*.js` for "docs register",
+"document register"): no hits. Unchanged.

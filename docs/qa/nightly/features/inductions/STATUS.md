@@ -42,3 +42,13 @@ None against tracker stage. The disagreement is internal to the tracker: the "Sp
 
 ## Re-verified 2026-10-27
 No commit since last night's audit (`896ace1`) touched this feature's files — the true window (`896ace1..41f45ed`) holds only Calendar sync-settings/Outlook/Splose work (see Portal - Splose - Outlook's folder). Re-ran the unit suite tonight: 223/223 passed, same as last night. `e2e/tests/tutorials.spec.js` still proves the walkthrough tab. Evidence label unchanged.
+
+## Re-verified 2026-10-28
+Real window tonight is `41f45ed..15acf0c` (travel desk-work, place-names autocomplete,
+a dependency patch — see the morning brief §6); none of it touches `learning-routes.js`,
+`learning-content.js`, `induction-assistant-routes.js` or the induction/walkthrough
+frontend. Re-ran the unit set and the integration set
+(`learning-admin.itest.js`, `learning.itest.js`, `onboarding-induction.itest.js`,
+`induction-assistant.itest.js` — 152 passed across that integration batch together
+with Interactive Assessments' and Opa Mobile Companion's files) tonight — all pass.
+Evidence label unchanged.

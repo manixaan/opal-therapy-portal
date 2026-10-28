@@ -34,3 +34,14 @@ None on tracker stage (card doesn't claim more than "idea"). The gap is real and
 
 ## Re-verified 2026-10-27
 No commit since last night's audit (`896ace1`) touched `profile-routes.js` or `profile.js` — the true window (`896ace1..41f45ed`) holds only Calendar sync-settings/Outlook/Splose work. Re-confirmed tonight: still no dedicated test for the leave/CPD submit→approve→reject round trip. Evidence label unchanged.
+
+## Re-verified 2026-10-28
+Real window tonight is `41f45ed..15acf0c` (travel desk-work, place-names autocomplete,
+a dependency patch — see the morning brief §6); none of it touches `profile-routes.js`
+or `profile.js`. Re-ran `credential-surface-guards`, `credential-extraction`,
+`smart-route-backend`, `travel-work-location-gate` (unit, all pass) and
+`readonly-and-hardening`, `credential-scans`, `documents` (integration) tonight. The
+same single `readonly-and-hardening.itest.js` D-6/D-7 root/chmod failure reproduced
+again — unchanged, still believed a root-uid sandbox artifact, still unconfirmed under
+a non-root runner. Still no dedicated test for the leave/CPD submit→approve→reject
+round trip. Evidence label unchanged.

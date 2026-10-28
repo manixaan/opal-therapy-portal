@@ -2,8 +2,8 @@
 
 - Tracker stage: idea
 - Tracker environment: none
-- Evidence label: **broken** (same confirmed bug as every night since 2026-10-17 — now the 11th consecutive night)
-- Addressed in change window (since last audit, 2026-10-26 `896ace1`): **yes** — a genuinely new Calendar Sync Settings feature landed, plus two bug fixes, all in this feature's own files. See "Tonight's change" below.
+- Evidence label: **broken** (same confirmed bug as every night since 2026-10-17 — now the 12th consecutive night)
+- Addressed in change window (since last audit, 2026-10-27 `41f45ed`): no — tonight's true window (`41f45ed..15acf0c`) is a travel desk-work feature, a place-names autocomplete feature and a dependency patch, none touching any `splose-*.js`, `outlook-*.js`, `sync-*.js` or `travel-sync-routes.js`/`travel-outlook-sync.js` file. See "Re-verified 2026-10-28" below.
 - Created (code exists): yes
 
 ## Tonight's change (2026-10-26/27, the true window since the last pushed audit)
@@ -54,22 +54,29 @@ checklist item "Confirm the Portal and Splose end up matching in both
 directions" — still all-unchecked in the tracker, see Disagreement. None of
 this changed again tonight; re-verified below against the same code.
 
-## Note: the "Make room" booking feature (carried forward, still no tracker card)
-Flagged first on 2026-10-24's audit: five commits (`94dad51`, `58f3fec`,
-`c86355b`, `ac4912e`, `74d9d91`) shipped a booking-panel feature —
-shortening/splitting existing calendar blocks to make room for a new
-session — touching `frontend/current/travel.js`, `booking-route.css` and
-`mockup_v3.html`, with `tests/smart-booking-route.test.js` (still passes).
-Pure frontend, no new backend route, does not touch `splose-*`,
-`outlook-*` or `travel-sync-routes.js`. Still **no tracker card of its
-own** as of tonight — unresolved, carried forward again in the morning
+## Note: the travel/booking panel (carried forward, still no tracker card)
+Flagged first on 2026-10-24's audit: five commits shipped a "Make room"
+booking-panel feature — shortening/splitting existing calendar blocks to make
+room for a new session — touching `frontend/current/travel.js`,
+`booking-route.css` and `mockup_v3.html`, with `tests/smart-booking-route.test.js`
+(still passes). Tonight the same `frontend/current/travel.js` and
+`backend/routes.js` (a different handler — see "Located files") grew a new
+desk-work rule (where a non-face-to-face/report block happens: at home, where
+the therapist is, or automatic), tested by the new
+`tests/travel-physical-route.test.js` (126 lines, passes) and an addition to
+`tests/integration/event-travel-plan.itest.js` (passes). Pure frontend +
+one generic events-metadata PATCH endpoint; neither change touches `splose-*`,
+`outlook-*`, `sync-*` or `travel-sync-routes.js`. Still **no tracker card of
+its own** as of tonight — unresolved, carried forward again in the morning
 brief's "what changed" section.
 
 ## Located files
 - `backend/outlook-oauth.js` — Microsoft Graph API client (unchanged).
 - `backend/routes.js` — legacy catch-all; `GET /api/outlook/categories`
-  (line 1466) — **unchanged, byte-for-byte identical to every prior night**
-  (re-read tonight).
+  (line 1487) — **unchanged, byte-for-byte identical to every prior night**
+  (re-read tonight). Tonight's own travel desk-work commit touched `routes.js`
+  too, but 1,100+ lines away, in the unrelated `PATCH /api/events/:dbId/travel`
+  handler — confirmed by reading the diff, not just the commit message.
 - `backend/travel-sync-routes.js`, `backend/travel-outlook-sync.js`,
   `backend/travel-feasibility.js`.
 - `backend/splose-link-routes.js`, `backend/splose-sync-routes.js`,
@@ -102,7 +109,7 @@ unchanged from every prior night, including tonight's sync-settings work,
 which touched `routes.js` elsewhere but not this route.** No test anywhere
 references `outlook/categories` or `getValidAccessToken` (re-confirmed by
 grep tonight). First reported 2026-10-17; repeated every night since;
-**still unfixed tonight, 2026-10-27 — the 11th consecutive night.**
+**still unfixed tonight, 2026-10-28 — the 12th consecutive night.**
 
 ## Tests and results
 Unit (re-run tonight, including new files): `splose-draft-sync.test.js`,
@@ -133,17 +140,27 @@ unchanged — still open, still largely manual/QA in nature rather than
 coding tasks.
 
 ## Commits in window that touched it
-`11aa73f`, `971cac1`, `3ef3965`, `ab75330`, `41f45ed` — see "Tonight's
-change" above. The 2026-10-22 commits `5d48f01`, `3ca80ad`, `d64389c` predate
-the true window (`896ace1..41f45ed`) — see "Recent history" above.
+None tonight — the true window (`41f45ed..15acf0c`) is a travel desk-work
+feature, a place-names autocomplete feature and a dependency patch (see
+"Note: the travel/booking panel" above), none in `splose-*.js`, `outlook-*.js`
+or `sync-*.js`. `11aa73f`, `971cac1`, `3ef3965`, `ab75330`, `41f45ed` (2026-10-27)
+and `5d48f01`, `3ca80ad`, `d64389c` (2026-10-22) predate this window — see
+"Tonight's change"/"Recent history" above.
 
 ## Disagreement
 Two, in opposite directions on the same card:
 1. The `broken` classification itself is unchanged — the `/api/outlook/categories`
    bug is exactly what the tracker's own `next_action` already names, for the
-   11th night running.
+   12th night running.
 2. The "Multi Calendar Rules" checklist is still behind the code: its c3 item
    ("Portal and Splose end up matching in both directions") describes
    something that now has a genuine, tested implementation (shipped
    2026-10-22), but reads as entirely unstarted (`todo`, all unchecked) in the
    tracker.
+
+## Re-verified 2026-10-28
+Re-ran the full 17-file unit set (243/243) and `sync-settings.itest.js` +
+`calendar-local-first.itest.js` (part of a 172-pass integration batch) tonight —
+same as last night. Re-read `GET /api/outlook/categories` (`routes.js:1487`)
+and `getValidAccessToken` (`routes.js:151`) byte-for-byte — unchanged. Evidence
+label unchanged: `broken`, 12th consecutive night.

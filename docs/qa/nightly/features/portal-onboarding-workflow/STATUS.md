@@ -2,9 +2,25 @@
 
 - Tracker stage: idea
 - Tracker environment: none
-- Evidence label: **broken** tonight (escalated from `needs-refinement` — see "New tonight" below; Stage 2's literal SharePoint-storage gap is still genuine on top of this)
-- Addressed in change window (since last audit, 2026-10-26 `896ace1`): no — the true window (`896ace1..41f45ed`) holds only Calendar sync-settings/Outlook/Splose commits, none touching any `onboarding-*.js` file. The 2026-10-22 8-commit "onboarding production-ready" push (see "Recent history" below) predates this window.
+- Evidence label: **broken**, 2nd consecutive night (first reported 2026-10-27, reproduced again 2026-10-28, still unconfirmed against the real deployment — see "Re-verified 2026-10-28" below; Stage 2's literal SharePoint-storage gap is still genuine on top of this)
+- Addressed in change window (since last audit, 2026-10-27 `41f45ed`): no — the true window (`41f45ed..15acf0c`) holds a travel desk-work feature, a place-names autocomplete feature and a dependency patch, none touching any `onboarding-*.js` file. The 2026-10-22 8-commit "onboarding production-ready" push (see "Recent history" below) predates this window.
 - Created (code exists): yes for Stage 1 and 2; Stage 3 (induction/setup/Activate) is now substantially built, as of 2026-10-22
+
+## Re-verified 2026-10-28 — still failing, 2nd consecutive night, still unconfirmed
+Real window tonight is `41f45ed..15acf0c` (travel desk-work, place-names autocomplete, a
+dependency patch — see the morning brief §6); none of it touches any `onboarding-*.js`
+file. The one incidental touch: `onboarding.html`'s `places-autocomplete.js?v=` pin
+bumped 1→2 (a shared address-autocomplete module used across the app, not onboarding
+logic) — confirmed via `node scripts/check-asset-pins.js`, clean. Re-ran
+`npx jest tests/onboarding-document-reader.test.js` tonight: **still fails**, identical
+error (`Cannot find module '@tesseract.js-data/eng/package.json'`), `ls
+node_modules/@tesseract.js-data/` still empty. Re-ran the full 27-file
+`onboarding-*.test.js` unit set (653/654, same single failure) and all 7
+`onboarding-*.itest.js` integration files (`onboarding-journey`,
+`onboarding-portal-route`, `onboarding-workflow`, `onboarding-defaults`,
+`onboarding-pack`, `onboarding-returns`, `onboarding` — 198/198 pass) tonight. Still
+needs a human to confirm `@tesseract.js-data/eng` is present in the real deployment;
+evidence label stays `broken` until then.
 
 ## New tonight (2026-10-27) — a test fails, likely a sandbox gap
 `npx jest tests/onboarding-document-reader.test.js` fails tonight: "the OCR

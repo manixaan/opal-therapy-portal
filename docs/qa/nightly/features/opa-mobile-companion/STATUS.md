@@ -34,3 +34,12 @@ None against tracker stage. The gap matches the tracker's own next_action: confi
 
 ## Re-verified 2026-10-27
 No commit since last night's audit (`896ace1`) touched this feature's files — the true window (`896ace1..41f45ed`) holds only Calendar sync-settings/Outlook/Splose work (see Portal - Splose - Outlook's folder). Re-ran `mobile-routes.test.js` (41/41) and `clinical-note-provider.test.js` (10/10) tonight — same as last night. Evidence label unchanged.
+
+## Re-verified 2026-10-28
+Real window tonight is `41f45ed..15acf0c` (travel desk-work, place-names autocomplete, a
+dependency patch — see the morning brief §6); none of it touches `case-note-routes.js`,
+`clinical-note-provider.js` or `mobile-routes.js`. Re-ran `case-note-routes.test.js`,
+`mobile-routes.test.js`, `clinical-note-provider.test.js` (unit, all pass) and
+`case-note-client-link.itest.js`/`case-note-deidentification.itest.js` (integration,
+both pass) tonight. No mobile-client codebase still exists in this repository to
+confirm real-device calls. Evidence label unchanged.

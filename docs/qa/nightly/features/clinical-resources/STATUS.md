@@ -133,3 +133,12 @@ Two, in opposite directions:
 
 ## Re-verified 2026-10-27
 No commit since last night's audit (`896ace1`) touched this feature's files — the true window (`896ace1..41f45ed`) holds only Calendar sync-settings/Outlook/Splose work (see Portal - Splose - Outlook's folder). Re-ran the full unit suite listed above tonight: 398 passed, 12 skipped, 0 failed — same as last night. Evidence label unchanged.
+
+## Re-verified 2026-10-28
+Real window tonight is `41f45ed..15acf0c` (travel desk-work, place-names autocomplete,
+a dependency patch — see the morning brief §6); none of it touches any resource-library
+or resource-hub file. Re-ran the full unit batch and the six integration files
+(`resources`, `resource-hub-v1`, `resource-library`, `resource-file-upload`,
+`resource-ingestion`, `resource-library-sharepoint`) tonight — all pass, no
+`resource-library.itest.js` deadlock flake this time. `docs/qa/BROWSER_QA_RESULTS.md`
+is still dated 2026-08-23 — no new browser proof. Evidence label unchanged.

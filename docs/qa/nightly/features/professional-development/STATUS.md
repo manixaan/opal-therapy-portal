@@ -29,3 +29,10 @@ The tracker card's title is ambiguous between two unrelated systems. Only the My
 
 ## Re-verified 2026-10-27
 No commit since last night's audit (`896ace1`) touched either CPD system's files — the true window (`896ace1..41f45ed`) holds only Calendar sync-settings/Outlook/Splose work. Re-ran `tests/integration/resource-hub-r2.itest.js` (33/33, includes the rh2 CPD logbook) tonight — same as last night. The My Profile CPD approve/reject flow still has no dedicated test. Evidence label unchanged.
+
+## Re-verified 2026-10-28
+Real window tonight is `41f45ed..15acf0c` (travel desk-work, place-names autocomplete,
+a dependency patch — see the morning brief §6); none of it touches either CPD system's
+files. Re-ran `tests/integration/resource-hub-r2.itest.js` tonight as part of a 172-pass
+integration batch — pass. The My Profile CPD approve/reject flow still has no dedicated
+test. Evidence label unchanged.

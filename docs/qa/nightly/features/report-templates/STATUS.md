@@ -36,3 +36,11 @@ None against tracker stage. One internal note: the tracker treats "Client Agreem
 
 ## Re-verified 2026-10-27
 No commit since last night's audit (`896ace1`) touched this feature's files — the true window (`896ace1..41f45ed`) holds only Calendar sync-settings/Outlook/Splose work (see Portal - Splose - Outlook's folder). Re-ran the unit suite tonight (interview-templates, templates-*, whodas-templates): 218/218 passed, same as last night. Evidence label unchanged.
+
+## Re-verified 2026-10-28
+Real window tonight is `41f45ed..15acf0c` (travel desk-work, place-names autocomplete, a
+dependency patch — see the morning brief §6); none of it touches `fca-routes.js`,
+`letter-routes.js` or `templates-routes.js`. Re-ran the 14-file FCA/letter/templates
+unit batch (569 pass) and the `fca-reports.itest.js`/`progress-note-letters.itest.js`/
+`templates.itest.js` integration set (part of a 172-pass batch) tonight — all pass.
+Still no browser/E2E proof for any of the three wizards. Evidence label unchanged.
