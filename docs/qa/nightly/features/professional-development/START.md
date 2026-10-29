@@ -22,12 +22,12 @@ Professional Development
 (none recorded)
 
 ## Where it lives today
-Two unrelated systems share the name "CPD": the My Profile submit→approve/reject workflow in `backend/profile-routes.js`, and the self-logged CPD-hours tracker in `backend/resource-hub-r2-routes.js` (`/api/rh2/cpd*`).
+System A (self-logged CPD tracker): `backend/resource-hub-r2-routes.js` (~lines 2304-2399), tested. System B (My Profile submit/approve/reject): `backend/profile-routes.js` (lines 204-312), untested.
 
 ## Start here
-First, clarify with the team which system this tracker card actually means — they are not the same feature. If it means the My Profile approve/reject workflow, the work is identical to the Employee Personal Page card's gap: add an integration test exercising submit→approve and submit→reject for CPD in `backend/profile-routes.js`, copying the pattern from `backend/tests/integration/resource-hub-r2.itest.js`.
+Add an integration test in `tests/integration/` (new file, or extend an existing profile-routes test) covering `/api/profile/cpd` POST → `/api/profile/cpd/:id/approve` → GET, and the reject path, as an owner approving/rejecting another user's submitted CPD activity, plus a 403 check for a non-owner caller. Follow the pattern in `tests/integration/resource-hub-r2.itest.js` for the sibling System A test. While there, consider whether the inline `canApprove(req.user)` check in `profile-routes.js` should move into `permissions.js` per the repo's stated convention — flag it to a human rather than refactoring silently, since it already works correctly.
 
 ## Done means
-The relevant system has a passing test for its full workflow; evidence label reaches `proven`.
+A new integration test exercises the CPD submit→approve→reject round trip in My Profile and passes. This closes the test gap shared with the Employee Personal Page card's "Review Portal Structure" task. Evidence label should move from `needs-refinement` toward `proven`.
 
 Tracker: 37f4e057-ae96-4a9e-a576-5f808b7dc8fb

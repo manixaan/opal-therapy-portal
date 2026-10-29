@@ -1,46 +1,44 @@
 # Report Templates
 
-- Tracker stage: idea
-- Tracker environment: none
+- Tracker stage: idea · Tracker environment: none
 - Evidence label: **tab-unproven**
-- Addressed in change window (since last audit, 2026-10-24): no — no commit this window touched `fca-routes.js`, `letter-routes.js` or `templates-routes.js`
-- Created (code exists): yes, for all three tasks
+- Addressed since the last audit (develop unchanged since 2026-10-28, also commit `15acf0c`): no — confirmed by real `git log --since=2026-10-15` on every located file, all empty.
+- Created (any located code): yes.
 
-## Per-task breakdown
+## Located
 
-### FCA
-- Located: `backend/fca-routes.js` + `fca.js`; guarded (`requireClinicalRead`/`requireClinicalWrite`).
-- Tests: `fca-docx-engine.test.js`, `fca-frontend-helpers.test.js`, `fca-preview-lifecycle.test.js`, `fca-preview-pages.test.js`, `fca-resolve-scalars.test.js`, `fca-wizard-behaviour.test.js` (unit) — **all pass** (re-run tonight); `tests/integration/fca-reports.itest.js` — **pass** (re-run tonight).
-- Browser/E2E proof: none.
+Shares the same FCA/letter engine as Interactive Assessments (`backend/fca-routes.js`, `letter-routes.js`, `backend/fca/`, `frontend/current/fca.js`, `letter.js`).
 
-### Progress Letter
-- Located: `backend/letter-routes.js` + `letter.js`; guarded identically.
-- Tests: `letter-docx-engine.test.js`, `letter-frontend-helpers.test.js`, `letter-template-map.test.js` (unit) — **all pass** (re-run tonight); `tests/integration/progress-note-letters.itest.js` — **pass** (re-run tonight).
-- Browser/E2E proof: none.
+**"Client Agreement Form"** maps to the service-agreement master served through `backend/templates-routes.js` (`/api/templates/*`) + `backend/templates/service-agreement-map.js`, which describes the real file `backend/service-agreements/templates/service-agreement-v2.2.docx` (121 unique content-control tags, verified against the shipped `.docx` by `templates-service-agreement-map.test.js`). This is the generic "complete an Opal master inside the portal, take an independent document away" capability. Note: `backend/service-agreement-routes.js` does **not** exist as a separate file — the service agreement is served via `templates-routes.js`, contrary to what CLAUDE.md's repo-map table might suggest at a glance.
 
-### Client Agreement Form
-- **Not a standalone wizard** — implemented inside the generic Resource Hub → Templates system: `backend/templates-routes.js` + `templates.js`, mapped via `backend/templates/service-agreement-map.js`; guarded (`requireTemplateRead`/`requireTemplateWrite`).
-- Tests: `templates-routes.test.js`, `templates-appendices.test.js`, `templates-export-boundary.test.js`, `templates-frontend-guards.test.js`, `templates-service-agreement-map.test.js` (unit) — **all pass** (re-run tonight); `tests/integration/templates.itest.js` — **pass** (re-run tonight).
-- Browser/E2E proof: none.
+Frontend: `frontend/current/templates.js`/`.css` (shares the Library/Templates-collection entry point with `fca.js`/`letter.js`).
 
-No TODO/FIXME found in any of these route files.
+## Guard check
 
-## Open tasks from the tracker
-"FCA", "Progress Letter", "Client Agreement Form" — all `todo`, no notes recorded on any.
+`templates-routes.js` mounts `requireAuth` plus the same `CLINICAL_ROLES`/`read_only` inline role gate as fca/letter/whodas (admin excluded) — by design it introduces no separate permission. Document access is re-fetched under `(organisation, creator)` on every request (own-only, 404 not 403 on a miss, matching the org-isolation pattern used elsewhere). No unguarded route. `node --check` clean.
 
-## Commits in window that touched it
-None — tonight's 8 commits touched none of this feature's files.
+## Tests and results
 
-## Disagreement
-None against tracker stage. One internal note: the tracker treats "Client Agreement Form" as its own generator, but it actually lives inside the shared Templates system alongside other document templates — worth knowing before assigning separate work to it.
+| Command | Result |
+|---|---|
+| `templates-appendices`, `templates-export-boundary`, `templates-frontend-guards`, `templates-routes`, `templates-service-agreement-map` (5 unit files) | PASS — all green |
+| shared `fca-docx-engine`/`letter-docx-engine` unit tests | PASS |
+| `templates.itest.js`, `fca-reports.itest.js`, `progress-note-letters.itest.js` (integration) | PASS |
 
-## Re-verified 2026-10-27
-No commit since last night's audit (`896ace1`) touched this feature's files — the true window (`896ace1..41f45ed`) holds only Calendar sync-settings/Outlook/Splose work (see Portal - Splose - Outlook's folder). Re-ran the unit suite tonight (interview-templates, templates-*, whodas-templates): 218/218 passed, same as last night. Evidence label unchanged.
+No failures anywhere.
 
-## Re-verified 2026-10-28
-Real window tonight is `41f45ed..15acf0c` (travel desk-work, place-names autocomplete, a
-dependency patch — see the morning brief §6); none of it touches `fca-routes.js`,
-`letter-routes.js` or `templates-routes.js`. Re-ran the 14-file FCA/letter/templates
-unit batch (569 pass) and the `fca-reports.itest.js`/`progress-note-letters.itest.js`/
-`templates.itest.js` integration set (part of a 172-pass batch) tonight — all pass.
-Still no browser/E2E proof for any of the three wizards. Evidence label unchanged.
+## Commits in window touching located files
+
+None.
+
+## Classification evidence
+
+Code for FCA, Progress Letter and the Client Agreement Form (service agreement master) is located, guarded, and every matching test passes, but no e2e spec or browser-QA entry exercises any of the three generation wizards. Confirmed via the same grep as Interactive Assessments: zero hits in both e2e spec files and in `BROWSER_QA_RESULTS.md`.
+
+## Open tracker tasks
+
+`[todo]` FCA, `[todo]` Progress Letter, `[todo]` Client Agreement Form — all three still open, all three map to tested-but-unproven-in-browser code.
+
+## Disagreement / notes
+
+Agree with the prior claude_update. Worth surfacing explicitly here since the tracker card never names it: "Client Agreement Form" is concretely `templates-routes.js` + `service-agreement-v2.2.docx`.

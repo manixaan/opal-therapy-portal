@@ -1,47 +1,32 @@
 # Employee Personal Page (My Profile Tab)
 
-- Tracker stage: idea
-- Tracker environment: none
+- Tracker stage: idea · Tracker environment: none
 - Evidence label: **needs-refinement**
-- Addressed in change window (since last audit, 2026-10-24): no — no commit this window touched `profile-routes.js` or `profile.js`
-- Created (code exists): yes
+- Addressed since the last audit: **no** — develop has not moved since last night's audit (2026-10-28, also commit `15acf0c`); tonight's true window is empty. `profile-routes.js` was touched by `74444eb` and `frontend/current/profile.js` by `a968e90` over the preceding fortnight (historical context, not tonight) — neither addresses the leave/CPD gap below.
+- Created (any located code): yes.
 
-## Located files
-- Backend: `backend/profile-routes.js` (1301 lines) — handles personal details, work locations, leave, CPD, documents/credentials, notifications, setup-status.
-- Frontend: `frontend/current/profile.js`, `PROFILE TAB` banner in `mockup_v3.html` (line ~4295).
+## Located
+
+`backend/profile-routes.js` (56KB) — full My Profile backend: leave (`/api/profile/leave*`), CPD (`/api/profile/cpd*`, same System B as the Professional Development card), documents (`/api/profile/documents*`), credentials (`/api/profile/credentials*`, scans/extraction), work-schedule, notification-prefs, setup-status, credential-reminder dismiss. Frontend: `frontend/current/profile.js`. Tab banner: `PROFILE TAB` (`mockup_v3.html:4307`).
 
 ## Guard check
-Every route uses `requireAuth`. Sensitive actions (leave/CPD approve, reject, credential verify) are additionally gated inline via `canApprove(req.user)` (owner-only) — correctly enforced. `work-schedule/:userId` also requires `requirePermission('view_all_travel')`. Not a defect.
+
+`requireAuth` on every route; leave/CPD approve/reject/view-all gated by inline `canApprove`/`canViewAll` (owner-only) rather than `permissions.js` middleware — a convention deviation, not a missing guard (functions correctly). Document download/delete checks `doc.user_id !== req.user.id && !canViewAll(req.user)` inline — same note applies.
 
 ## Tests and results
-- Documents + credentials: `tests/integration/readonly-and-hardening.itest.js`, `tests/credential-surface-guards.test.js`, `tests/credential-extraction.test.js`, `tests/integration/credential-scans.itest.js`, `tests/integration/documents.itest.js`.
-  - **Same single failure observed again tonight (2026-10-26)**, exactly as on 2026-10-16 through -24 (no 2026-10-25 brief was pushed — see the morning brief §7): `readonly-and-hardening.itest.js`, test "D-6/D-7: storage failure behaviour ... write failure → 5xx with NO orphaned row" — expected ≥500 on an unwritable storage directory (`chmod 0o755` restore after `fs.chmodSync`), got 201. **Likely cause: this sandbox runs the test process as root (`uid=0`), and Linux root bypasses file-permission bits, so the simulated write failure never actually happens here.** This is very likely an environment artifact of the nightly sandbox, not a proven application defect — it still has not been independently re-verified under a non-root runner, so it continues to be reported as observed rather than explained away.
-  - Unit tests (credential-surface-guards, credential-extraction) and integration (credential-scans, documents) — all pass (re-run tonight).
-- Work-schedule: `tests/smart-route-backend.test.js`, `tests/travel-work-location-gate.test.js` — pass.
-- **Leave requests and CPD (My Profile) submit→approve→reject: no dedicated test file found anywhere** in `backend/tests/` or `backend/tests/integration/` (confirmed by grep for the handler names). This matches the tracker's own next_action.
-- No E2E spec for the Profile tab. Browser QA row I (`docs/qa/BROWSER_QA_RESULTS.md`) only confirms the Leave/CPD/documents sections *render* (3/3) — it does not exercise the approve/reject workflow.
-- No TODO/FIXME found in `profile-routes.js`.
 
-## Open tasks from the tracker
-"Review Portal Structure" (manual QA checklist, status todo) — a human walkthrough task, not a coding task.
+Credentials and documents sections are covered indirectly through `tests/credential-surface-guards.test.js`, `tests/smart-route-backend.test.js`, and integration files `documents.itest.js`, `credential-scans.itest.js`, `stage2-pilot-readiness.itest.js`, `readonly-and-hardening.itest.js`, `audit.itest.js` (all `require`/exercise `profile-routes.js`, mostly for documents/credentials paths).
 
-## Commits in window that touched it
-None — tonight's 8 commits (resource privacy/upload, booking "Make room",
-a dependency patch) touched neither `profile-routes.js` nor `profile.js`.
+**Leave and CPD submit→approve→reject: no dedicated test anywhere.** Confirmed by grep across all unit and integration test files for `/api/profile/leave` and `/api/profile/cpd` as an actual HTTP call target — zero hits. The one `/api/profile/leave` string match found (`tests/onboarding-security.test.js`) is a path-allowlist unit assertion (`isPreEmployeePath`), never an endpoint call.
 
-## Disagreement
-None on tracker stage (card doesn't claim more than "idea"). The gap is real and matches the tracker's own next_action: the leave/CPD approve-reject round trip has no test.
+## Relevant commits (historical — predate last night's audit, not new tonight)
 
-## Re-verified 2026-10-27
-No commit since last night's audit (`896ace1`) touched `profile-routes.js` or `profile.js` — the true window (`896ace1..41f45ed`) holds only Calendar sync-settings/Outlook/Splose work. Re-confirmed tonight: still no dedicated test for the leave/CPD submit→approve→reject round trip. Evidence label unchanged.
+See above — neither commit addresses leave/CPD, and both are already several audit cycles old.
 
-## Re-verified 2026-10-28
-Real window tonight is `41f45ed..15acf0c` (travel desk-work, place-names autocomplete,
-a dependency patch — see the morning brief §6); none of it touches `profile-routes.js`
-or `profile.js`. Re-ran `credential-surface-guards`, `credential-extraction`,
-`smart-route-backend`, `travel-work-location-gate` (unit, all pass) and
-`readonly-and-hardening`, `credential-scans`, `documents` (integration) tonight. The
-same single `readonly-and-hardening.itest.js` D-6/D-7 root/chmod failure reproduced
-again — unchanged, still believed a root-uid sandbox artifact, still unconfirmed under
-a non-root runner. Still no dedicated test for the leave/CPD submit→approve→reject
-round trip. Evidence label unchanged.
+## Open tracker tasks
+
+`[todo]` Review Portal Structure — still open, no evidence in code or commits that this was ever addressed.
+
+## Disagreement / notes
+
+Agree with the prior claude_update: credentials/documents/work-location sections have real (if indirect) test coverage; the leave + CPD submit→approve→reject round trip genuinely has none.

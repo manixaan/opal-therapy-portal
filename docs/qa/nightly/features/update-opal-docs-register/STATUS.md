@@ -1,29 +1,18 @@
 # Update Opal Docs Register
 
-- Tracker stage: idea
-- Tracker environment: none
+- Tracker stage: idea · Tracker environment: none
 - Evidence label: **untouched**
-- Addressed in change window (since last audit, 2026-10-24): no
-- Created (code exists): no
+- Addressed since the last audit (develop unchanged since 2026-10-28, also commit `15acf0c`): no.
+- Created (any located code): no.
 
-## Located files
-None. Re-searched tonight: `backend/*.js` and `frontend/current/*.js` for "docs register" / "document register" — no hits at all tonight (the codebase has nothing relating to an Excel documentation register).
+## Located
 
-## Tests and results
-No test exists; none is expected — this is an Excel/SharePoint document-organising task outside the portal's code.
+Nothing. Searched `docs register`, `documentation register` case-insensitively across `backend/`, `frontend/current/`, `docs/` — no hits. The tracker's single task ("Update Excel Sheet to include all documentation required") describes maintaining an external Excel documentation register, not an in-portal feature.
 
-## Open tasks from the tracker
-"Update Excel Sheet to include all documentation required" (todo) — an off-platform organising task with a detailed checklist (list gaps, add columns, attach SharePoint links).
+## Open tracker tasks
 
-## Commits in window that touched it
-None (nothing to touch).
+`[todo]` Update Excel Sheet to include all documentation required — not a coding task; no corresponding code exists or should.
 
-## Disagreement
-None. The tracker's own next_action already states this correctly: update the Excel documentation register directly — no coding task exists for this card.
+## Disagreement / notes
 
-## Re-verified 2026-10-27
-Re-searched tonight; still no code anywhere matches this card. Unchanged.
-
-## Re-verified 2026-10-28
-Re-searched tonight (`backend/*.js`, `frontend/current/*.js` for "docs register",
-"document register"): no hits. Unchanged.
+Agree with the prior claude_update: no code anywhere matches this card.

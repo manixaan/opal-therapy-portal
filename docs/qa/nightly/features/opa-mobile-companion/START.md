@@ -22,12 +22,12 @@ Opa Mobile Companion
 (none recorded)
 
 ## Where it lives today
-Case Noting: `backend/case-note-routes.js`, `backend/clinical-note-provider.js` (via `backend/ai/ai-gateway.js`). Calendar View: `backend/mobile-routes.js`. Both API-only — no mobile client in this repository.
+Calendar View: `backend/mobile-routes.js`. Case Noting (voice-to-case-note, clinical AI): `backend/case-note-routes.js` + `clinical-note-provider.js` (goes through `backend/ai/ai-gateway.js`). This touches clinical AI output — CRITICAL level.
 
 ## Start here
-This is CRITICAL level: it touches AI-generated clinical notes. On the actual test device, walk through the case-noting pilot end to end (dictate → AI summary → save against the right client) per the tracker's own checklist, and separately confirm the Calendar View screen loads real appointments and travel directions. Report back which steps the pilot already handles correctly versus where it breaks — this is a verification task, not a build task, per the tracker's own notes ("no manual listing, just testing").
+This repository's side of the work is done and fully tested — 122 tests pass across both routes. The only outstanding step is confirming the real mobile client (a separate codebase) successfully calls `GET /api/mobile/calendar` and the `/api/mobile/case-note-drafts*` endpoints, or running the manual device-test checklist on this tracker card. That verification cannot happen from inside this repository.
 
 ## Done means
-A walkthrough on the real device confirms both flows work end to end; record the result (pass/fail per step) somewhere the team can see it — this audit folder's STATUS.md is a reasonable place to append it next run.
+Confirmation from the mobile client's own test suite, or a completed manual device-test checklist, that these endpoints work end to end from a real device. No code change is expected unless that check turns up a contract mismatch.
 
 Tracker: e786d774-43bf-4a8b-826d-94bcb97a9613

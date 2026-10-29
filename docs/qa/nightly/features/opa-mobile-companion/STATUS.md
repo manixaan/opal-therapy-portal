@@ -1,45 +1,40 @@
 # Opa Mobile Companion
 
-- Tracker stage: idea
-- Tracker environment: none
-- Evidence label: **needs-refinement** (both pieces are built, guarded and tested; the tracker's own next_action — confirm a real mobile client calls these APIs — is still open, which this repo alone cannot close)
-- Addressed in change window (since last audit, 2026-10-24): no — no commit this window touched `case-note-routes.js`, `clinical-note-provider.js` or `mobile-routes.js`
-- Created (code exists): yes
+- Tracker stage: idea · Tracker environment: none
+- Evidence label: **needs-refinement**
+- Addressed since the last audit (develop unchanged since 2026-10-28, also commit `15acf0c`): no — confirmed by `git log --since=2026-10-15` on every located file, all empty.
+- Created (any located code): yes.
 
-## Located files
-### Case Noting
-- `backend/case-note-routes.js` (`/api/mobile/case-note-drafts`, `/api/mobile/ai/case-note`), backed by `backend/clinical-note-provider.js`, which correctly routes through `backend/ai/ai-gateway.js` and `backend/ai/deidentify.js` — no vendor SDK bypass.
-- AI policy: `clinical_note_generation` is registered in `backend/ai/ai-policy.js` — compliant with the no-default-policy rule.
-- Guard: `requireAuth` only; file header explicitly documents strict `user_id` scoping ("not-yours answers 404, no role — owner included — can read another user's drafts") — **self-scoped by design**, not a missing guard.
+## Located
 
-### Calendar View
-- `backend/mobile-routes.js`: `GET /api/mobile/calendar`, `/api/mobile/travel`, `/today`, `/appointments/:id`, `/clients`, `/voice-notes`. Travel/maps data reads locally stored `travel_time_minutes`/`travel_distance` — never recalculated or fetched externally.
-- Guard: `requireAuth` only, header documents self-scoping (caller's own day/appointments, 404 for anything not owned) — **self-scoped by design**.
+- `backend/mobile-routes.js` — `GET /api/mobile/{clients,today,calendar,appointments/:id,travel,voice-notes,voice-notes/:id}`, POST/PATCH/DELETE voice-notes. Header states it never calls Splose/Outlook/Xero/Maps/any AI provider and is scoped to the caller's own day only.
+- Tracker task **"Calendar View"** → `GET /api/mobile/calendar` — located, in `mobile-routes.js`.
+- Tracker task **"Case Noting"** → **not** in `mobile-routes.js`. It is `backend/case-note-routes.js`, whose header says "CASE-NOTE DRAFTS — voice-to-case-note for Opa Mobile." Routes: `/api/mobile/case-note-drafts*` and deprecated alias `/api/mobile/ai/case-note`. This is the "AU-region clinical AI" piece. It calls `clinical-note-provider.js`, which correctly goes through `backend/ai/ai-gateway.js` — no gateway-boundary violation. Registered in `ai-policy.js` as `clinical_note_generation`.
+- No frontend tab exists for mobile, by design — consumed by an external mobile client not in this repo.
+
+## Guard check
+
+`mobile-routes.js`: `requireAuth` only — verified in code that every route filters by `req.user.id` or the caller's own `therapist_profile_id`; unowned resources 404. Self-scoped by design. `case-note-routes.js`: `requireAuth` only on both mount points; header explicitly documents "Strictly user-scoped (snapshot model): every read/write filters user_id; not-yours answers 404. No role — owner included — can read another user's drafts." Both self-scoped by design, not broken.
 
 ## Tests and results
-- Case Noting: `tests/case-note-routes.test.js` (unit) — **pass** (re-run tonight); `tests/integration/case-note-client-link.itest.js`, `tests/integration/case-note-deidentification.itest.js` (integration) — **all pass** (re-run tonight).
-- Calendar View: `tests/mobile-routes.test.js` (unit) — **pass** (re-run tonight). No integration test file matched "mobile". Note: tonight's "Make room" booking commits touched `frontend/current/travel.js` (desktop booking panel), not `mobile-routes.js` or its calendar view.
-- No TODO/FIXME found in either route file.
 
-**No mobile client codebase exists in this repository** — no React Native/Flutter/iOS project directory. Nobody can verify from this repo alone that a real mobile client successfully calls these APIs; that verification has to happen against the actual mobile app, outside this checkout. No E2E specs or `docs/qa/BROWSER_QA_RESULTS.md` entries mention mobile or case-note (expected — it's a native app, not browser-testable here).
+| Command | Result |
+|---|---|
+| `npx jest tests/mobile-routes.test.js` | PASS — 41/41 |
+| `npx jest tests/case-note-routes.test.js tests/clinical-note-provider.test.js tests/clinical-note-deidentify.test.js` | PASS — 81/81 |
+| `DB_NAME=therapy_scheduler_audit_g5 npx jest --config jest.integration.config.js tests/integration/case-note-client-link.itest.js tests/integration/case-note-deidentification.itest.js --runInBand` | PASS — 6/6 |
+| `npx jest tests/ai-gateway-boundary.test.js tests/ai-single-gateway-guards.test.js` | PASS — 30/30 (confirms no AI gateway boundary violation anywhere implicated by this feature) |
 
-## Open tasks from the tracker
-"Case Noting" (todo, detailed manual-testing checklist on the real device) and "Calendar View" (todo, no notes).
+No integration test exists for `mobile-routes.js` itself (no `*.itest.js` references `api/mobile`/`mobile-routes`). No test exists — and none can — proving the external mobile client successfully calls these APIs; that is impossible to establish from this repository.
 
-## Commits in window that touched it
-None directly. (See note above on the unrelated booking-panel commits.)
+## Commits in window touching located files
 
-## Disagreement
-None against tracker stage. The gap matches the tracker's own next_action: confirm with the real mobile client codebase that it successfully calls these APIs — something only verifiable from outside this repository.
+None.
 
-## Re-verified 2026-10-27
-No commit since last night's audit (`896ace1`) touched this feature's files — the true window (`896ace1..41f45ed`) holds only Calendar sync-settings/Outlook/Splose work (see Portal - Splose - Outlook's folder). Re-ran `mobile-routes.test.js` (41/41) and `clinical-note-provider.test.js` (10/10) tonight — same as last night. Evidence label unchanged.
+## Open tracker tasks
 
-## Re-verified 2026-10-28
-Real window tonight is `41f45ed..15acf0c` (travel desk-work, place-names autocomplete, a
-dependency patch — see the morning brief §6); none of it touches `case-note-routes.js`,
-`clinical-note-provider.js` or `mobile-routes.js`. Re-ran `case-note-routes.test.js`,
-`mobile-routes.test.js`, `clinical-note-provider.test.js` (unit, all pass) and
-`case-note-client-link.itest.js`/`case-note-deidentification.itest.js` (integration,
-both pass) tonight. No mobile-client codebase still exists in this repository to
-confirm real-device calls. Evidence label unchanged.
+`[todo]` Case Noting — located (`case-note-routes.js`, not `mobile-routes.js`), tested, no browser/E2E proof possible from this repo. `[todo]` Calendar View — located, tested, same structural gap.
+
+## Disagreement / notes
+
+Partial disagreement on specificity, agreement on substance. Prior claude_update: "the mobile API (clients, calendar, voice notes, AU-region clinical AI) is guarded and fully tested, but nothing in this repository confirms the real mobile client actually calls it" — accurate but imprecise: the "AU-region clinical AI"/case-noting piece is not in `mobile-routes.js` at all, it's in the separately-named `case-note-routes.js`. Recommend any future starter prompt name `case-note-routes.js` explicitly for "Case Noting," not just "the mobile API." The `needs-refinement` label is correct (both tracker tasks are `todo`) and carries over unchanged; the only real gap — proof the external mobile client calls these APIs correctly — is a permanent, structural gap this repository cannot close on its own, not a code defect.

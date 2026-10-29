@@ -1,43 +1,41 @@
 # Automated Reminders
 
-- Tracker stage: idea
-- Tracker environment: none
-- Evidence label: **needs-refinement** (bundles two unrelated deliverables at very different maturity)
-- Addressed in change window (since last audit, 2026-10-24): no — no commit this window touched `snapshot-routes.js` or `reports.js`
-- Created (code exists): yes for Therapist Snapshot; no for client appointment reminders
+- Tracker stage: idea · Tracker environment: none
+- Evidence label: **needs-refinement** (mixed — one sub-part tab-unproven, one untouched; see breakdown)
+- Addressed since the last audit (develop unchanged since 2026-10-28, also commit `15acf0c`): no.
+- Created (any located code): partially — Therapist Snapshot exists; the 24-hour client reminder does not.
 
-## Therapist Snapshot — mixed
-This task actually spans two pieces of code, not one file:
-- **Personal reminders/tasks API**: `backend/snapshot-routes.js`, mounted at `/api/snapshot/*`. Guard: `router.use('/api/snapshot', requireAuth)` only — the file's header comment explicitly documents strict `user_id` scoping for ALL roles, owner included ("personal productivity data, not practice data") — self-scoped by design, not a missing guard.
-- **The actual "Daily & Weekly Snapshot" panel** (utilisation/billable-hours progress, travel summary, idle gaps, smart recommendations — this is what the tracker notes mean by "weekly utilisation index" and "daily sessions and where to go") lives in `frontend/current/reports.js`, opened via the header's report icon (`openReportPanel('daily'|'weekly')`). It computes its metrics client-side from `/api/events` and existing billing/travel data, then layers in the personal reminders/tasks from `/api/snapshot/*`.
-- Tests: `tests/integration/snapshot.itest.js` (6 tests) — **pass** (re-run tonight); `tests/frontend-stage3-guards.test.js` (289 tests, asset-pin + structural guards covering `reports.js`) — **pass** (re-run tonight).
-- **No E2E/browser proof exists for the report panel itself** (the utilisation index / travel summary / idle-gaps display). No `e2e/tests/*.spec.js` match, no `docs/qa/BROWSER_QA_RESULTS.md` entry.
-- No TODO/FIXME found in `snapshot-routes.js`.
+## Located
 
-## Automated Client Appt Reminders — untouched
-**Confirmed: nothing has been built for this at all.** Specifically checked and found absent:
-- No cron/scheduling infrastructure anywhere in the codebase (no `node-cron` dependency, no `setInterval`-based job runner, nothing in `package.json`).
-- No SMS provider integration (no Twilio or similar) — only `nodemailer` exists, for unrelated transactional email.
-- No "reminded"/"reminder_sent" flag or similar column anywhere in `database.js` or `backend/migrations/*.sql`.
-- The only "reminder" code in the repo is the unrelated personal `snapshot_reminders` table used by `mobile-routes.js` and `snapshot-routes.js` (to-do items a user sets for themselves), not client-facing appointment reminders.
+- **Therapist Snapshot:** `backend/snapshot-routes.js`, frontend moved to `frontend/current/reports.js` (per a comment in `tests/frontend-stage3-guards.test.js:26`: "Daily & Weekly Snapshot: its CODE moved to reports.js").
+- **Automated Client Appt Reminders (24hr pre-appointment reminder to clients):** not found. Searched `24.hour.*reminder`, `appt.*reminder`, `appointment.*reminder`, `client.*reminder` across `backend/` and `frontend/current/` — every hit is unrelated (internal staff `snapshot_reminders`/`snapshot_tasks`, credential-expiry and work-location reminders, a one-line comment in `travel.js`: "Client reminders around leave come later"). Nothing sends an automated reminder to an NDIS client ahead of their appointment.
 
-## Open tasks from the tracker
-"Automated Client Appt Reminders" (todo, detailed checklist — channel choice, confirm-step design, configurable lead time, scheduler, audit logging, safe testing) — entirely unstarted. "Therapist Snapshot" (todo, checklist partially done — "find where the snapshot lives" and "create minimise function" are checked; the rest, including the utilisation-index formula decision, is open).
+## Guard check
 
-## Commits in window that touched it
-None.
+`snapshot-routes.js`'s header comment explicitly documents every query scoped to `req.user.id`/`req.session.userId`, "NO cross-user access for ANY role" — self-scoped by design, matching the CLAUDE.md exception.
 
-## Disagreement
-None against tracker stage. The tracker's own next_action already separates the two pieces correctly: decide if the 24-hour client reminder is still wanted and on what channel, then build the scheduled job — nothing to disagree with there.
+## Tests and results
 
-## Re-verified 2026-10-27
-No commit since last night's audit (`896ace1`) touched `snapshot-routes.js` or `reports.js` — the true window (`896ace1..41f45ed`) holds only Calendar sync-settings/Outlook/Splose work. Re-ran `tests/integration/snapshot.itest.js` (6/6) tonight — same as last night. Still no code anywhere for client appointment reminders. Evidence label unchanged.
+| Command | Result |
+|---|---|
+| `npx jest tests/frontend-stage3-guards.test.js` | PASS — 289 tests |
+| `DB_NAME=therapy_scheduler_audit_g1 npx jest --config jest.integration.config.js tests/integration/snapshot.itest.js --runInBand` | PASS — 6 tests |
+| `node --check snapshot-routes.js` | OK |
+| test for "Automated Client Appt Reminders" | **none exists — there is no code to test** |
 
-## Re-verified 2026-10-28
-Real window tonight is `41f45ed..15acf0c` (a desk-work travel feature, a place-names
-autocomplete feature, and a dependency patch — see the morning brief §6); none of it
-touches `snapshot-routes.js` or `reports.js`. Re-ran `tests/integration/snapshot.itest.js`
-(6/6) and `tests/frontend-stage3-guards.test.js` (part of a 1597-pass/12-skip batch)
-tonight — same as every prior night. Still no cron/scheduler, SMS/email-reminder
-wiring, or "reminded" flag anywhere for client appointment reminders. Evidence label
-unchanged.
+## Commits in window touching located files
+
+None. No commit touches `snapshot-routes.js` or `frontend/current/reports.js`; none relate to a client-facing reminder feature.
+
+## Breakdown
+
+- **Therapist Snapshot: tab-unproven** — API located, guarded, fully covered by passing tests, but none of `e2e/tests/portal.spec.js`, `e2e/tests/tutorials.spec.js`, or `docs/qa/BROWSER_QA_RESULTS.md` (flows A-J) exercise the Daily/Weekly report panel in a browser.
+- **Automated Client Appt Reminders: untouched** — zero matching code anywhere; this feature has not been started.
+
+## Open tracker tasks
+
+`[todo]` Automated Client Appt Reminders — not started, a decision on channel/scope is needed before any code is written. `[todo]` Therapist Snapshot — needs a browser or E2E check to move past tab-unproven.
+
+## Disagreement / notes
+
+Agree with the prior claude_update on both counts, independently verified.

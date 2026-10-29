@@ -1,176 +1,58 @@
 # Portal Onboarding Workflow
 
-- Tracker stage: idea
-- Tracker environment: none
-- Evidence label: **broken**, 2nd consecutive night (first reported 2026-10-27, reproduced again 2026-10-28, still unconfirmed against the real deployment — see "Re-verified 2026-10-28" below; Stage 2's literal SharePoint-storage gap is still genuine on top of this)
-- Addressed in change window (since last audit, 2026-10-27 `41f45ed`): no — the true window (`41f45ed..15acf0c`) holds a travel desk-work feature, a place-names autocomplete feature and a dependency patch, none touching any `onboarding-*.js` file. The 2026-10-22 8-commit "onboarding production-ready" push (see "Recent history" below) predates this window.
-- Created (code exists): yes for Stage 1 and 2; Stage 3 (induction/setup/Activate) is now substantially built, as of 2026-10-22
+- Tracker stage: idea · Tracker environment: none
+- Evidence label: **broken** (one real test failure; everything else is tab-unproven — see breakdown below)
+- Addressed since the last audit: **no** — develop has not moved since last night's audit (2026-10-28, also commit `15acf0c`); tonight's true window is empty. The commits listed below predate last night's audit and are historical context (the onboarding "production-ready" rebuild landed over the preceding fortnight), not new activity.
+- Created (any located code): yes, extensively.
 
-## Re-verified 2026-10-28 — still failing, 2nd consecutive night, still unconfirmed
-Real window tonight is `41f45ed..15acf0c` (travel desk-work, place-names autocomplete, a
-dependency patch — see the morning brief §6); none of it touches any `onboarding-*.js`
-file. The one incidental touch: `onboarding.html`'s `places-autocomplete.js?v=` pin
-bumped 1→2 (a shared address-autocomplete module used across the app, not onboarding
-logic) — confirmed via `node scripts/check-asset-pins.js`, clean. Re-ran
-`npx jest tests/onboarding-document-reader.test.js` tonight: **still fails**, identical
-error (`Cannot find module '@tesseract.js-data/eng/package.json'`), `ls
-node_modules/@tesseract.js-data/` still empty. Re-ran the full 27-file
-`onboarding-*.test.js` unit set (653/654, same single failure) and all 7
-`onboarding-*.itest.js` integration files (`onboarding-journey`,
-`onboarding-portal-route`, `onboarding-workflow`, `onboarding-defaults`,
-`onboarding-pack`, `onboarding-returns`, `onboarding` — 198/198 pass) tonight. Still
-needs a human to confirm `@tesseract.js-data/eng` is present in the real deployment;
-evidence label stays `broken` until then.
+## Located
 
-## New tonight (2026-10-27) — a test fails, likely a sandbox gap
-`npx jest tests/onboarding-document-reader.test.js` fails tonight: "the OCR
-language data is shipped with the portal, not fetched when a document
-arrives" — `Cannot find module '@tesseract.js-data/eng/package.json'`. This
-package is declared in `backend/package.json` (`"@tesseract.js-data/eng":
-"^1.0.0"`) but is genuinely absent from this sandbox's `backend/node_modules`
-(confirmed: `ls node_modules/@tesseract.js-data/` → no such directory). Ran
-twice tonight — reproducible both times, not a flake. **No prior audit
-(2026-10-16 through 2026-10-26) ever reported this failure**, which points
-to tonight's sandbox provisioning being incomplete rather than a code
-regression — this audit's own hard limits forbid running `npm install`/`npm
-ci` to fix it. Escalating the whole feature's evidence label to `broken` for
-tonight rather than silently absorbing it into the unchanged
-`needs-refinement` narrative below, because a concretely reproduced test
-failure is stronger evidence than an open product decision — but this
-needs a human to confirm whether `@tesseract.js-data/eng` is actually
-present in the real (Azure) deployment's `node_modules` before treating it
-as a production defect. If it's confirmed present there, this is sandbox
-noise and the label should revert to `needs-refinement` next audit.
+Backend routers (all mounted in `backend/server.js:557-574`): `onboarding-employee-routes.js`, `onboarding-workflow-routes.js`, `onboarding-journey-routes.js`, `onboarding-pack-routes.js`, `onboarding-returns-routes.js`, `onboarding-payroll-routes.js`, `onboarding-defaults-routes.js`, `onboarding-package-docs-routes.js`, `onboarding-assignment-routes.js`, `onboarding-library-routes.js`, `onboarding-routes.js`.
+Data access: `onboarding-db.js`, `onboarding-engine.js`, `onboarding-audit.js`, `onboarding-crypto.js`, `onboarding-seed.js`, `onboarding-expiry.js`, `onboarding-induction.js`.
+Frontend: `frontend/current/onboarding.js` (4810 lines), `onboarding-journey.js` (3287 lines), plus matching `.css`/`.html`. Tab banner: `ONBOARDING TAB` (`mockup_v3.html:4281`).
 
-## Recent history (2026-10-22, two nights ago now)
-Eight commits (`fba7eface`, `96324d99`, `f1439654`, `41e81787`, `db8fb6c4`,
-`51f585b6`, `73adb13f`, plus merge `273de152`) under the heading "onboarding
-production-ready" — none of this changed again tonight; re-verified below
-against the same code:
-- **`onboarding-account-guard.js` (new)** — fixes a confirmed account-takeover
-  bug (audit B-1): an onboarding record could previously adopt an existing
-  staff account sharing the applicant's email and later change its role or
-  password. Now every account-touching action re-checks, at action time under
-  a row lock, that the linked account is still `pre_employee`, in the record's
-  organisation, and not claimed by another open onboarding.
-- **Stage 2/3 now run through the portal** (`f1439654`) — this is the
-  single biggest forward move against the tracker's own Stage 2/3 checklist:
-  release, invitation (issue/resend/revoke-on-resend), the induction stage,
-  internal setup tasks, and an Activate gate are now a real screen-driven flow,
-  not just API plumbing. The old paper-pack-first flow is now an explicit,
-  secondary path for records that already use it.
-- **Owner-only activation** (`96324d99`) — activation no longer happens
-  automatically when documentation/induction completes; only the Owner
-  pressing Activate does it. `onboarding-lifecycle.js` gained
-  `activationReadiness` (password chosen, offer settled, every blocker
-  cleared, statutory checks verified for clinicians, paper-pack returns
-  verified, induction done) with named blockers on refusal.
-- **Placeholder documents refused everywhere** (`onboarding-placeholder-check.js`,
-  new) — a document whose text or file still holds `[TO CONFIRM …]`, a
-  `PLACEHOLDER -` stand-in, or a dev stub is refused at release, acknowledgement,
-  upload and paper-pack send alike (owner decision 4).
-- **The record's own contract / position description** (`onboarding-record-documents.js`,
-  new, migration 079) — Owner upload / generate-from-template / preview /
-  remove; the starter's acknowledgement records the file's SHA-256. **This is
-  a separate, DB-backed document store, not SharePoint** — see the
-  disagreement note below.
-- **Practice details are now Owner-edited settings** (`onboarding-practice.js`,
-  new) — name, ABN, ACN, signatory, return address, default work location and
-  default super fund, seeded from the practice's real current details, used
-  by the letter, contract, pack emails and the portal's super form instead of
-  hard-coded constants.
-- **Tiered, audited profile access + validated starter forms** (`db8fb6c4`) —
-  choice-field values checked against the database's own lists (400 with the
-  field named, not a 500); personal/emergency/identity/vehicle/credential
-  numbers need `onboarding.sensitive_identity`, pay needs `onboarding.payroll`;
-  every sensitive-tier read is audited (`profile_viewed`).
-- **A disagreeing returned document reopens a settled field as a conflict**
-  (`51f585b6`, audit B-6) unless the Owner already resolved it.
-- **Account-takeover and temporary-password hardening** (`fba7eface`) — same
-  rule as above, applied to invite accept, reissue, sign-in details and
-  `classifyAccountTarget`.
-- Supporting: `73adb13f` forces email transport off in tests (fixes a flaky
-  502 in `onboarding-workflow.itest.js` caused by a dev `.env` leaking a real
-  Graph mail transport into test runs — environment hygiene, not a product bug).
+The tracker's three tasks map to real subsystems, not literal modules:
+- **Stage 1** = offer (`onboarding-journey-routes.js` + `onboarding-pack-routes.js`)
+- **Stage 2** = documentation (`onboarding-workflow-routes.js` returned-documents/extraction + `onboarding-returns-routes.js` + `onboarding-library-routes.js`)
+- **Stage 3** = induction (shared with the "Inductions" feature: `onboarding-induction.js`, `learning-routes.js`, `induction-assistant-routes.js`, tutorial/walkthrough routes)
 
-## Per-stage breakdown (re-verified against tonight's unchanged code)
+## Guard check
 
-### Stage 1 (Letter of Offer) — proven, checklist still stale
-Unchanged. `backend/onboarding-journey-routes.js` + `onboarding-offer-{letter,docx,pdf,template,email}.js`, guarded per-route with `requirePermission`. Tests unchanged and still passing (see below). The checklist's "Add an editable preview" / "Make preview/PDF/doc identical" / "Add Send button" / "Test end to end" are still unchecked in the tracker despite the code for all of them existing — unchanged disagreement from every prior night.
-
-### Stage 2 (documents + dynamic contract) — needs-refinement, unchanged tonight
-- **SharePoint storage: still genuinely does not exist.** Re-confirmed tonight: `onboarding-record-documents.js` stores the contract/PD in `onboarding_offer_documents` (a Postgres table), not SharePoint; grepped the file again for `sharepoint`/`graph.microsoft` — no hits. The tracker checklist item "Finalise the onboarding documents and store them in SharePoint" is still open and still accurate. **Do not confuse this with Clinical Resources' "SharePoint-style" document library (`resourcelibrary.js`) — that is a different, unrelated module with a similar name, and it is not Microsoft SharePoint either.**
-- **Dynamic employee contract**: still built (`onboarding-contract-docx.js`, unchanged), as reported previously.
-- **"Check the flow from Stage 1 into Stage 2, make every button work"**: substantially addressed by 2026-10-22's Stage 2/3 portal-route work (release, contract/PD attach-generate-preview-remove, invitation flow) — still unchecked in the tracker, but the gap it describes is much smaller than the checklist suggests.
-- Placeholder-document refusal and the file-hash acknowledgement remain in place, tested, unchanged tonight.
-
-### Stage 3 — substantially built, unchanged tonight
-Built 2026-10-22: the Stage 2/3 portal-route commit (`f1439654`) and the Owner-only activation commit (`96324d99`) together build a real Stage 3 — induction stage, internal setup tasks, activation readiness/blockers, and the Activate gate. The tracker's "stage 3" task still has an empty `explanation`/`notes` and no checklist at all, so there is nothing in the tracker to tick against this — see Disagreement.
-
-## Guard check (re-run tonight)
-Every route in `onboarding-journey-routes.js`, `onboarding-employee-routes.js`,
-`onboarding-returns-routes.js`, `onboarding-workflow-routes.js`,
-`onboarding-routes.js` and `onboarding-defaults-routes.js` sits behind
-`requireAuth` plus a specific `requirePermission` (`onboarding.view` /
-`.assign` / `.review` / `.activate` / `.payroll` / `.manage_packages` /
-`.manage_compliance`), or `requireAuth` alone under `/api/onboarding/me/*`
-(self-scoped by design to the caller's own record — documented in the file
-header) and `/api/onboarding/journey` (role-gated per-route). One
-intentionally unauthenticated route, `GET /api/onboarding/starter-pack/download`,
-is pre-existing and documented as token-authorised (one-time, 256-bit,
-hashed, expiring token in place of a session) — not a guard gap. No new
-unguarded endpoint found tonight. No TODO/FIXME in any changed file.
+Pass, no gaps. Every management router applies `requireAuth` plus `requirePermission`/`requireAnyPermission` (`onboarding.view`/`.assign`/`.review`/`.activate`/`.manage_packages`/`.manage_documents`/`.manage_compliance`) or `ownerOnly`. Two deliberately-unauthenticated routes (`/api/onboarding-invite/*`, `/api/onboarding/starter-pack/download`) are documented with a security rationale (no account yet; single-use hashed, expiring token). `onboarding-employee-routes.js`'s `/api/onboarding/me/*` is `requireAuth`-only but documented self-scoped-by-design (every query keys off `req.user.id`). All 15 files pass `node --check`.
 
 ## Tests and results
-Unit (re-run tonight, full 27-file `onboarding-*.test.js` set): **653/654
-passed, 1 failed** — the new `onboarding-document-reader.test.js` failure
-above. Every other file, including `onboarding-practice.test.js`,
-`onboarding-placeholder-check.test.js`, `onboarding-accounts.test.js`,
-`onboarding-journey.test.js`, `onboarding-offer-docx.test.js`,
-`onboarding-offer-pdf.test.js`, `onboarding-offer-template.test.js`,
-`onboarding-contract-docx.test.js` — **all pass**, same as every prior
-night.
 
-Integration tests for this feature were not re-run tonight (this session's
-effort went into the new sync-settings feature on the Splose/Outlook card
-and chasing down the OCR failure above); the 8 `onboarding-*.itest.js`
-files are unchanged since they last passed on 2026-10-26
-(`onboarding-journey.itest.js`, `onboarding-portal-route.itest.js`,
-`onboarding-workflow.itest.js`, `onboarding-defaults.itest.js`,
-`onboarding-pack.itest.js`, `onboarding-returns.itest.js`,
-`onboarding.itest.js`) and should be re-run by whoever picks up either
-item above.
+| Command | Result |
+|---|---|
+| 24 onboarding unit test files (accounts, catalogue, contract-docx, crypto, email-markup, engine, extraction, form-reader, frontend-guards, journey(-frontend-guards), offer-docx/pdf/template, pack, payroll, placeholder-check, practice, reconcile, returns-match/zip, security, starter-pack, wizard-link, workflow-guards) | PASS — 25 suites, 632 tests |
+| `tests/onboarding-document-reader.test.js tests/onboarding-document-check.test.js` | **FAIL — 1 of 22** |
+| 10 onboarding integration files (defaults, induction, journey, pack, payroll-xero, portal-route, returns, wizard-link, workflow, onboarding) | PASS — 10 suites, 218 tests |
 
-Browser QA: `docs/qa/BROWSER_QA_RESULTS.md` row C still only covers the
-onboarding→profile chain as it stood before 2026-10-22's work (login
-routing, setup-card render) — it predates and does not exercise the
-release/invitation/Activate/induction screens built 2026-10-22. No E2E spec
-for onboarding exists.
+The one failure, quoted verbatim:
+```
+● no model reads a returned document › the OCR language data is shipped with the portal, not fetched when a document arrives
+Cannot find module '@tesseract.js-data/eng/package.json' from 'tests/onboarding-document-reader.test.js'
+```
+This is a missing `node_modules` package in this sandbox, not a code defect — per the hard limits this audit must not run `npm install` to fix it. It must be confirmed present in the real deployment.
 
-## Open tasks from the tracker
-Stage 1 (mostly done per checklist, items c3–c6 stale-unchecked), Stage 2
-(c0 "finalise and store in SharePoint" genuinely open; c2 "check Stage1→2
-flow" now much closer than its unchecked state suggests; c6 "simplify
-layout" open; c7/c5 dynamic-contract-scope decision and build — c5 is done,
-c7's decision step is still open), stage 3 (empty — no checklist at all).
+Note: `tests/integration/stage1-launch-blockers.itest.js` and `stage2-pilot-readiness.itest.js` are **not** about this tracker card's "Stage 1/2/3" — they're an unrelated pre-pilot RBAC/identity audit. Not run for this feature to avoid a misleading match.
 
-## Commits in window that touched it
-None — the true window (`896ace1..41f45ed`) holds only Calendar
-sync-settings/Outlook/Splose commits (`11aa73f`, `971cac1`, `3ef3965`,
-`ab75330`, `41f45ed`), none touching any `onboarding-*.js` file. The
-2026-10-22 commits `fba7eface`, `96324d99`, `f1439654`, `41e81787`,
-`db8fb6c4`, `51f585b6`, `73adb13f`, merge `273de152` predate this window —
-see "Recent history" above.
+## Breakdown
 
-## Disagreement
-The tracker checklist is now further behind the code than at any prior
-audit: Stage 2's "check the flow / make every button work" and essentially
-all of Stage 3 are substantially built, tested and guarded, but every
-checklist item describing them is still unchecked (Stage 3 has no checklist
-at all). The one item that is NOT ahead of the tracker — and still matches
-the tracker's own wording exactly — is Stage 2's SharePoint storage, which
-remains completely unbuilt. Flag clearly for the team: "SharePoint" now
-appears in two unrelated places in this codebase (this feature's literal
-gap, and Clinical Resources' new "SharePoint-*style*" UI) — worth a one-line
-clarification in the tracker so nobody closes this card by mistake once they
-see the other one.
+- **Document reading / OCR extraction (part of Stage 2): broken** — a guarded, otherwise-passing test fails on the missing `@tesseract.js-data/eng` dependency.
+- **Everything else (offer, package/compliance admin, account provisioning, Stage 1, the rest of Stage 2, onboarding's side of Stage 3): tab-unproven** — 850 tests pass, but nothing current proves the admin package/compliance UI renders in a browser. `docs/qa/BROWSER_QA_RESULTS.md` (2026-08-01, build `188334d`) Flow C only walks a new starter's basic onboarding entry, and predates the "production-ready" release/activation/package-admin rebuild (`273de15`, `f143965`, `96324d9`, all inside this window). `e2e/tests/portal.spec.js` only exercises invite→register→first-login, not the package-admin UI.
+
+## Open tracker tasks
+
+`[todo]` Stage 1, `[todo]` Stage 2, `[todo]` stage 3 — all open. Stage 2's concrete blocker is the OCR dependency; Stage 1/3's blocker is missing browser/E2E proof, not missing code.
+
+## Relevant commits (historical — predate last night's audit, not new tonight)
+
+`273de15` (Merge: onboarding production-ready — portal route, Owner-only activation, safety fixes), `51f585b` (a disagreeing returned document reopens an applied value as a conflict), `db8fb6c` (validated forms, a permission-tiered audited profile, gated scans), `41e8178` (the practice's details are Owner-edited settings), `f143965` (Stage 2/3 run through the portal — release, invitation, induction, Activate), `96324d9` (Owner-only activation, Owner-only waivers, no placeholder documents), `fba7efa` (an onboarding acts only on its own pre-employee account), `5eef761` (never mint an Owner, never demote an existing account, fresh session on accept). All of these are already several audit cycles old; none is from tonight's (empty) window.
+
+## Disagreement / notes
+
+Prior claude_update: *"Broken, 2nd night running: a reproducible test failure (missing @tesseract.js-data/eng OCR package) is unconfirmed against the real deployment. Stage 2's SharePoint-storage gap is unchanged; Stage 2/3 otherwise run through the portal."*
+- **Agree** on the OCR/tesseract failure, independently reproduced.
+- **Disagree / correction:** "Stage 2's SharePoint-storage gap" does not refer to anything in the onboarding code (`grep -ri sharepoint backend/onboarding-*.js` — zero hits). "SharePoint-style" is the *Resource Library* feature (`06c6777`), a different tracker card ("Clinical resources"). This looks like a misattribution carried over from a previous night.
+- **Disagree / addition:** "Stage 2/3 otherwise run through the portal" overstates settledness — the admin package/compliance UI has no current browser or E2E proof, which is a separate gap from the OCR defect.

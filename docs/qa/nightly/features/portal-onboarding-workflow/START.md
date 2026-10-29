@@ -19,46 +19,17 @@ Portal Onboarding Workflow
 (not yet written in the tracker)
 
 ## Decisions
-Stage 2 notes (verbatim from the tracker task): "Add finish the templated documents and upload to sharepoint as well as portal default packages under the edit onboarding tab... documents in stage 2 need to be finalised and uploaded both to the sharepoint and the portal (in portal under the default categories inside the edit onboarding). Check the workflow from stage 1 to 2 if the buttons all work... Also simplify UI where necessary."
+(none recorded)
 
 ## Where it lives today
-Stage 1 (Letter of Offer): built and tested, unchanged. Stage 2 dynamic
-contract: built and tested, unchanged. Stage 2/3 now run through the portal
-as a real screen (release, invitation, induction, internal setup tasks,
-Owner-only Activate) — built and tested as of tonight
-(`backend/onboarding-journey-routes.js`, `onboarding-lifecycle.js`,
-`onboarding-assignment-routes.js`). The record's own contract/position
-description is a new, separate DB-backed store
-(`backend/onboarding-record-documents.js`, migration 079) — **not
-SharePoint**. SharePoint storage itself: still nothing.
+`backend/onboarding-employee-routes.js`, `onboarding-workflow-routes.js`, `onboarding-journey-routes.js`, `onboarding-pack-routes.js`, `onboarding-returns-routes.js`, `onboarding-payroll-routes.js`, `onboarding-defaults-routes.js`, `onboarding-package-docs-routes.js`, `onboarding-assignment-routes.js`, `onboarding-library-routes.js`, `onboarding-routes.js`; data access in `onboarding-db.js`/`onboarding-engine.js`/`onboarding-crypto.js`; frontend `frontend/current/onboarding.js` + `onboarding-journey.js`. This is onboarding/migration/employment-record territory — CRITICAL level, not FAST or FEATURE.
 
 ## Start here
-**First, tonight's new item:** run `cd backend && npx jest
-tests/onboarding-document-reader.test.js` and confirm whether
-`@tesseract.js-data/eng` is genuinely missing from the real (Azure)
-deployment's `node_modules`, not just this sandbox's. If it's missing
-there too, OCR document extraction is silently broken in production — fix
-the dependency install, don't patch around it in code. If it's present in
-the real deployment, this was sandbox-only noise and the next audit should
-revert the evidence label to `needs-refinement`.
-
-**Then, the unchanged gap:** literal SharePoint storage for finished
-Stage 2 documents. Before writing code, confirm which integration method the
-practice wants (Microsoft Graph API, same auth pattern as
-`backend/outlook-oauth.js` / `backend/graph-identity.js`, or a simpler
-webhook/manual-link approach) — and confirm with the team that this is still
-wanted now that `onboarding-record-documents.js` and Clinical Resources' new
-document library exist, since one of those may turn out to be the better
-place to store these documents instead of actual SharePoint. Do not reuse
-Clinical Resources' `resourcelibrary.js`/`resource-library-routes.js` without
-that confirmation — it is "SharePoint-*style*" UI only, not a Microsoft
-integration, and onboarding documents are employee-sensitive (CRITICAL
-level), which the general resource library is not scoped for.
+Two separate pieces of work, don't conflate them:
+1. Confirm `@tesseract.js-data/eng` is genuinely present in the real Azure deployment's `node_modules` (this sandbox cannot install it). If missing there too, add it to `backend/package.json` dependencies as a CRITICAL-level fix.
+2. Separately, walk the admin package/compliance UI (Stage 1/2/3 admin screens under the Onboarding tab) in a browser as Owner, then add a browser or E2E check — none exists today beyond the basic invite→register path in `e2e/tests/portal.spec.js`.
 
 ## Done means
-A decision is recorded on where Stage 2 documents should actually live, and
-(if SharePoint is still wanted) a new integration test proves a finalised
-Stage 2 document reaches it and is linked back in the portal; evidence label
-for Stage 2 reaches `proven`.
+(1) `npx jest tests/onboarding-document-reader.test.js tests/onboarding-document-check.test.js` passes 22/22 against the real deployment's dependencies. (2) A new E2E spec or browser-QA entry exercises the admin package/compliance Stage 1–3 flow. Evidence label should move from `broken` to `tab-unproven`, then to `proven`.
 
 Tracker: 32b768b1-8bf3-40a6-9669-a8908922aa21

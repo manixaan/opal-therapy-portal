@@ -22,14 +22,12 @@ Employee Personal Page (My Profile Tab)
 (none recorded)
 
 ## Where it lives today
-`backend/profile-routes.js` (personal details, work locations, leave, CPD, documents/credentials, notifications), `frontend/current/profile.js`, `PROFILE TAB` in `mockup_v3.html`.
+`backend/profile-routes.js` + `frontend/current/profile.js`. Tab: PROFILE TAB (`mockup_v3.html:4307`).
 
 ## Start here
-Open `backend/profile-routes.js` and find the leave-request and CPD submit/approve/reject handlers (`canApprove` gate). Add a new test file `backend/tests/integration/profile-leave-cpd.itest.js` that: submits a leave request as a therapist, approves it as owner, confirms the therapist sees the updated status; repeats the same round trip for a CPD submission, including a reject path. Copy the supertest-against-the-mounted-router pattern from `backend/tests/integration/resources.itest.js`.
-
-Separately: re-run `backend/tests/integration/readonly-and-hardening.itest.js` on a non-root CI runner (not this sandbox) to confirm whether the D-6/D-7 storage-failure test genuinely passes there; if it still fails, that is a real defect in `profile-routes.js`'s document-upload error handling.
+Same gap as the Professional Development card's CPD half, plus leave: add an integration test exercising `/api/profile/leave` submit → owner approve/reject, and `/api/profile/cpd` submit → owner approve/reject, each with a non-owner 403 check. This single test closes both this card's "Review Portal Structure" task and the Professional Development card's gap — do them together. Use `tests/integration/documents.itest.js` as the pattern for mounting `profile-routes.js` in a test.
 
 ## Done means
-`npx jest --config jest.integration.config.js tests/integration/profile-leave-cpd.itest.js --runInBand` passes, covering submit→approve and submit→reject for both leave and CPD. Evidence label should then reach `proven`.
+A new integration test covers the leave and CPD submit→approve→reject round trip in My Profile and passes. Evidence label should move from `needs-refinement` toward `proven`.
 
 Tracker: 83bb9988-52ba-4f8c-85ba-7b65aca189b2

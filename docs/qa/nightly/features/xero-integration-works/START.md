@@ -22,12 +22,12 @@ Xero Integration Works
 (none recorded)
 
 ## Where it lives today
-Financial Dashboard: `backend/finance-routes.js`, `backend/accounting-routes.js`. Payroll Automation: `backend/xero-payroll-*.js` — already built and tested, despite its tracker checklist showing nothing done.
+Financial Dashboard: `backend/finance-routes.js` + `frontend/current/finance.js` (FINANCE TAB, owner-only, `mockup_v3.html:5492`). Payroll Automation: `backend/xero-payroll-sync.js` + `backend/onboarding-payroll-routes.js` + the `payrollPanel`/`payrollConfigForm` UI inside `frontend/current/onboarding-journey.js`. This touches accounting/Xero — CRITICAL level.
 
 ## Start here
-This is CRITICAL level (accounting/Xero). Open the Finance tab as an owner in a real browser with a connected Xero sandbox account (not just disconnected, which is already proven per `docs/qa/BROWSER_QA_RESULTS.md` row H), and confirm the Dashboard screen renders real figures (income/expenses/revenue/outstanding/late invoices/tax). Add a browser QA row or E2E check for that connected-state render — the disconnected state is already covered.
+Log in as Owner with a connected Xero account. First, open the Finance tab and confirm the Dashboard renders real figures (not placeholder zeros) across Dashboard/Payroll/Invoicing sub-nav. Second, separately, open an onboarding journey record and walk the payroll-setup panel (`payrollConfigForm`) end to end — config → approve → sync. Add a Playwright spec or a dated `docs/qa/BROWSER_QA_RESULTS.md` entry covering both; they are two different tabs and need two different walkthroughs, not one.
 
 ## Done means
-A passing check proves the dashboard renders real Xero-backed figures for an owner; evidence label reaches `proven`.
+A browser or E2E check confirms both the Finance tab Dashboard and the onboarding-journey payroll-setup panel render and work. Evidence label should move from `tab-unproven` to `proven` for each independently.
 
 Tracker: 3d5da727-ee76-4195-8954-2a6486844d77

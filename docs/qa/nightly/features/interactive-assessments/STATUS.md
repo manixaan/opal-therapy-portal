@@ -1,43 +1,41 @@
 # Interactive Assessments
 
-- Tracker stage: idea
-- Tracker environment: none
+- Tracker stage: idea · Tracker environment: none
 - Evidence label: **tab-unproven**
-- Addressed in change window (since last audit, 2026-10-24): no — no commit this window touched `whodas-routes.js`, `assessments-routes.js`, `fca-routes.js` or their frontend files
-- Created (code exists): yes
+- Addressed since the last audit (develop unchanged since 2026-10-28, also commit `15acf0c`): no — confirmed by `git log --since=2026-10-15` on every located file, all empty.
+- Created (any located code): yes.
 
-## Located files
-- Backend: `backend/whodas-routes.js`, `backend/assessments-routes.js`, `backend/fca-routes.js` (mounted in `server.js`).
-- Frontend: `assessment.js`, `whodas.js`, `fca.js` (pinned with `?v=` in `mockup_v3.html`; lives alongside NDIS Cases/Case Notes, no separate "ASSESSMENT TAB" banner).
+## Located
+
+- Routes: `backend/fca-routes.js`, `backend/letter-routes.js`, `backend/whodas-routes.js`, `backend/assessments-routes.js` (catalogue/history/share layer above WHODAS).
+- Data/engine: `backend/fca/`, `backend/whodas/`, `backend/templates/`.
+- Frontend: `frontend/current/fca.js`/`.css`, `letter.js`/`.css`, `assessment.js`/`.css`, `whodas.js`/`.css`. No dedicated tab banner — these are full-page/overlay surfaces mounted as direct children of `<body>` (`#fca-root`, `#letter-root`, `#assessment-root`, ~`mockup_v3.html:26267-26286`), entered from the Resources Library "Templates" collection or the NDIS case assessment flow, not from a tab click.
 
 ## Guard check
-All routes behind `requireAuth` plus `requireClinicalRead`/`requireClinicalWrite`/`requireCatalogue` — solid, appropriate for clinical data.
+
+All five route files mount `requireAuth` plus a role gate (`CLINICAL_ROLES` + `read_only`; admin explicitly excluded from clinical data). `whodas-routes.js` additionally feature-gates every route behind `ENABLE_WHODAS_ASSESSMENT === 'true'` (404 when off, by design). No unguarded route. `node --check` clean on all five.
 
 ## Tests and results
-Unit: `assessment-catalogue.test.js`, `assessment-surface-guards.test.js`, `whodas-external-completion.test.js`, `whodas-frontend-guards.test.js`, `whodas-scoring.test.js`, `whodas-templates.test.js` — **pass** (re-run tonight; `assessment-surface-guards.test.js` is also touched by tonight's resource/booking commits for their own asset pins — this feature's own assertions are unaffected).
-Integration: `tests/integration/assessments.itest.js`, `whodas.itest.js` — **all pass** (re-run tonight).
 
-**Browser/E2E proof for the assessment-taking wizard itself: none.** No `e2e/tests/*.spec.js` match; `docs/qa/BROWSER_QA_RESULTS.md` doesn't cover it (its closest entry, Flow I, only touches Leave/CPD/documents rendering).
+| Command | Result |
+|---|---|
+| assessment-catalogue, assessment-surface-guards, fca-docx-engine, fca-frontend-helpers, fca-preview-lifecycle, fca-preview-pages, fca-resolve-scalars, fca-wizard-behaviour, letter-docx-engine, letter-frontend-helpers, letter-template-map, whodas-external-completion, whodas-frontend-guards, whodas-scoring, whodas-templates (15 unit files) | PASS — all green |
+| `fca-reports.itest.js`, `progress-note-letters.itest.js`, `whodas.itest.js`, `assessments.itest.js` (4 integration files) | PASS — all green |
 
-No TODO/FIXME found.
+No failures anywhere in this feature's test surface.
 
-## Open tasks from the tracker
-"Assessment Review" (todo) — a human cataloguing task (keep/remove which assessments, source originals for WHODAS 2.0 and others), not a coding task.
+## Commits in window touching located files
 
-## Commits in window that touched it
-None — tonight's 8 commits touched none of this feature's route or frontend files.
+None — confirmed by real `git log --since=2026-10-15` on each located backend/frontend file, not inferred from a commit-subject summary.
 
-## Disagreement
-None against tracker stage. The gap matches the tracker's own next_action: nobody has opened the assessment wizard in a browser to confirm it completes end to end.
+## Classification evidence
 
-## Re-verified 2026-10-27
-No commit since last night's audit (`896ace1`) touched this feature's files — the true window (`896ace1..41f45ed`) holds only Calendar sync-settings/Outlook/Splose work (see Portal - Splose - Outlook's folder). Re-ran the unit suite tonight (assessment-catalogue, assessment-surface-guards, fca-*, letter-*, whodas-*): 897/897 passed, same as last night. Evidence label unchanged.
+Every matching unit and integration test passes, but nothing in the repository proves a human (or Playwright) ever opened the FCA/letter/WHODAS/Assessments wizard in a browser and watched it produce a document. `e2e/tests/portal.spec.js` and `tutorials.spec.js` contain zero mentions of fca/whodas/letter/template/assessment. `docs/qa/BROWSER_QA_RESULTS.md`'s only "Assessment" hit is an unrelated table column header ("Console errors | Assessment") — no flow touches these wizards.
 
-## Re-verified 2026-10-28
-Real window tonight is `41f45ed..15acf0c` (travel desk-work, place-names autocomplete,
-a dependency patch — see the morning brief §6); none of it touches `whodas-routes.js`,
-`assessments-routes.js`, `fca-routes.js` or their frontend. Re-ran
-`assessment-catalogue`, `assessment-surface-guards`, `whodas-external-completion`,
-`whodas-frontend-guards`, `whodas-scoring`, `whodas-templates` (unit, all pass) and
-`assessments.itest.js`/`whodas.itest.js` (integration, both pass) tonight. Still no
-browser/E2E proof the wizard completes. Evidence label unchanged.
+## Open tracker tasks
+
+`[todo]` Assessment Review — no corresponding code change or browser-QA entry found; still open, consistent with tab-unproven.
+
+## Disagreement / notes
+
+Agree with the prior claude_update in full, including the "unchanged" recency claim.

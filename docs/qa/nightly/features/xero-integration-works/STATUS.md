@@ -1,42 +1,49 @@
 # Xero Integration Works
 
-- Tracker stage: idea
-- Tracker environment: none
-- Evidence label: **tab-unproven** (Financial Dashboard); Payroll Automation is proven — see breakdown
-- Addressed in change window (since last audit, 2026-10-24): no — no commit this window touched `finance-routes.js`, `accounting-routes.js` or any `xero-*.js` file
-- Created (code exists): yes, both tasks
+- Tracker stage: idea · Tracker environment: none
+- Evidence label: **tab-unproven** (both sub-parts — see disagreement on Payroll Automation below)
+- Addressed since the last audit (develop unchanged since 2026-10-28, also commit `15acf0c`): no — confirmed by real `git log --since=2026-10-15` on every located file, all empty.
+- Created (any located code): yes.
 
-## Financial Dashboard — tab-unproven
-- Located: `backend/finance-routes.js` (`/api/finance/dashboard`, `/status`, `/payroll/overview`, `/payroll/pay-runs/:id`, `/invoicing/summary`) + `backend/finance-db.js`, `backend/finance-flags.js`; also `backend/accounting-routes.js` (Xero connect/sync/reconciliation/contacts/pricing) + `backend/accounting-db.js`, `backend/xero-api.js`, `backend/xero-sync.js`. Frontend: owner-only Finance/Accounting tabs in `mockup_v3.html` (`data-owner-only="1"`).
-- Guard: **owner-only confirmed** — every route in both files uses `requireAuth` + `requireRole('owner')` (the `finance-routes.js` file header even states "frontend hide is cosmetic").
-- Tests: `tests/finance-flags.test.js`, `tests/finance-routes.test.js` (unit) — **all pass** (re-run tonight); `tests/integration/finance-routes.itest.js`, `tests/integration/accounting-routes.itest.js`, `tests/integration/accounting-phase2.itest.js` — **all pass** (re-run tonight).
-- Browser/E2E proof: no E2E spec. `docs/qa/BROWSER_QA_RESULTS.md` row H confirms the owner-gated view renders with Xero disconnected and all write flags false, but explicitly notes "no Xero connection attempted, no write action exercised" — nobody has proven the dashboard renders real connected figures.
+## Located
 
-## Payroll Automation — proven, tracker checklist is stale
-- Code exists, **contrary to the checklist's all-unchecked state**: `backend/xero-payroll-api.js`, `xero-payroll-connection.js`, `xero-payroll-db.js`, `xero-payroll-mapping.js`, `xero-payroll-sync.js`, wired into `/api/finance/payroll/*` (owner-only) and the onboarding payroll data flow.
-- Tests: `tests/xero-payroll-api.test.js`, `xero-payroll-mapping.test.js`, `xero-payroll-sync.test.js`, `onboarding-payroll.test.js` (unit) — **all pass** (re-run tonight); `tests/integration/onboarding-payroll-xero.itest.js` — **pass** (re-run tonight).
-- Not a tab/page in its own right (a background sync process), so no browser-proof requirement applies.
+- `backend/finance-routes.js` — `GET /api/finance/{status,dashboard,payroll/overview,payroll/pay-runs/:id,invoicing/summary}`. Header: "every route: requireAuth + requireRole('owner')... live Xero calls are GET only."
+- `backend/accounting-routes.js`, `backend/invoicing-routes.js` — the Splose→Xero sync/invoicing pipeline (writes gated behind fail-closed flags per header comments).
+- `backend/xero-payroll-api.js`, `xero-payroll-mapping.js`, `xero-payroll-sync.js`, `xero-payroll-connection.js` — Xero Payroll AU integration; `xero-payroll-sync.js` is the "one approved onboarding snapshot → one employee in Xero" orchestration = tracker task **"Payroll Automation"**.
+- `backend/onboarding-payroll-routes.js` — the actual mounted payroll-automation routes: `/api/onboarding/journey/records/:id/payroll-setup*` (config, approve, request-changes, sync, retry, recheck, resolve-duplicate, manual-actions).
+- Frontend: FINANCE TAB (owner-only, `mockup_v3.html:5492`), rendered by `finance.js`, with Dashboard/Payroll/Invoicing sub-nav — **added in commit `427a063` (2026-09-17)**: "feat(finance): Finance tab — dashboard, payroll and invoicing over Xero (owner-only, read-only)."
+- Frontend payroll-setup UI: `frontend/current/onboarding-journey.js` has a real rendered panel (`payrollPanel`, `payrollConfigForm`, step `oj-payroll-config`) inside the Onboarding Journey tab — **not** inside the Finance tab. This is a genuine UI, not just an API.
 
-No TODO/FIXME found in any `xero-*.js`/`accounting-*.js`/`finance-*.js` file.
+## Guard check
 
-## Open tasks from the tracker
-"Financial Dashboard" (todo, detailed checklist, unchecked), "Payroll Automation" (todo, detailed checklist, unchecked — but see disagreement).
+`finance-routes.js`: `const ownerOnly = [requireAuth, requireRole('owner')];` applied to every one of its 5 routes — verified by direct grep. `onboarding-payroll-routes.js`: `requireAuth` plus `requirePermission('onboarding.payroll')` on every individual payroll-setup route (12 routes checked). Both correctly guarded.
 
-## Commits in window that touched it
-None — tonight's 8 commits (resource privacy/upload, booking "Make room", a
-dependency patch) touched none of this feature's files.
+## Tests and results
 
-## Disagreement
-Payroll Automation's tracker checklist shows every item unchecked, but substantial guarded, tested code already exists — the evidence is ahead of the tracker here, the opposite of most other cards in this snapshot.
+| Command | Result |
+|---|---|
+| `finance-routes`, `finance-flags`, `xero-payroll-api`, `xero-payroll-mapping`, `xero-payroll-sync`, `invoicing-billing-mark` (6 unit files) | PASS — 74/74 |
+| `npx jest tests/onboarding-payroll.test.js` | PASS — 7/7 |
+| `DB_NAME=therapy_scheduler_audit_g5` `accounting-phase2.itest.js`, `accounting-routes.itest.js`, `finance-routes.itest.js`, `invoicing.itest.js`, `reconcile-safety.itest.js` | PASS — 62/62 |
+| `onboarding-payroll-xero.itest.js` | PASS — 8/8 |
 
-## Re-verified 2026-10-27
-No commit since last night's audit (`896ace1`) touched this feature's files — the true window (`896ace1..41f45ed`) holds only Calendar sync-settings/Outlook/Splose work (see Portal - Splose - Outlook's folder). Re-ran the unit suite (81/81) and the integration suite (accounting-phase2, accounting-routes, finance-routes, invoicing, onboarding-payroll-xero: 63/63) tonight — same results as last night. Evidence label unchanged.
+No failures. No E2E/browser-QA record covers the Finance tab, payroll tab-content, or the onboarding-journey payroll panel — confirmed by zero mentions of "finance" in `docs/qa/BROWSER_QA_RESULTS.md` (dated 2026-08-01, build `188334d`, which predates commit `427a063` from 2026-09-17 that created the Finance tab), and zero mentions of finance/xero/payroll/invoicing in either e2e spec file (only `/api/accounting/*` visibility checks for a different, older tab).
 
-## Re-verified 2026-10-28
-Real window tonight is `41f45ed..15acf0c` (travel desk-work, place-names autocomplete, a
-dependency patch — see the morning brief §6); none of it touches `finance-routes.js`,
-`accounting-routes.js` or any `xero-*.js` file. Re-ran the unit set (`finance-flags`,
-`finance-routes`, `xero-payroll-api`, `xero-payroll-mapping`, `xero-payroll-sync`,
-`onboarding-payroll` — 77/77) and the integration set (`finance-routes`,
-`accounting-routes`, `accounting-phase2`, `invoicing`, `onboarding-payroll-xero` —
-63/63) tonight — same results as every prior night. Evidence label unchanged.
+## Commits in window touching located files
+
+None.
+
+## Breakdown
+
+- **Financial Dashboard (Finance tab): tab-unproven** — no disagreement with the prior night.
+- **Payroll Automation: tab-unproven** (downgraded from the prior night's "proven" — see below).
+
+## Open tracker tasks
+
+`[todo]` Financial Dashboard — needs browser/E2E check. `[todo]` Payroll Automation — backend proven by tests; a real UI panel exists (`onboarding-journey.js`) but is unproven in a browser; needs a browser/E2E check, not just a tracker-checklist update.
+
+## Disagreement / notes
+
+Agree on Financial Dashboard being tab-unproven, and on the browser-QA record predating the Finance tab — now confirmed with the exact commit (`427a063`, 2026-09-17, vs. the QA record dated 2026-08-01).
+
+**Disagree on Payroll Automation's prior "proven" label.** The backend is fully tested (15/15 passing tests) and correctly guarded, and it does have a real frontend panel (`payrollPanel`/`payrollConfigForm` in `onboarding-journey.js`) — but no browser or E2E test exercises that panel. Per the PROMPT.md rubric ("proven ... and (for a tab) a browser or E2E test covers the tab"), a feature with a real, untested UI panel should be `tab-unproven`, not `proven`. The prior next_action ("Open the Finance tab... confirm the Dashboard renders real figures, then add a browser/E2E check") remains the right next step and should be extended to also cover the onboarding-journey payroll-setup panel.
