@@ -405,6 +405,99 @@ describe('GET /api/mobile/calendar', () => {
   });
 });
 
+describe('calendar parity with the portal', () => {
+  const dayRoute = require('../billing/day-route');
+
+  test('Outlook copies of portal travel legs are hidden, as the portal hides them', async () => {
+    const mirror = { ...EVENT_A, id: 'eeeeeeee-0000-4000-8000-000000000001',
+      event_type: 'travel', title: 'Travel', custom_metadata: { travelLegKey: 'leg:1' } };
+    db.getEventsForTherapists.mockResolvedValue([EVENT_A, mirror]);
+    const agent = await loginAs(USER_A);
+    const res = await agent.get('/api/mobile/calendar?date=2026-08-10');
+    expect(res.body.days[0].appointments.map((a) => a.id)).toEqual([EVENT_A.id]);
+  });
+
+  test('asks for every event touching the window, not only ones contained in it', async () => {
+    const agent = await loginAs(USER_A);
+    await agent.get('/api/mobile/calendar?date=2026-08-10');
+    expect(db.getEventsForTherapists.mock.calls[0][1].overlap).toBe(true);
+    const own = db.pool.query.mock.calls.map(([sql]) => String(sql).replace(/\s+/g, ' '))
+      .find((q) => q.includes('FROM events WHERE user_id = $1') && q.includes('ORDER BY start_time'));
+    expect(own).toContain('start_time < $3 AND end_time > $2');
+  });
+
+  test('an event crossing Perth midnight shows on both days', async () => {
+    // 22:00 Perth on the 10th → 02:00 Perth on the 11th.
+    const late = { ...EVENT_A, start_time: '2026-08-10T14:00:00.000Z', end_time: '2026-08-10T18:00:00.000Z' };
+    db.getEventsForTherapists.mockResolvedValue([late]);
+    const agent = await loginAs(USER_A);
+    const res = await agent.get('/api/mobile/calendar?date=2026-08-10&range=week');
+    const ids = (d) => res.body.days.find((x) => x.date === d).appointments.map((a) => a.id);
+    expect(ids('2026-08-10')).toEqual([EVENT_A.id]);
+    expect(ids('2026-08-11')).toEqual([EVENT_A.id]);
+    expect(ids('2026-08-12')).toEqual([]);
+  });
+
+  test('an event ending exactly at midnight stays on its own day', async () => {
+    const toMidnight = { ...EVENT_A, start_time: '2026-08-10T14:00:00.000Z', end_time: '2026-08-10T16:00:00.000Z' };
+    db.getEventsForTherapists.mockResolvedValue([toMidnight]);
+    const agent = await loginAs(USER_A);
+    const res = await agent.get('/api/mobile/calendar?date=2026-08-10&range=week');
+    expect(res.body.days.find((x) => x.date === '2026-08-11').appointments).toEqual([]);
+  });
+
+  test('all-day events are flagged with the portal\'s 23-hour rule', async () => {
+    const allDay = { ...EVENT_A, start_time: '2026-08-09T16:00:00.000Z', end_time: '2026-08-10T16:00:00.000Z' };
+    db.getEventsForTherapists.mockResolvedValue([allDay, EVENT_A2]);
+    const agent = await loginAs(USER_A);
+    const res = await agent.get('/api/mobile/calendar?date=2026-08-10');
+    const [a, b] = res.body.days[0].appointments;
+    expect(a.isAllDay).toBe(true);
+    expect(b.isAllDay).toBe(false);
+  });
+
+  test('a hand-set address (JSONB) reaches the phone as text, never an object', async () => {
+    const pinned = { ...EVENT_A, manual_location: { address: '5 Pinned Way, Bateman WA 6150', lat: -32, lng: 115 } };
+    db.getEventsForTherapists.mockResolvedValue([pinned]);
+    const agent = await loginAs(USER_A);
+    const res = await agent.get('/api/mobile/calendar?date=2026-08-10');
+    expect(res.body.days[0].appointments[0].location).toBe('5 Pinned Way, Bateman WA 6150');
+    const travel = await agent.get('/api/mobile/travel?date=2026-08-10');
+    expect(travel.body.trips[0].toAddress).toBe('5 Pinned Way, Bateman WA 6150');
+  });
+
+  test('the first drive starts at the day\'s work base when one is set', async () => {
+    const ymd = '2026-08-10';
+    const base = db.pool.query.getMockImplementation();
+    db.pool.query.mockImplementation(async (sql, params) => {
+      if (String(sql).includes('SELECT work_location_schedule, default_work_location FROM users')) {
+        return { rows: [{
+          default_work_location: { homes: [{ id: 'h1', label: 'Home', addr: '1 Home St, Canning Vale WA 6155' }] },
+          work_location_schedule: { [dayRoute.weekKeyForDate(ymd)]: { [dayRoute.dayKeyForDate(ymd)]: 'h1' } },
+        }] };
+      }
+      return base(sql, params);
+    });
+    db.getEventsForTherapists.mockResolvedValue([EVENT_A, EVENT_A2]);
+    const agent = await loginAs(USER_A);
+    const res = await agent.get(`/api/mobile/travel?date=${ymd}`);
+    expect(res.body.trips[0]).toMatchObject({ fromAddress: '1 Home St, Canning Vale WA 6155', fromLabel: 'Home' });
+    expect(res.body.trips[1]).toMatchObject({ fromAddress: '12 Smith Street, Willetton', fromLabel: null });
+  });
+
+  test('no work base set: the first drive still has no origin', async () => {
+    db.getEventsForTherapists.mockResolvedValue([EVENT_A]);
+    const agent = await loginAs(USER_A);
+    const res = await agent.get('/api/mobile/travel?date=2026-08-10');
+    expect(res.body.trips[0]).toMatchObject({ fromAddress: null, fromLabel: null });
+  });
+
+  test('the parity rules sit behind the same sign-in guard', async () => {
+    expect((await request(app).get('/api/mobile/calendar?date=2026-08-10')).status).toBe(401);
+    expect((await request(app).get('/api/mobile/travel?date=2026-08-10')).status).toBe(401);
+  });
+});
+
 describe('GET /api/mobile/appointments/:id', () => {
   test('own appointment returns detail with travel + maps fields', async () => {
     const agent = await loginAs(USER_A);

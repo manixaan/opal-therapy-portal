@@ -35,6 +35,7 @@ const db = require('./database');
 const { pool } = require('./database');
 const { requireAuth } = require('./permissions');
 const { VIRTUAL_RE } = require('./geo');
+const dayRoute = require('./billing/day-route');
 const log = require('./logger').createLogger('mobile');
 
 router.use('/api/mobile', requireAuth);
@@ -113,7 +114,20 @@ function isRoutableAddress(addr) {
   return clean.includes(',') || clean.split(/\s+/).length >= 3;
 }
 
-const bestAddress = (ev) => ev.manual_location || ev.location || null;
+// manual_location is JSONB ({ address, lat, lng, … }) — never hand the object
+// to the phone as if it were text. Same rule the portal's billing route uses.
+const bestAddress = (ev) => dayRoute.eventAddress(ev) || null;
+
+/**
+ * Outlook copies of the portal's own travel legs. The portal's calendar hides
+ * these (mockup_v3.html filters custom_metadata.travelLegKey) and draws the
+ * leg itself; the phone must hide them too or every leg shows twice.
+ */
+const isTravelMirror = (ev) => !!(ev && ev.custom_metadata && ev.custom_metadata.travelLegKey);
+
+/** Same threshold the portal uses to draw an all-day chip. */
+const ALL_DAY_MS = 23 * 3600 * 1000;
+const isAllDayEvent = (ev) => new Date(ev.end_time) - new Date(ev.start_time) >= ALL_DAY_MS;
 
 /** Compact appointment shape for mobile lists. No raw sync payloads. */
 function formatMobileAppointment(ev) {
@@ -128,6 +142,7 @@ function formatMobileAppointment(ev) {
     eventType: ev.event_type,
     status: ev.status,
     isCancelled: ev.status === 'cancelled',
+    isAllDay: isAllDayEvent(ev),
     location: address,
     isVirtual: virtual,
     hasTravel: ev.travel_time_minutes != null || ev.travel_distance != null,
@@ -156,13 +171,13 @@ async function loadOwnAppointments(req, date, days = 1) {
   //      here. Nothing widens beyond the caller.
   const [profileEvents, ownRes] = await Promise.all([
     profileId
-      ? db.getEventsForTherapists([profileId], { startDate: startUtc.toISOString(), endDate: endUtc.toISOString() })
+      ? db.getEventsForTherapists([profileId], { startDate: startUtc.toISOString(), endDate: endUtc.toISOString(), overlap: true })
       : Promise.resolve([]),
     pool.query(
       `SELECT * FROM events
         WHERE user_id = $1
           AND (is_deleted IS NULL OR is_deleted = FALSE)
-          AND start_time >= $2 AND end_time <= $3
+          AND start_time < $3 AND end_time > $2
           ${profileId ? 'AND (therapist_profile_id IS NULL OR therapist_profile_id <> $4)' : ''}
         ORDER BY start_time ASC`,
       profileId ? [req.user.id, startUtc.toISOString(), endUtc.toISOString(), profileId]
@@ -170,7 +185,7 @@ async function loadOwnAppointments(req, date, days = 1) {
   ]);
   const seen = new Set();
   const kept = [...(profileEvents || []), ...(ownRes?.rows || [])]
-    .filter((e) => !e.is_deleted && !seen.has(e.id) && seen.add(e.id))
+    .filter((e) => !e.is_deleted && !isTravelMirror(e) && !seen.has(e.id) && seen.add(e.id))
     .sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
   // The "not linked" notice is for an account that has NO diary of either
   // kind — not for an owner whose appointments live on their user, and not
@@ -199,7 +214,7 @@ async function loadOwnAppointments(req, date, days = 1) {
  * routable is status 'needs_review' (presentation state; fixing addresses
  * stays a portal feature).
  */
-function deriveTrips(rawEvents) {
+function deriveTrips(rawEvents, startBase = null) {
   const stops = rawEvents
     .filter((e) => e.event_type === 'therapy' && e.status !== 'cancelled')
     .filter((e) => !VIRTUAL_RE.test(String(bestAddress(e) || '')))
@@ -212,7 +227,10 @@ function deriveTrips(rawEvents) {
     const trip = {
       id: `trip-${ev.id}`,
       appointmentId: ev.id,
-      fromAddress: prev ? bestAddress(prev) : null,
+      // The day's first drive starts at the practitioner's work base for that
+      // date (the portal's own rule — users.work_location_schedule), when set.
+      fromAddress: prev ? bestAddress(prev) : (startBase ? startBase.address : null),
+      fromLabel: prev ? null : (startBase ? startBase.label : null),
       toAddress: routable ? toAddress : null,
       departAfter: prev ? prev.end_time : null,
       arriveBy: ev.start_time,
@@ -232,6 +250,22 @@ function deriveTrips(rawEvents) {
     needsReviewCount: trips.filter((t) => t.status === 'needs_review').length,
   };
   return { trips, summary };
+}
+
+/**
+ * The caller's work base for a Perth date ({ address, label }) or null —
+ * unset, leave, office or a remote base never anchors a drive.
+ */
+async function loadDayBase(req, date) {
+  try {
+    const r = await pool.query(
+      'SELECT work_location_schedule, default_work_location FROM users WHERE id = $1', [req.user.id]);
+    const base = r.rows[0] ? dayRoute.dayBase(r.rows[0], date) : null;
+    return base && !base.remote && base.address ? { address: base.address, label: base.label } : null;
+  } catch (err) {
+    log.warn('mobile day base lookup failed', { error: err.message });
+    return null;
+  }
 }
 
 // ── Voice-note shaping/validation ────────────────────────────────────────────
@@ -369,7 +403,7 @@ router.get('/api/mobile/today', safe(async (req, res) => {
   }
 
   const { startUtc, endUtc } = perthDayWindow(date);
-  const [{ appointments, rawEvents, warnings }, remindersQ, tasksQ, notesQ] = await Promise.all([
+  const [{ appointments, rawEvents, warnings }, remindersQ, tasksQ, notesQ, dayBase] = await Promise.all([
     loadOwnAppointments(req, date),
     // Due today or overdue, still open.
     pool.query(
@@ -382,12 +416,13 @@ router.get('/api/mobile/today', safe(async (req, res) => {
     pool.query(
       `SELECT * FROM voice_notes WHERE user_id = $1 AND status = 'draft'
         ORDER BY created_at DESC LIMIT 5`, [req.user.id]),
+    loadDayBase(req, date),
   ]);
 
   const now = new Date();
   const upcoming = appointments.filter((a) => !a.isCancelled);
   const nextAppointment = upcoming.find((a) => new Date(a.start) >= now) || null;
-  const { trips, summary: travelSummary } = deriveTrips(rawEvents);
+  const { trips, summary: travelSummary } = deriveTrips(rawEvents, dayBase);
   const nextTrip = trips.find((t) => new Date(t.arriveBy) >= now) || null;
 
   res.json({
@@ -436,10 +471,16 @@ router.get('/api/mobile/calendar', safe(async (req, res) => {
     days.push({ date: d, appointments: [] });
   }
   const byDate = new Map(days.map((d) => [d.date, d]));
+  // An event that crosses midnight (or spans days) belongs to every Perth day
+  // it touches — the window query is overlap, so it would otherwise vanish
+  // from the day it started before.
   for (const a of appointments) {
-    const perthDate = new Date(new Date(a.start).getTime() + PERTH_TZ_OFFSET_MIN * 60000)
-      .toISOString().slice(0, 10);
-    byDate.get(perthDate)?.appointments.push(a);
+    const startMs = new Date(a.start).getTime();
+    const lastMs = Math.max(startMs, new Date(a.end).getTime() - 1); // end is exclusive
+    for (const d of days) {
+      const { startUtc: ds, endUtc: de } = perthDayWindow(d.date);
+      if (startMs < de.getTime() && lastMs >= ds.getTime()) byDate.get(d.date).appointments.push(a);
+    }
   }
 
   res.json({
@@ -497,8 +538,9 @@ router.get('/api/mobile/travel', safe(async (req, res) => {
     return res.status(400).json({ error: 'timezone must be a valid IANA timezone name' });
   }
 
-  const { rawEvents, warnings } = await loadOwnAppointments(req, date);
-  const { trips, summary } = deriveTrips(rawEvents);
+  const [{ rawEvents, warnings }, dayBase] = await Promise.all([
+    loadOwnAppointments(req, date), loadDayBase(req, date)]);
+  const { trips, summary } = deriveTrips(rawEvents, dayBase);
   const nextTrip = trips.find((t) => new Date(t.arriveBy) >= new Date()) || null;
 
   res.json({

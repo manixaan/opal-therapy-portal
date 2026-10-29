@@ -1443,7 +1443,7 @@ async function backfillEventTherapistProfile(userId, therapistProfileId, organis
 
 // Fetch events for one or more therapist profiles, with optional date filtering.
 // Returns events ordered by start_time, tagged with therapist colour/name for the UI.
-async function getEventsForTherapists(therapistProfileIds, { startDate, endDate, includeDeleted = false } = {}) {
+async function getEventsForTherapists(therapistProfileIds, { startDate, endDate, includeDeleted = false, overlap = false } = {}) {
   if (!therapistProfileIds || therapistProfileIds.length === 0) return [];
 
   let params = [therapistProfileIds];
@@ -1452,13 +1452,15 @@ async function getEventsForTherapists(therapistProfileIds, { startDate, endDate,
   if (!includeDeleted) {
     conditions.push('(e.is_deleted IS NULL OR e.is_deleted = FALSE)');
   }
+  // overlap: anything touching the window (an event crossing midnight or
+  // spanning days). Default stays containment for existing callers.
   if (startDate) {
     params.push(startDate);
-    conditions.push(`e.start_time >= $${params.length}`);
+    conditions.push(overlap ? `e.end_time > $${params.length}` : `e.start_time >= $${params.length}`);
   }
   if (endDate) {
     params.push(endDate);
-    conditions.push(`e.end_time <= $${params.length}`);
+    conditions.push(overlap ? `e.start_time < $${params.length}` : `e.end_time <= $${params.length}`);
   }
 
   const result = await pool.query(`
