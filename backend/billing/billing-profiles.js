@@ -148,6 +148,9 @@ async function upsertProfile(q, orgId, clientId, userId, values) {
     params.push(v);
     sets.push(`${EDITABLE[k]} = $${params.length}`);
   }
+  // A payer edited here is no longer the one read from Splose (migration 082);
+  // splose-billing-source.js#fillProfile sets the source again after its own fill.
+  if (['payerType', 'payerName', 'payerEmail'].some(k => k in values)) sets.push('payer_source = NULL', 'payer_source_detail = NULL');
   // A changed service address invalidates the stored coordinates.
   if ('serviceAddress' in values && (before.service_address || '') !== (values.serviceAddress || '')) {
     sets.push('latitude = NULL', 'longitude = NULL', 'mmm_checked_at = NULL');

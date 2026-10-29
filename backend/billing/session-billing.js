@@ -109,6 +109,47 @@ function buildSessionLine({ serviceDate, minutes, rate, mmm, sessionLabel = 'The
 }
 
 /**
+ * A Splose support activity (report writing, non-face-to-face work logged in
+ * Splose). Priced like a session — the rate card's session hourly rate for
+ * the client's zone — with quantity = minutes ÷ 60 (4 dp). The item code is
+ * Splose's own (e.g. 15_617_0128_1_3_RR); the caller has checked that its
+ * base is this rate rule's session item.
+ */
+function buildSploseActivityLine({ serviceDate, minutes, rate, mmm, itemCode, serviceTitle, sploseActivityId, splosePricing = null, mmmSnapshot = null }) {
+  const qtyE4 = M.minutesToHoursQty(minutes, 1);
+  const unitCents = rate.sessionRateCents;
+  const amountCents = M.lineAmount(qtyE4, unitCents);
+  return {
+    component: 'SPLOSE_ACTIVITY',
+    itemCode: itemCode || rate.rule.sessionItemCode || null,
+    description: `${displayDate(serviceDate)}, ${serviceTitle || 'Non-Face-to-Face Support'}`,
+    serviceDate,
+    durationMinutes: minutes,
+    quantityE4: qtyE4,
+    unitCents,
+    amountCents,
+    mmm,
+    rateCardId: rate.card.id,
+    rateCardVersion: rate.card.version,
+    calculation: {
+      method: 'splose_activity_minutes_div_60',
+      serviceDate,
+      sploseActivityId: String(sploseActivityId),
+      serviceTitle: serviceTitle || null,
+      durationMinutes: minutes,
+      quantityHours: M.qtyToString(qtyE4),
+      mmm,
+      mmmSource: mmmSnapshot,
+      rateCard: rate.card,
+      zone: rate.rule.zoneLabel,
+      hourlyRate: M.fromCents(unitCents),
+      splosePricing,
+      amount: M.fromCents(amountCents),
+    },
+  };
+}
+
+/**
  * A client's share of a non-face-to-face block's timed work (billing/nf2f-timer.js).
  * Priced like a session — the rate card's session hourly rate for the
  * client's MMM zone, same support item, NDIS non-face-to-face claim — with
@@ -246,5 +287,5 @@ function displayStatus(inv, today) {
 
 module.exports = {
   MAX_SESSION_MINUTES, isTelehealth, durationMinutes, evaluateEvent, displayDate, gstFor,
-  buildSessionLine, buildNf2fLine, buildTravelLines, invoiceTotals, addDays, todayInTz, displayStatus,
+  buildSessionLine, buildNf2fLine, buildSploseActivityLine, buildTravelLines, invoiceTotals, addDays, todayInTz, displayStatus,
 };

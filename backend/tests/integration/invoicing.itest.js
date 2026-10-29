@@ -20,6 +20,8 @@ const bcrypt = require('bcryptjs');
 const { db, truncateAll, seedUser, seedOrganisation, closePool } = require('./helpers');
 const { setMapsProvider } = require('../../billing/maps-adapter');
 const DR = require('../../billing/day-route');
+// Splose is not part of these scenarios (invoicing-splose.itest.js covers it): disconnected, so nothing leaves the process.
+require('../../billing/splose-billing-source').setSploseSource({ isConfigured: () => false });
 
 const PASSWORD = 'InvPass1!';
 

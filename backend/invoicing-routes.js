@@ -33,6 +33,7 @@ const SessionMmm = require('./billing/session-mmm-store');
 const RF = require('./billing/route-facts');
 const DR = require('./billing/day-route');
 const Issues = require('./billing/billing-issues');
+const SB = require('./billing/splose-billing-source');
 const { recordAudit, listAudit } = require('./billing/billing-audit');
 const storage = require('./storage');
 
@@ -462,21 +463,18 @@ router.put('/api/invoicing/clients/:clientId/mmm-override', safe(async (req, res
 }));
 
 router.post('/api/invoicing/clients/:clientId/import-splose', safe(async (req, res) => {
-  const clientId = String(req.params.clientId);
-  const splose = require('./splose-api');
-  if (typeof splose.isConfigured === 'function' && !(await splose.isConfigured())) return res.status(409).json({ error: 'Splose is not connected' });
-  let patient;
-  try { patient = await splose.getPatient(clientId); } catch (_) { return res.status(502).json({ error: 'Could not read the client from Splose' }); }
+  const clientId = String(req.params.clientId).slice(0, 255);
+  const data = await SB.loadForClient(clientId);
+  if (data.status === 'NOT_CONNECTED') return res.status(409).json({ error: 'Splose is not connected' });
+  if (data.status !== 'OK') return res.status(502).json({ error: 'Could not read the client from Splose' });
+  if (!data.patients.has(clientId)) return res.status(404).json({ error: 'Client not found in Splose' });
+  await BP.ensureStubProfiles(pool, orgId(req), [{ clientId, clientName: data.patients.get(clientId).fullName || null }]);
   const existing = await BP.getProfile(pool, orgId(req), clientId);
-  const values = BP.fieldsFromSplosePatient(patient, existing);
-  const out = await Life.withTx(pool, async tx => {
-    const r = await BP.upsertProfile(tx, orgId(req), clientId, req.user.id, values);
-    await recordAudit(tx, { orgId: orgId(req), actorUserId: req.user.id, action: 'billing_profile.imported_from_splose',
-      entityType: 'billing_profile', entityId: clientId, after: { fields: Object.keys(values) } });
-    return r.after;
-  });
-  const classified = await MMM.ensureClassified(pool, out);
-  res.json({ profile: classified, imported: Object.keys(values) });
+  // Fills blanks only (name, NDIS number, address, plan management, and the
+  // payer from the client's latest Splose invoice); owner data is never replaced.
+  const out = await Life.withTx(pool, tx => SB.fillProfile(tx, orgId(req), existing, data, req.user.id));
+  const classified = await MMM.ensureClassified(pool, out.profile);
+  res.json({ profile: classified, imported: out.fields });
 }));
 
 // ── Route facts (manual entry when Google cannot route a leg) ─────────────
@@ -502,7 +500,8 @@ router.get('/api/invoicing/settings', safe(async (req, res) => {
   await RC.ensureDefaultRateCard(pool, orgId(req));
   const [org, cards, ds] = await Promise.all([Settings.loadOrgProfile(pool, orgId(req)), RC.loadRateCards(pool, orgId(req)), MMM.activeDataset(pool)]);
   res.json({ settings, organisation: org, rateCards: cards, mmmDataset: ds,
-    nextInvoiceNumberPreview: Settings.formatInvoiceNumber(settings.invoicePrefix, settings.nextInvoiceNumber, settings.invoiceNumberPadding),
+    nextInvoiceNumberPreview: Settings.formatInvoiceNumber(settings.invoicePrefix,
+      Math.max(settings.nextInvoiceNumber, (settings.sploseInvoiceNumberHigh || 0) + 1), settings.invoiceNumberPadding),
     emailConfigured: require('./email').isEmailConfigured(), mapsConfigured: !!process.env.GOOGLE_MAPS_API_KEY });
 }));
 

@@ -599,6 +599,26 @@ async function getPatientIdentifiers() {
   }));
 }
 
+/**
+ * What invoicing needs from each active patient: name, NDIS number, address
+ * and how the plan is managed (ndisInfo.fundManagement). Server-only, like
+ * getPatientIdentifiers(); shares the cached /patients fetch.
+ */
+async function getPatientBillingDetails() {
+  const items = await fetchAllPages('/patients');
+  return items.filter((p) => !p.archived && !p.deletedAt).map((p) => {
+    const addr = extractPatientAddress(p);
+    return {
+      id: p.id,
+      fullName: `${p.firstname || ''} ${p.lastname || ''}`.trim(),
+      email: p.email || null,
+      ndisNumber: p.ndisNumber || null,
+      fundManagement: (p.ndisInfo && p.ndisInfo.fundManagement) || null,
+      formattedAddress: addr.formattedAddress || null,
+    };
+  });
+}
+
 // ─── Cases ────────────────────────────────────────────────────────────────────
 
 async function getCase(id) {
@@ -636,8 +656,8 @@ async function getContacts() {
 
 // ─── Invoices ─────────────────────────────────────────────────────────────────
 
-async function getInvoices(params = {}) {
-  return fetchAllPages('/invoices', params);
+async function getInvoices(params = {}, opts = {}) {
+  return fetchAllPages('/invoices', params, opts);
 }
 
 // ─── Payments ─────────────────────────────────────────────────────────────────
@@ -648,8 +668,8 @@ async function getPayments() {
 
 // ─── Support activities (read) ────────────────────────────────────────────────
 
-async function getSupportActivities() {
-  return fetchAllPages('/support-activities');
+async function getSupportActivities(opts = {}) {
+  return fetchAllPages('/support-activities', {}, opts);
 }
 
 // ─── Support items ────────────────────────────────────────────────────────────
@@ -662,6 +682,7 @@ async function getSupportItems() {
 
 module.exports = {
   getPatientIdentifiers,
+  getPatientBillingDetails,
   setApiKey,
   getApiKey,
   isConfigured,

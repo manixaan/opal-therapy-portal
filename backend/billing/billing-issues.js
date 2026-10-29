@@ -31,6 +31,12 @@ const ISSUE_TYPES = Object.freeze({
   TRIP_ALLOCATION_CHANGED:   { severity: 'BLOCKING', label: 'Trip allocation changed after invoice finalised' },
   ALREADY_BILLED_CONFLICT:   { severity: 'WARNING',  label: 'Already billed conflict' },
   SOURCE_CHANGED_AFTER_FINALISE: { severity: 'BLOCKING', label: 'Source event changed after invoice finalisation' },
+  // Splose as a billing source (billing/splose-billing-source.js, migration 082)
+  SPLOSE_UNAVAILABLE:        { severity: 'BLOCKING', label: 'Splose could not be checked' },
+  SPLOSE_DOUBLE_BILLED:      { severity: 'BLOCKING', label: 'Invoiced in both Splose and Opal' },
+  SPLOSE_ACTIVITY_PRACTITIONER_UNMAPPED: { severity: 'BLOCKING', label: 'Splose practitioner not linked to a portal user' },
+  SPLOSE_ACTIVITY_ITEM_UNSUPPORTED:      { severity: 'BLOCKING', label: 'Splose support item not on the rate card' },
+  SPLOSE_ACTIVITY_DUPLICATES_NF2F:       { severity: 'WARNING',  label: 'Splose activity overlaps a timed non-face-to-face block' },
 });
 
 /**

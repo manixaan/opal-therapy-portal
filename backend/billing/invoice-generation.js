@@ -7,7 +7,12 @@
  *   → rate card on the service date → session lines
  *   → practitioner-day route (day-route) + persisted route facts
  *   → travel allocation (travel-billing) → travel lines
+ *   + Splose support activities (report writing…) → activity lines
  *   → group by client + payer → draft invoices
+ *
+ * Splose (billing/splose-billing-source.js) is read in phase A: it fills
+ * blank payers from the client's latest Splose invoice, supplies support
+ * activities, and says what Splose has already invoiced, which Opal skips.
  *
  * Two phases:
  *   A. PREPARE (pool, no transaction): read events, create stub profiles,
@@ -37,6 +42,7 @@ const DR = require('./day-route');
 const RF = require('./route-facts');
 const Settings = require('./billing-settings');
 const Issues = require('./billing-issues');
+const SB = require('./splose-billing-source');
 const { recordAudit } = require('./billing-audit');
 
 const OPEN_STATUSES = ['DRAFT', 'NEEDS_ATTENTION'];
@@ -67,7 +73,7 @@ async function loadCandidateEvents(q, orgId, { from, to, practitionerIds, client
   if (eventIds && eventIds.length) { params.push(eventIds); where.push(`e.id = ANY($${params.length}::uuid[])`); }
   const { rows } = await q.query(
     `SELECT e.id, e.user_id, e.title, e.start_time, e.end_time, e.location, e.manual_location, e.event_type,
-            e.status, e.client_id, e.client_name, e.is_teams_meeting, e.is_deleted, e.custom_metadata,
+            e.status, e.splose_id, e.client_id, e.client_name, e.is_teams_meeting, e.is_deleted, e.custom_metadata,
             to_char(((e.start_time AT TIME ZONE 'UTC') AT TIME ZONE $4)::date, 'YYYY-MM-DD') AS local_date,
             COALESCE(tp.display_name, u.name) AS practitioner_name,
             u.work_location_schedule, u.default_work_location,
@@ -130,7 +136,31 @@ async function prepare(q, orgId, opts) {
     eventsExamined: events.length, skipped: {}, sessionsIncluded: 0, nf2fIncluded: 0, travelAllocations: 0,
     alreadyInvoiced: 0, excludedByOwner: 0, invoicesCreated: 0, invoicesUpdated: 0,
     itemsNeedAttention: 0, linesAdded: 0, linesUpdated: 0, totalCents: 0,
+    sploseActivitiesIncluded: 0, invoicedInSplose: 0, splose: null,
   };
+  const skip = reason => { summary.skipped[reason] = (summary.skipped[reason] || 0) + 1; };
+
+  // 0. Splose: read once. Anything Splose must judge is held back when it cannot be read.
+  const splose = await SB.loadForRun({ from: opts.from, to: opts.to });
+  summary.splose = splose.status;
+  const sploseHeld = splose.status !== 'OK';
+  const eventScoped = !!(opts.eventIds && opts.eventIds.length);
+  if (splose.status === 'OK') {
+    await SB.recordSploseHigh(q, orgId, SB.highestNumber([...splose.invoiceNumbers], settings.invoicePrefix));
+  }
+  let sploseIssueRaised = false;
+  const raiseSploseUnavailable = () => {
+    if (sploseIssueRaised) return;
+    sploseIssueRaised = true;
+    issues.raise('SPLOSE_UNAVAILABLE', { serviceDate: opts.from, extraKey: 'splose',
+      message: splose.status === 'NOT_CONNECTED'
+        ? 'Splose is not connected, so Opal cannot check what Splose has already invoiced. Sessions synced from Splose are held back. Connect Splose in Settings, then reprocess.'
+        : 'Splose could not be read completely, so Opal cannot check what Splose has already invoiced. Sessions synced from Splose and Splose support activities are held back. Reprocess shortly.',
+      fixTarget: { kind: 'settings' } });
+  };
+  if (splose.status === 'UNAVAILABLE' && !eventScoped) raiseSploseUnavailable();
+  const sploseInvoicedEventIds = [];
+  const sploseInvoicedActivityIds = [];
 
   // 1b. Non-face-to-face blocks: each client's share of the timed work.
   const nf2fParts = [];
@@ -161,8 +191,22 @@ async function prepare(q, orgId, opts) {
 
   // 1. Event-level eligibility
   const evaluated = events.map(ev => ({ ev, res: S.evaluateEvent(ev, { now, completionRule: settings.completionRule, hasLocation: !!DR.eventAddress(ev) }) }));
+  // 1a. A session synced from Splose that Splose has already invoiced (or marked
+  //     do-not-invoice) is Splose's; Opal skips it. Unknown → held, not billed.
+  for (const item of evaluated) {
+    const { ev, res } = item;
+    if (res.state === 'SKIP' || !ev.splose_id || !ev.client_id) continue;
+    if (sploseHeld) {
+      raiseSploseUnavailable();
+      item.res = { ...res, state: 'ISSUE', issues: res.state === 'ISSUE' ? res.issues : [], heldForSplose: true };
+      continue;
+    }
+    const pt = splose.apptPatients.get(`${ev.splose_id}|${ev.client_id}`);
+    if (pt && pt.invoiceId) { item.res = { state: 'SKIP', reason: 'invoiced_in_splose' }; sploseInvoicedEventIds.push(ev.id); summary.invoicedInSplose++; }
+    else if (pt && pt.doNotInvoice) item.res = { state: 'SKIP', reason: 'splose_do_not_invoice' };
+  }
   for (const { ev, res } of evaluated) {
-    if (res.state === 'SKIP') summary.skipped[res.reason] = (summary.skipped[res.reason] || 0) + 1;
+    if (res.state === 'SKIP') skip(res.reason);
     if (res.state === 'ISSUE') {
       for (const type of res.issues) {
         issues.raise(type, {
@@ -170,6 +214,45 @@ async function prepare(q, orgId, opts) {
           message: issueMessage(type, ev), fixTarget: { kind: 'event', eventId: ev.id, date: ev.local_date },
         });
       }
+    }
+  }
+
+  // 1c. Splose support activities in the period (not for an event-scoped run).
+  const activityParts = [];
+  if (splose.status === 'OK' && !eventScoped) {
+    const pmap = await SB.practitionerMap(q, orgId);
+    for (const x of SB.activitiesInRange(splose, { from: opts.from, to: opts.to, tz })) {
+      if (opts.clientIds && opts.clientIds.length && !opts.clientIds.includes(x.clientId)) continue;
+      const prac = x.practitionerSploseId ? pmap.get(x.practitionerSploseId) || null : null;
+      if (opts.practitionerIds && opts.practitionerIds.length && !(prac && opts.practitionerIds.includes(prac.userId))) continue;
+      x.practitioner = prac;
+      x.clientName = (splose.patients.get(x.clientId) || {}).fullName || null;
+      if (x.skip) {
+        skip(x.skip);
+        if (x.skip === 'invoiced_in_splose') { sploseInvoicedActivityIds.push(x.id); summary.invoicedInSplose++; }
+        continue;
+      }
+      summary.eventsExamined++;
+      const what = `${x.serviceTitle || 'Support activity'} on ${S.displayDate(x.date)}`;
+      if (!prac) {
+        x.blocked = true;
+        issues.raise('SPLOSE_ACTIVITY_PRACTITIONER_UNMAPPED', { clientId: x.clientId, serviceDate: x.date, extraKey: x.id,
+          message: `${x.clientName || 'Client'}'s Splose ${what} is by a Splose practitioner who is not linked to a portal user. Link them in Users & Roles, then reprocess.`,
+          fixTarget: { kind: 'users' } });
+      } else {
+        // Work timed on an Opal non-face-to-face block for the same client at the same time is the same work: Opal's timer wins.
+        const start = Date.parse(x.activity.start), end = Date.parse(x.activity.end);
+        const dup = nf2fParts.find(n => n.block.user_id === prac.userId && n.part.clientId === x.clientId
+          && Date.parse(n.block.start_time) < end && Date.parse(n.block.end_time) > start);
+        if (dup) {
+          skip('duplicates_nf2f');
+          issues.raise('SPLOSE_ACTIVITY_DUPLICATES_NF2F', { clientId: x.clientId, practitionerId: prac.userId, serviceDate: x.date, extraKey: x.id,
+            message: `${x.clientName || 'Client'}'s Splose ${what} overlaps the timed non-face-to-face block "${dup.block.title || 'Non-face-to-face'}". Only the Opal timer is billed.`,
+            fixTarget: { kind: 'event', eventId: dup.block.id, date: x.date } });
+          continue;
+        }
+      }
+      activityParts.push(x);
     }
   }
 
@@ -187,8 +270,18 @@ async function prepare(q, orgId, opts) {
     if (!clientNames.has(n.part.clientId)) clientNames.set(n.part.clientId, n.part.clientName);
     profileZoneClients.add(n.part.clientId);
   }
+  for (const x of activityParts) {
+    if (!clientNames.has(x.clientId)) clientNames.set(x.clientId, x.clientName);
+    profileZoneClients.add(x.clientId);
+  }
   await BP.ensureStubProfiles(q, orgId, [...clientNames].map(([clientId, clientName]) => ({ clientId, clientName })));
   const profiles = await BP.getProfilesByClient(q, orgId, [...clientNames.keys()]);
+  // Blank payer / NDIS number / address / management filled from Splose (never owner data).
+  if (splose.status === 'OK') {
+    for (const [cid, p] of profiles) {
+      if (SB.needsFill(p)) profiles.set(cid, (await SB.fillProfile(q, orgId, p, splose, opts.userId)).profile);
+    }
+  }
   for (const cid of profileZoneClients) if (profiles.has(cid)) profiles.set(cid, await MMM.ensureClassified(q, profiles.get(cid)));
   const cards = await RC.loadRateCards(q, orgId);
 
@@ -268,6 +361,44 @@ async function prepare(q, orgId, opts) {
     nf2f.push(entry);
   }
 
+  // 3c. Splose support activities: the client's zone, the session rate, Splose's item code, the client's payer.
+  const activities = [];
+  for (const x of activityParts) {
+    const p = profiles.get(x.clientId);
+    const entry = { ...x, profile: p, blocked: !!x.blocked, recipientIssues: [] };
+    const zone = clientZone(p);
+    entry.mmm = zone.mmm;
+    entry.mmmSnapshot = zone.snapshot;
+    const ev = { client_name: x.clientName, local_date: x.date };
+    if (zone.mmm == null) {
+      entry.blocked = true;
+      const type = !p || !p.service_address ? 'CLIENT_ADDRESS_MISSING' : (p.mmm_zone && p.mmm_confidence === 'REVIEW' ? 'MMM_REVIEW' : 'MMM_UNRESOLVED');
+      issues.raise(type, { clientId: x.clientId, message: issueMessage(type, ev, p), fixTarget: { kind: 'client', clientId: x.clientId } });
+    } else {
+      entry.rate = RC.resolveRule(cards, { serviceDate: x.date, mmm: zone.mmm, discipline: 'OT' });
+      if (!entry.rate) {
+        entry.blocked = true;
+        issues.raise('RATE_UNAVAILABLE', { clientId: x.clientId, serviceDate: x.date, extraKey: x.id,
+          message: issueMessage('RATE_UNAVAILABLE', ev, p, zone.mmm), fixTarget: { kind: 'rate_cards' } });
+      } else if (x.activity.itemCode && SB.baseItemCode(x.activity.itemCode) !== entry.rate.rule.sessionItemCode) {
+        entry.blocked = true;
+        issues.raise('SPLOSE_ACTIVITY_ITEM_UNSUPPORTED', { clientId: x.clientId, serviceDate: x.date, extraKey: x.id,
+          message: `${x.clientName || 'Client'}'s Splose ${x.serviceTitle || 'support activity'} on ${S.displayDate(x.date)} uses support item ${x.activity.itemCode}, which the rate card does not price (it prices ${entry.rate.rule.sessionItemCode}). Bill it by hand or add a rate card for it.`,
+          fixTarget: { kind: 'rate_cards' } });
+      }
+    }
+    entry.payer = BP.resolvePayer(p);
+    if (!entry.payer) {
+      entry.recipientIssues.push('CLIENT_MISSING_PAYER');
+      issues.raise('CLIENT_MISSING_PAYER', { clientId: x.clientId, message: issueMessage('CLIENT_MISSING_PAYER', ev, p), fixTarget: { kind: 'client', clientId: x.clientId } });
+    }
+    if (BP.ndisNumberRequired(p) && !(p && p.ndis_number)) {
+      entry.recipientIssues.push('NDIS_NUMBER_MISSING');
+      issues.raise('NDIS_NUMBER_MISSING', { clientId: x.clientId, message: issueMessage('NDIS_NUMBER_MISSING', ev, p), fixTarget: { kind: 'client', clientId: x.clientId } });
+    }
+    activities.push(entry);
+  }
+
   // 4. Travel: one route per practitioner-day over its in-person sessions
   const days = new Map();
   for (const s of sessions) {
@@ -331,7 +462,27 @@ async function prepare(q, orgId, opts) {
     }
   }
 
-  return { settings, tz, now, sessions, nf2f, issues, summary, profiles, dayPlans };
+  return { settings, tz, now, sessions, nf2f, activities, issues, summary, profiles, dayPlans,
+    splose: { status: splose.status, invoicedEventIds: sploseInvoicedEventIds, invoicedActivityIds: sploseInvoicedActivityIds,
+      activitiesJudged: splose.status === 'OK' && !eventScoped } };
+}
+
+/**
+ * The zone work with no session address (a Splose support activity) is priced
+ * at: the client profile's zone (manual override or confident classification),
+ * else the WA locality table on the client's service address. Never a guess.
+ */
+function clientZone(p) {
+  const mmm = MMM.effectiveMmm(p);
+  if (mmm != null) return { mmm, snapshot: { ...MMM.mmmSnapshot(p), source: 'client profile (support activity)' } };
+  if (p && p.service_address) {
+    const r = Loc.lookupAddress(p.service_address);
+    if (r.confident) {
+      return { mmm: r.zone, snapshot: { zone: r.zone, source: 'client address (support activity)', locality: r.locality,
+        postcode: r.postcode, matchedBy: r.matchedBy, datasetVersion: r.datasetVersion } };
+    }
+  }
+  return { mmm: null, snapshot: null };
 }
 
 /**
@@ -456,14 +607,15 @@ async function insertLine(tx, orgId, invoiceId, line, extra) {
   const { rows: [r] } = await tx.query(
     `INSERT INTO invoice_lines (invoice_id, organisation_id, component, calendar_event_id, client_id, practitioner_user_id,
         travel_allocation_id, trip_id, trip_allocation_id, rate_card_id, rate_card_version, mmm_zone, service_date,
-        item_code, description, duration_minutes, quantity, unit_price, gst_rate, gst_amount, amount, calculation, sort_order)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23) RETURNING id`,
+        item_code, description, duration_minutes, quantity, unit_price, gst_rate, gst_amount, amount, calculation, sort_order,
+        splose_activity_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24) RETURNING id`,
     [invoiceId, orgId, line.component, extra.eventId || null, extra.clientId || null, extra.practitionerId || null,
       extra.travelAllocationId || null, extra.tripId || null, extra.tripAllocationId || null, line.rateCardId || null,
       line.rateCardVersion ?? null, line.mmm ?? null, line.serviceDate || null, line.itemCode || null,
       line.description.slice(0, 500), line.durationMinutes ?? null, M.qtyToString(line.quantityE4),
       M.fromCents(line.unitCents), gst.rate, M.fromCents(gst.cents), M.fromCents(line.amountCents),
-      JSON.stringify(line.calculation || {}), extra.sortOrder || 0]);
+      JSON.stringify(line.calculation || {}), extra.sortOrder || 0, extra.sploseActivityId || null]);
   return r.id;
 }
 
@@ -549,7 +701,7 @@ async function runInvoicing(opts) {
   if (!validRange(from, to)) throw Object.assign(new Error('from/to must be YYYY-MM-DD with from <= to'), { status: 400 });
   const plan = await prepare(q, orgId, opts);
   if (opts.preparePhase) await opts.preparePhase(q, plan);
-  const { settings, sessions, nf2f, issues, summary, profiles } = plan;
+  const { settings, sessions, nf2f, activities, issues, summary, profiles } = plan;
 
   const tx = await q.connect();
   try {
@@ -669,6 +821,84 @@ async function runInvoicing(opts) {
         invoiceId: d.invoice_id, before: { component: 'NF2F', amount: d.amount }, reason: 'Non-face-to-face time no longer billable for this client' });
     }
 
+    // Splose support activities: one line each, claimed by the Splose activity id.
+    const actIds = [...new Set(activities.map(a => a.id).concat(plan.splose.invoicedActivityIds))];
+    const actClaims = new Map();
+    if (actIds.length) {
+      const { rows } = await tx.query(
+        `SELECT l.*, i.status AS invoice_status, i.invoice_number FROM invoice_lines l JOIN invoices i ON i.id = l.invoice_id
+          WHERE l.organisation_id = $1 AND l.splose_activity_id = ANY($2::text[]) AND l.line_status IN ('ACTIVE','REMOVED')`, [orgId, actIds]);
+      for (const r of rows) actClaims.set(r.splose_activity_id, r);
+    }
+    for (const a of activities) {
+      if (a.blocked) continue;
+      clientRecipient.set(a.clientId, { profile: a.profile, payer: a.payer, recipientIssues: a.recipientIssues });
+      const line = S.buildSploseActivityLine({ serviceDate: a.date, minutes: a.minutes, rate: a.rate, mmm: a.mmm,
+        itemCode: a.activity.itemCode || null, serviceTitle: a.serviceTitle, sploseActivityId: a.id,
+        splosePricing: a.activity.pricing ?? null, mmmSnapshot: a.mmmSnapshot });
+      const claim = actClaims.get(a.id);
+      const extra = { clientId: a.clientId, practitionerId: a.practitioner.userId, taxTreatment: settings.defaultTaxTreatment,
+        tripId: null, sortOrder: sortKey({ start_time: a.activity.start }, 'SPLOSE_ACTIVITY'), sploseActivityId: a.id };
+      if (claim) {
+        if (!OPEN_STATUSES.includes(claim.invoice_status)) { summary.alreadyInvoiced++; continue; }
+        if (claim.line_status === 'REMOVED') { summary.excludedByOwner++; continue; }
+        book.touch(claim.invoice_id);
+        if (claim.is_overridden) continue;
+        await updateLine(tx, claim.id, line, extra);
+        summary.linesUpdated++;
+      } else {
+        const invoiceId = await book.forClient(a.clientId, a.profile, a.payer, { from, to, tripId: null });
+        await insertLine(tx, orgId, invoiceId, line, extra);
+        summary.linesAdded++;
+      }
+      summary.sploseActivitiesIncluded++;
+    }
+    // Draft activity lines whose activity no longer bills (invoiced in Splose, do-not-invoice, deleted, moved) leave the draft.
+    // Only when this run read Splose completely; otherwise nothing is judged.
+    if (plan.splose.activitiesJudged) {
+      const keep = activities.map(a => a.id);
+      const aParams = [orgId, from, to, keep];
+      let aScope = '';
+      if (opts.practitionerIds && opts.practitionerIds.length) { aParams.push(opts.practitionerIds); aScope += ` AND l.practitioner_user_id = ANY($${aParams.length}::uuid[])`; }
+      if (opts.clientIds && opts.clientIds.length) { aParams.push(opts.clientIds); aScope += ` AND l.client_id = ANY($${aParams.length}::text[])`; }
+      const { rows: aDropped } = await tx.query(
+        `UPDATE invoice_lines l SET line_status = 'VOIDED', removed_reason = 'Splose support activity no longer billable here',
+                removed_at = NOW(), updated_at = NOW()
+           FROM invoices i
+          WHERE i.id = l.invoice_id AND i.organisation_id = $1 AND i.status IN ('DRAFT','NEEDS_ATTENTION')
+            AND l.line_status = 'ACTIVE' AND l.component = 'SPLOSE_ACTIVITY' AND l.is_overridden IS NOT TRUE
+            AND l.service_date BETWEEN $2::date AND $3::date
+            AND NOT (l.splose_activity_id = ANY($4::text[]))${aScope}
+        RETURNING l.invoice_id, l.id, l.amount`, aParams);
+      for (const d of aDropped) {
+        book.touch(d.invoice_id);
+        await recordAudit(tx, { orgId, actorUserId: userId, action: 'invoice.line_removed', entityType: 'invoice_line', entityId: d.id,
+          invoiceId: d.invoice_id, before: { component: 'SPLOSE_ACTIVITY', amount: d.amount }, reason: 'Splose support activity no longer billable here' });
+      }
+    }
+
+    // Work Splose has invoiced that is also on a finalised Opal invoice: billed twice. Flag it; never rewrite either.
+    const doubleClaims = [];
+    if (plan.splose.invoicedEventIds.length) {
+      const { rows } = await tx.query(
+        `SELECT l.invoice_id, l.client_id, l.service_date, l.calendar_event_id::text AS source_id, i.invoice_number
+           FROM invoice_lines l JOIN invoices i ON i.id = l.invoice_id
+          WHERE l.calendar_event_id = ANY($1::uuid[]) AND l.line_status = 'ACTIVE' AND i.status NOT IN ('DRAFT','NEEDS_ATTENTION','VOID')`,
+        [plan.splose.invoicedEventIds]);
+      doubleClaims.push(...rows);
+    }
+    for (const id of plan.splose.invoicedActivityIds) {
+      const c = actClaims.get(id);
+      if (c && c.line_status === 'ACTIVE' && !OPEN_STATUSES.includes(c.invoice_status) && c.invoice_status !== 'VOID') {
+        doubleClaims.push({ invoice_id: c.invoice_id, client_id: c.client_id, service_date: c.service_date, source_id: id, invoice_number: c.invoice_number });
+      }
+    }
+    for (const d of doubleClaims) {
+      issues.raise('SPLOSE_DOUBLE_BILLED', { clientId: d.client_id, invoiceId: d.invoice_id, serviceDate: ymd(d.service_date), extraKey: d.source_id,
+        message: `Work on ${S.displayDate(ymd(d.service_date))} is on Opal invoice ${d.invoice_number} and has also been invoiced in Splose. Void one of them.`,
+        fixTarget: { kind: 'invoice', invoiceId: d.invoice_id } });
+    }
+
     // Draft lines whose source event is no longer billable (cancelled, DNA, deleted, moved out) leave the draft.
     const billableIds = sessions.filter(s => !s.blocked).map(s => s.ev.id);
     const blockedIds = sessions.filter(s => s.blocked).map(s => s.ev.id);
@@ -725,7 +955,7 @@ async function runInvoicing(opts) {
     }
     await Issues.resolveStale(tx, orgId, {
       runId, from, to, practitionerIds: opts.practitionerIds, tripId: opts.trip ? opts.trip.id : null,
-      raisedKeys: issues.list().map(i => i.dedupeKey), clientIds: [...new Set(sessions.map(s => s.ev.client_id).concat(nf2f.map(n => n.part.clientId)).filter(Boolean))],
+      raisedKeys: issues.list().map(i => i.dedupeKey), clientIds: [...new Set(sessions.map(s => s.ev.client_id).concat(nf2f.map(n => n.part.clientId), activities.map(a => a.clientId)).filter(Boolean))],
     });
     summary.itemsNeedAttention = issues.list().filter(i => i.severity === 'BLOCKING').length;
     summary.warnings = issues.list().filter(i => i.severity === 'WARNING').length;
@@ -747,4 +977,4 @@ async function runInvoicing(opts) {
   }
 }
 
-module.exports = { runInvoicing, prepare, loadCandidateEvents, refreshDraft, insertLine, issueMessage, sessionZone, ymd, validRange };
+module.exports = { runInvoicing, prepare, loadCandidateEvents, refreshDraft, insertLine, issueMessage, sessionZone, clientZone, ymd, validRange };

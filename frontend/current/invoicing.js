@@ -232,7 +232,7 @@
   });
 
   // ── Invoice detail ───────────────────────────────────────────────────────
-  var COMPONENT_LABEL = { SESSION: 'Session', TRAVEL_LABOUR: 'Provider travel', TRAVEL_KM: 'Vehicle / non-labour', TRIP_COST: 'Trip cost', MANUAL: 'Manual' };
+  var COMPONENT_LABEL = { SESSION: 'Session', TRAVEL_LABOUR: 'Provider travel', TRAVEL_KM: 'Vehicle / non-labour', TRIP_COST: 'Trip cost', MANUAL: 'Manual', NF2F: 'Non-face-to-face', SPLOSE_ACTIVITY: 'Splose support activity' };
 
   function calcHtml(l) {
     var c = l.calculation || {};
@@ -258,6 +258,13 @@
       }
       kv('Amount', aud(c.amount));
       kv('Rate card', c.rateCard ? esc(c.rateCard.name) + ' v' + esc(c.rateCard.version) : '—');
+    } else if (l.component === 'SPLOSE_ACTIVITY') {
+      kv('Service date', dmy(c.serviceDate)); kv('Logged in Splose', esc(c.serviceTitle || 'Support activity') + ' (activity ' + esc(c.sploseActivityId) + ')');
+      kv('Duration', esc(c.durationMinutes) + ' min → ' + esc(c.quantityHours) + ' h');
+      kv('MMM', c.mmm ? 'MM' + esc(c.mmm) + (c.mmmSource && c.mmmSource.source ? ' (' + esc(c.mmmSource.source) + ')' : '') : '—');
+      kv('Rate card', c.rateCard ? esc(c.rateCard.name) + ' v' + esc(c.rateCard.version) : '—');
+      kv('Hourly rate', aud(c.hourlyRate)); if (c.splosePricing != null) kv('Splose price', aud(c.splosePricing));
+      kv('Amount', aud(c.amount));
     } else if (l.component === 'TRIP_COST') {
       kv('Trip', esc(c.tripName)); kv('Method', esc(String(c.method || '').replace(/_/g, ' ').toLowerCase()));
       kv('Eligible shared pool', aud(c.eligiblePool)); kv('Total trip costs', aud(c.totalCosts)); kv('Non-billable costs', aud(c.nonBillableCosts));
@@ -421,6 +428,8 @@
         '<div><b>' + s.invoicesUpdated + '</b><span>drafts updated</span></div>' +
         '<div><b>' + s.sessionsIncluded + '</b><span>sessions included</span></div>' +
         '<div><b>' + (s.nf2fIncluded || 0) + '</b><span>non-face-to-face shares</span></div>' +
+        '<div><b>' + (s.sploseActivitiesIncluded || 0) + '</b><span>Splose support activities</span></div>' +
+        '<div><b>' + (s.invoicedInSplose || 0) + '</b><span>skipped — already invoiced in Splose</span></div>' +
         '<div><b>' + s.travelAllocations + '</b><span>travel allocations</span></div>' +
         '<div><b>' + s.itemsNeedAttention + '</b><span>items need attention</span></div>' +
         '<div><b>' + s.alreadyInvoiced + '</b><span>skipped — already invoiced</span></div>' +
@@ -488,7 +497,7 @@
         '<label>Plan end<input type="date" name="planEnd" value="' + esc((p.plan_end || '').slice(0, 10)) + '"></label>' +
         '<label>Management type<select name="managementType">' + opt('', '—', p.management_type) + opt('PLAN_MANAGED', 'Plan managed', p.management_type) + opt('SELF_MANAGED', 'Self managed', p.management_type) + opt('NDIA_MANAGED', 'NDIA (agency) managed', p.management_type) + opt('OTHER', 'Other / private', p.management_type) + '</select></label>' +
         '<label>Payer type<select name="payerType">' + opt('', '—', p.payer_type) + opt('PLAN_MANAGER', 'Plan manager', p.payer_type) + opt('PARTICIPANT', 'Participant', p.payer_type) + opt('NOMINEE', 'Nominee', p.payer_type) + opt('OTHER', 'Other', p.payer_type) + '</select></label>' +
-        '<label>Invoice to (plan manager / payer)<input name="payerName" value="' + esc(p.payer_name || '') + '"></label>' +
+        '<label>Invoice to (plan manager / payer)<input name="payerName" value="' + esc(p.payer_name || '') + '">' + (p.payer_source_detail ? '<span class="inv-dim">From ' + esc(p.payer_source_detail) + '</span>' : '') + '</label>' +
         '<label>Payer email<input type="email" name="payerEmail" value="' + esc(p.payer_email || '') + '"></label>' +
         '<label>Payer reference<input name="payerReference" value="' + esc(p.payer_reference || '') + '"></label>' +
         '<label>Payment terms (days, blank = default)<input type="number" min="0" max="365" name="paymentTermsDays" value="' + esc(p.payment_terms_days == null ? '' : p.payment_terms_days) + '"></label>' +
@@ -653,7 +662,7 @@
     var s = r.settings, o = r.organisation || {};
     el.innerHTML =
       '<div class="inv-panel"><h3>Business &amp; invoice details</h3>' +
-      '<div class="inv-note">Blank business fields fall back to Settings → Organisation (' + esc(o.name || 'not set') + '). Next invoice number: <b>' + esc(r.nextInvoiceNumberPreview) + '</b>. Email: ' + (r.emailConfigured ? 'configured' : '<b>not configured</b> — use Mark sent') + '. Google Maps: ' + (r.mapsConfigured ? 'configured' : '<b>not configured</b> — travel legs need manual routes') + '.</div>' +
+      '<div class="inv-note">Blank business fields fall back to Settings → Organisation (' + esc(o.name || 'not set') + '). Next invoice number: <b>' + esc(r.nextInvoiceNumberPreview) + '</b>' + (s.sploseInvoiceNumberHigh ? ' (continues after Splose\'s ' + esc(s.invoicePrefix || '') + esc(s.sploseInvoiceNumberHigh) + ')' : '') + '. Email: ' + (r.emailConfigured ? 'configured' : '<b>not configured</b> — use Mark sent') + '. Google Maps: ' + (r.mapsConfigured ? 'configured' : '<b>not configured</b> — travel legs need manual routes') + '.</div>' +
       '<form class="inv-form" id="inv-settings-form">' +
       '<label>Invoice prefix<input name="invoicePrefix" value="' + esc(s.invoicePrefix) + '"></label>' +
       '<label>Next invoice number<input type="number" min="1" name="nextInvoiceNumber" value="' + esc(s.nextInvoiceNumber) + '"></label>' +
