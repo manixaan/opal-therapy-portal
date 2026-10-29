@@ -139,8 +139,11 @@ function routeKey(origin, destination, mode) {
 }
 
 function isFresh(entry) {
-  return entry && (Date.now() - entry.fetchedAt) < CACHE_TTL_MS;
+  return entry && (Date.now() - entry.fetchedAt) < (entry.ttlMs || CACHE_TTL_MS);
 }
+/* A drive more than a day ahead is priced on Google's predicted traffic,
+   which barely moves: keep it 6 hours instead of re-asking every 10 minutes. */
+const FAR_ROUTE_TTL_MS = 6 * 3600 * 1000;
 
 /* Async route fetch. Writes into ROUTE_CACHE. Dedupes in-flight requests.
    Falls back gracefully to the suburb table when no API key is configured.
@@ -198,6 +201,7 @@ async function fetchRoute(origin, destination, mode, opts) {
       return result;
     }
     result.fetchedAt = Date.now();
+    if (bucket && Date.parse(o.departureTime) - Date.now() > 24 * 3600 * 1000) result.ttlMs = FAR_ROUTE_TTL_MS;
     ROUTE_CACHE.set(key, result);
     if (key !== plainKey) {
       const plain = ROUTE_CACHE.get(plainKey);
@@ -358,6 +362,35 @@ function travelMinutes(fromSuburb, toSuburb) {
   if (fromSuburb === toSuburb) return 0;
   return travelDurationMinSync(fromSuburb, toSuburb, 'driving');
 }
+
+/* Drive minutes for a leg leaving at `departMin` on `day` (29 Oct 2026).
+   The calendar used to price every leg on traffic RIGHT NOW — Thursday's
+   10:30 drive showed whatever the roads were like when the page was opened.
+   A future departure is asked for at its own time (Google's traffic-aware
+   prediction, near-live on the day); the plain number stands in until the
+   answer lands. Past or imminent departures keep the plain (live) number.
+   Returns { min, real } — real: the number came from the Routes API. */
+function _legDepartureIso(day, departMin) {
+  const date = (typeof DAY_DATES !== 'undefined' && DAY_DATES) ? DAY_DATES[day] : null;
+  if (!date || !Number.isFinite(departMin)) return null;
+  const iso = _perthStamp(date, departMin);
+  const t = Date.parse(iso), now = Date.now();
+  if (!(t > now + 60 * 1000) || t > now + 89 * 86400000) return null;
+  return iso;
+}
+function travelAt(from, to, day, departMin) {
+  const plain = travelMinutes(from, to);
+  const plainEntry = from && to ? ROUTE_CACHE.get(routeKey(from, to, 'driving')) : null;
+  const plainReal = !!(plainEntry && isFresh(plainEntry) && plainEntry.source === 'routes-api');
+  if (!(plain > 0)) return { min: plain, real: plainReal };
+  const iso = _legDepartureIso(day, departMin);
+  if (!iso) return { min: plain, real: plainReal };
+  const entry = ROUTE_CACHE.get(routeKey(from, to, 'driving') + '|t' + _departureBucket(iso));
+  if (isFresh(entry)) return { min: entry.durationMin, real: entry.source === 'routes-api' };
+  fetchRoute(from, to, 'driving', { departureTime: iso }).then(scheduleOverlayRefresh).catch(() => {});
+  return { min: plain, real: false };
+}
+function travelMinutesAt(from, to, day, departMin) { return travelAt(from, to, day, departMin).min; }
 
 /* Pick the richest address string a given location object can offer for
    routing. Prefers full street address (when the session was booked with
@@ -580,6 +613,70 @@ function deskWorkPlan(s) {
   return { mode: fits ? 'home' : 'here', auto: true, base, homeAvailable: true,
            reason: fits ? 'time' : 'notime', driveMin, gapMin, prevId: prev.id };
 }
+/* ---------- Not driving this (29 Oct 2026) ----------
+   A travel leg is worked out from the day, not saved, so "delete" means
+   something that can be kept: the therapist is not driving this one (a lift,
+   already there). It is stored on the appointment the leg belongs to, on its
+   side — travel.noDriveBefore / noDriveAfter — so a via-home gap can drop
+   one of its two drives. */
+function _noDriveField(side) { return side === 'before' ? 'noDriveBefore' : side === 'after' ? 'noDriveAfter' : null; }
+function legIsNotDriven(seg) {
+  if (!seg || seg.kind === 'gap' || !seg.ownerSessionId || !window.SESSIONS) return false;
+  const owner = window.SESSIONS[seg.ownerSessionId], f = _noDriveField(seg.ownerSide);
+  return !!(owner && f && owner.travel && owner.travel[f] === true);
+}
+async function setLegNotDriven(seg, notDriven) {
+  const s = seg && window.SESSIONS && window.SESSIONS[seg.ownerSessionId];
+  const f = seg && _noDriveField(seg.ownerSide);
+  if (!s || !s.dbId || !f) { showToast('Not saved', 'This drive has no saved appointment behind it yet.', 'warn'); return false; }
+  const prev = Object.assign({}, s.travel || {});
+  const next = Object.assign({}, prev);
+  if (notDriven) next[f] = true; else delete next[f];
+  s.travel = next;
+  if (typeof refreshDayOverlays === 'function') refreshDayOverlays(s.day);
+  try {
+    const body = {}; body[f] = notDriven ? true : null;
+    const r = await fetch('/api/events/' + encodeURIComponent(s.dbId) + '/travel', {
+      method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    if (!r.ok) throw new Error(((await r.json().catch(() => ({}))).error) || ('HTTP ' + r.status));
+    registerTravelUndo(s, prev, notDriven ? 'Not driving this' : 'Drive this after all');
+    return true;
+  } catch (e) {
+    s.travel = prev;
+    if (typeof refreshDayOverlays === 'function') refreshDayOverlays(s.day);
+    showToast('Could not change this drive', e.message, 'warn');
+    return false;
+  }
+}
+/* Right-click on a travel leg: the calendar's own context menu, travel items. */
+function showTravelLegMenu(x, y, seg) {
+  if (typeof closeCalContextMenu === 'function') closeCalContextMenu();
+  const owner = seg.ownerSessionId && window.SESSIONS ? window.SESSIONS[seg.ownerSessionId] : null;
+  const menu = document.createElement('div');
+  menu.className = 'cal-ctx-menu';
+  menu.id = 'cal-ctx-menu-active';
+  const item = (label, fn, danger) => {
+    const it = document.createElement('div');
+    it.className = 'cal-ctx-menu-item';
+    if (danger) it.style.color = 'var(--danger,#c2412e)';
+    it.textContent = label;
+    it.addEventListener('click', (e) => { e.stopPropagation(); menu.remove(); fn(); });
+    menu.appendChild(it);
+  };
+  item('Travel details', () => openTravelPanel(seg));
+  if (owner && owner.dbId) {
+    if (seg.skipped) item('Drive this after all', () => setLegNotDriven(seg, false));
+    else item('Not driving this — remove the drive', () => setLegNotDriven(seg, true), true);
+  }
+  document.body.appendChild(menu);
+  menu.style.left = x + 'px'; menu.style.top = y + 'px';
+  const r = menu.getBoundingClientRect ? menu.getBoundingClientRect() : null;
+  if (r && r.right > window.innerWidth) menu.style.left = (x - r.width) + 'px';
+  if (r && r.bottom > window.innerHeight) menu.style.top = (y - r.height) + 'px';
+  setTimeout(() => document.addEventListener('click', () => menu.remove(), { once: true }), 0);
+}
+
 /* Save where a desk block happens. mode: 'home' | 'here' | null (automatic). */
 async function setDeskWorkPlace(sessionId, mode) {
   const s = window.SESSIONS && window.SESSIONS[sessionId];
@@ -779,6 +876,10 @@ function registerTravelUndo(s, prev, label) {
         before: was.before || null, after: was.after || null, next: was.next || null,
         beforeOffsetMin: was.beforeOffsetMin == null ? null : was.beforeOffsetMin,
         afterOffsetMin:  was.afterOffsetMin  == null ? null : was.afterOffsetMin,
+        // Every answer the travel PATCH stores, or an undo leaves it behind.
+        desk: was.desk || null,
+        noDriveBefore: was.noDriveBefore === true ? true : null,
+        noDriveAfter:  was.noDriveAfter  === true ? true : null,
       }),
     });
     if (!r.ok) throw new Error(((await r.json().catch(() => ({}))).error) || ('HTTP ' + r.status));
@@ -1750,11 +1851,14 @@ function _bspApplyCut(input, keepFocus) {
    event (Outlook write-back + the Splose queue) and registers a Cmd+Z step.
    Resolves once every save has answered, so the calendar reload that follows
    the booking reads the new times. Returns how many blocks changed. */
-async function bspCommitSqueeze() {
-  const sq = BOOKING_ROUTE.squeeze, room = BOOKING_ROUTE.squeezePlan;
-  BOOKING_ROUTE.squeeze = null; BOOKING_ROUTE.squeezePlan = null; BOOKING_ROUTE.squeezeOffer = null;
-  if (!sq || !room || typeof window.commitMove !== 'function') return 0;
-  const changed = room.blocks.filter(b => b.newStartMin !== b.startMin || b.newEndMin !== b.endMin);
+/* Apply a Make room plan's blocks (planMakeRoom().blocks) exactly as a drag
+   or an edge-resize is saved: window.commitMove, whose splose-sync wrapper
+   PATCHes each event (Outlook write-back + the Splose queue) and registers a
+   Cmd+Z step. Shared by booking (bspCommitSqueeze) and the traffic alert.
+   Resolves once every save has answered → { done, failed, changed }. */
+async function applyMakeRoomBlocks(blocks) {
+  const changed = (blocks || []).filter(b => b.newStartMin !== b.startMin || b.newEndMin !== b.endMin);
+  if (typeof window.commitMove !== 'function') return { done: 0, failed: changed.length, changed };
   const saves = [];
   let done = 0;
   // Earliest first: every block only shrinks or moves up, into time the one
@@ -1770,7 +1874,13 @@ async function bspCommitSqueeze() {
     if (pm.persisted) saves.push(pm.persisted);
   }
   const results = await Promise.all(saves.map(p => Promise.resolve(p).catch(() => null)));
-  const failed = results.filter(r => !r || !r.ok).length;
+  return { done, failed: results.filter(r => !r || !r.ok).length, changed };
+}
+async function bspCommitSqueeze() {
+  const sq = BOOKING_ROUTE.squeeze, room = BOOKING_ROUTE.squeezePlan;
+  BOOKING_ROUTE.squeeze = null; BOOKING_ROUTE.squeezePlan = null; BOOKING_ROUTE.squeezeOffer = null;
+  if (!sq || !room || typeof window.commitMove !== 'function') return 0;
+  const { done, failed, changed } = await applyMakeRoomBlocks(room.blocks);
   if (done && typeof showToast === 'function' && !failed) {
     const fmt = (m) => (typeof fmtTime === 'function') ? fmtTime(Math.floor(m / 60), m % 60) : _hhmm(m);
     showToast('Made room — ' + done + ' block' + (done === 1 ? '' : 's') + ' shortened',
@@ -2108,7 +2218,9 @@ function computeDayTravelSegments(day) {
     const baseKey  = startPt.addr || startPt.suburb;
     const firstKey = locTravelKey(firstLoc);
     if (!startPt.remote && baseKey && firstKey && baseKey !== firstKey) {
-      const travel = travelMinutes(baseKey, firstKey);
+      // Priced at the time it is driven: it leaves about `plain` before the first stop.
+      const tStart = travelAt(baseKey, firstKey, day, sessionStartMin(first) - travelMinutes(baseKey, firstKey));
+      const travel = tStart.min;
       if (travel > 0) {
         const at = placeTravelLeg({ kind: 'start', anchorMin: sessionStartMin(first), travelMin: travel, offsetMin: offsetOf(first, 'before'), busy: busyFor(first) });
         segs.push({
@@ -2121,7 +2233,7 @@ function computeDayTravelSegments(day) {
           fromSessionId: null, toSessionId: first.id,
           ownerSessionId: first.id, ownerSide: 'before',
           anchorBaseId: startPt.baseId || calendarWeekLocations()[day] || 'office',
-          overridden: !!sessionTravelOverride(first, 'before'),
+          overridden: !!sessionTravelOverride(first, 'before'), routeReal: tStart.real,
           cacheKey: routeKey(baseKey, firstKey, 'driving')
         });
       }
@@ -2140,7 +2252,11 @@ function computeDayTravelSegments(day) {
         // the place saved with Go Somewhere Else ('place-in' / 'place-out').
         const atPlace = !plan.home;
         const hb = plan.home || plan.place, homeLoc = { suburb: hb.suburb, label: hb.label, region: hb.region, address: hb.addr || null, addr: hb.addr || null };
-        const toMin = atPlace ? plan.toPlace : plan.toBase, fromMin = atPlace ? plan.fromPlace : plan.fromBase;
+        const hbKey = hb.addr || hb.suburb;
+        const tTo = (atPlace ? plan.toPlace : plan.toBase) > 0 ? travelAt(fromKey, hbKey, day, sessionEndMin(curr)) : { min: 0, real: false };
+        const planFrom = atPlace ? plan.fromPlace : plan.fromBase;
+        const tFrom = planFrom > 0 ? travelAt(hbKey, toKey, day, sessionStartMin(next) - planFrom) : { min: 0, real: false };
+        const toMin = tTo.min, fromMin = tFrom.min;
         const ret = placeTravelLeg({ kind: 'end', anchorMin: sessionEndMin(curr), travelMin: toMin, offsetMin: offsetOf(curr, 'after'), busy: busyFor(curr, next) });
         const retAuto = ret.moved ? placeTravelLeg({ kind: 'end', anchorMin: sessionEndMin(curr), travelMin: toMin, busy: busyFor(curr, next) }).startMin : ret.startMin;
         if (toMin > 0) segs.push({
@@ -2149,7 +2265,7 @@ function computeDayTravelSegments(day) {
           startMin: ret.startMin, endMin: ret.endMin, travelMin: toMin, freeMin: 0,
           moved: ret.moved, tight: ret.tight || ret.endMin > sessionStartMin(next), autoStartMin: retAuto,
           fromSessionId: curr.id, toSessionId: null, gapFromSessionId: curr.id, gapToSessionId: next.id,
-          ownerSessionId: curr.id, ownerSide: 'after', anchorBaseId: hb.baseId || calendarWeekLocations()[day] || null,
+          ownerSessionId: curr.id, ownerSide: 'after', anchorBaseId: hb.baseId || calendarWeekLocations()[day] || null, routeReal: tTo.real,
           cacheKey: routeKey(fromKey, hb.addr || hb.suburb, 'driving')
         });
         const out = placeTravelLeg({ kind: 'between', anchorMin: sessionStartMin(next), floorMin: ret.endMin, travelMin: fromMin, offsetMin: offsetOf(next, 'before'), busy: busyFor(curr, next) });
@@ -2160,17 +2276,21 @@ function computeDayTravelSegments(day) {
           startMin: out.startMin, endMin: out.endMin, travelMin: fromMin, freeMin: 0,
           moved: out.moved, tight: out.tight, autoStartMin: outAuto,
           fromSessionId: null, toSessionId: next.id, gapFromSessionId: curr.id, gapToSessionId: next.id,
-          ownerSessionId: next.id, ownerSide: 'before', anchorBaseId: hb.baseId || calendarWeekLocations()[day] || null,
+          ownerSessionId: next.id, ownerSide: 'before', anchorBaseId: hb.baseId || calendarWeekLocations()[day] || null, routeReal: tFrom.real,
           cacheKey: routeKey(hb.addr || hb.suburb, toKey, 'driving')
         });
         continue;
       }
-      const travel  = travelMinutes(fromKey, toKey);
+      const plainMin = travelMinutes(fromKey, toKey);
       // The next stop IS home (18 Oct 2026): the drive is the drive home,
       // leaving when this session ends — not one parked before the session
       // at home, as if the therapist waited at the client's until then.
       const homeKey = base && !base.unset && !base.remote ? (base.addr || base.suburb) : null;
-      if (travel > 0 && homeKey && canonAddr(homeKey) === canonAddr(toKey)) {
+      const goingHome = plainMin > 0 && homeKey && canonAddr(homeKey) === canonAddr(toKey);
+      // Home: it leaves when the session ends. Onward: it leaves about `plain` before the next.
+      const tLeg = travelAt(fromKey, toKey, day, goingHome ? sessionEndMin(curr) : sessionStartMin(next) - plainMin);
+      const travel = plainMin > 0 ? tLeg.min : plainMin;
+      if (goingHome) {
         const ret = placeTravelLeg({ kind: 'end', anchorMin: sessionEndMin(curr), travelMin: travel, offsetMin: offsetOf(curr, 'after'), busy: busyFor(curr, next) });
         segs.push({
           // toHome: there is no other way to go — no Direct ⇄ Via home switch
@@ -2181,7 +2301,7 @@ function computeDayTravelSegments(day) {
           moved: ret.moved, tight: ret.tight || ret.endMin > sessionStartMin(next),
           autoStartMin: ret.moved ? placeTravelLeg({ kind: 'end', anchorMin: sessionEndMin(curr), travelMin: travel, busy: busyFor(curr, next) }).startMin : ret.startMin,
           fromSessionId: curr.id, toSessionId: null, gapFromSessionId: curr.id, gapToSessionId: next.id,
-          ownerSessionId: curr.id, ownerSide: 'after', anchorBaseId: base.baseId || calendarWeekLocations()[day] || null,
+          ownerSessionId: curr.id, ownerSide: 'after', anchorBaseId: base.baseId || calendarWeekLocations()[day] || null, routeReal: tLeg.real,
           cacheKey: routeKey(fromKey, toKey, 'driving')
         });
         continue;
@@ -2209,7 +2329,7 @@ function computeDayTravelSegments(day) {
         autoStartMin: at.moved ? placeTravelLeg({ kind: 'between', anchorMin: sessionStartMin(next), floorMin: sessionEndMin(curr), travelMin: travel, busy: busyFor(curr, next) }).startMin : at.startMin,
         fromSessionId: curr.id, toSessionId: next.id, gapFromSessionId: curr.id, gapToSessionId: next.id,
         ownerSessionId: next.id, ownerSide: 'before',
-        anchorBaseId: null,
+        anchorBaseId: null, routeReal: tLeg.real,
         cacheKey: routeKey(fromKey, toKey, 'driving')
       });
     }
@@ -2222,7 +2342,8 @@ function computeDayTravelSegments(day) {
     const endPt = resolveTravelPoint(sessionTravelOverride(last, 'after'), day) || base;
     const baseKeyEnd = endPt.addr || endPt.suburb;
     if (!endPt.remote && baseKeyEnd && lastKey && baseKeyEnd !== lastKey) {
-      const travel = travelMinutes(lastKey, baseKeyEnd);
+      const tEnd = travelAt(lastKey, baseKeyEnd, day, sessionEndMin(last));
+      const travel = tEnd.min;
       if (travel > 0) {
         const at = placeTravelLeg({ kind: 'end', anchorMin: sessionEndMin(last), travelMin: travel, offsetMin: offsetOf(last, 'after'), busy: busyFor(last) });
         segs.push({
@@ -2235,17 +2356,22 @@ function computeDayTravelSegments(day) {
           fromSessionId: last.id, toSessionId: null,
           ownerSessionId: last.id, ownerSide: 'after',
           anchorBaseId: endPt.baseId || calendarWeekLocations()[day] || 'office',
-          overridden: !!sessionTravelOverride(last, 'after'),
+          overridden: !!sessionTravelOverride(last, 'after'), routeReal: tEnd.real,
           cacheKey: routeKey(lastKey, baseKeyEnd, 'driving')
         });
       }
     }
   }
 
+  // --- legs the therapist is not driving (29 Oct 2026): right-click › Not
+  // driving this. Still computed (so it can be restored where it was), but it
+  // blocks no time, is never sent to Outlook and never raises a traffic alert.
+  segs.forEach(seg => { if (legIsNotDriven(seg)) seg.skipped = true; });
+
   // --- free windows (Snapshot report, idle-slot suggestions) ---
   // Time not covered by any event or travel leg: before the day's first
   // commitment, between consecutive commitments, after the last.
-  const legs = segs.slice();
+  const legs = segs.filter(l => !l.skipped);
   const busy = sessions.map(s => [sessionStartMin(s), sessionEndMin(s), s])
     .concat(legs.map(l => [l.startMin, l.endMin, null]))
     .sort((x, y) => x[0] - y[0]);
@@ -2284,6 +2410,8 @@ function refreshDayOverlays(day) {
   segs.forEach(seg => renderSegmentOverlay(col, seg));
   decorateTravelBadges(day, segs);
   scheduleTravelOutlookSync(day, segs);
+  // Traffic alerts (travel-alerts.js): today and tomorrow only.
+  if (window.TravelAlerts && typeof window.TravelAlerts.check === 'function') { try { window.TravelAlerts.check(day, segs); } catch (_) { /* never break drawing */ } }
   // Clearing the column also removed Smart Booking's proposed travel: put it
   // back (from cache — no new routing call) while the panel is open.
   if (typeof _scheduleBspRepaint === 'function') _scheduleBspRepaint();
@@ -2325,6 +2453,19 @@ function renderSegmentOverlay(col, seg) {
   // the neighbouring session tile.
   const segSlotPx = (seg.endMin - seg.startMin) / 60 * HOUR_PX;
   el.style.height = Math.min(Math.max(12, segSlotPx - 4), Math.max(4, segSlotPx - 2)) + 'px';
+  el.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); showTravelLegMenu(e.clientX, e.clientY, seg); });
+  if (seg.skipped) {
+    // Not driving this: a slim marker where the drive was, to bring it back.
+    el.classList.add('skipped');
+    el.style.height = '14px';
+    el.innerHTML = '<span class="t-label">Not driving · ' + _tpEsc(seg.fromLoc.suburb || seg.fromLoc.label || 'here') + ' → ' + _tpEsc(seg.toLoc.suburb || seg.toLoc.label || 'next stop') + '</span>';
+    el.title = 'You are not driving this one — it blocks no time and is not in Outlook. Right-click to drive it after all.';
+    el.dataset.ownerSession = seg.ownerSessionId || '';
+    el.dataset.ownerSide = seg.ownerSide || '';
+    el.onclick = (ev) => { ev.stopPropagation(); openTravelPanel(seg); };
+    col.appendChild(el);
+    return;
+  }
   if (seg.tight) el.style.borderLeftColor = '#9c3322';
   const overlaps = (typeof SESSIONS !== 'undefined') && sessionsForDay(seg.day).some(x => !isTravelBlock(x) && sessionStartMin(x) < seg.endMin && sessionEndMin(x) > seg.startMin);
   if (overlaps) el.classList.add('overlaps');
@@ -2408,7 +2549,7 @@ function travelOutlookPayload(day, segs) {
   const seen = sessionsForDay(day).map(s => s.dbId).filter(Boolean).map(String);
   const legs = [];
   (segs || []).forEach(seg => {
-    if (seg.kind === 'gap' || !seg.ownerSessionId || !(seg.travelMin > 0)) return;
+    if (seg.kind === 'gap' || seg.skipped || !seg.ownerSessionId || !(seg.travelMin > 0)) return;
     const owner = window.SESSIONS[seg.ownerSessionId];
     if (!owner || !owner.dbId) return;
     const from = seg.fromLoc.suburb || seg.fromLoc.label || 'previous stop';
@@ -2793,6 +2934,11 @@ function _renderTravelPanel(seg) {
     html += '<div class="tp-plan-hint tp-past-note">Past day: travel changes here are not sent to Outlook.</div>';
   }
 
+  if (seg.skipped) {
+    html += '<div class="tp-plan-hint tp-skip-note">You are not driving this one — it blocks no time and is not sent to Outlook. ' +
+      '<button type="button" class="tp-plan-opt" data-nodrive-restore>Drive this after all</button></div>';
+  }
+
   // Stat row
   html += '<div class="tp-stat-row">';
   html += '<div class="tp-stat"><div class="tp-stat-val">' + (seg.travelMin || '—') + ' min</div><div class="tp-stat-lbl">Est. travel</div></div>';
@@ -2802,7 +2948,7 @@ function _renderTravelPanel(seg) {
   html += '</div>';
 
   // Warning if tight
-  if (tight) {
+  if (tight && !seg.skipped) {
     html += '<div class="tp-warn-block">';
     html += '<strong>Travel time may be insufficient</strong>';
     html += seg.kind === 'end'
@@ -2962,6 +3108,14 @@ function _renderTravelPanel(seg) {
   _wireTravelPlan(body, seg);
   _wireRouteAddressEdits(body, seg);
   _wireDeskChoices(body, seg);
+  var restore = body.querySelector('[data-nodrive-restore]');
+  if (restore) restore.addEventListener('click', function () {
+    setLegNotDriven(seg, false).then(function (ok) {
+      if (!ok) return;
+      var again = computeDayTravelSegments(seg.day).find(function (x) { return x.ownerSessionId === seg.ownerSessionId && x.ownerSide === seg.ownerSide; });
+      if (again) _renderTravelPanel(again); else closeTravelPanel();
+    });
+  });
   var between = body.querySelector('.tp-between');
   if (between) _wireBetweenElsewhere(body, between);
   if (between) between.querySelectorAll('[data-mode]').forEach(function (b) {
