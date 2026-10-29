@@ -1,0 +1,35 @@
+/* Traffic alerts (travel-alerts.js) — a small card, bottom right, above the
+   calendar. Shell tokens (--panel, --ink, --muted, --border, --accent). */
+.tr-alert {
+  position: fixed; right: 16px; bottom: 16px; z-index: 8500;
+  width: min(380px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow-y: auto;
+  background: var(--panel, #fff); color: var(--ink, #241f1a);
+  border: 1px solid var(--border, #e9e3d9); border-left: 4px solid #b5563a; border-radius: 12px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, .22); padding: 12px 14px; font-size: 13px;
+}
+.tr-head { display: flex; justify-content: space-between; align-items: center; }
+.tr-eyebrow { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #b5563a; font-weight: 600; }
+.tr-x { border: 0; background: transparent; font-size: 20px; line-height: 1; color: var(--muted, #99928a); cursor: pointer; padding: 2px 6px; border-radius: 6px; }
+.tr-x:hover, .tr-x:focus-visible { background: var(--bg, #f4f1ec); outline: none; }
+.tr-title { font-weight: 600; font-size: 14px; margin: 4px 0; }
+.tr-body { margin: 0 0 10px; color: var(--ink-soft, #5d564e); }
+.tr-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.tr-btn { height: 30px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--border, #e9e3d9); background: var(--panel, #fff); color: inherit; font: inherit; font-size: 12.5px; cursor: pointer; }
+.tr-btn.primary { background: var(--accent, #0f7c6c); border-color: var(--accent, #0f7c6c); color: #fff; }
+.tr-btn:focus-visible { outline: 2px solid var(--accent, #0f7c6c); outline-offset: 2px; }
+.tr-btn[disabled] { opacity: .6; cursor: default; }
+.tr-room { border: 1px solid var(--border, #e9e3d9); border-radius: 10px; padding: 8px 10px; margin: 0 0 10px; }
+.tr-room-sum { margin-bottom: 6px; }
+.tr-room-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.tr-room-list li { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; }
+.tr-room-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tr-room-time { grid-column: 1; font-size: 12px; color: var(--muted, #99928a); }
+.tr-room-step { grid-column: 2; grid-row: 1 / span 2; display: flex; align-items: center; gap: 4px; }
+.tr-step { width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--border, #e9e3d9); background: var(--panel, #fff); color: inherit; cursor: pointer; }
+.tr-step[disabled] { opacity: .4; cursor: default; }
+.tr-room-cut { min-width: 44px; text-align: center; font-size: 12px; }
+.tr-room-foot { font-size: 11.5px; color: var(--muted, #99928a); margin-top: 6px; }
+/* The drive the alert points at. */
+.travel-overlay.tr-flash { animation: tr-pulse 1s ease-in-out 4; outline: 2px solid #b5563a; outline-offset: 1px; }
+@keyframes tr-pulse { 50% { outline-color: transparent; } }
+@media (prefers-reduced-motion: reduce) { .travel-overlay.tr-flash { animation: none; } }

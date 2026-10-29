@@ -2580,6 +2580,10 @@ router.patch('/api/events/:dbId/travel', requireAuth, async (req, res) => {
     // therapist already is, or null = automatic (home when there is time).
     const desk = 'desk' in body ? (body.desk === null ? null : (body.desk === 'home' || body.desk === 'here' ? body.desk : undefined)) : null;
     if (desk === undefined) return res.status(400).json({ error: 'desk must be null, "home" or "here"' });
+    // Not driving this leg (29 Oct 2026): true, or null to drive it again.
+    const flag = (k) => (k in body ? (body[k] === null ? null : (body[k] === true ? true : undefined)) : null);
+    const noDriveBefore = flag('noDriveBefore'), noDriveAfter = flag('noDriveAfter');
+    if (noDriveBefore === undefined || noDriveAfter === undefined) return res.status(400).json({ error: 'noDriveBefore/noDriveAfter must be true or null' });
     const travel = {}, replaced = [];
     if ('before' in body) { replaced.push('before'); if (before) travel.before = before; }
     if ('after'  in body) { replaced.push('after');  if (after)  travel.after  = after; }
@@ -2587,6 +2591,8 @@ router.patch('/api/events/:dbId/travel', requireAuth, async (req, res) => {
     if ('afterOffsetMin'  in body) { replaced.push('afterOffsetMin');  if (afterOffset  !== null) travel.afterOffsetMin  = afterOffset; }
     if ('next' in body) { replaced.push('next'); if (next) travel.next = next; }
     if ('desk' in body) { replaced.push('desk'); if (desk) travel.desk = desk; }
+    if ('noDriveBefore' in body) { replaced.push('noDriveBefore'); if (noDriveBefore) travel.noDriveBefore = true; }
+    if ('noDriveAfter'  in body) { replaced.push('noDriveAfter');  if (noDriveAfter)  travel.noDriveAfter  = true; }
     const r = await db.pool.query(
       `UPDATE events
           SET custom_metadata = COALESCE(custom_metadata, '{}'::jsonb) || jsonb_build_object('travel',

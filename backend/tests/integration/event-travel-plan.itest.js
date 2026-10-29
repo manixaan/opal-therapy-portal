@@ -81,6 +81,20 @@ describe('PATCH /api/events/:dbId/travel', () => {
     expect((await ro.patch(`/api/events/${roEv.id}/travel`).send({ desk: 'home' })).status).toBe(403);
   });
 
+  test('not driving a leg: noDriveBefore / noDriveAfter are true or null, stored alone, anything else refused', async () => {
+    const app = buildApp();
+    const { agent, user } = await agentFor(app);
+    const ev = await seedEvent(user.id);
+    await agent.patch(`/api/events/${ev.id}/travel`).send({ desk: 'home' });
+    const r1 = await agent.patch(`/api/events/${ev.id}/travel`).send({ noDriveBefore: true });
+    expect(r1.status).toBe(200);
+    expect(r1.body.travel).toEqual({ desk: 'home', noDriveBefore: true });
+    const r2 = await agent.patch(`/api/events/${ev.id}/travel`).send({ noDriveAfter: true, noDriveBefore: null });
+    expect(r2.body.travel).toEqual({ desk: 'home', noDriveAfter: true });
+    expect((await agent.patch(`/api/events/${ev.id}/travel`).send({ noDriveAfter: 'yes' })).status).toBe(400);
+    expect((await agent.patch(`/api/events/${ev.id}/travel`).send({ noDriveBefore: false })).status).toBe(400);
+  });
+
   test('rejects malformed specs, another user\'s event, and read-only accounts', async () => {
     const app = buildApp();
     const { agent, user } = await agentFor(app);

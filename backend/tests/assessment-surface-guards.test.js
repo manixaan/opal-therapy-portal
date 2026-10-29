@@ -734,7 +734,11 @@ describe('changed assets are cache-busted', () => {
       // 51: desk work (non-face-to-face, no address) happens at home when there
       // is time to get there; a drive whose next stop is home has no Direct ⇄
       // Via home switch; the panel names the real next stop (28 Oct 2026).
-      ['travel.js', 51],
+      // 52: drives priced at their own departure time; right-click › Not driving
+      // this; the traffic-alert hook; Make room's apply shared (29 Oct 2026).
+      ['travel.js', 52],
+      // 1: traffic alerts — a re-priced drive running into a client session.
+      ['travel-alerts.js', 1], ['travel-alerts.css', 1],
       // 1: booking-route.js/.css are new — client location selector, the
       // work-location notice and the "What next?" continuation.
       // 6: a time re-pick with the panel open (keepState) keeps the chosen address.
