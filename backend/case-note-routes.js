@@ -875,10 +875,42 @@ router.patch('/api/mobile/case-note-drafts/:id', safe(async (req, res) => {
   }
   if (!sets.length) return res.status(400).json({ error: 'No editable fields supplied' });
 
+  // Editing an APPROVED note is allowed (phone and laptop) — but the approval
+  // was given to the old words. Leaving it in place would leave a note marked
+  // "approved by <therapist> on <date>" for text that therapist never
+  // approved, the same attestation problem regeneration already guards
+  // against. So a real change voids the approval, here and on the AI
+  // interaction, and the note waits for approval again. A save that changes
+  // nothing keeps it.
+  const changed = (b.noteBody !== undefined && b.noteBody !== row.note_body)
+    || (b.plan !== undefined && JSON.stringify(b.plan.map((p) => p.trim()).filter(Boolean)) !== JSON.stringify(row.plan || []));
+  const voidApproval = row.review_status === 'approved' && changed;
+  if (voidApproval) {
+    sets.push(`review_status = 'review_required'`, 'reviewed_by = NULL', 'reviewed_at = NULL');
+  }
+
   const { rows } = await pool.query(
     `UPDATE case_note_drafts SET ${sets.join(', ')}, updated_at = NOW()
       WHERE id = $1 AND user_id = $2 RETURNING *`, params);
-  await audit(req, 'mobile.case_note_updated', row.id, { editedChars: b.noteBody ? b.noteBody.length : 0 });
+
+  // Mirror onto the governance record so the two cannot disagree. Non-fatal,
+  // as on review: the outcome is captured in the audit event either way.
+  let interactionReopened = null;
+  if (voidApproval && row.ai_interaction_id) {
+    try {
+      // eslint-disable-next-line global-require
+      interactionReopened = await require('./ai/ai-audit').reopenReview({
+        interactionId: row.ai_interaction_id, userId: req.user.id,
+      });
+    } catch (err) {
+      interactionReopened = false;
+      log.warn(`approval voided on draft but not on interaction (reason: ${err?.message || 'unknown'})`);
+    }
+  }
+  await audit(req, 'mobile.case_note_updated', row.id, {
+    editedChars: b.noteBody ? b.noteBody.length : 0,
+    ...(voidApproval ? { approvalVoided: true, aiInteractionId: row.ai_interaction_id || null, interactionReopened } : {}),
+  });
   res.json({ caseNoteDraft: formatDraft(rows[0]) });
 }));
 

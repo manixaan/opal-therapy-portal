@@ -132,6 +132,12 @@ function installPoolMock() {
       Object.assign(row, { review_status: params[0], reviewed_by: params[1], reviewed_at: new Date().toISOString() });
       return { rows: [], rowCount: 1 };
     }
+    if (q.includes('UPDATE ai_interactions') && q.includes("SET review_status = 'review_required', reviewed_by = NULL")) { // reopenReview
+      const row = interactionStore.get(params[0]);
+      if (!row || row.user_id !== params[1]) return { rows: [], rowCount: 0 };
+      Object.assign(row, { review_status: 'review_required', reviewed_by: null, reviewed_at: null });
+      return { rows: [], rowCount: 1 };
+    }
     if (q.includes('UPDATE ai_interactions') && q.includes("status = 'provider_error'")) { // markOrphaned
       const row = interactionStore.get(params[0]);
       if (!row || row.review_status !== 'review_required') return { rows: [], rowCount: 0 };
@@ -209,6 +215,10 @@ function installPoolMock() {
         let v = params[Number(n) - 1];
         if (col === 'plan') v = JSON.parse(v);
         row[col] = v;
+      }
+      // Literal resets (an edit voiding an approval).
+      if (q.includes("review_status = 'review_required'")) {
+        Object.assign(row, { review_status: 'review_required', reviewed_by: null, reviewed_at: null });
       }
       row.updated_at = new Date().toISOString();
       return { rows: [row] };
@@ -1296,5 +1306,71 @@ describe('names check and de-identification', () => {
     expect(res.body.code).toBe('names_not_hidden');
     expect(res.body.status).toBe('blocked');
     expect(draftStore.size).toBe(0);
+  });
+});
+
+// ═══ Editing an APPROVED note voids the approval ═════════════════════════════
+//
+// The approval was given to the old words. Left in place it would attest to
+// text the therapist never approved — so a real edit sends the note back to
+// review, on the draft AND on its AI interaction, and says so in the audit.
+
+describe('editing an approved case note', () => {
+  async function approvedDraft(agent) {
+    seedInteraction(INTERACTION_1, USER_A.id);
+    provider._setProviderForTests(providerWithInteraction(INTERACTION_1));
+    const draft = (await generate(agent)).body.caseNoteDraft;
+    await agent.post(`/api/mobile/case-note-drafts/${draft.id}/review`).send({ decision: 'approved' });
+    expect(draftStore.get(draft.id).review_status).toBe('approved');
+    return draft;
+  }
+
+  test('is allowed, and returns the note to review — draft and AI interaction', async () => {
+    const agent = await loginAs(USER_A);
+    const draft = await approvedDraft(agent);
+    const res = await agent.patch(`/api/mobile/case-note-drafts/${draft.id}`)
+      .send({ noteBody: `${draft.noteBody}\n\nCorrected after approval.` });
+    expect(res.status).toBe(200);
+    expect(res.body.caseNoteDraft.reviewStatus).toBe('review_required');
+    const stored = draftStore.get(draft.id);
+    expect(stored).toMatchObject({ review_status: 'review_required', reviewed_by: null, reviewed_at: null });
+    expect(interactionStore.get(INTERACTION_1).review_status).toBe('review_required');
+  });
+
+  test('is audited as approvalVoided', async () => {
+    const agent = await loginAs(USER_A);
+    const draft = await approvedDraft(agent);
+    await agent.patch(`/api/mobile/case-note-drafts/${draft.id}`).send({ noteBody: 'Corrected.' });
+    const call = db.logAuditEvent.mock.calls.map((c) => c[0]).find((e) => e && e.action === 'mobile.case_note_updated');
+    expect(JSON.stringify(call)).toContain('approvalVoided');
+  });
+
+  test('a save that changes nothing keeps the approval', async () => {
+    const agent = await loginAs(USER_A);
+    const draft = await approvedDraft(agent);
+    const same = draftStore.get(draft.id).note_body;
+    const res = await agent.patch(`/api/mobile/case-note-drafts/${draft.id}`).send({ noteBody: same });
+    expect(res.status).toBe(200);
+    expect(draftStore.get(draft.id).review_status).toBe('approved');
+    expect(interactionStore.get(INTERACTION_1).review_status).toBe('approved');
+  });
+
+  test('approving again after the edit records a fresh approval', async () => {
+    const agent = await loginAs(USER_A);
+    const draft = await approvedDraft(agent);
+    await agent.patch(`/api/mobile/case-note-drafts/${draft.id}`).send({ noteBody: 'Corrected.' });
+    const again = await agent.post(`/api/mobile/case-note-drafts/${draft.id}/review`).send({ decision: 'approved' });
+    expect(again.status).toBe(200);
+    expect(draftStore.get(draft.id).review_status).toBe('approved');
+    expect(interactionStore.get(INTERACTION_1).review_status).toBe('approved');
+  });
+
+  test('another therapist still cannot edit it (404, nothing changes)', async () => {
+    const agent = await loginAs(USER_A);
+    const draft = await approvedDraft(agent);
+    const other = await loginAs(USER_B);
+    const res = await other.patch(`/api/mobile/case-note-drafts/${draft.id}`).send({ noteBody: 'Hijack.' });
+    expect(res.status).toBe(404);
+    expect(draftStore.get(draft.id).review_status).toBe('approved');
   });
 });
