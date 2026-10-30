@@ -605,11 +605,6 @@
         '<textarea id="cn-note" class="cn-note" data-cn-input="note" spellcheck="true"' +
           ' aria-describedby="cn-note-hint"' + (editable ? '' : ' readonly') + '>' + esc(note) + '</textarea>' +
         '<p class="cn-quiet" id="cn-note-hint">Your wording is what is stored. Nothing is submitted anywhere else.</p>' +
-        // An approved note can still be corrected — but the approval was for
-        // the old words, so the portal sends it back for approval on save.
-        (draft.reviewStatus === 'approved'
-          ? '<p class="cn-msg cn-msg-info" id="cn-approved-note">Approved in the Opa app. Saving a change sends it back for approval — approve it again in Opa.</p>'
-          : '') +
       '</section>' +
       '<aside class="cn-transcript' + (S.transcriptOpen ? ' open' : '') + '" aria-labelledby="cn-tx-h">' +
         '<h3 id="cn-tx-h" class="cn-tx-head">' + icn('doc', 13) + ' Transcript — what was recorded' +
