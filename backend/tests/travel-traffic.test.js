@@ -172,7 +172,8 @@ describe('traffic alerts', () => {
   }
 
   test('only a change alerts, only into a client session, and only from a real Routes answer', () => {
-    const c = load(perth(0));
+    const c = load(perth(1)); // tomorrow: still watched, and always in the future — a
+    // day of today failed every afternoon, once the 12:15 session had passed;
     day(c);
     priceAt(c, HOME.addr, JOONDALUP, '11:35', 40);
     c.TravelAlerts.check('mon', c.computeDayTravelSegments('mon'));        // baseline, no alert
@@ -203,7 +204,8 @@ describe('traffic alerts', () => {
   });
 
   test('with storage blocked the baseline is kept in memory, so a change still alerts', () => {
-    const c = load(perth(0));
+    const c = load(perth(1)); // tomorrow: still watched, and always in the future — a
+    // day of today failed every afternoon, once the 12:15 session had passed;
     c.localStorage.getItem = () => { throw new Error('SecurityError'); };
     c.localStorage.setItem = () => { throw new Error('SecurityError'); };
     day(c);
