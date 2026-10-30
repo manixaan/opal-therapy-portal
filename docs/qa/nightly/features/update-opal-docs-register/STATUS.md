@@ -2,7 +2,7 @@
 
 - Tracker stage: idea · Tracker environment: none
 - Evidence label: **untouched**
-- Addressed since the last audit (develop unchanged since 2026-10-28, also commit `15acf0c`): no.
+- Addressed since the last audit (2026-10-29, commit `15acf0c` → tonight `338f5dc`): no — none of tonight's 5 commits touch any documentation-register code (there is none).
 - Created (any located code): no.
 
 ## Located
