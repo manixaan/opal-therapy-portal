@@ -46,6 +46,7 @@ const { requireAuth } = require('./permissions');
 const provider = require('./clinical-note-provider');
 const { CURRENT_STYLE_VERSION, INSTRUCTION_MODIFIERS } = require('./case-note-style');
 const caseload = require('./splose-caseload');
+const { renderCaseNotePdf, caseNotePdfFilename } = require('./case-note-pdf');
 const log = require('./logger').createLogger('case-note');
 
 router.use('/api/mobile/case-note-drafts', requireAuth);
@@ -846,6 +847,22 @@ router.get('/api/mobile/case-note-drafts/:id', safe(async (req, res) => {
 }));
 
 // ═══ Edit (therapist review) ═════════════════════════════════════════════════
+
+// ═══ PDF — the saved note on Opal letterhead ═════════════════════════════════
+//
+// Renders the STORED note text (never unsaved edits, never the transcript).
+// Own drafts only, exactly like GET /:id. The audit entry carries the id only.
+router.get('/api/mobile/case-note-drafts/:id/pdf', safe(async (req, res) => {
+  const row = await loadOwnDraft(req, req.params.id);
+  if (!row) return res.status(404).json({ error: 'Not found' });
+  const header = row.header || {};
+  const bytes = await renderCaseNotePdf({ header, noteBody: row.note_body });
+  await audit(req, 'mobile.case_note_pdf_exported', row.id, { status: row.status });
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Content-Disposition', `attachment; filename="${caseNotePdfFilename(header)}"`);
+  res.end(Buffer.from(bytes));
+}));
 
 router.patch('/api/mobile/case-note-drafts/:id', safe(async (req, res) => {
   const row = await loadOwnDraft(req, req.params.id);

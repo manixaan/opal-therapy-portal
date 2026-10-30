@@ -1526,8 +1526,8 @@ describe('case notes review surface', () => {
   const CN_CODE = CN_JS.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
 
   test('assets are linked next to the other extracted asset pairs', () => {
-    expect(HTML).toContain('<link rel="stylesheet" href="/casenotes.css?v=2" />');
-    expect(HTML).toContain('<script src="/casenotes.js?v=3" defer></script>');
+    expect(HTML).toContain('<link rel="stylesheet" href="/casenotes.css?v=3" />');
+    expect(HTML).toContain('<script src="/casenotes.js?v=4" defer></script>');
   });
 
   test('nav tab + view mount exist and are wired the same way as other tabs', () => {
@@ -1573,17 +1573,20 @@ describe('case notes review surface', () => {
     for (const p of paths) expect(p.startsWith('/api/mobile/case-note-drafts')).toBe(true);
   });
 
-  test('only noteBody and plan are editable — metadata never sits in a field', () => {
-    // the PATCH body is exactly the two editable fields
+  test('only the note is editable — metadata never sits in a field', () => {
+    // the PATCH body is the note, with the stored plan carried unchanged
     expect(CN_JS).toContain('var sent = { noteBody: noteBody, plan: cnNormalisePlan(S.edits.plan) };');
     expect(CN_JS).toContain("await api(draftPath(S.draft.id), { method: 'PATCH', body: sent });");
     expect(CN_JS).toContain("S.edits = draft\n      ? { noteBody: draft.noteBody == null ? '' : String(draft.noteBody), plan: (draft.plan || []).map(String) }");
 
-    // every <textarea>/<input> built by this file is a note or a plan row
+    // the one <textarea> built by this file is the note — Identify, Session
+    // details and Plan are sections of it, not separate fields or panels
     const fields = CN_CODE.match(/<(textarea|input)[^>]*/g) || [];
-    expect(fields.length).toBeGreaterThan(0);
+    expect(fields.length).toBe(1);
+    expect(CN_CODE).not.toContain('Generated sections as stored');
+    expect(CN_CODE).not.toContain('data-cn="plan-add"');
     for (const f of fields) {
-      expect(f).toMatch(/data-cn-input="(note|plan)"/);
+      expect(f).toMatch(/data-cn-input="note"/);
       for (const banned of ['clientName', 'clientAddress', 'serviceLine', 'sessionDateLabel', 'identify', 'sessionDetails', 'transcript']) {
         expect(f).not.toContain(banned);
       }
@@ -1597,6 +1600,17 @@ describe('case notes review surface', () => {
     expect(CN_JS).toContain('These details come from the linked client record in Splose, or from the linked appointment in your calendar. They are not written by the AI and cannot be edited here.');
     expect(CN_CSS).toContain('.cn-readonly-tag');
     expect(CN_CSS).toContain('.cn-editable-tag');
+  });
+
+  test('copy and PDF are reads — the PDF is made from the SAVED note only', () => {
+    expect(CN_JS).toContain('data-cn="copy"');
+    expect(CN_JS).toContain('data-cn="pdf"');
+    // copy takes the editor text; the PDF refuses unsaved edits rather than
+    // printing something different from what is stored
+    const pdf = CN_JS.slice(CN_JS.indexOf('async function downloadPdf()'), CN_JS.indexOf('function showMsg()'));
+    expect(pdf).toContain("if (isDirty()) {");
+    expect(pdf).toContain("fetch(draftPath(S.draft.id) + '/pdf', { credentials: 'include' })");
+    expect(pdf).not.toMatch(/method:/);
   });
 
   test('transcript is labelled honestly and stays read-only', () => {
@@ -1689,13 +1703,11 @@ describe('case notes review surface', () => {
 
   test('accessibility basics: real buttons, tied labels, headings, focus styles', () => {
     expect(CN_JS).not.toMatch(/<a [^>]*data-cn=/);          // actions are buttons, not links
-    expect(CN_JS).toContain('<label class="cn-sr-only" for="\' + id + \'">Plan item ');
     expect(CN_JS).toContain('<label for="cn-note">Note</label>');
     expect(CN_JS).toContain('role="status" aria-live="polite"');
     expect(CN_JS).toContain('aria-current="');
     expect(CN_CSS).toContain('.cn-item:focus-visible');
     expect(CN_CSS).toContain('.cn-note:focus-visible');
-    expect(CN_CSS).toContain('.cn-input:focus-visible');
   });
 });
 

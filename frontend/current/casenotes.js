@@ -25,13 +25,15 @@
         side; this file never attempts it.
      2. DRAFTS STAY DRAFTS. No finalise, no approve, no send, no Splose or
         Outlook write, no "mark appointment documented". The only writes are
-        PATCH (noteBody + plan), POST regenerate, DELETE (soft archive).
+        PATCH (noteBody), POST regenerate, DELETE (soft archive). Copy and
+        Download PDF are reads: the clipboard gets the editor text, the PDF
+        is GET /:id/pdf, rendered server side from the SAVED note.
      3. SERVER-COMPOSED METADATA IS READ-ONLY. header.{clientName,
         clientAddress, serviceLine, sessionDateLabel}, identify and
         sessionDetails come from the linked appointment / the stored
         narrative snapshot. They render as muted metadata rows and NEVER
-        appear inside a <textarea> or <input>. Only noteBody and plan are
-        editable — exactly what PATCH accepts.
+        appear inside a <textarea> or <input>. Only noteBody is editable:
+        Identify, Session details and Plan are all sections of that one note.
      4. NO CONTENT LEAVES. Transcript and note text are never logged, never
         put in a URL, never sent anywhere except the endpoints above. There
         is deliberately no console.* call in this file.
@@ -119,12 +121,51 @@
     ].filter(function (r) { return r.value != null && String(r.value).trim() !== ''; });
   }
 
+  /**
+   * Note text → simple, fully escaped HTML for the clipboard, so a paste into
+   * Splose, Word or an email keeps the headings and bullets. Same reading as
+   * the server's PDF layout: a short line ending in ":" is a heading, "- " /
+   * "• " lines are bullets with a bold "Label:" lead, the rest paragraphs.
+   */
+  function cnNoteToHtml(text) {
+    var lines = String(text == null ? '' : text).replace(/\r\n?/g, '\n').split('\n');
+    var out = [];
+    var inList = false;
+    function closeList() { if (inList) { out.push('</ul>'); inList = false; } }
+    function withLead(t) {
+      var m = /^([^.!?:]{2,60}:)\s+([\s\S]*)$/.exec(t);
+      return m ? '<strong>' + cnEsc(m[1]) + '</strong> ' + cnEsc(m[2]) : cnEsc(t);
+    }
+    for (var i = 0; i < lines.length; i++) {
+      var t = lines[i].trim();
+      if (!t) { closeList(); continue; }
+      if (/^[A-Za-z][^.!?:]{0,40}:$/.test(t)) {
+        closeList();
+        out.push('<h3>' + cnEsc(t.replace(/:$/, '')) + '</h3>');
+        continue;
+      }
+      var b = /^(?:[-\u2022*]|\d+[.)])\s+([\s\S]*)$/.exec(t);
+      if (b) {
+        if (!inList) { out.push('<ul>'); inList = true; }
+        out.push('<li>' + withLead(b[1]) + '</li>');
+        continue;
+      }
+      closeList();
+      if (/^service:/i.test(t)) out.push('<p>' + withLead(t) + '</p>');
+      else if (/^therapy session$/i.test(t)) out.push('<h2>' + cnEsc(t) + '</h2>');
+      else out.push('<p>' + cnEsc(t) + '</p>');
+    }
+    closeList();
+    return out.join('');
+  }
+
   var helpers = {
     cnEsc: cnEsc,
     cnRelativeTime: cnRelativeTime,
     cnNormalisePlan: cnNormalisePlan,
     cnIsDirty: cnIsDirty,
     cnMetaRows: cnMetaRows,
+    cnNoteToHtml: cnNoteToHtml,
     CN_MAX_PLAN_ITEMS: CN_MAX_PLAN_ITEMS,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = helpers;
@@ -153,10 +194,11 @@
     draft: null,          // full draft from GET /:id
     detailLoading: false,
     detailError: '',
-    edits: null,          // { noteBody: string, plan: string[] } — the ONLY editable fields
+    edits: null,          // { noteBody, plan } — plan is carried unchanged; the note is the editable field
     saving: false,
     regenerating: false,
     archiving: false,
+    exporting: false,
     msg: null,            // { kind: 'ok'|'warn'|'error'|'info', text }
     guard: null,          // { kind: 'select'|'leave', id, tab }
     transcriptOpen: false,
@@ -435,26 +477,68 @@
     render();
   }
 
-  // ── Plan row editing (the second — and last — editable field) ─────────────
+  // ── Copy + PDF (reads only — nothing is written) ──────────────────────────
 
-  function planAdd() {
-    if (!S.edits || !isEditable()) return;
-    if (S.edits.plan.length >= CN_MAX_PLAN_ITEMS) return;
-    S.edits.plan.push('');
-    renderPlan();
-    var rows = doc.querySelectorAll('#cn-plan-rows input[data-cn-input="plan"]');
-    var last = rows[rows.length - 1];
-    if (last) { try { last.focus(); } catch (_) { /* not focusable */ } }
-    syncDirty();
+  async function copyNote() {
+    if (!S.draft || !S.edits) return;
+    var text = String(S.edits.noteBody || '');
+    if (!text.trim()) { setMsg('error', 'There is nothing to copy yet.'); render(); return; }
+    var copied = false;
+    try {
+      if (global.navigator && navigator.clipboard && global.ClipboardItem && navigator.clipboard.write) {
+        await navigator.clipboard.write([new global.ClipboardItem({
+          'text/plain': new Blob([text], { type: 'text/plain' }),
+          'text/html': new Blob([cnNoteToHtml(text)], { type: 'text/html' }),
+        })]);
+        copied = true;
+      }
+    } catch (_) { copied = false; }
+    if (!copied) {
+      try { await navigator.clipboard.writeText(text); copied = true; } catch (_) { copied = false; }
+    }
+    setMsg(copied ? 'ok' : 'error', copied
+      ? 'Note copied — paste it into Splose, Word or an email.'
+      : 'Could not copy automatically. Select the note text and copy it instead.');
+    showMsg();
   }
 
-  function planRemove(idx) {
-    if (!S.edits || !isEditable()) return;
-    var i = Number(idx);
-    if (!isFinite(i) || i < 0 || i >= S.edits.plan.length) return;
-    S.edits.plan.splice(i, 1);
-    renderPlan();
-    syncDirty();
+  async function downloadPdf() {
+    if (!S.draft || S.exporting) return;
+    if (isDirty()) {
+      setMsg('warn', 'Save your changes first — the PDF is made from the saved note.');
+      showMsg();
+      return;
+    }
+    S.exporting = true;
+    setMsg('info', 'Preparing the PDF…');
+    showMsg();
+    try {
+      var r = await fetch(draftPath(S.draft.id) + '/pdf', { credentials: 'include' });
+      if (!r.ok) throw new Error(r.status === 404 ? 'This draft is no longer available.' : 'Could not create the PDF (' + r.status + ').');
+      var blob = await r.blob();
+      var cd = r.headers.get('Content-Disposition') || '';
+      var m = /filename="([^"]+)"/.exec(cd);
+      var url = URL.createObjectURL(blob);
+      var a = doc.createElement('a');
+      a.href = url;
+      a.download = m ? m[1] : 'Therapy Session.pdf';
+      doc.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 30000);
+      setMsg('ok', 'PDF downloaded.');
+    } catch (err) {
+      setMsg('error', (err && err.message) || 'Could not create the PDF.');
+    }
+    S.exporting = false;
+    showMsg();
+  }
+
+  /** Update only the message region — never re-render the editor under the cursor. */
+  function showMsg() {
+    var host = el('cn-msg');
+    if (!host) { render(); return; }
+    host.innerHTML = S.msg ? '<p class="cn-msg cn-msg-' + esc(S.msg.kind) + '">' + esc(S.msg.text) + '</p>' : '';
   }
 
   // ── Rendering ─────────────────────────────────────────────────────────────
@@ -538,63 +622,6 @@
       '</section>';
   }
 
-  /** Server-composed narrative snapshot — shown, never editable. */
-  function narrativeCard(draft) {
-    var parts = [];
-    if (draft.identify) {
-      parts.push('<div class="cn-narr-block"><span class="cn-meta-label">Identify</span>' +
-        '<p>' + esc(draft.identify) + '</p></div>');
-    }
-    if (draft.sessionDetails) {
-      parts.push('<div class="cn-narr-block"><span class="cn-meta-label">Session details</span>' +
-        '<p>' + esc(draft.sessionDetails) + '</p></div>');
-    }
-    if (!parts.length) return '';
-    return '<section class="cn-narrative" aria-labelledby="cn-narr-h">' +
-      '<h3 id="cn-narr-h" class="cn-meta-head">Generated sections as stored' +
-        '<span class="cn-readonly-tag">' + icn('lock', 11) + ' read-only</span></h3>' +
-      parts.join('') +
-      '<p class="cn-meta-note">The snapshot the note was composed from. Edit the note itself above.</p>' +
-      '</section>';
-  }
-
-  function planRowsHtml() {
-    var editable = isEditable();
-    var plan = (S.edits && S.edits.plan) || [];
-    if (!plan.length) {
-      return '<p class="cn-quiet" id="cn-plan-empty">No plan items. ' +
-        (editable ? 'Add one if the session calls for it.' : '') + '</p>';
-    }
-    return plan.map(function (v, i) {
-      var id = 'cn-plan-' + i;
-      return '<div class="cn-plan-row">' +
-        '<label class="cn-sr-only" for="' + id + '">Plan item ' + (i + 1) + '</label>' +
-        '<input type="text" id="' + id + '" class="cn-input" data-cn-input="plan" data-cn-idx="' + i + '"' +
-          ' value="' + esc(v) + '"' + (editable ? '' : ' readonly') + ' maxlength="500">' +
-        (editable ? '<button type="button" class="cn-icon-btn" data-cn="plan-remove" data-cn-idx="' + i + '"' +
-          ' aria-label="Remove plan item ' + (i + 1) + '">' + icn('trash', 13) + '</button>' : '') +
-        '</div>';
-    }).join('');
-  }
-
-  function planCard() {
-    var editable = isEditable();
-    var count = ((S.edits && S.edits.plan) || []).length;
-    return '<section class="cn-plan" aria-labelledby="cn-plan-h">' +
-      '<h3 id="cn-plan-h" class="cn-pane-head">Plan' +
-        '<span class="cn-editable-tag">' + icn('edit', 11) + ' editable</span></h3>' +
-      '<div id="cn-plan-rows">' + planRowsHtml() + '</div>' +
-      '<div class="cn-plan-foot">' +
-        (editable
-          ? '<button type="button" class="btn" data-cn="plan-add"' +
-            (count >= CN_MAX_PLAN_ITEMS ? ' disabled' : '') + '>' + icn('plus', 13) + ' Add plan item</button>'
-          : '') +
-        '<span class="cn-quiet" id="cn-plan-count">' + count + ' of ' + CN_MAX_PLAN_ITEMS +
-          ' · empty rows are dropped when you save</span>' +
-      '</div>' +
-      '</section>';
-  }
-
   function bodyPanes(draft) {
     var editable = isEditable();
     var note = (S.edits && S.edits.noteBody) || '';
@@ -602,9 +629,15 @@
       '<section class="cn-note-pane" aria-labelledby="cn-note-h">' +
         '<h3 id="cn-note-h" class="cn-pane-head"><label for="cn-note">Note</label>' +
           '<span class="cn-editable-tag">' + icn('edit', 11) + ' editable</span></h3>' +
+        '<div class="cn-note-tools">' +
+          '<button type="button" class="btn" data-cn="copy" title="Copy the note to paste anywhere">' +
+            icn('doc', 13) + ' Copy note</button>' +
+          '<button type="button" class="btn" data-cn="pdf" title="Download the saved note as a PDF on Opal letterhead">' +
+            icn('forward', 13) + ' Download PDF</button>' +
+        '</div>' +
         '<textarea id="cn-note" class="cn-note" data-cn-input="note" spellcheck="true"' +
           ' aria-describedby="cn-note-hint"' + (editable ? '' : ' readonly') + '>' + esc(note) + '</textarea>' +
-        '<p class="cn-quiet" id="cn-note-hint">Your wording is what is stored. Nothing is submitted anywhere else.</p>' +
+        '<p class="cn-quiet" id="cn-note-hint">Identify, Session details and Plan are all part of this one note. Your wording is what is stored, copied and printed.</p>' +
       '</section>' +
       '<aside class="cn-transcript' + (S.transcriptOpen ? ' open' : '') + '" aria-labelledby="cn-tx-h">' +
         '<h3 id="cn-tx-h" class="cn-tx-head">' + icn('doc', 13) + ' Transcript — what was recorded' +
@@ -694,8 +727,6 @@
       metaCard(d) +
       warningsCard(d) +
       bodyPanes(d) +
-      planCard() +
-      narrativeCard(d) +
       '</section>';
   }
 
@@ -711,17 +742,6 @@
       '<div class="cn-layout">' + listPane() + detailPane() + '</div>';
     var note = el('cn-note');
     if (note) autosize(note);
-  }
-
-  function renderPlan() {
-    var host = el('cn-plan-rows');
-    if (!host) { render(); return; }
-    host.innerHTML = planRowsHtml();
-    var count = ((S.edits && S.edits.plan) || []).length;
-    var counter = el('cn-plan-count');
-    if (counter) counter.textContent = count + ' of ' + CN_MAX_PLAN_ITEMS + ' · empty rows are dropped when you save';
-    var add = doc.querySelector('[data-cn="plan-add"]');
-    if (add) add.disabled = count >= CN_MAX_PLAN_ITEMS;
   }
 
   /** Cheap dirty-state sync — never re-renders the editors under the cursor. */
@@ -748,8 +768,8 @@
     if (action === 'archive') { archiveAsk(); return; }
     if (action === 'archive-confirm') { archiveConfirm(); return; }
     if (action === 'archive-cancel') { archiveClose(); return; }
-    if (action === 'plan-add') { planAdd(); return; }
-    if (action === 'plan-remove') { planRemove(t.getAttribute('data-cn-idx')); return; }
+    if (action === 'copy') { copyNote(); return; }
+    if (action === 'pdf') { downloadPdf(); return; }
     if (action === 'guard-keep') { guardKeepEditing(); return; }
     if (action === 'guard-discard') { guardDiscard(); return; }
     if (action === 'toggle-transcript') {
@@ -772,14 +792,6 @@
       autosize(t);
       syncDirty();
       return;
-    }
-    if (kind === 'plan') {
-      var i = Number(t.getAttribute('data-cn-idx'));
-      if (isFinite(i) && i >= 0) {
-        while (S.edits.plan.length <= i) S.edits.plan.push('');
-        S.edits.plan[i] = t.value;
-        syncDirty();
-      }
     }
   });
 
@@ -827,8 +839,8 @@
     archiveAsk: archiveAsk,
     archiveConfirm: archiveConfirm,
     archiveCancel: archiveClose,
-    planAdd: planAdd,
-    planRemove: planRemove,
+    copyNote: copyNote,
+    downloadPdf: downloadPdf,
     _state: S,
     _helpers: helpers,
   };

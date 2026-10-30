@@ -3,11 +3,11 @@
    Opal design tokens only; no new colour values invented here.
 
    Visual grammar carries the safety story:
-     - server-composed metadata (.cn-meta, .cn-narrative, .cn-transcript) is
+     - server-composed metadata (.cn-meta, .cn-transcript) is
        muted, on the warm page background, with a "read-only" tag — it must
        never look like something you can type into;
-     - the two editable fields (.cn-note, .cn-plan inputs) sit on white
-       panels with a visible border and an "editable" tag;
+     - the one editable field (.cn-note) sits on a white
+       panel with a visible border and an "editable" tag;
      - warnings are a calm, low-saturation callout, not an alarm.
    ═══════════════════════════════════════════════════════════════════════════ */
 
@@ -158,7 +158,7 @@
 .cn-guard-actions .btn { font-size: 12.5px; }
 
 /* ── Read-only metadata (server-composed) ── */
-.cn-meta, .cn-narrative {
+.cn-meta {
   margin-top: 14px; padding: 12px 14px;
   background: var(--bg);
   border: 1px dashed var(--border);
@@ -190,9 +190,6 @@
 }
 .cn-meta-value { flex: 1; min-width: 0; font-size: 13px; color: var(--ink); }
 .cn-meta-note { margin: 8px 0 0; font-size: 11.5px; color: var(--muted); line-height: 1.5; }
-
-.cn-narr-block { padding: 6px 0; }
-.cn-narr-block p { margin: 3px 0 0; font-size: 12.5px; color: var(--ink-soft); line-height: 1.6; white-space: pre-wrap; }
 
 /* ── Warnings — calm, never alarming ── */
 .cn-warnings {
@@ -226,6 +223,8 @@
 .cn-note:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 .cn-note[readonly] { background: var(--bg); color: var(--ink-soft); }
 #cn-note-hint { margin-top: 6px; }
+.cn-note-tools { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 8px; }
+.cn-note-tools .btn { font-size: 12.5px; }
 
 .cn-transcript {
   min-width: 0; padding: 12px 14px;
@@ -250,25 +249,6 @@
   font-size: 12px; line-height: 1.7; color: var(--ink-soft);
   white-space: pre-wrap; word-break: break-word;
 }
-
-/* ── Plan ── */
-.cn-plan {
-  margin-top: 16px; padding: 12px 14px;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md, 11px);
-}
-.cn-plan-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-.cn-input {
-  flex: 1; min-width: 0; padding: 8px 11px;
-  border: 1px solid var(--border); border-radius: var(--radius-sm, 7px);
-  background: var(--panel); color: var(--ink);
-  font-family: inherit; font-size: 13px;
-}
-.cn-input:focus-visible { outline: none; box-shadow: var(--focus-ring); }
-.cn-input[readonly] { background: var(--bg); color: var(--ink-soft); }
-.cn-plan-foot { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 8px; }
-.cn-plan-foot .btn { font-size: 12.5px; }
 
 /* ── Narrow widths: single column, transcript collapses below the note ── */
 @media (max-width: 1000px) {

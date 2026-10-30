@@ -19,6 +19,7 @@ const {
   cnEsc,
   cnRelativeTime,
   cnNormalisePlan,
+  cnNoteToHtml,
   cnIsDirty,
   cnMetaRows,
   CN_MAX_PLAN_ITEMS,
@@ -155,5 +156,29 @@ describe('cnMetaRows — server-composed metadata only', () => {
       noteBody: 'should not appear',
     });
     expect(JSON.stringify(rows)).not.toContain('should not appear');
+  });
+});
+
+describe('cnNoteToHtml — what the Copy note button puts on the clipboard', () => {
+  const NOTE = [
+    'Noah Mathew', '', 'Therapy Session', '', 'Service: 11:50 am, 29 Oct 2026 Therapy Session', '',
+    'Identify:', '', 'Therapist attended the school.', '',
+    'Session details:', '', '- Teacher Discussion (first 10 minutes): The OT met the teacher.', '- Peer work went well.', '',
+    'Plan:', '', 'Time billed for 50-minute session.',
+  ].join('\n');
+
+  test('headings, bullets with a bold lead, and paragraphs', () => {
+    const html = cnNoteToHtml(NOTE);
+    expect(html).toContain('<h2>Therapy Session</h2>');
+    expect(html).toContain('<p><strong>Service:</strong> 11:50 am, 29 Oct 2026 Therapy Session</p>');
+    expect(html).toContain('<h3>Identify</h3><p>Therapist attended the school.</p>');
+    expect(html).toContain('<h3>Session details</h3><ul><li><strong>Teacher Discussion (first 10 minutes):</strong> The OT met the teacher.</li><li>Peer work went well.</li></ul>');
+    expect(html).toContain('<h3>Plan</h3><p>Time billed for 50-minute session.</p>');
+  });
+
+  test('every value is escaped — no raw HTML passes through', () => {
+    const html = cnNoteToHtml('<img src=x onerror=alert(1)>\n- <b>x</b>: y');
+    expect(html).not.toMatch(/<img|<b>/);
+    expect(html).toContain('&lt;img');
   });
 });

@@ -1298,3 +1298,59 @@ describe('names check and de-identification', () => {
     expect(draftStore.size).toBe(0);
   });
 });
+
+// ═══ PDF export — the saved note on letterhead ═══════════════════════════════
+
+describe('GET /api/mobile/case-note-drafts/:id/pdf', () => {
+  const pdfReq = (agent, id) => agent.get(`/api/mobile/case-note-drafts/${id}/pdf`)
+    .buffer(true).parse((res, cb) => { const c = []; res.on('data', (d) => c.push(d)); res.on('end', () => cb(null, Buffer.concat(c))); });
+
+  test('signed out is 401', async () => {
+    const res = await request(app).get('/api/mobile/case-note-drafts/cafecafe-5555-4555-8555-000000000001/pdf');
+    expect(res.status).toBe(401);
+  });
+
+  test('the owner gets a PDF of the saved note; the audit entry carries no note text', async () => {
+    const agent = await loginAs(USER_A);
+    const draft = (await generate(agent)).body.caseNoteDraft;
+    const res = await pdfReq(agent, draft.id);
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toBe('application/pdf');
+    expect(res.headers['cache-control']).toBe('no-store');
+    expect(res.headers['content-disposition']).toBe('attachment; filename="Therapy Session - Liam Carter - 10-08-2026.pdf"');
+    expect(res.body.slice(0, 5).toString()).toBe('%PDF-');
+    const exported = db.logAuditEvent.mock.calls.map((c) => c[0]).find((e) => e.action === 'mobile.case_note_pdf_exported');
+    expect(exported.targetId).toBe(draft.id);
+    expect(JSON.stringify(exported)).not.toContain('Liam');
+    expect(JSON.stringify(exported)).not.toContain('jumper');
+  });
+
+  test("another therapist's draft is 404, identical to a missing one", async () => {
+    const agentA = await loginAs(USER_A);
+    const draft = (await generate(agentA)).body.caseNoteDraft;
+    const agentB = await loginAs(USER_B);
+    const foreign = await agentB.get(`/api/mobile/case-note-drafts/${draft.id}/pdf`);
+    const missing = await agentB.get('/api/mobile/case-note-drafts/99999999-9999-4999-8999-999999999999/pdf');
+    expect(foreign.status).toBe(404);
+    expect(foreign.body).toEqual(missing.body);
+  });
+});
+
+describe('case-note PDF layout reads the note without rewriting it', () => {
+  const { parseNote } = require('../case-note-pdf');
+  test('letterhead lines are lifted out; headings, bullets and paragraphs keep their text', () => {
+    const header = { clientName: 'Liam Carter', clientAddress: '7 Example Street, Testville', serviceLine: 'svc' };
+    const n = parseNote([
+      'Liam Carter', '7 Example Street, Testville', '', 'Therapy Session', '', 'Service: 11:50 am', '',
+      'Identify:', '', 'He attended.', '', 'Plan:', '', '- Keep going.', 'Time billed for 50-minute session.',
+    ].join('\n'), header);
+    expect(n.name).toBe('Liam Carter');
+    expect(n.addressLines).toEqual(['7 Example Street', 'Testville']);
+    expect(n.service).toBe('11:50 am');
+    expect(n.blocks.filter((b) => b.type !== 'gap')).toEqual([
+      { type: 'heading', text: 'Identify' }, { type: 'para', text: 'He attended.' },
+      { type: 'heading', text: 'Plan' }, { type: 'bullet', text: 'Keep going.' },
+      { type: 'para', text: 'Time billed for 50-minute session.' },
+    ]);
+  });
+});
