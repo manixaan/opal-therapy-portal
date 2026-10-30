@@ -92,7 +92,7 @@
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && document.getElementById('inv-backdrop')) closeModal(); });
 
   // ── Shell ────────────────────────────────────────────────────────────────
-  var SECTIONS = [['invoices', 'Invoices'], ['attention', 'Needs attention'], ['trips', 'Trips'], ['clients', 'Client billing'], ['runs', 'Runs'], ['settings', 'Billing settings']];
+  var SECTIONS = [['invoices', 'Invoices'], ['attention', 'Needs attention'], ['trips', 'Trips'], ['clients', 'Client billing'], ['payers', 'Payers'], ['runs', 'Runs'], ['settings', 'Billing settings']];
 
   function renderShell() {
     var el = root();
@@ -141,7 +141,7 @@
     var el = section();
     if (!el) return;
     el.innerHTML = skel(6);
-    var fn = { invoices: renderInvoices, attention: renderAttention, trips: renderTrips, clients: renderClients, runs: renderRuns, settings: renderSettings }[sec];
+    var fn = { invoices: renderInvoices, attention: renderAttention, trips: renderTrips, clients: renderClients, payers: renderPayers, runs: renderRuns, settings: renderSettings }[sec];
     Promise.resolve(fn(el)).catch(function (e) { denied(el, e); });
   }
 
@@ -478,10 +478,20 @@
 
   function opt(v, label, cur) { return '<option value="' + esc(v) + '"' + (String(cur || '') === String(v) ? ' selected' : '') + '>' + esc(label) + '</option>'; }
 
+  var PAYER_TYPE_LABEL = { PLAN_MANAGER: 'Plan manager', PARTICIPANT: 'Participant', NOMINEE: 'Nominee', OTHER: 'Other' };
+  function payerHistoryHtml(h) {
+    if (!h || !h.length) return '<div class="inv-panel" style="margin-top:12px"><h3>Invoice history</h3><div class="inv-dim">No invoices on record for this client yet, so there is nobody to remember. Choose or enter the payer above; it is remembered from then on.</div></div>';
+    return '<div class="inv-panel" style="margin-top:12px"><h3>Invoice history</h3><div class="inv-table-wrap"><table class="inv-table"><thead><tr><th>Sent to</th><th>Type</th><th class="num">Invoices</th><th>Latest</th></tr></thead><tbody>' +
+      h.map(function (x) { return '<tr><td>' + esc(x.name) + (x.email ? '<div class="inv-dim">' + esc(x.email) + '</div>' : '') + '</td><td>' + esc(PAYER_TYPE_LABEL[x.payer_type] || x.payer_type) + '</td><td class="num">' + x.invoices + '</td><td>' + esc(x.last_invoice_number || '—') + ' · ' + dmy(x.last_issue_date) + ' (' + (x.last_source === 'OPAL' ? 'Opal' : 'Splose') + ')</td></tr>'; }).join('') +
+      '</tbody></table></div></div>';
+  }
+
   async function openClient(clientId) {
     var bd = modal('Client billing profile', skel(8), null, { wide: true });
     try {
-      var r = await get('/clients/' + encodeURIComponent(clientId));
+      var both = await Promise.all([get('/clients/' + encodeURIComponent(clientId)), get('/payers').catch(function () { return { payers: [] }; })]);
+      var r = both[0], payers = both[1].payers;
+      state.payerList = payers;
       var p = r.profile;
       var zone = r.effectiveMmm ? 'MM' + r.effectiveMmm : 'Unresolved';
       var mmmInfo = p.mmm_manual_override
@@ -496,6 +506,9 @@
         '<label>Plan start<input type="date" name="planStart" value="' + esc((p.plan_start || '').slice(0, 10)) + '"></label>' +
         '<label>Plan end<input type="date" name="planEnd" value="' + esc((p.plan_end || '').slice(0, 10)) + '"></label>' +
         '<label>Management type<select name="managementType">' + opt('', '—', p.management_type) + opt('PLAN_MANAGED', 'Plan managed', p.management_type) + opt('SELF_MANAGED', 'Self managed', p.management_type) + opt('NDIA_MANAGED', 'NDIA (agency) managed', p.management_type) + opt('OTHER', 'Other / private', p.management_type) + '</select></label>' +
+        '<label class="wide">Choose a payer from the directory<select id="inv-payer-pick" aria-describedby="inv-payer-pick-hint"><option value="">— or type a new payer below —</option>' +
+          (payers || []).map(function (y) { return '<option value="' + esc(y.id) + '"' + (y.id === p.payer_id ? ' selected' : '') + '>' + esc(y.name) + ' · ' + esc(PAYER_TYPE_LABEL[y.payer_type] || y.payer_type) + (y.email ? ' · ' + esc(y.email) : ' · no email') + '</option>'; }).join('') +
+          '</select><span class="inv-dim" id="inv-payer-pick-hint">A payer typed in for the first time is added to the directory and remembered for this client\'s later invoices.</span><input type="hidden" name="payerId" value="' + esc(p.payer_id || '') + '"></label>' +
         '<label>Payer type<select name="payerType">' + opt('', '—', p.payer_type) + opt('PLAN_MANAGER', 'Plan manager', p.payer_type) + opt('PARTICIPANT', 'Participant', p.payer_type) + opt('NOMINEE', 'Nominee', p.payer_type) + opt('OTHER', 'Other', p.payer_type) + '</select></label>' +
         '<label>Invoice to (plan manager / payer)<input name="payerName" value="' + esc(p.payer_name || '') + '">' + (p.payer_source_detail ? '<span class="inv-dim">From ' + esc(p.payer_source_detail) + '</span>' : '') + '</label>' +
         '<label>Payer email<input type="email" name="payerEmail" value="' + esc(p.payer_email || '') + '"></label>' +
@@ -506,6 +519,7 @@
         '<label class="wide">Participant billing address<textarea name="participantBillingAddress">' + esc(p.participant_billing_address || '') + '</textarea></label>' +
         '<label class="wide">Billing notes<textarea name="billingNotes">' + esc(p.billing_notes || '') + '</textarea></label>' +
         '</form><div id="inv-client-msg"></div>' +
+        payerHistoryHtml(r.payerHistory) +
         '<div class="inv-panel" style="margin-top:12px"><h3>MMM override</h3><div class="inv-field-row"><select id="inv-mmm-zone"><option value="">No override</option>' + [1, 2, 3, 4, 5, 6, 7].map(function (z) { return opt(z, 'MM' + z, p.mmm_manual_override); }).join('') + '</select>' +
         '<input id="inv-mmm-reason" placeholder="Reason (required)" style="flex:1;min-width:200px"><button class="btn" type="button" data-inv="mmm-override" data-client="' + esc(clientId) + '">Save override</button><button class="btn" type="button" data-inv="mmm-refresh" data-client="' + esc(clientId) + '">Re-check address</button></div></div>';
       document.getElementById('inv-modal-body').insertAdjacentHTML('afterend', '<footer id="inv-modal-foot"><button class="btn" data-inv="import-splose" data-client="' + esc(clientId) + '">Fill blanks from Splose</button><button class="btn" data-inv="close-modal">Close</button><button class="btn primary" data-inv="save-client" data-client="' + esc(clientId) + '">Save profile</button></footer>');
@@ -524,6 +538,72 @@
       loadOverview();
     } catch (e) { msg.innerHTML = '<div class="inv-error">' + esc(e.message) + '</div>'; }
   }
+
+  // ── Payer directory ──────────────────────────────────────────────────────
+  async function renderPayers(el) {
+    el.innerHTML = '<div class="inv-note">Everyone invoices have gone to: plan managers, participants and nominees. Filled from every Splose invoice (on each invoicing run, or now with the button), and from each invoice Opal finalises. A client with no payer gets the payer of their latest invoice here; a new client is given one by choosing it on their billing profile.</div>' +
+      '<div class="inv-filters"><input type="search" id="inv-py-q" placeholder="Search payer name or email" aria-label="Search payers">' +
+      '<button class="btn" type="button" data-inv="payers-import">Import all Splose invoices</button><button class="btn primary" type="button" data-inv="payer-new">Add payer</button></div>' +
+      '<div id="inv-py-msg"></div><div id="inv-py-list">' + skel(5) + '</div>';
+    await loadPayers('');
+  }
+  async function loadPayers(q) {
+    var box = document.getElementById('inv-py-list');
+    var r = await get('/payers' + (q ? '?q=' + encodeURIComponent(q) : ''));
+    state.payerList = r.payers;
+    if (!r.payers.length) { box.innerHTML = '<div class="inv-panel inv-empty">' + (q ? 'No payer matches.' : 'The directory is empty. Import the Splose invoices, or add a payer.') + '</div>'; return; }
+    box.innerHTML = '<div class="inv-table-wrap"><table class="inv-table"><thead><tr><th>Payer</th><th>Type</th><th>Email</th><th class="num">Clients</th><th class="num">Invoices</th><th>Last invoiced</th><th>Source</th></tr></thead><tbody>' + r.payers.map(function (y) {
+      return '<tr class="clickable" data-inv="payer-edit" data-id="' + esc(y.id) + '"><td><button type="button" class="inv-link" data-inv="payer-edit" data-id="' + esc(y.id) + '">' + esc(y.name) + '</button></td>' +
+        '<td>' + esc(PAYER_TYPE_LABEL[y.payer_type] || y.payer_type) + '</td><td>' + (y.email ? esc(y.email) : '<span class="inv-pill NEEDS_ATTENTION">No email</span>') + '</td>' +
+        '<td class="num">' + Math.max(y.linked_clients, y.history_clients) + '</td><td class="num">' + y.invoices + '</td><td>' + dmy(y.last_issue_date) + '</td>' +
+        '<td>' + (y.source === 'SPLOSE_IMPORT' ? 'Splose' : 'Added in Opal') + '</td></tr>';
+    }).join('') + '</tbody></table></div>';
+  }
+  var pyTimer = null;
+  document.addEventListener('input', function (e) { if (e.target.id === 'inv-py-q') { clearTimeout(pyTimer); var v = e.target.value.trim(); pyTimer = setTimeout(function () { loadPayers(v); }, 250); } });
+  function openPayer(id) {
+    var y = id ? (state.payerList || []).find(function (x) { return x.id === id; }) : null;
+    var t = y ? y.payer_type : 'PLAN_MANAGER';
+    modal(y ? 'Payer' : 'Add payer', '<form class="inv-form" id="inv-payer-form">' +
+      '<label>Name<input name="name" required value="' + esc(y ? y.name : '') + '"></label>' +
+      '<label>Type<select name="payerType">' + ['PLAN_MANAGER', 'PARTICIPANT', 'NOMINEE', 'OTHER'].map(function (k) { return opt(k, PAYER_TYPE_LABEL[k], t); }).join('') + '</select></label>' +
+      '<label>Invoice email<input type="email" name="email" value="' + esc(y && y.email ? y.email : '') + '"></label>' +
+      '<label>Reference<input name="reference" value="' + esc(y && y.reference ? y.reference : '') + '"></label>' +
+      '<label class="wide">Billing address<textarea name="address">' + esc(y && y.address ? y.address : '') + '</textarea></label>' +
+      (y ? '<label class="wide"><span><input type="checkbox" name="archived"' + (y.archived ? ' checked' : '') + '> Archived (no longer offered for new clients)</span></label>' : '') +
+      '</form>' + (y ? '<div class="inv-note">Changes apply to every client whose profile uses this payer (' + y.linked_clients + ') and to their drafts on the next run. Finalised invoices keep the details they were sent with.</div>' : '') +
+      '<div id="inv-payer-msg"></div>',
+      '<button class="btn" data-inv="close-modal">Close</button><button class="btn primary" data-inv="payer-save"' + (y ? ' data-id="' + esc(y.id) + '"' : '') + '>Save payer</button>');
+  }
+  async function savePayer(id) {
+    var f = document.getElementById('inv-payer-form'), b = {};
+    Array.prototype.forEach.call(f.elements, function (el) { if (!el.name) return; b[el.name] = el.type === 'checkbox' ? el.checked : (el.value.trim() || null); });
+    try {
+      if (id) await put('/payers/' + id, b); else await post('/payers', b);
+      closeModal(); toast('Payer saved'); if (state.section === 'payers') loadPayers((document.getElementById('inv-py-q') || {}).value || '');
+    } catch (e) { document.getElementById('inv-payer-msg').innerHTML = '<div class="inv-error">' + esc(e.message) + '</div>'; }
+  }
+  // Choosing a directory payer fills the payer fields; editing the name afterwards makes it a new payer.
+  document.addEventListener('change', function (e) {
+    if (e.target.id !== 'inv-payer-pick') return;
+    var form = document.getElementById('inv-client-form');
+    var y = (state.payerList || []).find(function (x) { return x.id === e.target.value; });
+    form.elements.payerId.value = y ? y.id : '';
+    form.dataset.pickedFrom = y ? y.id : '';
+    if (!y) return;
+    form.elements.payerType.value = y.payer_type; form.elements.payerName.value = y.name;
+    form.elements.payerEmail.value = y.email || ''; form.elements.payerReference.value = y.reference || ''; form.elements.payerAddress.value = y.address || '';
+  });
+  document.addEventListener('input', function (e) {
+    var form = document.getElementById('inv-client-form');
+    if (!form || e.target.form !== form || e.target.name !== 'payerName') return;
+    form.elements.payerId.value = ''; var pick = document.getElementById('inv-payer-pick'); if (pick) pick.value = '';
+    // A new name is a new payer: the picked payer's contact details must not carry over to it.
+    if (form.dataset.pickedFrom) {
+      form.dataset.pickedFrom = '';
+      form.elements.payerEmail.value = ''; form.elements.payerReference.value = ''; form.elements.payerAddress.value = '';
+    }
+  });
 
   // ── Runs ─────────────────────────────────────────────────────────────────
   async function renderRuns(el) {
@@ -961,6 +1041,17 @@
           break;
         }
         case 'open-client': await openClient(btn.dataset.client); break;
+        case 'payer-new': openPayer(null); break;
+        case 'payer-edit': openPayer(btn.dataset.id); break;
+        case 'payer-save': await savePayer(btn.dataset.id || null); break;
+        case 'payers-import': {
+          var pm = document.getElementById('inv-py-msg');
+          btn.disabled = true; pm.innerHTML = '<div class="inv-note">Reading every Splose invoice…</div>';
+          try { var pi = await post('/payers/import-splose'); pm.innerHTML = '<div class="inv-ok">Read ' + pi.invoices + ' Splose invoices for ' + pi.clients + ' clients: ' + pi.payers + ' payers (' + pi.newPayers + ' new), ' + pi.newInvoices + ' invoices newly recorded.</div>'; await loadPayers(''); }
+          catch (e) { pm.innerHTML = '<div class="inv-error">' + esc(e.message) + '</div>'; }
+          btn.disabled = false;
+          break;
+        }
         case 'save-client': await saveClient(btn.dataset.client); break;
         case 'mmm-override': {
           var z = document.getElementById('inv-mmm-zone').value, rs = document.getElementById('inv-mmm-reason').value;

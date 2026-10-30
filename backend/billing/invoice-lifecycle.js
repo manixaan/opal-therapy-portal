@@ -24,6 +24,7 @@ const BP = require('./billing-profiles');
 const Settings = require('./billing-settings');
 const { recordAudit } = require('./billing-audit');
 const SB = require('./splose-billing-source');
+const PD = require('./payer-directory');
 const { renderInvoicePdf } = require('./invoice-pdf');
 const storage = require('../storage');
 
@@ -442,6 +443,8 @@ async function finalise({ pool = defaultPool, orgId, userId, invoiceId }) {
       `UPDATE invoices SET status = 'READY', finalised_at = NOW(), finalised_by_user_id = $2, updated_at = NOW() WHERE id = $1`,
       [invoiceId, userId]);
     const doc = await storeDocument(tx, orgId, userId, { ...inv, status: 'READY' }, bytes, true);
+    // The payer directory remembers where this client's invoice went (migration 083).
+    await PD.recordOpalInvoice(tx, orgId, inv, userId);
     await recordAudit(tx, { orgId, actorUserId: userId, action: 'invoice.finalised', entityType: 'invoice', entityId: invoiceId, invoiceId,
       before: { status: inv.status }, after: { status: 'READY', total: inv.total, documentSha256: doc.sha256 } });
     return { status: 'READY', documentId: doc.id };

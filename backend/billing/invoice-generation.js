@@ -43,6 +43,7 @@ const RF = require('./route-facts');
 const Settings = require('./billing-settings');
 const Issues = require('./billing-issues');
 const SB = require('./splose-billing-source');
+const PD = require('./payer-directory');
 const { recordAudit } = require('./billing-audit');
 
 const OPEN_STATUSES = ['DRAFT', 'NEEDS_ATTENTION'];
@@ -147,6 +148,8 @@ async function prepare(q, orgId, opts) {
   const eventScoped = !!(opts.eventIds && opts.eventIds.length);
   if (splose.status === 'OK') {
     await SB.recordSploseHigh(q, orgId, SB.highestNumber([...splose.invoiceNumbers], settings.invoicePrefix));
+    // Keep the payer directory current with every Splose invoice (idempotent).
+    summary.payerDirectory = await PD.syncFromSplose(q, orgId, { invoices: splose.invoices, contacts: splose.contactList }, opts.userId || null);
   }
   let sploseIssueRaised = false;
   const raiseSploseUnavailable = () => {
@@ -276,11 +279,10 @@ async function prepare(q, orgId, opts) {
   }
   await BP.ensureStubProfiles(q, orgId, [...clientNames].map(([clientId, clientName]) => ({ clientId, clientName })));
   const profiles = await BP.getProfilesByClient(q, orgId, [...clientNames.keys()]);
-  // Blank payer / NDIS number / address / management filled from Splose (never owner data).
-  if (splose.status === 'OK') {
-    for (const [cid, p] of profiles) {
-      if (SB.needsFill(p)) profiles.set(cid, (await SB.fillProfile(q, orgId, p, splose, opts.userId)).profile);
-    }
+  // Blank NDIS number / address / management from Splose, and a blank payer from the
+  // payer directory's history, which still answers with Splose switched off. Never owner data.
+  for (const [cid, p] of profiles) {
+    if (SB.needsFill(p)) profiles.set(cid, (await SB.fillProfile(q, orgId, p, splose.status === 'OK' ? splose : null, opts.userId)).profile);
   }
   for (const cid of profileZoneClients) if (profiles.has(cid)) profiles.set(cid, await MMM.ensureClassified(q, profiles.get(cid)));
   const cards = await RC.loadRateCards(q, orgId);

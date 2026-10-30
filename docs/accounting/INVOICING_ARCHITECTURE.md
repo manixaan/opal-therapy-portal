@@ -280,12 +280,14 @@ for invoices, support activities and appointments.
 
 - **Payer.** Splose's client record has the NDIS number, address and plan
   management (`ndisInfo.fundManagement`), but not the plan manager. The only
-  link is the contact on the client's **latest** Splose invoice. Blank profile
-  fields are filled from there; owner-entered values are never replaced.
-  - Plan-managed: the contact must be of type "Plan manager", else no payer.
-  - Self-managed: a non-plan-manager contact ("Client" → participant, otherwise nominee).
+  link is the contact on each Splose invoice, which feeds the **payer
+  directory** (below). A blank payer is filled from the client's **latest**
+  invoice there; owner-entered values are never replaced.
+  - Plan-managed: the payer must be a plan manager, else no payer.
+  - Self-managed: anyone but a plan manager.
   - NDIA-managed: no payer (claimed through the NDIS portal).
-  - The profile records `payer_source = SPLOSE_INVOICE` and which invoice. An owner edit clears it.
+  - The profile records `payer_source` (`SPLOSE_INVOICE`, `OPAL_INVOICE` or
+    `OWNER`) and which invoice.
   - The audit row lists field names only, never values.
 - **Support activities** (report writing, case notes logged in Splose) become
   `SPLOSE_ACTIVITY` lines.
@@ -315,6 +317,28 @@ for invoices, support activities and appointments.
   - When Splose is not connected, Splose-synced sessions are held back and finalise uses the stored number floor.
 - **Not covered yet.** A Splose activity edited after its Opal invoice was
   finalised is not flagged. The calendar triggers only watch `events`.
+
+## Payer directory (`billing/payer-directory.js`, migration 083)
+
+Opal's own memory of who invoices go to, so it keeps working once Splose
+invoicing is off.
+
+- `billing_payers`: one row per payer. Type plus normalised name is unique, so
+  Splose's two "NDSP" contacts are one payer. The email comes from the most
+  recently invoiced contact that has one.
+- `billing_payer_invoices`: every invoice sent, and to whom. That is every Splose
+  invoice (imported on each invoicing run, or with Payers › Import all Splose
+  invoices), plus each invoice Opal finalises.
+- `billing_profiles.payer_id`: the client's chosen payer.
+- Imports are idempotent and only fill blanks. A payer the owner edited is never
+  overwritten.
+- Editing a payer carries to every linked profile. Finalised invoices keep the
+  details they were sent with.
+- A new client has no history. The owner picks a payer on the client's billing
+  profile, or types a new one, which is added to the directory and linked.
+  From then on it is remembered.
+- 30 Oct 2026, live data: 1,927 invoices, 86 clients, 51 payers (33 plan
+  managers, all with an email).
 
 ## Extension points
 

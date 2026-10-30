@@ -3,12 +3,9 @@
 // Pure rules of billing/splose-billing-source.js (no database, no Splose).
 const SB = require('../billing/splose-billing-source');
 
-const data = (invoices, contacts, patients = []) => ({
-  latestInvoiceByPatient: SB.latestInvoices(invoices),
-  contacts: new Map(contacts.map(c => [String(c.id), c])),
-  patients: new Map(patients.map(p => [String(p.id), p])),
-});
+const PD = require('../billing/payer-directory');
 const PM = { id: 1, type: 'Plan manager', name: 'NDSP', email: 'invoices@ndsp.com.au' };
+const PM_DUP = { id: 4, type: 'Plan manager', name: 'N.D.S.P ', email: null };
 const MUM = { id: 2, type: 'Mother', name: 'Jo Parent', email: 'jo@parent.test' };
 const ME = { id: 3, type: 'Client', name: 'Sam Self', email: 'not-an-email' };
 const inv = (id, n, contactId, issueDate, extra = {}) => ({ id, invoiceNumber: n, patientId: 9, contactId, issueDate, ...extra });
@@ -20,32 +17,50 @@ describe('fund management', () => {
   });
 });
 
-describe('payer from the latest Splose invoice', () => {
-  test('the latest invoice decides — by issue date, then id; archived invoices do not count', () => {
-    const d = data([inv(1, 'INV-1', 2, '2026-01-01'), inv(2, 'INV-2', 1, '2026-05-01'), inv(3, 'INV-3', 2, '2026-09-01', { isArchived: true })], [PM, MUM]);
-    expect(SB.payerFromSplose(d, 9, 'PLAN_MANAGED')).toMatchObject({ type: 'PLAN_MANAGER', name: 'NDSP', email: 'invoices@ndsp.com.au', detail: 'Splose invoice INV-2' });
+describe('payer directory from Splose invoices', () => {
+  test('same type + name is one payer, whatever the spelling; email from the most recent invoiced contact', () => {
+    const { payers, records } = PD.buildFromSplose(
+      [inv(1, 'INV-1', 4, '2026-01-01'), inv(2, 'INV-2', 1, '2026-05-01'), inv(3, 'INV-3', 2, '2026-09-01', { isArchived: true }),
+        inv(4, 'INV-4', null, '2026-09-02'), inv(5, 'INV-5', 99, '2026-09-03')], [PM, PM_DUP, MUM]);
+    expect([...payers.values()].map(p => [p.type, p.nameKey, p.email, p.invoiceCount, [...p.contactIds].sort()]))
+      .toEqual([['PLAN_MANAGER', 'ndsp', 'invoices@ndsp.com.au', 2, ['1', '4']]]);   // Jo's only invoice is archived: not a payer
+    expect(records.map(r => r.invoiceNumber)).toEqual(['INV-2', 'INV-1']);   // archived, contact-less and unknown-contact invoices left out
   });
-  test('plan-managed needs a Plan manager contact; anything else is no payer', () => {
-    expect(SB.payerFromSplose(data([inv(1, 'INV-1', 2, '2026-01-01')], [PM, MUM]), 9, 'PLAN_MANAGED')).toBeNull();
-    expect(SB.payerFromSplose(data([], [PM]), 9, 'PLAN_MANAGED')).toBeNull();
-    expect(SB.payerFromSplose(data([inv(1, 'INV-1', null, '2026-01-01')], [PM]), 9, 'PLAN_MANAGED')).toBeNull();
+  test('name keys', () => {
+    expect(PD.nameKey('  NDSP ')).toBe('ndsp');
+    expect(PD.nameKey('My Care Plan-Manager')).toBe('my care plan manager');
+    expect(PD.nameKey('')).toBe('');
   });
-  test('self-managed: the client or a nominee, never a plan manager; an invalid email is dropped', () => {
-    expect(SB.payerFromSplose(data([inv(1, 'INV-1', 2, '2026-01-01')], [MUM]), 9, 'SELF_MANAGED')).toMatchObject({ type: 'NOMINEE', email: 'jo@parent.test' });
-    expect(SB.payerFromSplose(data([inv(1, 'INV-1', 3, '2026-01-01')], [ME]), 9, 'SELF_MANAGED')).toMatchObject({ type: 'PARTICIPANT', email: null });
-    expect(SB.payerFromSplose(data([inv(1, 'INV-1', 1, '2026-01-01')], [PM]), 9, 'SELF_MANAGED')).toBeNull();
+  test('contact type → payer type', () => {
+    expect([PM, MUM, ME, { type: 'Support Coordinator' }, {}].map(PD.payerTypeForContact)).toEqual(['PLAN_MANAGER', 'NOMINEE', 'PARTICIPANT', 'OTHER', 'OTHER']);
   });
-  test('NDIA-managed is never invoiced to anyone', () => {
-    expect(SB.payerFromSplose(data([inv(1, 'INV-1', 1, '2026-01-01')], [PM]), 9, 'NDIA_MANAGED')).toBeNull();
+  test('a payer must fit the plan management — fail-closed', () => {
+    expect(PD.fitsManagement('PLAN_MANAGER', 'PLAN_MANAGED')).toBe(true);
+    expect(PD.fitsManagement('NOMINEE', 'PLAN_MANAGED')).toBe(false);
+    expect(PD.fitsManagement('NOMINEE', 'SELF_MANAGED')).toBe(true);
+    expect(PD.fitsManagement('PLAN_MANAGER', 'SELF_MANAGED')).toBe(false);
+    expect(PD.fitsManagement('PLAN_MANAGER', 'NDIA_MANAGED')).toBe(false);
+    expect(PD.fitsManagement('PLAN_MANAGER', null)).toBe(false);
   });
-  test('the fill never replaces owner data', () => {
-    const d = data([inv(1, 'INV-1', 1, '2026-01-01')], [PM], [{ id: 9, fullName: 'R W', ndisNumber: '431876925', fundManagement: 'Plan-managed', formattedAddress: 'X' }]);
-    const owned = { client_id: '9', participant_name: 'Owner Name', ndis_number: '111111111', management_type: 'SELF_MANAGED',
-      payer_type: 'PARTICIPANT', payer_name: 'Owner Payer', service_address: 'Owner St' };
-    expect(SB.sploseProfileFill(d, owned).values).toEqual({});
-    const blank = { client_id: '9' };
-    expect(SB.sploseProfileFill(d, blank).values).toEqual({ participantName: 'R W', ndisNumber: '431876925', serviceAddress: 'X',
-      managementType: 'PLAN_MANAGED', payerType: 'PLAN_MANAGER', payerName: 'NDSP', payerEmail: 'invoices@ndsp.com.au' });
+  test('Splose\'s UTC midnight is the Perth calendar date', () => {
+    expect(PD.isoDay('2026-10-28T16:00:00.000Z')).toBe('2026-10-29');
+    expect(PD.isoDay('2026-10-28')).toBe('2026-10-28');
+    expect(PD.isoDay(null)).toBeNull();
+  });
+  test('validation', () => {
+    expect(PD.validatePayer({ name: ' ', payerType: 'PLAN_MANAGER' }).errors).toContain('A payer name is required');
+    expect(PD.validatePayer({ name: 'X', payerType: 'BANK' }).errors).toContain('payerType is invalid');
+    expect(PD.validatePayer({ name: 'X', payerType: 'OTHER', email: 'nope' }).errors).toContain('email is invalid');
+    expect(PD.validatePayer({ email: '' }, { partial: true })).toEqual({ errors: [], values: { email: null } });
+  });
+});
+
+describe('client fields from the Splose patient record', () => {
+  const data = { patients: new Map([['9', { id: 9, fullName: 'R W', ndisNumber: '431876925', fundManagement: 'Plan-managed', formattedAddress: 'X' }]]) };
+  test('blanks only; never owner data; no payer (that comes from the directory)', () => {
+    expect(SB.sploseProfileFill(data, { client_id: '9', participant_name: 'Owner', ndis_number: '111111111', management_type: 'SELF_MANAGED', service_address: 'Owner St' })).toEqual({});
+    expect(SB.sploseProfileFill(data, { client_id: '9' })).toEqual({ participantName: 'R W', ndisNumber: '431876925', serviceAddress: 'X', managementType: 'PLAN_MANAGED' });
+    expect(SB.sploseProfileFill(null, { client_id: '9' })).toEqual({});
   });
 });
 

@@ -169,10 +169,10 @@ describe('1 — the payer comes from the client\'s latest Splose invoice', () =>
     expect(a.after_state.fields).toEqual(expect.arrayContaining(['ndisNumber', 'managementType', 'payerType', 'payerName', 'payerEmail']));
     expect(JSON.stringify(a.after_state)).not.toMatch(/ndsp\.com\.au|431876925/);   // field names only, never the values
 
-    // An owner edit replaces the payer and clears its Splose source.
+    // An owner edit replaces the payer, is remembered as the owner's choice, and joins the directory.
     const put = await agent.put(`/api/invoicing/clients/${ROBERT.id}`).send({ payerName: 'Owner Chosen PM', payerEmail: 'owner@pm.test' });
     expect(put.status).toBe(200);
-    expect(put.body.profile).toMatchObject({ payer_name: 'Owner Chosen PM', payer_source: null, payer_source_detail: null });
+    expect(put.body.profile).toMatchObject({ payer_name: 'Owner Chosen PM', payer_source: 'OWNER', payer_source_detail: null });
     // …and Splose never overwrites it.
     await run(agent, day(0), day(0));
     expect((await agent.get(`/api/invoicing/clients/${ROBERT.id}`)).body.profile.payer_name).toBe('Owner Chosen PM');
@@ -206,8 +206,11 @@ describe('1 — the payer comes from the client\'s latest Splose invoice', () =>
     expect(res.body.profile).toMatchObject({ payer_name: 'NDSP', payer_email: 'invoices@ndsp.com.au', participant_name: 'Robert Weaver' });
     const { agent: therapist } = await login(app, 'therapist', org.id);
     expect((await therapist.post(`/api/invoicing/clients/${ROBERT.id}/import-splose`)).status).toBe(403);
+    // With Splose off the button still answers from the payer directory.
     fake.connected = false;
-    expect((await agent.post(`/api/invoicing/clients/${ROBERT.id}/import-splose`)).status).toBe(409);
+    const off = await agent.post(`/api/invoicing/clients/${ROBERT.id}/import-splose`);
+    expect(off.status).toBe(200);
+    expect(off.body.splose).toBe('NOT_CONNECTED');
   });
 });
 
@@ -370,5 +373,116 @@ describe('3 — numbering continues after Splose', () => {
     expect(refused.status).toBe(409);
     expect(refused.body.code).toBe('SPLOSE_UNAVAILABLE');
     expect((await detail(agent, other.id)).invoice.status).toBe('DRAFT');
+  });
+});
+
+describe('the payer directory — Opal\'s own memory of where invoices go (migration 083)', () => {
+  const NDSP_DUP = { id: 1529505, type: 'Plan manager', name: 'NDSP ', email: null, archived: false };   // Splose's duplicate, no email
+
+  test('importing every Splose invoice: duplicate contacts are one payer, history per client, idempotent', async () => {
+    const app = buildApp();
+    const org = await seedOrganisation();
+    const { agent } = await login(app, 'owner', org.id);
+    const SAM = { id: 7000010, fullName: 'Sam Self', ndisNumber: '431876930', fundManagement: 'Self-managed', formattedAddress: 'A home, Perth WA 6000' };
+    const MUM = { id: 55, type: 'Mother', name: 'Jo Self', email: 'jo@self.test', archived: false };
+    fake.patients = [ROBERT, SAM];
+    fake.contacts = [NDSP, NDSP_DUP, OLD_PM, MUM];
+    fake.invoices = [sploseInvoice(1, 'INV-1500', ROBERT.id, OLD_PM.id, '2026-01-10T16:00:00.000Z'),
+      sploseInvoice(2, 'INV-1990', ROBERT.id, NDSP_DUP.id, '2026-09-01T16:00:00.000Z'),
+      sploseInvoice(3, 'INV-2006', ROBERT.id, NDSP.id, '2026-10-28T16:00:00.000Z'),
+      sploseInvoice(4, 'INV-2001', SAM.id, MUM.id, '2026-10-20T16:00:00.000Z'),
+      sploseInvoice(5, 'INV-2002', SAM.id, null, '2026-10-21T16:00:00.000Z'),          // no contact: not a payer record
+      { ...sploseInvoice(6, 'INV-2003', SAM.id, OLD_PM.id, '2026-10-22T16:00:00.000Z'), isArchived: true }];
+
+    const imp = await agent.post('/api/invoicing/payers/import-splose');
+    expect(imp.status).toBe(200);
+    expect(imp.body).toMatchObject({ invoices: 4, clients: 2, payers: 3, newPayers: 3, newInvoices: 4 });
+    const again = await agent.post('/api/invoicing/payers/import-splose');
+    expect(again.body).toMatchObject({ newPayers: 0, newInvoices: 0 });
+
+    const { payers } = (await agent.get('/api/invoicing/payers')).body;
+    const ndsp = payers.find(p => p.name_key === 'ndsp');
+    expect(payers.filter(p => p.name_key === 'ndsp')).toHaveLength(1);
+    expect(ndsp).toMatchObject({ payer_type: 'PLAN_MANAGER', email: 'invoices@ndsp.com.au', invoices: 2, source: 'SPLOSE_IMPORT' });
+    expect(ndsp.splose_contact_ids.sort()).toEqual(['1529505', '344246']);
+    expect(payers.find(p => p.name === 'Jo Self')).toMatchObject({ payer_type: 'NOMINEE' });
+
+    // The client's history, newest first; the self-managed client is invoiced to the nominee.
+    await agent.post(`/api/invoicing/clients/${ROBERT.id}/import-splose`);
+    const rob = (await agent.get(`/api/invoicing/clients/${ROBERT.id}`)).body;
+    expect(rob.payerHistory.map(h => [h.name, h.invoices, h.last_invoice_number])).toEqual([['NDSP', 2, 'INV-2006'], ['Old Plan Co', 1, 'INV-1500']]);
+    expect(rob.payerHistory[0].last_issue_date.slice(0, 10)).toBe('2026-10-29');   // Splose's UTC midnight is 29 Oct in Perth
+    const sam = (await agent.post(`/api/invoicing/clients/${SAM.id}/import-splose`)).body.profile;
+    expect(sam).toMatchObject({ management_type: 'SELF_MANAGED', payer_type: 'NOMINEE', payer_name: 'Jo Self', payer_email: 'jo@self.test' });
+
+    // Editing a payer is audited by field name and reaches every linked profile.
+    const put = await agent.put(`/api/invoicing/payers/${ndsp.id}`).send({ email: 'accounts@ndsp.com.au' });
+    expect(put.body).toMatchObject({ linkedProfilesUpdated: 1 });
+    expect((await agent.get(`/api/invoicing/clients/${ROBERT.id}`)).body.profile.payer_email).toBe('accounts@ndsp.com.au');
+    const { rows: [a] } = await db.pool.query(`SELECT * FROM billing_audit_events WHERE action = 'payer.updated'`);
+    expect(a.after_state.fields).toEqual(['email']);
+    // A re-import never overwrites what the owner changed.
+    await agent.post('/api/invoicing/payers/import-splose');
+    expect((await agent.get('/api/invoicing/payers')).body.payers.find(p => p.id === ndsp.id).email).toBe('accounts@ndsp.com.au');
+  });
+
+  test('with Splose switched off, a client is still invoiced to the payer their history remembers', async () => {
+    const app = buildApp();
+    const org = await seedOrganisation();
+    const { agent } = await login(app, 'owner', org.id);
+    const pr = await practitioner(org.id, 'Ann', [day(0)]);
+    fake.patients = [ROBERT]; fake.contacts = [NDSP];
+    fake.invoices = [sploseInvoice(3, 'INV-2006', ROBERT.id, NDSP.id, '2026-10-28T16:00:00.000Z')];
+    await agent.post('/api/invoicing/payers/import-splose');
+    // Profile knows the client but not the payer (e.g. typed in by hand before Splose was turned off).
+    await agent.put(`/api/invoicing/clients/${ROBERT.id}`).send({ participantName: 'Robert Weaver', ndisNumber: '431876925',
+      managementType: 'PLAN_MANAGED', serviceAddress: ROBERT.formattedAddress });
+    fake.connected = false;
+    await event(pr, { clientId: String(ROBERT.id), clientName: 'Robert Weaver', date: day(0) });
+    await run(agent, day(0), day(0));
+    const [inv] = await invoices(agent);
+    expect(inv).toMatchObject({ payer_name: 'NDSP', status: 'DRAFT' });
+    expect((await agent.get(`/api/invoicing/clients/${ROBERT.id}`)).body.profile).toMatchObject({ payer_source_detail: 'Splose invoice INV-2006' });
+  });
+
+  test('a new client with no invoices: the owner enters the payer once, it joins the directory, is reused, and finalised invoices extend the history', async () => {
+    const app = buildApp();
+    const org = await seedOrganisation();
+    const { agent } = await login(app, 'owner', org.id);
+    await agent.put('/api/invoicing/settings').send({ abn: '49699791958' });
+    const pr = await practitioner(org.id, 'Ann', [day(0)]);
+    fake.connected = false;
+    await event(pr, { clientId: 'new-1', clientName: 'New Client', date: day(0) });
+    await run(agent, day(0), day(0));
+    expect(await openIssues(org.id, 'CLIENT_MISSING_PAYER')).toHaveLength(1);
+
+    // Entered by hand: the payer is added to the directory and linked.
+    const saved = await agent.put('/api/invoicing/clients/new-1').send({ participantName: 'New Client', ndisNumber: '431876940',
+      managementType: 'PLAN_MANAGED', payerType: 'PLAN_MANAGER', payerName: 'Fresh Plan Co', payerEmail: 'inv@fresh.test',
+      serviceAddress: '288 Orton Rd, Casuarina WA 6167' });
+    expect(saved.status).toBe(200);
+    const { payers } = (await agent.get('/api/invoicing/payers')).body;
+    expect(payers).toHaveLength(1);
+    expect(payers[0]).toMatchObject({ name: 'Fresh Plan Co', email: 'inv@fresh.test', source: 'OWNER', linked_clients: 1 });
+    expect(saved.body.profile).toMatchObject({ payer_id: payers[0].id, payer_source: 'OWNER' });
+
+    // A second client picks it from the directory instead of retyping it.
+    const pick = await agent.put('/api/invoicing/clients/new-2').send({ participantName: 'Second New', payerId: payers[0].id });
+    expect(pick.body.profile).toMatchObject({ payer_name: 'Fresh Plan Co', payer_email: 'inv@fresh.test', payer_type: 'PLAN_MANAGER', payer_id: payers[0].id });
+    expect((await agent.put('/api/invoicing/clients/new-2').send({ payerId: '00000000-0000-0000-0000-000000000000' })).status).toBe(404);
+
+    // The draft picks the payer up; finalising it records it in the history.
+    await run(agent, day(0), day(0));
+    const [inv] = await invoices(agent);
+    expect(inv.payer_name).toBe('Fresh Plan Co');
+    expect((await agent.post(`/api/invoicing/invoices/${inv.id}/finalise`)).status).toBe(200);
+    const hist = (await agent.get('/api/invoicing/clients/new-1')).body.payerHistory;
+    expect(hist).toEqual([expect.objectContaining({ name: 'Fresh Plan Co', invoices: 1, last_source: 'OPAL', last_invoice_number: inv.invoice_number })]);
+
+    // Duplicates are refused; the directory needs manage_billing.
+    expect((await agent.post('/api/invoicing/payers').send({ name: 'fresh plan co', payerType: 'PLAN_MANAGER' })).status).toBe(409);
+    const { agent: therapist } = await login(app, 'therapist', org.id);
+    expect((await therapist.get('/api/invoicing/payers')).status).toBe(403);
+    expect((await therapist.post('/api/invoicing/payers').send({ name: 'X', payerType: 'OTHER' })).status).toBe(403);
   });
 });

@@ -34,6 +34,7 @@ const RF = require('./billing/route-facts');
 const DR = require('./billing/day-route');
 const Issues = require('./billing/billing-issues');
 const SB = require('./billing/splose-billing-source');
+const PD = require('./billing/payer-directory');
 const { recordAudit, listAudit } = require('./billing/billing-audit');
 const storage = require('./storage');
 
@@ -410,15 +411,38 @@ router.get('/api/invoicing/clients/:clientId', safe(async (req, res) => {
   const p = await BP.getProfile(pool, orgId(req), String(req.params.clientId));
   if (!p) return res.status(404).json({ error: 'Client billing profile not found' });
   const ds = await MMM.activeDataset(pool);
-  res.json({ profile: p, effectiveMmm: MMM.effectiveMmm(p), mmmDataset: ds ? { version: ds.version, source: ds.source } : null });
+  res.json({ profile: p, effectiveMmm: MMM.effectiveMmm(p), mmmDataset: ds ? { version: ds.version, source: ds.source } : null,
+    payerHistory: await PD.historyForClient(pool, orgId(req), p.client_id) });
 }));
 
 router.put('/api/invoicing/clients/:clientId', safe(async (req, res) => {
   const clientId = String(req.params.clientId).slice(0, 255);
-  const { errors, values } = BP.validateProfilePatch(req.body || {});
+  const body = { ...(req.body || {}) };
+  // Picking a payer from the directory copies its details onto the profile.
+  let chosen = null;
+  if (body.payerId) {
+    chosen = UUID_RE.test(String(body.payerId)) ? await PD.getPayer(pool, orgId(req), String(body.payerId)) : null;
+    if (!chosen || chosen.archived) return res.status(404).json({ error: 'Payer not found' });
+    Object.assign(body, { payerType: chosen.payer_type, payerName: chosen.name, payerEmail: chosen.email,
+      payerAddress: chosen.address, payerReference: chosen.reference });
+  }
+  const { errors, values } = BP.validateProfilePatch(body);
   if (errors.length) return res.status(400).json({ error: errors.join('; ') });
   const out = await Life.withTx(pool, async tx => {
-    const r = await BP.upsertProfile(tx, orgId(req), clientId, req.user.id, values);
+    let r = await BP.upsertProfile(tx, orgId(req), clientId, req.user.id, values);
+    // Remember the payer: link the profile to its directory entry, adding a new
+    // payer to the directory the first time it is entered.
+    if (['payerType', 'payerName', 'payerEmail'].some(k => k in values)) {
+      const a = r.after;
+      const payer = a.payer_name && a.payer_type
+        ? chosen || await PD.ensurePayer(tx, orgId(req), { payerType: a.payer_type, name: a.payer_name, email: a.payer_email,
+          address: a.payer_address, reference: a.payer_reference }, req.user.id)
+        : null;
+      const { rows: [linked] } = await tx.query(
+        `UPDATE billing_profiles SET payer_id = $3, payer_source = CASE WHEN $3::uuid IS NULL THEN NULL ELSE 'OWNER' END, payer_source_detail = NULL
+          WHERE organisation_id = $1 AND client_id = $2 RETURNING *`, [orgId(req), clientId, payer ? payer.id : null]);
+      r = { ...r, after: linked };
+    }
     const changed = Object.keys(values).reduce((acc, k) => {
       const col = BP.EDITABLE[k];
       if (String(r.before ? r.before[col] ?? '' : '') !== String(r.after[col] ?? '')) acc[k] = { from: r.before ? r.before[col] : null, to: r.after[col] };
@@ -465,16 +489,56 @@ router.put('/api/invoicing/clients/:clientId/mmm-override', safe(async (req, res
 router.post('/api/invoicing/clients/:clientId/import-splose', safe(async (req, res) => {
   const clientId = String(req.params.clientId).slice(0, 255);
   const data = await SB.loadForClient(clientId);
-  if (data.status === 'NOT_CONNECTED') return res.status(409).json({ error: 'Splose is not connected' });
-  if (data.status !== 'OK') return res.status(502).json({ error: 'Could not read the client from Splose' });
-  if (!data.patients.has(clientId)) return res.status(404).json({ error: 'Client not found in Splose' });
-  await BP.ensureStubProfiles(pool, orgId(req), [{ clientId, clientName: data.patients.get(clientId).fullName || null }]);
+  if (data.status === 'UNAVAILABLE') return res.status(502).json({ error: 'Could not read the client from Splose' });
+  const connected = data.status === 'OK';
+  if (connected && !data.patients.has(clientId)) return res.status(404).json({ error: 'Client not found in Splose' });
+  await BP.ensureStubProfiles(pool, orgId(req), [{ clientId, clientName: connected ? data.patients.get(clientId).fullName || null : null }]);
   const existing = await BP.getProfile(pool, orgId(req), clientId);
-  // Fills blanks only (name, NDIS number, address, plan management, and the
-  // payer from the client's latest Splose invoice); owner data is never replaced.
-  const out = await Life.withTx(pool, tx => SB.fillProfile(tx, orgId(req), existing, data, req.user.id));
+  // Fills blanks only: name, NDIS number, address and plan management from
+  // Splose; the payer from the payer directory (the client's latest invoice,
+  // which this also imports). Owner data is never replaced. Without Splose
+  // the directory alone still answers.
+  const out = await Life.withTx(pool, async tx => {
+    if (connected) await PD.syncFromSplose(tx, orgId(req), { invoices: data.invoices, contacts: data.contactList }, req.user.id);
+    return SB.fillProfile(tx, orgId(req), existing, connected ? data : null, req.user.id);
+  });
   const classified = await MMM.ensureClassified(pool, out.profile);
-  res.json({ profile: classified, imported: out.fields });
+  res.json({ profile: classified, imported: out.fields, splose: data.status });
+}));
+
+// ── Payer directory (migration 083) ──────────────────────────────────────
+
+router.get('/api/invoicing/payers', safe(async (req, res) => {
+  res.json({ payers: await PD.listPayers(pool, orgId(req), { search: req.query.q || null, includeArchived: req.query.archived === '1' }) });
+}));
+
+router.post('/api/invoicing/payers', safe(async (req, res) => {
+  const { errors, values } = PD.validatePayer(req.body || {});
+  if (errors.length) return res.status(400).json({ error: errors.join('; ') });
+  const existing = (await pool.query(`SELECT id FROM billing_payers WHERE organisation_id = $1 AND payer_type = $2 AND name_key = $3`,
+    [orgId(req), values.payerType, PD.nameKey(values.name)])).rows[0];
+  if (existing) return res.status(409).json({ error: 'A payer with this name and type is already in the directory', payerId: existing.id });
+  const payer = await Life.withTx(pool, tx => PD.ensurePayer(tx, orgId(req), { payerType: values.payerType, name: values.name,
+    email: values.email, address: values.address, reference: values.reference }, req.user.id));
+  res.status(201).json({ payer });
+}));
+
+router.put('/api/invoicing/payers/:id', uuidParam('id'), safe(async (req, res) => {
+  const { errors, values } = PD.validatePayer(req.body || {}, { partial: true });
+  if (errors.length) return res.status(400).json({ error: errors.join('; ') });
+  const r = await Life.withTx(pool, tx => PD.updatePayer(tx, orgId(req), req.params.id, values, req.user.id));
+  if (r.error === 'NOT_FOUND') return res.status(404).json({ error: 'Payer not found' });
+  if (r.error === 'DUPLICATE') return res.status(409).json({ error: 'Another payer already has this name and type' });
+  res.json({ payer: r.after, linkedProfilesUpdated: r.linkedUpdated });
+}));
+
+/** Read every Splose invoice into the directory (also happens on every invoicing run). */
+router.post('/api/invoicing/payers/import-splose', safe(async (req, res) => {
+  const src = await SB.loadDirectorySource();
+  if (src.status === 'NOT_CONNECTED') return res.status(409).json({ error: 'Splose is not connected' });
+  if (src.status !== 'OK') return res.status(502).json({ error: 'Splose could not be read completely; nothing was imported' });
+  const result = await Life.withTx(pool, tx => PD.syncFromSplose(tx, orgId(req), src, req.user.id));
+  res.json(result);
 }));
 
 // ── Route facts (manual entry when Google cannot route a leg) ─────────────

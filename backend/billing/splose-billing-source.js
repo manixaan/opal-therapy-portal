@@ -6,8 +6,10 @@
  *
  *   1. Payer. Splose's client record says how the plan is managed
  *      (ndisInfo.fundManagement) but not who the plan manager is. The only
- *      link is the contact on the client's latest Splose invoice, so that is
- *      where the payer comes from. Blanks are filled; owner data never is.
+ *      link is the contact on each Splose invoice. Every run imports them
+ *      into Opal's payer directory (billing/payer-directory.js), and a blank
+ *      payer is filled from the client's latest invoice there. Blanks are
+ *      filled; owner data never is.
  *   2. Support activities. Report writing and other work logged in Splose as
  *      a "support activity" is billed as a SPLOSE_ACTIVITY line. An activity
  *      Splose has already invoiced (invoiceId) or marked doNotInvoice is not.
@@ -20,14 +22,13 @@
  */
 
 const BP = require('./billing-profiles');
+const PD = require('./payer-directory');
 const { recordAudit } = require('./billing-audit');
 
 let injected = null;
 /** Tests replace the Splose client; production uses ../splose-api. */
 function setSploseSource(source) { injected = source || null; }
 function api() { return injected || require('../splose-api'); }
-
-const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
 function isConnected() {
   const a = api();
@@ -98,6 +99,7 @@ async function loadForRun({ from, to }) {
       invoices,
       latestInvoiceByPatient: latestInvoices(invoices),
       contacts: new Map(contacts.map(c => [String(c.id), c])),
+      contactList: contacts,
       patients: new Map(patients.map(p => [String(p.id), p])),
       services: new Map((services || []).map(s => [String(s.id), s])),
       activities,
@@ -121,10 +123,23 @@ async function loadForClient(clientId) {
     const own = invoices.filter(i => String(i.patientId) === String(clientId));
     return {
       status: 'OK',
-      latestInvoiceByPatient: latestInvoices(own),
-      contacts: new Map(contacts.map(c => [String(c.id), c])),
+      invoices: own,
+      contactList: contacts,
       patients: new Map(patients.map(p => [String(p.id), p])),
     };
+  } catch (_) {
+    return { status: 'UNAVAILABLE', reason: 'error' };
+  }
+}
+
+/** Every Splose invoice and contact, for the payer directory import. */
+async function loadDirectorySource() {
+  if (!isConnected()) return { status: 'NOT_CONNECTED' };
+  try {
+    const invoices = await api().getInvoices({}, { fresh: true });
+    const contacts = await api().getContacts();
+    if (![invoices, contacts].every(complete)) return { status: 'UNAVAILABLE', reason: 'incomplete' };
+    return { status: 'OK', invoices, contacts };
   } catch (_) {
     return { status: 'UNAVAILABLE', reason: 'error' };
   }
@@ -141,65 +156,51 @@ function managementFromFund(fund) {
   return null;
 }
 
-/**
- * Who Splose last invoiced for this client, read as a payer for the given
- * management type. Null when Splose cannot say — never a guess:
- *   plan-managed → the latest invoice's contact, only if it is a Plan manager;
- *   self-managed → the latest invoice's contact if it is not a Plan manager
- *                  (the client themself, or a parent/nominee);
- *   NDIA-managed → nobody (claimed through the NDIS portal, not invoiced).
- */
-function payerFromSplose(data, clientId, managementType) {
-  const inv = data.latestInvoiceByPatient.get(String(clientId));
-  const contact = inv && inv.contactId != null ? data.contacts.get(String(inv.contactId)) : null;
-  if (!contact || contact.archived || !String(contact.name || '').trim()) return null;
-  const isPm = String(contact.type || '').toLowerCase() === 'plan manager';
-  let type = null;
-  if (managementType === 'PLAN_MANAGED' && isPm) type = 'PLAN_MANAGER';
-  else if (managementType === 'SELF_MANAGED' && !isPm) type = String(contact.type || '').toLowerCase() === 'client' ? 'PARTICIPANT' : 'NOMINEE';
-  if (!type) return null;
-  const email = contact.email && EMAIL_RE.test(String(contact.email).trim()) ? String(contact.email).trim() : null;
-  return { type, name: String(contact.name).trim(), email, detail: `Splose invoice ${inv.invoiceNumber}`, contactId: String(contact.id) };
-}
-
-/** The blank profile fields Splose can fill. Owner-entered values are never replaced. */
+/** The blank client fields Splose's patient record can fill. Owner-entered values are never replaced. */
 function sploseProfileFill(data, profile) {
-  const clientId = profile.client_id;
-  const patient = data.patients.get(String(clientId));
-  if (!patient) return { values: {}, payer: null };
+  const patient = data && data.patients ? data.patients.get(String(profile.client_id)) : null;
+  if (!patient) return {};
   const values = BP.fieldsFromSplosePatient(patient, profile);
-  const management = profile.management_type || managementFromFund(patient.fundManagement);
+  const management = managementFromFund(patient.fundManagement);
   if (!profile.management_type && management) values.managementType = management;
-  let payer = null;
-  if (!profile.payer_type && !profile.payer_name && management) {
-    payer = payerFromSplose(data, clientId, management);
-    if (payer) {
-      values.payerType = payer.type;
-      values.payerName = payer.name;
-      if (payer.email && !profile.payer_email) values.payerEmail = payer.email;
-    }
-  }
-  return { values, payer };
+  return values;
 }
 
 /**
- * Fill one profile's blanks from Splose and audit which fields (never their
- * values — names and emails stay out of the audit log). Returns the profile.
+ * Fill one profile's blanks. Client details come from Splose's patient record
+ * (when Splose was read). The payer comes from the payer directory: the payer
+ * of the client's latest invoice, Splose or Opal, if it fits their plan
+ * management (billing/payer-directory.js). That works with Splose switched off.
+ * The audit lists which fields were filled, never their values.
  */
 async function fillProfile(q, orgId, profile, data, userId) {
-  const { values, payer } = sploseProfileFill(data, profile);
+  const values = sploseProfileFill(data, profile);
+  const management = profile.management_type || values.managementType || null;
+  let payer = null;
+  if (!profile.payer_type && !profile.payer_name && management) {
+    payer = await PD.latestPayerForClient(q, orgId, profile.client_id, management);
+    if (payer) {
+      values.payerType = payer.payer_type;
+      values.payerName = payer.name;
+      if (payer.email && !profile.payer_email) values.payerEmail = payer.email;
+      if (payer.address && !profile.payer_address) values.payerAddress = payer.address;
+      if (payer.reference && !profile.payer_reference) values.payerReference = payer.reference;
+    }
+  }
   if (!Object.keys(values).length) return { profile, fields: [] };
   const r = await BP.upsertProfile(q, orgId, profile.client_id, userId || null, values);
   let after = r.after;
+  const detail = payer ? `${payer.source === 'OPAL' ? 'Opal' : 'Splose'} invoice ${payer.invoice_number || ''}`.trim() : null;
   if (payer) {
     const { rows: [p] } = await q.query(
-      `UPDATE billing_profiles SET payer_source = 'SPLOSE_INVOICE', payer_source_detail = $3
-        WHERE organisation_id = $1 AND client_id = $2 RETURNING *`, [orgId, profile.client_id, payer.detail.slice(0, 255)]);
+      `UPDATE billing_profiles SET payer_id = $3, payer_source = $4, payer_source_detail = $5
+        WHERE organisation_id = $1 AND client_id = $2 RETURNING *`,
+      [orgId, profile.client_id, payer.id, payer.source === 'OPAL' ? 'OPAL_INVOICE' : 'SPLOSE_INVOICE', detail.slice(0, 255)]);
     after = p;
   }
   await recordAudit(q, { orgId, actorUserId: userId || null, action: 'billing_profile.imported_from_splose',
     entityType: 'billing_profile', entityId: profile.client_id,
-    after: { fields: Object.keys(values), payerSource: payer ? payer.detail : null } });
+    after: { fields: Object.keys(values), payerSource: detail } });
   return { profile: after, fields: Object.keys(values) };
 }
 
@@ -289,7 +290,7 @@ async function checkNumber(q, orgId, number, prefix) {
 }
 
 module.exports = {
-  setSploseSource, isConnected, loadForRun, loadForClient, managementFromFund, payerFromSplose, sploseProfileFill,
+  setSploseSource, isConnected, loadForRun, loadForClient, loadDirectorySource, managementFromFund, sploseProfileFill,
   fillProfile, needsFill, activitiesInRange, serviceLabel, baseItemCode, practitionerMap, highestNumber, recordSploseHigh,
   checkNumber, localDate, latestInvoices,
 };
