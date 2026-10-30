@@ -10,9 +10,10 @@
 #        read-only: the production managed identity's claims, the staging AI
 #        settings to mirror, and the IAM trust policy to paste into AWS.
 #
-#    (AWS console, account 847566517126: add the production client id to the
-#     Entra OIDC provider's audiences, create OpalPortalProductionBedrockRole
-#     with the printed trust policy, copy the staging role's inline policy.)
+#    (AWS account 847566517126: create OpalPortalProductionBedrockRole with
+#     the printed trust policy and a copy of OpalPortalStagingBedrockRolePolicy.
+#     The sts.windows.net OIDC provider already lists the audience. Done
+#     30 Oct 2026 via CloudShell.)
 #
 #    bash deploy/prod-ai-enable-2026-10.sh settings <production role ARN>
 #        applies the AI settings to opal-portal-prod and restarts it.
@@ -54,19 +55,20 @@ identity)
   echo "── Staging AI settings to mirror"
   for n in $MIRRORED; do printf '  %-36s %s\n' "$n" "$(stg "$n")"; done
   echo "── Trust policy for OpalPortalProductionBedrockRole"
+  # Same shape as the live staging role (read 30 Oct 2026): the audience app
+  # registration issues v1 tokens, so the issuer is sts.windows.net and the
+  # pins are sub (the MI object id) + aud (AZURE_BEDROCK_AUDIENCE verbatim).
   cat <<JSON
 {"Version":"2012-10-17","Statement":[{
   "Sid":"OpalProductionFederatedAssume",
   "Effect":"Allow",
-  "Principal":{"Federated":"arn:aws:iam::847566517126:oidc-provider/login.microsoftonline.com/$TENANT/v2.0"},
+  "Principal":{"Federated":"arn:aws:iam::847566517126:oidc-provider/sts.windows.net/$TENANT/"},
   "Action":"sts:AssumeRoleWithWebIdentity",
   "Condition":{"StringEquals":{
-    "login.microsoftonline.com/$TENANT/v2.0:aud":"$CLIENT",
-    "login.microsoftonline.com/$TENANT/v2.0:oaud":"${AUD#api://}",
-    "login.microsoftonline.com/$TENANT/v2.0:sub":"$PRINCIPAL"
+    "sts.windows.net/$TENANT/:sub":"$PRINCIPAL",
+    "sts.windows.net/$TENANT/:aud":"$AUD"
   }}}]}
 JSON
-  echo "  (if staging's trust policy has no :oaud line, drop it here too)"
   ;;
 
 settings)
