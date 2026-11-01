@@ -219,7 +219,7 @@ describe('client chats and the installable app', () => {
     const m = JSON.parse(read('assist.webmanifest'));
     expect(m).toEqual(expect.objectContaining({ id: '/assist', scope: '/assist', display: 'standalone', name: 'Opal Assist' }));
     expect(m.start_url.startsWith('/assist')).toBe(true);
-    m.icons.forEach((i) => expect(fs.existsSync(path.join(__dirname, '../../frontend/current', i.src))).toBe(true));
+    m.icons.forEach((i) => expect(fs.existsSync(path.join(__dirname, '../../frontend/current', i.src.split('?')[0]))).toBe(true));
     expect(read('assist.html')).toContain('<link rel="manifest" href="/assist.webmanifest" />');
   });
 
@@ -227,5 +227,25 @@ describe('client chats and the installable app', () => {
     const shell = read('mockup_v3.html');
     expect(shell).toContain('id="hdr-assist-btn"');
     expect(shell).toMatch(/window\.open\('\/assist', 'opal-assist'/);
+  });
+});
+
+describe('the AI has its own mark; the cell is the portal\'s', () => {
+  const fs = require('fs'); const path = require('path');
+  const read = (f) => fs.readFileSync(path.join(__dirname, '../../frontend/current', f), 'utf8');
+
+  test('the AI mark is the golden-angle seed spiral, not the pebble', () => {
+    const svg = read('icons/opal-assist.svg');
+    expect(svg.match(/<circle /g)).toHaveLength(34);
+    expect(svg).not.toMatch(/<path/);
+  });
+
+  test('the Opa AI button draws the AI mark, not the CSS pebble', () => {
+    const css = read('opa.css');
+    const rule = css.slice(css.indexOf('.opa-fab-pebble {'), css.indexOf('}', css.indexOf('.opa-fab-pebble {')));
+    expect(rule).toContain('/icons/opal-assist.svg');
+    expect(rule).not.toMatch(/pebbleMorph|border-radius/);
+    // The portal header keeps the cell.
+    expect(read('mockup_v3.html')).toContain('class="logo brand-pebble" id="opa-pebble"');
   });
 });

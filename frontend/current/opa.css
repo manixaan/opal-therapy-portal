@@ -1,8 +1,10 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    OPA AI — Phase 1 shell styles.
    Native to the Opal design system: warm neutrals, opal teal/terracotta,
-   soft radii, restrained shadows. The mascot is the living-cell pebble
-   already used in the app header (same gradient + morph animation).
+   soft radii, restrained shadows. The AI's mark is the golden-angle seed
+   spiral (/icons/opal-assist.svg, scripts/build-ai-icons.py) — the cell
+   pebble is the portal's own mark and stays in the app header only.
+   (The .opa-*-pebble class names are kept so opa.js need not change.)
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /* ── Collapsed floating button ── */
@@ -21,17 +23,11 @@
 
 .opa-fab-pebble {
   width: 30px; height: 30px; display: inline-block; position: relative; flex-shrink: 0;
-  background: linear-gradient(135deg, #2aa792 0%, #0f7c6c 58%, #cf7b57 108%);
-  border-radius: 58% 42% 52% 48% / 50% 58% 42% 50%;
-  animation: pebbleMorph 8s ease-in-out infinite, pebbleSway 13s ease-in-out infinite;
+  background: url("/icons/opal-assist.svg?v=3") center / contain no-repeat;
+  animation: opaSeedTurn 60s linear infinite;
 }
-.opa-fab-pebble::after {
-  content: ""; position: absolute; left: 30%; top: 26%;
-  width: 34%; height: 30%;
-  background: rgba(255, 255, 255, 0.55);
-  border-radius: 60% 40% 55% 45% / 55% 60% 40% 45%;
-  animation: pebbleDrift 8s ease-in-out infinite;
-}
+/* One slow turn a minute: alive, never busy. Reduced motion stops it. */
+@keyframes opaSeedTurn { to { transform: rotate(360deg); } }
 
 /* ── Panel ── */
 #opa-panel {

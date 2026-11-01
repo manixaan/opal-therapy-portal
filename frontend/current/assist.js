@@ -146,8 +146,8 @@
     var stack = $('oa-stack');
     if (!S.messages.length) {
       // A task pane is narrow: one quiet line, not the full welcome.
-      if (S.surface !== 'web') { stack.innerHTML = '<div class="oa-empty oa-empty-pane"><img src="/icons/opal-assist.svg" alt=""><p>Ask a question, or select text and press Use selection.</p></div>'; return; }
-      stack.innerHTML = '<div class="oa-empty"><img src="/icons/opal-assist.svg" alt=""><h1>Opal Assist</h1>'
+      if (S.surface !== 'web') { stack.innerHTML = '<div class="oa-empty oa-empty-pane"><img src="/icons/opal-assist.svg?v=3" alt=""><p>Ask a question, or select text and press Use selection.</p></div>'; return; }
+      stack.innerHTML = '<div class="oa-empty"><img src="/icons/opal-assist.svg?v=3" alt=""><h1>Opal Assist</h1>'
         + '<p>' + (S.client ? 'Everything in this chat is about <b>' + esc(S.client.name) + '</b>, who the AI only ever sees as [CLIENT_1]. ' : '')
         + 'Paste your case note, FCA section or letter and ask for it rephrased, tightened or rewritten — names and contact details are hidden before anything leaves the practice.</p>'
         + '<div class="oa-chips">' + [
@@ -163,7 +163,7 @@
       var body = m.live && !m.text ? '<div class="oa-thinking">Opal Assist is thinking</div>' : renderTokens(m.text);
       var tools = (!m.live && !m.error) ? '<div class="oa-tools"><button class="oa-btn ghost sm" type="button" data-copy="' + i + '">Copy</button>'
         + (S.surface !== 'web' ? '<button class="oa-btn ghost sm" type="button" data-insert="' + i + '">Insert into document</button>' : '') + '</div>' : '';
-      return '<div class="oa-msg assistant' + (m.error ? ' error' : '') + '"><img class="oa-avatar" src="/icons/opal-assist.svg" alt=""><div><div class="oa-bubble">' + body + '</div>' + tools + '</div></div>';
+      return '<div class="oa-msg assistant' + (m.error ? ' error' : '') + '"><img class="oa-avatar" src="/icons/opal-assist.svg?v=3" alt=""><div><div class="oa-bubble">' + body + '</div>' + tools + '</div></div>';
     }).join('');
     $('oa-body').scrollTop = $('oa-body').scrollHeight;
   }
