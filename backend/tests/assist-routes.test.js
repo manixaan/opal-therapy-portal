@@ -176,3 +176,92 @@ describe('document actions — a typed instruction becomes a list of fixed tools
     expect((await agent.post('/api/assist/actions').send({ surface: 'word', instruction: 'x' })).status).toBe(403);
   });
 });
+
+describe('client chats — one chat, one client, the client always [CLIENT_1]', () => {
+  const caseload = require('../splose-caseload');
+  const ALEX = 'splose:patient:2';
+  beforeEach(() => {
+    directory._setCacheForTests({ entries: [
+      { role: 'client', ref: 'splose:patient:1', name: 'Aiden Blackwood-Tan', variants: directory.strictVariants('Aiden Blackwood-Tan') },
+      { role: 'client', ref: ALEX, name: 'Alexander Whitlock', variants: directory.strictVariants('Alexander Whitlock') },
+    ], partial: false });
+    jest.spyOn(caseload, 'loadOwnClient').mockImplementation(async (req, id) => (id === '2' ? { id: '2', fullName: 'Alexander Whitlock' } : null));
+    jest.spyOn(caseload, 'listOwnClients').mockResolvedValue({ clients: [{ id: '2', fullName: 'Alexander Whitlock', suburb: 'Como', formattedAddress: '1 Secret St' }], scope: 'caseload' });
+  });
+  afterEach(() => jest.restoreAllMocks());
+
+  test('the picker lists the caller\'s own clients as refs, without addresses; caseload refusals pass through', async () => {
+    const agent = await login(buildApp(), user());
+    const r = await agent.get('/api/assist/clients');
+    expect(r.status).toBe(200);
+    expect(r.body.clients).toEqual([{ ref: ALEX, name: 'Alexander Whitlock', suburb: 'Como' }]);
+    expect(JSON.stringify(r.body)).not.toContain('Secret');
+    caseload.listOwnClients.mockRejectedValue(new caseload.CaseloadError('practitioner_mapping_required', 403, 'not linked'));
+    expect((await agent.get('/api/assist/clients')).status).toBe(403);
+    expect((await request(buildApp()).get('/api/assist/clients')).status).toBe(401);
+  });
+
+  test('check pins the client as [CLIENT_1] server-side, so nickname and initials are hidden too', async () => {
+    const agent = await login(buildApp(), user());
+    const r = await agent.post('/api/assist/check').send({ text: 'Alex attended. AW was settled.', clientRef: ALEX });
+    expect(r.status).toBe(200);
+    expect(r.body.text).toBe('[CLIENT_1] attended. [CLIENT_1] was settled.');
+    expect(r.body.known).toEqual(expect.arrayContaining([{ token: 'CLIENT_1', ref: ALEX, role: 'client' }]));
+    // Without the client chat the same initials are ordinary text.
+    const plain = await agent.post('/api/assist/check').send({ text: 'AW was settled.' });
+    expect(plain.body.text).toBe('AW was settled.');
+  });
+
+  test('a new client chat must be one of the caller\'s clients — otherwise 404 and no model call', async () => {
+    const spy = jest.fn(); provider._setProviderForTests(spy);
+    const agent = await login(buildApp(), user());
+    expect((await agent.post('/api/assist/chat').send({ message: 'Rephrase for [CLIENT_1].', clientRef: 'splose:patient:1' })).status).toBe(404);
+    expect((await agent.post('/api/assist/chat').send({ message: 'Rephrase.', clientRef: 'user:abc' })).status).toBe(400);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  test('fail closed: a client the directory cannot name right now is a 503 — nothing is sent', async () => {
+    const spy = jest.fn(); provider._setProviderForTests(spy);
+    directory._setCacheForTests({ entries: [], partial: true });
+    const agent = await login(buildApp(), user());
+    expect((await agent.post('/api/assist/chat').send({ message: 'Rephrase for [CLIENT_1].', clientRef: ALEX })).status).toBe(503);
+    expect((await agent.post('/api/assist/check').send({ text: 'Rephrase', clientRef: ALEX })).status).toBe(503);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  test('a browser map that gives [CLIENT_1] to someone else is refused, not guessed', async () => {
+    const agent = await login(buildApp(), user());
+    const r = await agent.post('/api/assist/chat').send({ message: 'Hi [CLIENT_1]', clientRef: ALEX, known: [{ token: 'CLIENT_1', ref: 'splose:patient:1', role: 'client' }] });
+    expect(r.status).toBe(400);
+    expect(r.body.error).toBe('client_token_conflict');
+  });
+
+  test('the chat is filed under the client ref (never the name) and the model is told the chat is about [CLIENT_1]', async () => {
+    let system = null;
+    provider._setProviderForTests(async (args) => { system = args.system; return { text: 'Rephrased for [CLIENT_1].' }; });
+    const agent = await login(buildApp(), user());
+    const r = await agent.post('/api/assist/chat').send({ message: 'Rephrase this note for [CLIENT_1].', clientRef: ALEX, hiddenCount: 1 });
+    expect(r.status).toBe(200);
+    const insert = db.pool.query.mock.calls.find((c) => /INSERT INTO assist_conversations/.test(c[0]));
+    expect(insert[1]).toContain(ALEX);
+    expect(JSON.stringify(insert[1])).not.toMatch(/Alexander|Whitlock/);
+    expect(system).toContain('THIS CHAT IS ABOUT ONE CLIENT');
+    expect(system).not.toMatch(/Alexander|Whitlock/);
+    const audit = db.logAuditEvent.mock.calls.map((c) => c[0]).find((a) => a.action === 'assist.chat');
+    expect(audit.metadata.clientChat).toBe(true);
+    expect(JSON.stringify(audit)).not.toContain(ALEX);
+  });
+
+  test('the thread list filters by client or general, and rejects a malformed filter', async () => {
+    const agent = await login(buildApp(), user());
+    await agent.get('/api/assist/conversations?client=' + encodeURIComponent(ALEX));
+    let call = db.pool.query.mock.calls.find((c) => /FROM assist_conversations WHERE user_id/.test(c[0]));
+    expect(call[0]).toMatch(/client_ref = \$2/);
+    expect(call[1]).toEqual([expect.any(String), ALEX]);
+    db.pool.query.mockClear();
+    await agent.get('/api/assist/conversations?client=general');
+    call = db.pool.query.mock.calls.find((c) => /FROM assist_conversations WHERE user_id/.test(c[0]));
+    expect(call[0]).toMatch(/client_ref IS NULL/);
+    expect((await agent.get('/api/assist/conversations?client=x;drop')).status).toBe(400);
+  });
+});

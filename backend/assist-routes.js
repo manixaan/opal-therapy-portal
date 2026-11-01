@@ -7,7 +7,8 @@
  *   POST   /api/assist/check                  check-before-send: tokens in, list of what was hidden — NO model call
  *   POST   /api/assist/chat                   one reply (JSON)
  *   POST   /api/assist/chat/stream            one reply as server-sent events
- *   GET    /api/assist/conversations          the caller's recent threads
+ *   GET    /api/assist/clients                the caller's clients, for the side-panel picker
+ *   GET    /api/assist/conversations          the caller's recent threads (?client=<ref>|general)
  *   GET    /api/assist/conversations/:id      one thread, tokenised turns
  *   DELETE /api/assist/conversations/:id      forget a thread now
  *
@@ -18,6 +19,14 @@
  * practice knows about is still in the clear. What is stored is only what
  * the model was shown. The browser puts the names back for display and
  * keeps that map itself.
+ *
+ * CLIENT CHATS (migration 084). A chat may be dedicated to one client the
+ * caller may see (splose-caseload scoping). The conversation stores only the
+ * directory ref; the client is always [CLIENT_1], and the server adds that
+ * assignment to `known` itself, so the client's name is tokenised and
+ * guarded even if the browser forgot to send it. If the directory cannot
+ * resolve the client's name right now, a client chat refuses (503) rather
+ * than send text it cannot check — fail closed.
  *
  * Every role except read_only may use it (it is the practice's own AI).
  * Rate limit 30 messages / 5 min per person, in-process like Opa's.
@@ -30,6 +39,8 @@ const { entraBearerAuth } = require('./assist/entra-auth');
 const provider = require('./assist/assist-provider');
 const deid = require('./assist/assist-deidentify');
 const { buildSystemPrompt, SURFACES } = require('./assist/assist-prompt');
+const directory = require('./assist/identity-directory');
+const caseload = require('./splose-caseload');
 
 const router = express.Router();
 const pool = db.pool;
@@ -80,6 +91,59 @@ const isUuid = (v) => typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0
 const orgOf = (req) => req.user.organisation_id || null;
 const surfaceOf = (body) => (SURFACES[body?.surface] ? body.surface : 'web');
 
+// ── Client chats ─────────────────────────────────────────────────────────────
+const CLIENT_REF_RE = /^splose:patient:([A-Za-z0-9_-]{1,40})$/;
+const CLIENT_TOKEN = 'CLIENT_1';
+const NO_CLIENT_CHECK = 'The client\'s name cannot be checked right now (the client list did not load), so nothing was sent. Please try again in a minute.';
+
+/**
+ * `known` with the chat's client pinned as [CLIENT_1]. Returns null when the
+ * browser's list contradicts that (CLIENT_1 is someone else) — the caller
+ * refuses rather than guess which person a token means.
+ */
+function withClient(known, clientRef) {
+  const list = Array.isArray(known) ? known.filter((k) => k && typeof k === 'object') : [];
+  if (!clientRef) return list;
+  const mine = list.find((k) => k.ref === clientRef);
+  if (mine) return mine.token === CLIENT_TOKEN ? list : null;
+  if (list.some((k) => k.token === CLIENT_TOKEN)) return null;
+  return [{ token: CLIENT_TOKEN, ref: clientRef, role: 'client' }, ...list];
+}
+
+/** True when the directory can name this client, so their name can be hidden and guarded. */
+async function clientResolvable(clientRef) {
+  try { return !!(await directory.byRef(clientRef)); } catch (_) { return false; }
+}
+
+/**
+ * A NEW client chat: the ref must be one of the caller's own clients.
+ * Responds and returns null on refusal. "Not yours" and "no such client" are
+ * the same 404.
+ */
+async function authoriseClient(req, res, clientRef) {
+  const m = CLIENT_REF_RE.exec(String(clientRef || ''));
+  if (!m) { res.status(400).json({ error: 'invalid_client', answer: 'That client could not be found.' }); return null; }
+  let client;
+  try { client = await caseload.loadOwnClient(req, m[1]); } catch (err) {
+    if (err instanceof caseload.CaseloadError) { res.status(err.status).json({ error: err.message, code: err.code, answer: err.message }); return null; }
+    res.status(502).json({ error: 'client_lookup_failed', answer: 'Could not reach Splose to confirm the client. Please try again.' });
+    return null;
+  }
+  if (!client) { res.status(404).json({ error: 'client_not_found', answer: 'That client could not be found.' }); return null; }
+  return clientRef;
+}
+
+router.get('/api/assist/clients', safe(async (req, res) => {
+  try {
+    const { clients, scope } = await caseload.listOwnClients(req);
+    res.json({ clients: clients.filter((c) => c.fullName).map((c) => ({ ref: `splose:patient:${c.id}`, name: c.fullName, suburb: c.suburb })), scope });
+  } catch (err) {
+    if (err instanceof caseload.CaseloadError) return res.status(err.status).json({ error: err.message, code: err.code });
+    console.error('[assist] client list failed:', err.message);
+    res.status(502).json({ error: 'Could not load your clients from Splose just now.', code: 'client_lookup_failed' });
+  }
+}));
+
 // ── Config ───────────────────────────────────────────────────────────────────
 router.get('/api/assist/config', safe(async (req, res) => {
   res.json({ enabled: provider.isEnabled(), reason: provider.isEnabled() ? null : provider.configError(), name: 'Opal Assist', retentionDays: RETENTION_DAYS });
@@ -92,7 +156,14 @@ router.post('/api/assist/check', safe(async (req, res) => {
   if (!text.trim() || text.length > MAX_MESSAGE_CHARS + MAX_SELECTION_CHARS) {
     return res.status(400).json({ error: 'invalid_text', message: `Send between 1 and ${MAX_MESSAGE_CHARS + MAX_SELECTION_CHARS} characters.` });
   }
-  const r = await deid.check({ text, known: body.known, confirmedNames: body.confirmedNames, ignoredWords: body.ignoredWords });
+  let known = body.known;
+  if (body.clientRef !== undefined && body.clientRef !== null) {
+    if (!CLIENT_REF_RE.test(String(body.clientRef))) return res.status(400).json({ error: 'invalid_client' });
+    known = withClient(body.known, body.clientRef);
+    if (!known) return res.status(400).json({ error: 'client_token_conflict', message: 'This chat\'s client token is out of step. Start a new chat for this client.' });
+    if (!(await clientResolvable(body.clientRef))) return res.status(503).json({ error: 'client_unresolvable', message: NO_CLIENT_CHECK });
+  }
+  const r = await deid.check({ text, known, confirmedNames: body.confirmedNames, ignoredWords: body.ignoredWords });
   res.json(r);
 }));
 
@@ -106,18 +177,6 @@ async function prepare(req, res) {
     return null;
   }
 
-  // The guard. A name or contact detail here means the browser skipped the
-  // check, or the check missed something the practice knows — either way
-  // it does not leave. Selection text is guarded the same way.
-  for (const [what, txt] of [['message', message], ['selection', selection]]) {
-    if (!txt) continue;
-    const reason = await deid.assertClean({ text: txt, known: body.known });
-    if (reason) {
-      res.status(422).json({ error: 'identifiers_present', code: reason, where: what, answer: 'That text still contains a name or contact detail. Run the check and hide it first.' });
-      return null;
-    }
-  }
-
   let conversation = null;
   if (body.conversationId !== undefined && body.conversationId !== null) {
     if (!isUuid(body.conversationId)) { res.status(404).json({ error: 'Conversation not found' }); return null; }
@@ -125,24 +184,49 @@ async function prepare(req, res) {
     if (!rows.length) { res.status(404).json({ error: 'Conversation not found' }); return null; }
     conversation = rows[0];
   }
+
+  // A thread keeps the client it was started for; a new one is checked
+  // against the caller's caseload before anything is sent.
+  let clientRef = null;
+  if (conversation) clientRef = conversation.client_ref || null;
+  else if (body.clientRef !== undefined && body.clientRef !== null) {
+    clientRef = await authoriseClient(req, res, body.clientRef);
+    if (!clientRef) return null;
+  }
+  const known = withClient(body.known, clientRef);
+  if (!known) { res.status(400).json({ error: 'client_token_conflict', answer: 'This chat\'s client token is out of step. Start a new chat for this client.' }); return null; }
+  if (clientRef && !(await clientResolvable(clientRef))) { res.status(503).json({ error: 'client_unresolvable', answer: NO_CLIENT_CHECK }); return null; }
+
+  // The guard. A name or contact detail here means the browser skipped the
+  // check, or the check missed something the practice knows — either way
+  // it does not leave. Selection text is guarded the same way. In a client
+  // chat the client is always part of `known`, server-side.
+  for (const [what, txt] of [['message', message], ['selection', selection]]) {
+    if (!txt) continue;
+    const reason = await deid.assertClean({ text: txt, known });
+    if (reason) {
+      res.status(422).json({ error: 'identifiers_present', code: reason, where: what, answer: 'That text still contains a name or contact detail. Run the check and hide it first.' });
+      return null;
+    }
+  }
   let history = [];
   if (conversation) {
     const { rows } = await pool.query(`SELECT role, content FROM assist_messages WHERE conversation_id = $1 ORDER BY id DESC LIMIT ${HISTORY_TURNS}`, [conversation.id]);
     history = rows.reverse().map((r) => ({ role: r.role, content: r.content }));
   }
   const surface = conversation ? conversation.surface : surfaceOf(body);
-  const system = buildSystemPrompt({ user: req.user, surface, selection });
+  const system = buildSystemPrompt({ user: req.user, surface, selection, clientChat: !!clientRef });
   const hiddenCount = Number.isInteger(body.hiddenCount) && body.hiddenCount >= 0 ? Math.min(body.hiddenCount, 10000) : 0;
-  return { message, selection, conversation, history, surface, system, hiddenCount };
+  return { message, selection, conversation, history, surface, system, hiddenCount, clientRef };
 }
 
 async function persist(req, prep, answer, streamed) {
   let conversation = prep.conversation;
   if (!conversation) {
     const { rows } = await pool.query(
-      `INSERT INTO assist_conversations (user_id, organisation_id, title, surface, expires_at)
-       VALUES ($1, $2, $3, $4, NOW() + ($5 || ' days')::interval) RETURNING *`,
-      [req.user.id, orgOf(req), prep.message.slice(0, 60), prep.surface, String(RETENTION_DAYS)]);
+      `INSERT INTO assist_conversations (user_id, organisation_id, title, surface, client_ref, expires_at)
+       VALUES ($1, $2, $3, $4, $5, NOW() + ($6 || ' days')::interval) RETURNING *`,
+      [req.user.id, orgOf(req), prep.message.slice(0, 60), prep.surface, prep.clientRef, String(RETENTION_DAYS)]);
     conversation = rows[0];
   } else {
     await pool.query(`UPDATE assist_conversations SET updated_at = NOW(), expires_at = NOW() + ($2 || ' days')::interval WHERE id = $1`, [conversation.id, String(RETENTION_DAYS)]);
@@ -152,7 +236,7 @@ async function persist(req, prep, answer, streamed) {
   await db.logAuditEvent({
     actorUserId: req.user.id, organisationId: orgOf(req),
     action: 'assist.chat', targetType: 'assist_conversation', targetId: conversation.id,
-    metadata: { surface: prep.surface, streamed: !!streamed, hiddenCount: prep.hiddenCount, hasSelection: !!prep.selection, messageChars: prep.message.length },
+    metadata: { surface: prep.surface, streamed: !!streamed, hiddenCount: prep.hiddenCount, hasSelection: !!prep.selection, messageChars: prep.message.length, clientChat: !!prep.clientRef },
     ipAddress: req.ip,
   }).catch(() => {});
   return conversation;
@@ -276,14 +360,18 @@ router.post('/api/assist/actions', rateLimit, safe(async (req, res) => {
 }));
 
 router.get('/api/assist/conversations', safe(async (req, res) => {
+  const filter = typeof req.query.client === 'string' ? req.query.client : null;
+  if (filter && filter !== 'general' && !CLIENT_REF_RE.test(filter)) return res.status(400).json({ error: 'invalid_client' });
+  const where = filter === 'general' ? ' AND client_ref IS NULL' : filter ? ' AND client_ref = $2' : '';
   const { rows } = await pool.query(
-    `SELECT id, title, surface, updated_at, expires_at FROM assist_conversations WHERE user_id = $1 AND expires_at > NOW() ORDER BY updated_at DESC LIMIT 20`, [req.user.id]);
+    `SELECT id, title, surface, client_ref, updated_at, expires_at FROM assist_conversations WHERE user_id = $1 AND expires_at > NOW()${where} ORDER BY updated_at DESC LIMIT 50`,
+    filter && filter !== 'general' ? [req.user.id, filter] : [req.user.id]);
   res.json({ conversations: rows });
 }));
 
 router.get('/api/assist/conversations/:id', safe(async (req, res) => {
   if (!isUuid(req.params.id)) return res.status(404).json({ error: 'Conversation not found' });
-  const c = await pool.query('SELECT id, title, surface, updated_at, expires_at FROM assist_conversations WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id]);
+  const c = await pool.query('SELECT id, title, surface, client_ref, updated_at, expires_at FROM assist_conversations WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id]);
   if (!c.rows.length) return res.status(404).json({ error: 'Conversation not found' });
   const m = await pool.query('SELECT role, content, hidden_count, created_at FROM assist_messages WHERE conversation_id = $1 ORDER BY id ASC', [req.params.id]);
   res.json({ conversation: c.rows[0], messages: m.rows });

@@ -6,9 +6,16 @@
  * it goes to /api/assist/check, which returns the text with every known
  * person and contact detail replaced by a token, plus the list of what was
  * hidden. This page keeps the token→name map for the conversation — in
- * memory and sessionStorage, never on the server — and puts the names back
+ * memory and this browser's localStorage, never on the server — and puts the names back
  * when it renders, in both directions. A reply that mentions [CLIENT_1] is
  * shown with the client's name; the model never had it.
+ *
+ * CLIENT CHATS. The side panel lists the person's own clients. Picking one
+ * files every new chat under that client: the client is pinned as
+ * [CLIENT_1] from the first message (the server pins it too), and the
+ * panel shows only that client's earlier chats. The map is kept in
+ * localStorage for the 30 days a chat lives, so a chat reopened tomorrow —
+ * in the portal's tab or the installed Opal Assist app — still shows names.
  *
  * Pure helpers (restoreTokens, splitTokens) are exported for node tests and
  * the file returns early without a DOM.
@@ -38,7 +45,22 @@
     return String(text || '').replace(TOKEN_RE, function (whole, t) { return names && names[t] ? names[t] : whole; });
   }
 
-  if (typeof module !== 'undefined' && module.exports) module.exports = { splitTokens, restoreTokens };
+  /** The starting map for a chat about one client: the client is always [CLIENT_1]. */
+  function clientSeed(client) {
+    if (!client) return { names: {}, known: [] };
+    return { names: { CLIENT_1: client.name }, known: [{ token: 'CLIENT_1', ref: client.ref, role: 'client' }] };
+  }
+
+  /** Clients whose name (or suburb) matches every typed word. */
+  function filterClients(list, q) {
+    var words = String(q || '').toLowerCase().split(/\s+/).filter(Boolean);
+    return (list || []).filter(function (c) {
+      var hay = (String(c.name || '') + ' ' + String(c.suburb || '')).toLowerCase();
+      return words.every(function (w) { return hay.indexOf(w) >= 0; });
+    });
+  }
+
+  if (typeof module !== 'undefined' && module.exports) module.exports = { splitTokens, restoreTokens, clientSeed, filterClients };
   if (!global.document) return;
 
   // ── State ─────────────────────────────────────────────────────────────────
@@ -57,7 +79,11 @@
     busy: false,
     abort: null,
     review: null,        // pending check result awaiting confirmation
+    client: null,        // { ref, name } — the client this chat belongs to, or null (general)
+    clients: [],         // the person's own clients, for the picker
+    clientsError: '',
   };
+  var MAP_TTL_MS = 31 * 24 * 3600 * 1000; // chats live 30 days on the server
 
   var $ = function (id) { return document.getElementById(id); };
   var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
@@ -78,11 +104,31 @@
   // ── Per-conversation map, this browser only ───────────────────────────────
   function saveMap() {
     if (!S.conversationId) return;
-    try { sessionStorage.setItem('oa.map.' + S.conversationId, JSON.stringify({ names: S.names, known: S.known, ignoredWords: S.ignoredWords })); } catch (e) { /* private mode */ }
+    try { localStorage.setItem('oa.map.' + S.conversationId, JSON.stringify({ names: S.names, known: S.known, ignoredWords: S.ignoredWords, at: Date.now() })); } catch (e) { /* private mode */ }
   }
   function loadMap(id) {
-    try { var raw = sessionStorage.getItem('oa.map.' + id); if (raw) { var m = JSON.parse(raw); S.names = m.names || {}; S.known = m.known || []; S.ignoredWords = m.ignoredWords || []; return; } } catch (e) { /* ignore */ }
+    try {
+      var raw = localStorage.getItem('oa.map.' + id) || sessionStorage.getItem('oa.map.' + id);
+      if (raw) { var m = JSON.parse(raw); S.names = m.names || {}; S.known = m.known || []; S.ignoredWords = m.ignoredWords || []; return; }
+    } catch (e) { /* ignore */ }
     S.names = {}; S.known = []; S.ignoredWords = [];
+  }
+  /** Names are kept no longer than the chat itself. */
+  function pruneMaps() {
+    try {
+      for (var i = localStorage.length - 1; i >= 0; i--) {
+        var k = localStorage.key(i);
+        if (!k || k.indexOf('oa.map.') !== 0) continue;
+        var m = null; try { m = JSON.parse(localStorage.getItem(k)); } catch (e) { m = null; }
+        if (!m || !m.at || Date.now() - m.at > MAP_TTL_MS) localStorage.removeItem(k);
+      }
+    } catch (e) { /* storage blocked */ }
+  }
+  /** The client's own name always shows, even when this browser has no map for the chat. */
+  function pinClientName() {
+    if (!S.client) return;
+    if (S.client.name) S.names.CLIENT_1 = S.client.name;
+    if (!S.known.some(function (k) { return k.ref === S.client.ref; })) S.known = clientSeed(S.client).known.concat(S.known);
   }
 
   // ── Rendering ─────────────────────────────────────────────────────────────
@@ -102,13 +148,13 @@
       // A task pane is narrow: one quiet line, not the full welcome.
       if (S.surface !== 'web') { stack.innerHTML = '<div class="oa-empty oa-empty-pane"><img src="/icons/opal-assist.svg" alt=""><p>Ask a question, or select text and press Use selection.</p></div>'; return; }
       stack.innerHTML = '<div class="oa-empty"><img src="/icons/opal-assist.svg" alt=""><h1>Opal Assist</h1>'
-        + '<p>Draft letters and emails, tidy case-note wording, prepare for plan reviews, summarise documents, build spreadsheet formulas. '
-        + 'Paste what you have — names and contact details are hidden before anything leaves the practice.</p>'
+        + '<p>' + (S.client ? 'Everything in this chat is about <b>' + esc(S.client.name) + '</b>, who the AI only ever sees as [CLIENT_1]. ' : '')
+        + 'Paste your case note, FCA section or letter and ask for it rephrased, tightened or rewritten — names and contact details are hidden before anything leaves the practice.</p>'
         + '<div class="oa-chips">' + [
-          'Draft a plan review summary from these notes',
-          'Rewrite this email to a parent in plain language',
-          'Turn these bullet points into a progress letter',
-          'Explain this NDIS support item',
+          'Rephrase this case note in professional, objective language',
+          'Rewrite this FCA section in person-centred, reasonable-and-necessary terms',
+          'Turn these notes into a progress letter paragraph for the family',
+          'Make this shorter and clearer without changing the meaning',
         ].map(function (c) { return '<button class="oa-chip" type="button" data-chip="' + esc(c) + '">' + esc(c) + '</button>'; }).join('') + '</div></div>';
       return;
     }
@@ -157,12 +203,16 @@
     setBusy(true);
     setStatus('Checking…');
     var confirmed = S.known.filter(function (k) { return k.name; }).map(function (k) { return k.name; }).concat(S.pendingConfirmed || []);
-    return api('/api/assist/check', { body: { text: rawText, known: S.known, confirmedNames: confirmed, ignoredWords: S.ignoredWords } })
-      .then(function (r) { if (!r.ok) throw new Error('check_failed'); return r.json(); })
+    var clientRef = S.client ? S.client.ref : undefined;
+    return api('/api/assist/check', { body: { text: rawText, known: S.known, confirmedNames: confirmed, ignoredWords: S.ignoredWords, clientRef: clientRef } })
+      .then(function (r) {
+        if (r.status === 503 || r.status === 400) return r.json().then(function (j) { throw new Error(j.message || 'check_failed'); });
+        if (!r.ok) throw new Error('check_failed'); return r.json();
+      })
       .then(function (msg) {
         var pending = { text: msg.text, hidden: msg.hidden, candidates: msg.candidates, known: msg.known, directoryPartial: msg.directoryPartial, directoryMissing: msg.directoryMissing, directoryNotConnected: msg.directoryNotConnected, cautions: msg.cautions || [], raw: rawText };
         if (!S.selection) return pending;
-        return api('/api/assist/check', { body: { text: S.selection, known: msg.known, confirmedNames: confirmed, ignoredWords: S.ignoredWords } })
+        return api('/api/assist/check', { body: { text: S.selection, known: msg.known, confirmedNames: confirmed, ignoredWords: S.ignoredWords, clientRef: clientRef } })
           .then(function (r) { if (!r.ok) throw new Error('check_failed'); return r.json(); })
           .then(function (sel) {
             pending.selectionText = sel.text; pending.known = sel.known;
@@ -177,7 +227,10 @@
         setBusy(false); setStatus('Ready');
         renderReview();
       })
-      .catch(function () { setBusy(false); setStatus('Check failed', 'warn'); });
+      .catch(function (err) {
+        setBusy(false); setStatus('Check failed', 'warn');
+        if (err && err.message && err.message !== 'check_failed') $('oa-review-slot').innerHTML = '<p class="oa-note warn">' + esc(err.message) + '</p>';
+      });
   }
 
   // ── Sending ───────────────────────────────────────────────────────────────
@@ -195,12 +248,13 @@
     setBusy(true); setStatus('Thinking…');
     var ctrl = new AbortController(); S.abort = ctrl;
     var body = { message: r.text, conversationId: S.conversationId, surface: S.surface, hiddenCount: r.hidden.length, known: S.known };
+    if (S.client) body.clientRef = S.client.ref;
     if (r.selectionText) body.selection = r.selectionText;
     S.selection = ''; updateSelectionBar();
 
     api('/api/assist/chat/stream', { body: body, signal: ctrl.signal }).then(function (res) {
       if (res.status === 422) return res.json().then(function (j) { live.text = j.answer || 'That text still contains a name or contact detail.'; live.error = true; live.live = false; });
-      if (res.status === 429) return res.json().then(function (j) { live.text = j.answer; live.error = true; live.live = false; });
+      if (res.status === 429 || res.status === 503 || res.status === 400 || res.status === 403 || res.status === 404 || res.status === 502) return res.json().then(function (j) { live.text = j.answer || j.error || 'Opal Assist is unavailable right now.'; live.error = true; live.live = false; });
       var ct = res.headers.get('content-type') || '';
       if (ct.indexOf('text/event-stream') < 0) return res.json().then(function (j) { live.text = j.answer || 'Opal Assist is unavailable right now.'; live.error = j.status !== 'ok'; live.live = false; if (j.conversationId) S.conversationId = j.conversationId; });
       return readSse(res, live);
@@ -238,7 +292,9 @@
 
   // ── Threads ───────────────────────────────────────────────────────────────
   function loadThreads() {
-    return api('/api/assist/conversations').then(function (r) { return r.ok ? r.json() : { conversations: [] }; }).then(function (d) {
+    var q = S.surface === 'web' ? '?client=' + encodeURIComponent(S.client ? S.client.ref : 'general') : '';
+    $('oa-threads-label').textContent = S.surface !== 'web' ? 'Chats' : S.client ? 'Chats about ' + S.client.name : 'General chats (no client)';
+    return api('/api/assist/conversations' + q).then(function (r) { return r.ok ? r.json() : { conversations: [] }; }).then(function (d) {
       var el = $('oa-threads');
       el.innerHTML = (d.conversations || []).map(function (c) {
         return '<button class="oa-thread' + (c.id === S.conversationId ? ' active' : '') + '" type="button" data-open="' + esc(c.id) + '">' + esc(c.title || 'Chat') + '<small>' + esc(new Date(c.updated_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })) + ' · ' + esc(c.surface) + '</small></button>';
@@ -249,15 +305,66 @@
     api('/api/assist/conversations/' + id).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
       if (!d) return;
       S.conversationId = id; loadMap(id);
+      var ref = d.conversation.client_ref || null;
+      S.client = ref ? (S.clients.filter(function (c) { return c.ref === ref; })[0] || { ref: ref, name: '' }) : null;
+      pinClientName(); saveMap(); renderClientChip(); renderClients();
       S.title = d.conversation.title || 'Chat'; $('oa-title').textContent = S.title;
       S.messages = d.messages.map(function (m) { return { role: m.role, text: m.content }; });
       S.review = null; renderReview(); renderStack(); loadThreads();
     });
   }
   function newChat() {
-    S.conversationId = null; S.messages = []; S.names = {}; S.known = []; S.ignoredWords = []; S.review = null; S.title = 'New chat';
-    $('oa-title').textContent = S.title; renderReview(); renderStack(); loadThreads(); $('oa-input').focus();
+    var seed = clientSeed(S.client);
+    S.conversationId = null; S.messages = []; S.names = seed.names; S.known = seed.known; S.ignoredWords = []; S.review = null; S.title = 'New chat';
+    $('oa-title').textContent = S.title; renderClientChip(); renderReview(); renderStack(); loadThreads(); $('oa-input').focus();
   }
+
+  // ── Clients (web page only) ───────────────────────────────────────────────
+  function renderClientChip() {
+    var chip = $('oa-client-chip');
+    if (S.client && S.client.name) { chip.hidden = false; chip.textContent = S.client.name; chip.title = 'This chat is about ' + S.client.name + ' — the AI sees [CLIENT_1]'; } else chip.hidden = true;
+  }
+  function renderClients() {
+    var el = $('oa-client-list');
+    if (!el) return;
+    if (S.clientsError) { el.innerHTML = '<p class="oa-note" style="padding:4px 10px;">' + esc(S.clientsError) + '</p>'; return; }
+    var list = filterClients(S.clients, $('oa-client-search').value).slice(0, 80);
+    el.innerHTML = '<button class="oa-client-opt general' + (!S.client ? ' active' : '') + '" type="button" role="option" data-client="">General — no client</button>'
+      + list.map(function (c) {
+        return '<button class="oa-client-opt' + (S.client && S.client.ref === c.ref ? ' active' : '') + '" type="button" role="option" data-client="' + esc(c.ref) + '">' + esc(c.name) + (c.suburb ? '<small>' + esc(c.suburb) + '</small>' : '') + '</button>';
+      }).join('');
+  }
+  function selectClient(ref) {
+    var c = ref ? S.clients.filter(function (x) { return x.ref === ref; })[0] : null;
+    if (ref && !c) return;
+    S.client = c || null;
+    try { localStorage.setItem('oa.client', c ? c.ref : ''); } catch (e) { /* ignore */ }
+    renderClients(); newChat();
+    if (global.innerWidth < 760) $('oa-side').classList.remove('open');
+  }
+  function loadClients(initialRef) {
+    return api('/api/assist/clients').then(function (r) {
+      return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || 'Could not load your clients.'); return j; });
+    }).then(function (d) {
+      S.clients = d.clients || []; S.clientsError = '';
+      if (initialRef) { var c = S.clients.filter(function (x) { return x.ref === initialRef; })[0]; if (c && !S.conversationId) { S.client = c; newChat(); } }
+      if (S.client && !S.client.name) { var m = S.clients.filter(function (x) { return x.ref === S.client.ref; })[0]; if (m) { S.client = m; pinClientName(); renderClientChip(); renderStack(); loadThreads(); } }
+      renderClients();
+    }).catch(function (err) { S.clients = []; S.clientsError = (err && err.message) || 'Could not load your clients.'; renderClients(); });
+  }
+
+  // ── Leaving, and installing as an app ─────────────────────────────────────
+  // Opened from the portal's button: "Portal" goes back to that tab and closes this window.
+  function wirePortalButton() {
+    var a = $('oa-portal');
+    var opener = null; try { opener = global.opener && !global.opener.closed && global.opener.location.origin === global.location.origin ? global.opener : null; } catch (e) { opener = null; }
+    if (!opener) return;
+    a.textContent = 'Close'; a.title = 'Close Opal Assist and go back to the portal';
+    a.addEventListener('click', function (e) { e.preventDefault(); try { opener.focus(); } catch (x) { /* ignore */ } global.close(); });
+  }
+  var installPrompt = null;
+  global.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); installPrompt = e; var b = $('oa-install'); if (b) b.hidden = false; });
+  global.addEventListener('appinstalled', function () { installPrompt = null; var b = $('oa-install'); if (b) b.hidden = true; });
 
   // ── Selection (Office surfaces) ───────────────────────────────────────────
   function updateSelectionBar() {
@@ -287,6 +394,8 @@
     if (t.dataset.hide) { S.pendingConfirmed = (S.pendingConfirmed || []).concat([t.dataset.hide]); runCheck(S.review.raw); return; }
     if (t.dataset.ignore) { S.ignoredWords.push(t.dataset.ignore); runCheck(S.review.raw); return; }
     if (t.dataset.open) return openThread(t.dataset.open);
+    if (t.dataset.client !== undefined) return selectClient(t.dataset.client || null);
+    if (t.id === 'oa-install') { if (installPrompt) { installPrompt.prompt(); installPrompt.userChoice.then(function () { installPrompt = null; t.hidden = true; }); } return; }
     if (t.dataset.chip) { $('oa-input').value = t.dataset.chip + ':\n\n'; $('oa-input').focus(); return; }
     if (t.dataset.copy !== undefined) { var m = S.messages[+t.dataset.copy]; navigator.clipboard.writeText(restoreTokens(m.text, S.names)).then(function () { t.textContent = 'Copied'; setTimeout(function () { t.textContent = 'Copy'; }, 1200); }); return; }
     if (t.dataset.insert !== undefined) {
@@ -297,6 +406,7 @@
     }
   });
   $('oa-input').addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSend(); } });
+  $('oa-client-search').addEventListener('input', renderClients);
 
   // Inside Office, Microsoft 365 sign-in is tried first. When Office cannot
   // supply it (Word signed in to a different Microsoft account, consent not
@@ -319,7 +429,12 @@
   function boot() {
     if (S.surface !== 'web') { document.body.classList.add('oa-pane'); $('oa-hint').textContent = 'Names and contact details are hidden before sending.'; $('oa-input').placeholder = 'Ask Opal Assist…'; }
     if (global.innerWidth < 760) $('oa-menu').style.display = '';
-    renderStack(); updateSelectionBar();
+    pruneMaps(); wirePortalButton();
+    // The client comes from the link (?client=splose:patient:<id>), else the last one picked in this browser.
+    var startRef = params.get('client');
+    if (startRef === null) { try { startRef = localStorage.getItem('oa.client') || ''; } catch (e) { startRef = ''; } }
+    if (S.surface !== 'web') { $('oa-client').style.display = 'none'; startRef = ''; }
+    renderStack(); updateSelectionBar(); renderClients();
     api('/api/auth/me').then(function (r) { return r.ok ? r.json() : null; }).then(function (u) { S.user = u; }).catch(function () {});
     if (office()) { $('oa-use-selection').style.display = ''; }
     api('/api/assist/config').then(function (r) {
@@ -337,6 +452,7 @@
         if (!S.enabled) $('oa-hint').textContent = 'Opal Assist is not switched on for this portal yet. Ask the practice owner.';
       }).catch(function () { setStatus('Unavailable', 'off'); });
     loadThreads();
+    if (S.surface === 'web') loadClients(/^splose:patient:[A-Za-z0-9_-]+$/.test(startRef || '') ? startRef : '');
   }
   global.OpalAssist = { setSelection: setSelection, newChat: newChat, onInsert: null, _state: S };
   if (S.surface !== 'web' && office() && !office().state.ready && !office().state.error) document.addEventListener('opal-assist-office-ready', boot, { once: true });

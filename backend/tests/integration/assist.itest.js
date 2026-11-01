@@ -84,3 +84,33 @@ test('purge removes threads past their expiry along with their turns', async () 
   const left = await db.pool.query('SELECT COUNT(*)::int AS n FROM assist_messages');
   expect(left.rows[0].n).toBe(0);
 });
+
+test('migration 084: a client chat is filed under the client ref and listed only under that client', async () => {
+  const caseload = require('../../splose-caseload');
+  const spy = jest.spyOn(caseload, 'loadOwnClient').mockResolvedValue({ id: '1', fullName: 'Aiden Blackwood-Tan' });
+  try {
+    const app = buildApp();
+    const me = await seedUser({ role: 'owner' });
+    const general = await request(app).post('/api/assist/chat').set('x-test-user', me.id).send({ message: 'A general question.' });
+    const client = await request(app).post('/api/assist/chat').set('x-test-user', me.id).send({ message: 'Rephrase this note for [CLIENT_1].', clientRef: 'splose:patient:1' });
+    expect(client.status).toBe(200);
+
+    const row = await db.pool.query('SELECT client_ref FROM assist_conversations WHERE id = $1', [client.body.conversationId]);
+    expect(row.rows[0].client_ref).toBe('splose:patient:1');
+
+    // Continuing the thread keeps its client even if the browser sends another.
+    const again = await request(app).post('/api/assist/chat').set('x-test-user', me.id).send({ message: 'Shorter please.', conversationId: client.body.conversationId, clientRef: 'splose:patient:9' });
+    expect(again.status).toBe(200);
+    expect(spy).toHaveBeenCalledTimes(1);
+
+    const forClient = await request(app).get('/api/assist/conversations?client=splose%3Apatient%3A1').set('x-test-user', me.id);
+    expect(forClient.body.conversations.map((c) => c.id)).toEqual([client.body.conversationId]);
+    const forGeneral = await request(app).get('/api/assist/conversations?client=general').set('x-test-user', me.id);
+    expect(forGeneral.body.conversations.map((c) => c.id)).toEqual([general.body.conversationId]);
+    const one = await request(app).get('/api/assist/conversations/' + client.body.conversationId).set('x-test-user', me.id);
+    expect(one.body.conversation.client_ref).toBe('splose:patient:1');
+
+    const stored = await db.pool.query('SELECT content FROM assist_messages WHERE conversation_id = $1', [client.body.conversationId]);
+    expect(JSON.stringify(stored.rows)).not.toMatch(/Aiden|Blackwood/);
+  } finally { spy.mockRestore(); }
+});

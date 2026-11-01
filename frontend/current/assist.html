@@ -5,14 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Opal Assist</title>
   <link rel="icon" href="/favicon.svg?v=2" type="image/svg+xml" />
-  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
-  <link rel="manifest" href="/site.webmanifest" />
+  <link rel="apple-touch-icon" href="/icons/assist-apple-touch.png" />
+  <!-- Its own manifest, so "Install Opal Assist" puts a separate app icon on the desktop. -->
+  <link rel="manifest" href="/assist.webmanifest" />
+  <meta name="apple-mobile-web-app-title" content="Opal Assist" />
   <meta name="theme-color" content="#0f7c6c" />
   <link rel="icon" href="/icons/opal-assist.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assist.css?v=6">
+  <link rel="stylesheet" href="/assist.css?v=7">
 </head>
 <body>
   <div class="oa-app">
@@ -23,16 +25,24 @@
       </div>
       <div class="oa-side-actions">
         <button class="oa-btn primary" id="oa-new" type="button">+ New chat</button>
-        <a class="oa-btn ghost" href="/" title="Back to the portal">Portal</a>
+        <a class="oa-btn ghost" href="/" id="oa-portal" title="Back to the portal">Portal</a>
       </div>
+      <div class="oa-client" id="oa-client">
+        <div class="oa-side-label">Client</div>
+        <label class="sr-only" for="oa-client-search">Find a client</label>
+        <input class="oa-client-search" id="oa-client-search" type="search" placeholder="Search your clients…" autocomplete="off">
+        <div class="oa-client-list" id="oa-client-list" role="listbox" aria-label="Clients"></div>
+      </div>
+      <div class="oa-side-label oa-threads-label" id="oa-threads-label">Chats</div>
       <nav class="oa-threads" id="oa-threads" aria-label="Recent chats"></nav>
-      <div class="oa-side-foot" id="oa-foot">Names and contact details are hidden before anything leaves. Chats are kept for 30 days.</div>
+      <div class="oa-side-foot" id="oa-foot">Names and contact details are hidden before anything leaves. Chats are kept for 30 days.<button class="oa-install" id="oa-install" type="button" hidden>Install Opal Assist as an app</button></div>
     </aside>
 
     <main class="oa-main">
       <header class="oa-head">
         <button class="oa-btn ghost sm" id="oa-menu" type="button" aria-label="Chats" style="display:none;">☰</button>
         <div class="oa-title" id="oa-title">New chat</div>
+        <span class="oa-client-chip" id="oa-client-chip" hidden></span>
         <button class="oa-btn sm" id="oa-use-selection" type="button" style="display:none;">Use selection</button>
         <span class="oa-pill" id="oa-status">Checking…</span>
       </header>
@@ -68,6 +78,6 @@
       if (sf === 'excel') document.write('<script src="/assist-excel-format.js?v=2"><\/script>');
     })();
   </script>
-  <script src="/assist.js?v=4"></script>
+  <script src="/assist.js?v=5"></script>
 </body>
 </html>

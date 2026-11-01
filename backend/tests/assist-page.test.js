@@ -195,3 +195,37 @@ describe('shared tool bar, Excel tools and the Word template', () => {
     expect(pane).toContain("primary: '#2F5651'");
   });
 });
+
+describe('client chats and the installable app', () => {
+  const fs = require('fs'); const path = require('path');
+  const { clientSeed, filterClients } = require('../../frontend/current/assist.js');
+  const read = (f) => fs.readFileSync(path.join(__dirname, '../../frontend/current', f), 'utf8');
+
+  test('a client chat starts with the client pinned as [CLIENT_1]; a general chat starts empty', () => {
+    expect(clientSeed({ ref: 'splose:patient:2', name: 'Alexander Whitlock' })).toEqual({
+      names: { CLIENT_1: 'Alexander Whitlock' }, known: [{ token: 'CLIENT_1', ref: 'splose:patient:2', role: 'client' }],
+    });
+    expect(clientSeed(null)).toEqual({ names: {}, known: [] });
+  });
+
+  test('the picker search matches every typed word against name and suburb', () => {
+    const list = [{ name: 'Alexander Whitlock', suburb: 'Como' }, { name: 'Aiden Blackwood-Tan', suburb: 'Bayswater' }];
+    expect(filterClients(list, 'alex como').map((c) => c.name)).toEqual(['Alexander Whitlock']);
+    expect(filterClients(list, '')).toHaveLength(2);
+    expect(filterClients(list, 'perth')).toEqual([]);
+  });
+
+  test('Opal Assist installs as its own app, separate from the portal', () => {
+    const m = JSON.parse(read('assist.webmanifest'));
+    expect(m).toEqual(expect.objectContaining({ id: '/assist', scope: '/assist', display: 'standalone', name: 'Opal Assist' }));
+    expect(m.start_url.startsWith('/assist')).toBe(true);
+    m.icons.forEach((i) => expect(fs.existsSync(path.join(__dirname, '../../frontend/current', i.src))).toBe(true));
+    expect(read('assist.html')).toContain('<link rel="manifest" href="/assist.webmanifest" />');
+  });
+
+  test('the portal header opens Opal Assist in its own window', () => {
+    const shell = read('mockup_v3.html');
+    expect(shell).toContain('id="hdr-assist-btn"');
+    expect(shell).toMatch(/window\.open\('\/assist', 'opal-assist'/);
+  });
+});

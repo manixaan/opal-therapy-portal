@@ -156,3 +156,18 @@ body.oa-pane .oa-compose-row .oa-hint { font-size: 11px; }
 .oa-finding-text { flex: 1; min-width: 0; }
 .oa-finding-acts { display: flex; gap: 4px; flex-shrink: 0; }
 .oa-btn.xs { padding: 2px 8px; font-size: 11px; }
+
+/* ── Client picker: each chat belongs to one client (or none) ──────────── */
+.oa-side-label { font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); padding: 0 16px 6px; }
+.oa-threads-label { padding-top: 10px; border-top: 1px solid var(--border-soft); }
+.oa-client { padding: 4px 0 10px; }
+.oa-client-search { display: block; width: calc(100% - 24px); margin: 0 12px 6px; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 6px 10px; background: var(--bg); font-size: 13px; }
+.oa-client-search:focus-visible { border-color: var(--accent); background: var(--panel); }
+.oa-client-list { max-height: 210px; overflow: auto; padding: 0 8px; }
+.oa-client-opt { display: block; width: 100%; text-align: left; background: none; border: 1px solid transparent; border-radius: var(--radius-sm); padding: 5px 10px; color: var(--ink-soft); font-size: 13px; }
+.oa-client-opt:hover { background: var(--border-soft); }
+.oa-client-opt.active { background: var(--accent-soft); color: var(--accent-deep); font-weight: 600; }
+.oa-client-opt small { color: var(--muted); font-weight: 400; margin-left: 6px; }
+.oa-client-opt.general { font-style: italic; }
+.oa-client-chip { font-size: 12px; font-weight: 600; background: var(--accent-soft); color: var(--accent-deep); border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
+.oa-install { display: block; margin-top: 8px; background: none; border: 0; padding: 0; color: var(--accent-deep); font-size: 12px; font-weight: 600; text-decoration: underline; }
