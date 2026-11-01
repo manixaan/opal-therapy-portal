@@ -21259,6 +21259,15 @@ function attachPlacesAutocomplete(inputEl, onSelect) {
         '<span class="pac-name">' + escapeHtml(it.name) + '</span>' +
         '<span class="pac-sub">' + escapeHtml(it.addr) + '</span></button>';
     }).join('');
+    // Anchor under the input itself, not the bottom of its wrapper — the
+    // wrapper may hold more below the input (label chips, MMM zone).
+    if (inputEl.offsetParent === wrap) {
+      list.style.top = (inputEl.offsetTop + inputEl.offsetHeight + 4) + 'px';
+      list.style.left = inputEl.offsetLeft + 'px';
+      list.style.width = inputEl.offsetWidth + 'px';
+      list.style.right = 'auto';
+      list.style.boxSizing = 'border-box';
+    }
     list.style.display = 'block';
   }
   list.addEventListener('mousedown', function (e) { // mousedown wins over input blur
