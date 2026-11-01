@@ -339,6 +339,31 @@ async function markReviewed({ interactionId, reviewedBy, decision } = {}) {
 }
 
 /**
+ * Reopen an interaction's review: the reviewed text was changed afterwards
+ * (a therapist edited an approved note), so the earlier decision no longer
+ * describes what the record says. Back to review_required, reviewer cleared;
+ * a fresh approval goes through markReviewed as before.
+ *
+ * Scoped to the acting user, like markReviewed.
+ */
+async function reopenReview({ interactionId, userId } = {}) {
+  if (!interactionId || !userId) throw new Error('invalid_review_target');
+  if (_sink) {
+    await _sink({ actorUserId: userId, event: { eventId: interactionId, status: 'review_required' } });
+    return true;
+  }
+  // eslint-disable-next-line global-require
+  const db = require('../database');
+  const { rowCount } = await db.pool.query(
+    `UPDATE ai_interactions
+        SET review_status = 'review_required', reviewed_by = NULL, reviewed_at = NULL
+      WHERE id = $1 AND user_id = $2`,
+    [interactionId, userId]
+  );
+  return rowCount > 0;
+}
+
+/**
  * Mark an interaction ORPHANED: the model generated, but the governed draft
  * that should carry the output could not be persisted, so no reviewable
  * clinical object exists.
@@ -393,6 +418,7 @@ module.exports = {
   finalise,
   securityEvent,
   markReviewed,
+  reopenReview,
   markOrphaned,
   _setSinkForTests,
 };

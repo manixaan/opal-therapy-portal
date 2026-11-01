@@ -1527,7 +1527,7 @@ describe('case notes review surface', () => {
 
   test('assets are linked next to the other extracted asset pairs', () => {
     expect(HTML).toContain('<link rel="stylesheet" href="/casenotes.css?v=3" />');
-    expect(HTML).toContain('<script src="/casenotes.js?v=4" defer></script>');
+    expect(HTML).toContain('<script src="/casenotes.js?v=5" defer></script>');
   });
 
   test('nav tab + view mount exist and are wired the same way as other tabs', () => {
