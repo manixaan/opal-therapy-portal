@@ -183,7 +183,7 @@
       // A task pane is narrow: one quiet line, not the full welcome.
       if (S.surface !== 'web') { stack.innerHTML = '<div class="oa-empty oa-empty-pane"><img src="/icons/opal-assist-live.svg?v=1" alt=""><p>Ask a question, or select text and press Use selection.</p></div>'; return; }
       stack.innerHTML = '<div class="oa-empty"><img src="/icons/opal-assist-live.svg?v=1" alt=""><h1>Opal Assist</h1>'
-        + '<p>' + (S.client ? 'Everything in this chat is about <b>' + esc(S.client.name) + '</b>, who the AI only ever sees as [CLIENT_1]. ' : '')
+        + '<p>' + (S.client ? 'Everything in this chat is about <b>' + esc(S.client.name) + '</b>. Their name is hidden from the AI. ' : '')
         + 'Paste your case note, FCA section or letter and ask for it rephrased, tightened or rewritten — names and contact details are hidden before anything leaves the practice.</p>'
         + '<div class="oa-chips">' + [
           'Rephrase this case note in professional, objective language',
@@ -397,13 +397,18 @@
   }
 
   // ── Threads ───────────────────────────────────────────────────────────────
+  /** Thread titles are stored tokenised: show them with this client's name, other tokens as roles. */
+  function threadTitle(title) {
+    var names = Object.assign({}, S.names, S.client && S.client.name ? { CLIENT_1: S.client.name } : {});
+    return DOC().restoreText(title || 'Chat', names, S.nameStyle);
+  }
   function loadThreads() {
     var q = S.surface === 'web' ? '?client=' + encodeURIComponent(S.client ? S.client.ref : 'general') : '';
     $('oa-threads-label').textContent = S.surface !== 'web' ? 'Chats' : S.client ? 'Chats about ' + S.client.name : 'General chats (no client)';
     return api('/api/assist/conversations' + q).then(function (r) { return r.ok ? r.json() : { conversations: [] }; }).then(function (d) {
       var el = $('oa-threads');
       el.innerHTML = (d.conversations || []).map(function (c) {
-        return '<button class="oa-thread' + (c.id === S.conversationId ? ' active' : '') + '" type="button" data-open="' + esc(c.id) + '">' + esc(c.title || 'Chat') + '<small>' + esc(new Date(c.updated_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })) + ' · ' + esc(c.surface) + '</small></button>';
+        return '<button class="oa-thread' + (c.id === S.conversationId ? ' active' : '') + '" type="button" data-open="' + esc(c.id) + '">' + esc(threadTitle(c.title)) + '<small>' + esc(new Date(c.updated_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })) + ' · ' + esc(c.surface) + '</small></button>';
       }).join('') || '<p class="oa-note" style="padding:8px 10px;">No chats yet.</p>';
     }).catch(function () {});
   }

@@ -311,3 +311,30 @@ describe('editable documents on the page', () => {
     expect(read('assist.html')).toMatch(/<script src="\/assist-doc\.js\?v=\d+"><\/script>\s*<script src="\/assist\.js\?v=\d+"><\/script>/);
   });
 });
+
+describe('Opal Assist follows the portal: day / night and its dropdowns', () => {
+  const fs = require('fs'); const path = require('path');
+  const read = (f) => fs.readFileSync(path.join(__dirname, '../../frontend/current', f), 'utf8');
+
+  test('the page shares the portal theme: theme.js before first paint, theme.css after the page styles, and the same toggle', () => {
+    const page = read('assist.html');
+    const themeJs = page.indexOf('<script src="/theme.js?v=');
+    expect(themeJs).toBeGreaterThan(0);
+    expect(themeJs).toBeLessThan(page.indexOf('<link rel="stylesheet" href="/assist.css'));
+    expect(page.indexOf('<link rel="stylesheet" href="/theme.css')).toBeGreaterThan(page.indexOf('<link rel="stylesheet" href="/assist.css'));
+    expect(page).toContain('id="theme-toggle"');
+    expect(page).toContain('onclick="window.OpalTheme.cycle()"');
+  });
+
+  test('dropdowns use the portal style, and no page rule resets the chevron with a background shorthand', () => {
+    const css = read('assist.css');
+    expect(css).toMatch(/select \{\s*appearance: none;/);
+    expect(css).not.toMatch(/(?:\.oa-format|\.oa-namestyle select)\s*\{[^}]*background:/);
+  });
+
+  test('thread titles and the welcome line never show a raw token', () => {
+    const js = read('assist.js');
+    expect(js).toContain("esc(threadTitle(c.title))");
+    expect(js).not.toContain('who the AI only ever sees as [CLIENT_1]');
+  });
+});

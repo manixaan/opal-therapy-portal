@@ -10,11 +10,14 @@
   <link rel="manifest" href="/assist.webmanifest" />
   <meta name="apple-mobile-web-app-title" content="Opal Assist" />
   <meta name="theme-color" content="#0f7c6c" />
+  <!-- Day / night, shared with the portal (same saved choice). Not deferred: stamps <html data-theme> before first paint. -->
+  <script src="/theme.js?v=2"></script>
   <link rel="icon" href="/icons/opal-assist.svg?v=3" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assist.css?v=8">
+  <link rel="stylesheet" href="/assist.css?v=9">
+  <link rel="stylesheet" href="/theme.css?v=3">
 </head>
 <body>
   <div class="oa-app">
@@ -45,6 +48,7 @@
         <span class="oa-client-chip" id="oa-client-chip" hidden></span>
         <button class="oa-btn sm" id="oa-use-selection" type="button" style="display:none;">Use selection</button>
         <span class="oa-pill" id="oa-status">Checking…</span>
+        <button class="oa-theme" id="theme-toggle" type="button" onclick="window.OpalTheme.cycle()" title="Theme" aria-label="Theme"></button>
       </header>
 
       <section class="oa-body" id="oa-body" aria-live="polite">
@@ -86,6 +90,6 @@
     })();
   </script>
   <script src="/assist-doc.js?v=1"></script>
-  <script src="/assist.js?v=9"></script>
+  <script src="/assist.js?v=10"></script>
 </body>
 </html>
