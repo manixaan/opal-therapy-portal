@@ -27,6 +27,8 @@
      honours reduced motion inside the SVG — no CSS animation needed here. */
   background: url("/icons/opal-assist-live.svg?v=1") center / contain no-repeat;
 }
+/* While Opa writes a reply: the same mark, breathing faster (opa.js sets the class). */
+.opa-thinking-now .opa-fab-pebble { background-image: url("/icons/opal-assist-thinking.svg?v=1"); }
 
 /* ── Panel ── */
 #opa-panel {

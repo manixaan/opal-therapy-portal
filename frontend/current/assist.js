@@ -161,9 +161,11 @@
     stack.innerHTML = S.messages.map(function (m, i) {
       if (m.role === 'user') return '<div class="oa-msg user"><div class="oa-bubble">' + renderTokens(m.text, true) + '</div></div>';
       var body = m.live && !m.text ? '<div class="oa-thinking">Opal Assist is thinking</div>' : renderTokens(m.text);
+      // The reply being written wears the thinking mark: the same seeds, breathing faster.
+      var avatar = m.live ? '/icons/opal-assist-thinking.svg?v=1' : '/icons/opal-assist.svg?v=3';
       var tools = (!m.live && !m.error) ? '<div class="oa-tools"><button class="oa-btn ghost sm" type="button" data-copy="' + i + '">Copy</button>'
         + (S.surface !== 'web' ? '<button class="oa-btn ghost sm" type="button" data-insert="' + i + '">Insert into document</button>' : '') + '</div>' : '';
-      return '<div class="oa-msg assistant' + (m.error ? ' error' : '') + '"><img class="oa-avatar" src="/icons/opal-assist.svg?v=3" alt=""><div><div class="oa-bubble">' + body + '</div>' + tools + '</div></div>';
+      return '<div class="oa-msg assistant' + (m.error ? ' error' : '') + '"><img class="oa-avatar" src="' + avatar + '" alt=""><div><div class="oa-bubble">' + body + '</div>' + tools + '</div></div>';
     }).join('');
     $('oa-body').scrollTop = $('oa-body').scrollHeight;
   }
@@ -171,6 +173,11 @@
   function scheduleRender() { if (renderQueued) return; renderQueued = true; requestAnimationFrame(function () { renderQueued = false; renderStack(); }); }
 
   function setStatus(text, cls) { var p = $('oa-status'); p.textContent = text; p.className = 'oa-pill' + (cls ? ' ' + cls : ''); }
+  /** The side-panel mark breathes faster while a reply is being written. */
+  function setThinking(on) {
+    var mark = $('oa-brand-mark');
+    if (mark) mark.src = on ? '/icons/opal-assist-thinking.svg?v=1' : '/icons/opal-assist-live.svg?v=1';
+  }
   function setBusy(b) { S.busy = b; $('oa-send').disabled = b || !S.enabled; $('oa-stop').style.display = b ? '' : 'none'; $('oa-input').disabled = b; }
 
   // ── Review card ───────────────────────────────────────────────────────────
@@ -245,7 +252,7 @@
     var live = { role: 'assistant', text: '', live: true };
     S.messages.push(live);
     renderStack();
-    setBusy(true); setStatus('Thinking…');
+    setBusy(true); setStatus('Thinking…'); setThinking(true);
     var ctrl = new AbortController(); S.abort = ctrl;
     var body = { message: r.text, conversationId: S.conversationId, surface: S.surface, hiddenCount: r.hidden.length, known: S.known };
     if (S.client) body.clientRef = S.client.ref;
@@ -262,7 +269,7 @@
       live.live = false;
       if (!live.text) { live.text = err && err.name === 'AbortError' ? 'Stopped.' : 'Opal Assist is unavailable right now.'; live.error = true; }
     }).then(function () {
-      live.live = false; S.abort = null; setBusy(false); setStatus('Ready');
+      live.live = false; S.abort = null; setBusy(false); setStatus('Ready'); setThinking(false);
       saveMap(); renderStack(); loadThreads(); $('oa-input').focus();
     });
   }

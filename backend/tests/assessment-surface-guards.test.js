@@ -778,7 +778,7 @@ describe('changed assets are cache-busted', () => {
       // SSE deltas rendered incrementally, with the JSON route kept as the
       // fallback. Stale JS here would post to the old route and lose the
       // streamed UX the new backend exists for.
-      ['opa.js', 3],
+      ['opa.js', 4],
       // 1: the Finance portal — dashboard, payroll and invoicing over Xero.
       ['finance.js', 1], ['finance.css', 1],
       // 1: Invoicing — calendar-driven NDIS invoices, travel and rural trip billing.

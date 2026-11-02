@@ -249,6 +249,18 @@ describe('the AI has its own mark; the cell is the portal\'s', () => {
     expect(live).not.toMatch(/<script|on[a-z]+=/i);
   });
 
+  test('thinking: the same seeds breathe faster, and both Opa and Opal Assist switch to it while a reply is written', () => {
+    const speed = (f) => { const t = read(f); return { breath: +t.match(/animation:breathe ([\d.]+)s/)[1], turn: +t.match(/animation:turn ([\d.]+)s/)[1], circles: t.match(/<circle /g).length }; };
+    const live = speed('icons/opal-assist-live.svg'); const think = speed('icons/opal-assist-thinking.svg');
+    expect(think.circles).toBe(live.circles);
+    expect(think.breath).toBeLessThan(live.breath / 2);
+    expect(think.turn).toBeLessThan(live.turn);
+    expect(read('opa.js')).toMatch(/fab\.classList\.toggle\('opa-thinking-now', !!OPA\.busy\)/);
+    expect(read('opa.css')).toMatch(/\.opa-thinking-now \.opa-fab-pebble \{ background-image: url\("\/icons\/opal-assist-thinking\.svg/);
+    expect(read('assist.js')).toMatch(/setThinking\(true\)/);
+    expect(read('assist.js')).toMatch(/setThinking\(false\)/);
+  });
+
   test('the Opa AI button draws the AI mark, not the CSS pebble', () => {
     const css = read('opa.css');
     const rule = css.slice(css.indexOf('.opa-fab-pebble {'), css.indexOf('}', css.indexOf('.opa-fab-pebble {')));

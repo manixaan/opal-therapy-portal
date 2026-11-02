@@ -11,6 +11,7 @@ Seeds grow from the centre out and carry the brand gradient, green
 Writes, from one geometry:
   frontend/current/icons/opal-assist.svg                    the mark, still (favicon, header button, chat avatars)
   frontend/current/icons/opal-assist-live.svg               the mark, alive (Opa button and panel, Assist page)
+  frontend/current/icons/opal-assist-thinking.svg           the mark, thinking (while a reply is being written)
   frontend/current/icons/office/opal-assist-{16..128}.png   Office ribbon, transparent
   frontend/current/icons/assist-{192,512}.png               desktop app, cream rounded tile
   frontend/current/icons/assist-maskable-512.png            desktop app, full-bleed tile
@@ -125,9 +126,12 @@ def svg():
 BREATH_S = 4.2     # one breath, seconds
 TURN_S = 36        # one full turn, seconds
 BREATH_OUT = 0.10  # how far a seed moves outward, as a share of its distance from the centre
+# While the AI is writing a reply: quicker breath, quicker turn — same shape, so the swap is seamless.
+THINK_BREATH_S = 1.3
+THINK_TURN_S = 12
 
 
-def svg_live():
+def svg_live(breath_s=BREATH_S, turn_s=TURN_S, note='seeds breathe in and out while the spiral turns'):
     c, s = 32.0, 32.0 * 0.92 / (1 + BREATH_OUT)   # leave room for the out-breath
     lo, hi = c - 32.0 * 0.92, c + 32.0 * 0.92
     stops = ''.join('<stop offset="%g" stop-color="#%02x%02x%02x"/>' % (o, *rgb) for o, rgb in STOPS)
@@ -135,19 +139,19 @@ def svg_live():
     circles = ''.join(
         '<circle cx="%.2f" cy="%.2f" r="%.2f" style="--x:%.2fpx;--y:%.2fpx;animation-delay:-%.2fs"/>' % (
             c + x * s, c + y * s, r * s, x * s * BREATH_OUT, y * s * BREATH_OUT,
-            BREATH_S * 0.6 * (1 - math.hypot(x, y) / SPREAD))   # inner seeds lead, the wave runs out to the rim
+            breath_s * 0.6 * (1 - math.hypot(x, y) / SPREAD))   # inner seeds lead, the wave runs out to the rim
         for x, y, r in dots)
     css = ('.turn{transform-origin:32px 32px;animation:turn %ds linear infinite}'
            '.turn circle{animation:breathe %.1fs ease-in-out infinite}'
            '@keyframes turn{to{transform:rotate(360deg)}}'
            '@keyframes breathe{0%%,100%%{transform:translate(0,0)}50%%{transform:translate(var(--x),var(--y))}}'
-           '@media (prefers-reduced-motion:reduce){.turn,.turn circle{animation:none}}') % (TURN_S, BREATH_S)
+           '@media (prefers-reduced-motion:reduce){.turn,.turn circle{animation:none}}') % (turn_s, breath_s)
     return ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Opal Assist">\n'
-            '  <!-- The Opal AI mark, alive: seeds breathe in and out while the spiral turns (scripts/build-ai-icons.py). -->\n'
+            '  <!-- The Opal AI mark, alive: %s (scripts/build-ai-icons.py). -->\n'
             '  <style>%s</style>\n'
             '  <defs><linearGradient id="oa-g" gradientUnits="userSpaceOnUse" x1="%.2f" y1="%.2f" x2="%.2f" y2="%.2f">%s</linearGradient></defs>\n'
             '  <g class="turn" fill="url(#oa-g)">%s</g>\n'
-            '</svg>\n') % (css, lo, lo, hi, hi, stops, circles)
+            '</svg>\n') % (note, css, lo, lo, hi, hi, stops, circles)
 
 
 def write(rel, data):
@@ -164,6 +168,7 @@ if __name__ == '__main__':
     assert gap > 0.01, 'seeds overlap'
     write('opal-assist.svg', svg().encode())
     write('opal-assist-live.svg', svg_live().encode())
+    write('opal-assist-thinking.svg', svg_live(THINK_BREATH_S, THINK_TURN_S, 'thinking — the same breath, quicker, while a reply is being written').encode())
     for size in (16, 32, 64, 80, 128):
         write('office/opal-assist-%d.png' % size, png(size, render(size, mark=0.96)))
     write('assist-192.png', png(192, render(192, mark=0.62, tile=True, corner=0.22)))

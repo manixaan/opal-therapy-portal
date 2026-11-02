@@ -175,6 +175,8 @@
   }
 
   function buildFab() {
+    // Fetch the thinking mark up front so the first swap has no blank frame.
+    new Image().src = '/icons/opal-assist-thinking.svg?v=1';
     fab = document.createElement('button');
     fab.id = 'opa-fab';
     fab.type = 'button';
@@ -245,6 +247,10 @@
   // ── Conversation rendering (shell phase: honest placeholder answers) ─────
   function renderBody() {
     var body = panel.querySelector('#opa-body');
+    // Every busy change ends in a render, so this is the one place the mark
+    // learns Opa is thinking: it breathes faster until the reply is done.
+    fab.classList.toggle('opa-thinking-now', !!OPA.busy);
+    panel.classList.toggle('opa-thinking-now', !!OPA.busy);
     if (!OPA.messages.length) {
       var mod = currentModule();
       var chips = OPA.suggestions || suggestionsFor(mod);
