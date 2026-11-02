@@ -581,6 +581,9 @@ app.use('/', require('./travel-routes'));
 app.use('/', require('./splose-sync-routes'));
 // Sync settings (081): per-direction Outlook/Splose sync choices and "Sync now".
 app.use('/', require('./sync-settings-routes'));
+// Block review (086): blocks booked straight into Outlook/Splose, classified
+// and settled so billing and travel can use them.
+app.use('/', require('./block-review-routes'));
 
 // Snapshot Day (personal reminders + daily tasks; strictly user-scoped)
 app.use('/', require('./snapshot-routes'));

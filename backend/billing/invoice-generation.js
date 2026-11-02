@@ -54,6 +54,11 @@ function validRange(from, to) {
 
 // ── Phase A ────────────────────────────────────────────────────────────────
 
+// A block booked outside the portal whose booking the portal only guessed
+// (block-review.js, migration 086) is not invoiced until a person confirms it.
+const HELD_FOR_REVIEW =
+  `NOT EXISTS (SELECT 1 FROM event_block_reviews br WHERE br.event_id = e.id AND br.status = 'guessed')`;
+
 async function loadCandidateEvents(q, orgId, { from, to, practitionerIds, clientIds, eventIds, tz }) {
   const params = [orgId, from, to, tz];
   const where = [
@@ -61,6 +66,7 @@ async function loadCandidateEvents(q, orgId, { from, to, practitionerIds, client
     `((e.start_time AT TIME ZONE 'UTC') AT TIME ZONE $4)::date BETWEEN $2::date AND $3::date`,
     'COALESCE(e.is_deleted, FALSE) = FALSE',
     `(e.event_type = 'therapy' OR (e.event_type = 'outlook' AND e.client_id IS NOT NULL))`,
+    HELD_FOR_REVIEW,
   ];
   if (practitionerIds && practitionerIds.length) { params.push(practitionerIds); where.push(`e.user_id = ANY($${params.length}::uuid[])`); }
   if (clientIds && clientIds.length) { params.push(clientIds); where.push(`e.client_id = ANY($${params.length}::text[])`); }
@@ -93,6 +99,7 @@ async function loadNf2fBlocks(q, orgId, { from, to, practitionerIds, eventIds, t
     `((e.start_time AT TIME ZONE 'UTC') AT TIME ZONE $4)::date BETWEEN $2::date AND $3::date`,
     'COALESCE(e.is_deleted, FALSE) = FALSE',
     `e.custom_metadata->'booking'->>'group' = 'nf2f'`,
+    HELD_FOR_REVIEW,
   ];
   if (practitionerIds && practitionerIds.length) { params.push(practitionerIds); where.push(`e.user_id = ANY($${params.length}::uuid[])`); }
   if (eventIds && eventIds.length) { params.push(eventIds); where.push(`e.id = ANY($${params.length}::uuid[])`); }

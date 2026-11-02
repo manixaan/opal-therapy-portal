@@ -774,6 +774,9 @@ describe('changed assets are cache-busted', () => {
       // 1: Settings → Calendar sync — per-direction Outlook/Splose choices, the
       // Owner's practice limits and the Sync now preview (migration 081).
       ['sync-settings.js', 1], ['sync-settings.css', 1],
+      // 1: Calendar → Blocks to review — outside-the-portal blocks classified
+      // and settled (migration 086).
+      ['block-review.js', 1], ['block-review.css', 1],
       // 2: Opa chat streams — answers arrive over /api/opa/chat/stream as
       // SSE deltas rendered incrementally, with the JSON route kept as the
       // fallback. Stale JS here would post to the old route and lose the
