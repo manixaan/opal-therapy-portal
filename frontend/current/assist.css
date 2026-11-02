@@ -75,9 +75,8 @@ body.oa-pane .oa-side { display: none; }
 .oa-msg.assistant .oa-bubble { background: var(--panel); border: 1px solid var(--border); border-bottom-left-radius: 6px; box-shadow: var(--shadow-sm); }
 .oa-msg.assistant.error .oa-bubble { background: var(--warn-soft); border-color: transparent; color: var(--warn); }
 .oa-msg .oa-avatar { width: 26px; height: 26px; flex-shrink: 0; margin-top: 4px; }
-.oa-name { padding: 0 2px; border-radius: 4px; background: rgba(15,124,108,.12); font-weight: 600; }
-.oa-msg.user .oa-name { background: rgba(255,255,255,.22); }
-.oa-name.token { background: var(--warn-soft); color: var(--warn); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; font-weight: 600; }
+/* Names read as plain text: the AI saw tokens, the person just sees the name. */
+.oa-name { font: inherit; color: inherit; }
 .oa-tools { display: flex; gap: 6px; margin-top: 6px; }
 .oa-thinking { color: var(--muted); font-size: 12.5px; padding: 4px 2px; }
 .oa-thinking::after { content: "…"; animation: oaDots 1.2s steps(4, end) infinite; }
@@ -171,3 +170,40 @@ body.oa-pane .oa-compose-row .oa-hint { font-size: 11px; }
 .oa-client-opt.general { font-style: italic; }
 .oa-client-chip { font-size: 12px; font-weight: 600; background: var(--accent-soft); color: var(--accent-deep); border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
 .oa-install { display: block; margin-top: 8px; background: none; border: 0; padding: 0; color: var(--accent-deep); font-size: 12px; font-weight: 600; text-decoration: underline; }
+
+/* ── Editable document (rephrases and case notes) ──────────────────────── */
+.oa-msg.assistant.doc > .oa-doc-host { flex: 1; min-width: 0; }
+.oa-doc { position: relative; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); }
+.oa-doc-bar { display: flex; align-items: center; gap: 2px; padding: 6px 10px; border-bottom: 1px solid var(--border-soft); position: sticky; top: 0; background: var(--panel); border-radius: var(--radius-lg) var(--radius-lg) 0 0; z-index: 1; flex-wrap: wrap; }
+.oa-doc-bar button { min-width: 30px; height: 28px; border: 0; background: none; border-radius: var(--radius-sm); color: var(--ink-soft); font-size: 13px; padding: 0 8px; }
+.oa-doc-bar button:hover { background: var(--border-soft); color: var(--ink); }
+.oa-doc-bar .oa-doc-copy { border: 1px solid var(--border); color: var(--accent-deep); font-weight: 600; font-size: 12px; margin-left: 4px; }
+.oa-doc-kind { font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--accent-deep); margin-right: 8px; }
+.oa-doc-sep { width: 1px; height: 18px; background: var(--border); margin: 0 4px; }
+.oa-doc-gap { flex: 1; }
+.oa-doc-status { font-size: 11.5px; color: var(--muted); margin-right: 4px; }
+.oa-doc-page { padding: 18px 26px 22px; font-family: Arial, Helvetica, sans-serif; font-size: 14px; line-height: 1.6; color: var(--ink); outline: none; min-height: 60px; }
+.oa-doc-page:focus-visible { box-shadow: inset 0 0 0 2px var(--accent-soft); }
+.oa-doc-page h3 { font-size: 17px; font-weight: 600; margin: 18px 0 8px; color: var(--ink); }
+.oa-doc-page h3:first-child { margin-top: 0; }
+.oa-doc-page p { margin: 0 0 10px; }
+.oa-doc-page ul { margin: 0 0 12px; padding-left: 22px; }
+.oa-doc-page li { margin: 0 0 8px; padding-left: 2px; }
+.oa-doc-page strong, .oa-doc-page b { font-weight: 700; }
+.oa-tok { white-space: nowrap; }
+.oa-doc.revising .oa-doc-page { opacity: .55; transition: opacity var(--t-med); }
+.oa-doc-menu { position: absolute; z-index: 5; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; max-width: 420px; padding: 6px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow-md); }
+.oa-doc-menu[hidden] { display: none; }
+.oa-doc-menu > button { border: 1px solid var(--border); background: var(--bg); border-radius: 999px; padding: 4px 10px; font-size: 12px; font-weight: 600; color: var(--ink-soft); }
+.oa-doc-menu > button:hover { background: var(--accent-soft); color: var(--accent-deep); border-color: transparent; }
+.oa-doc-ask { display: flex; gap: 4px; flex: 1 1 100%; }
+.oa-doc-ask input { flex: 1; min-width: 0; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 5px 9px; font-size: 12.5px; background: var(--bg); }
+.oa-doc-ask button { border: 0; background: var(--accent); color: #fff; border-radius: var(--radius-sm); padding: 0 12px; font-size: 12px; font-weight: 600; }
+.oa-format { border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--panel); padding: 5px 8px; font-size: 12.5px; color: var(--ink-soft); }
+.oa-namestyle { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 12px; }
+.oa-namestyle select { border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--panel); padding: 2px 6px; font-size: 12px; }
+@media (max-width: 760px) {
+  .oa-compose-row { flex-wrap: wrap; }
+  .oa-compose-row .oa-hint { flex-basis: 100%; order: 3; }
+  .oa-doc-page { padding: 14px 16px 18px; }
+}

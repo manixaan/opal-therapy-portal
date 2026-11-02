@@ -114,3 +114,35 @@ test('migration 084: a client chat is filed under the client ref and listed only
     expect(JSON.stringify(stored.rows)).not.toMatch(/Aiden|Blackwood/);
   } finally { spy.mockRestore(); }
 });
+
+test('migration 085: a case-note reply is stored as a document, reopened as one, and edits are saved tokenised', async () => {
+  const NOTE = { title: null, blocks: [
+    { t: 'h', text: 'Identify' }, { t: 'p', text: 'The OT saw [CLIENT_1] at home.' },
+    { t: 'h', text: 'Session details' }, { t: 'li', lead: 'Session setup', text: 'TACPAC items prepared.' },
+    { t: 'h', text: 'Plan' }, { t: 'li', text: 'Continue TACPAC.' },
+  ] };
+  provider._setProviderForTests(async () => ({ text: JSON.stringify(NOTE) }));
+  const app = buildApp();
+  const me = await seedUser({ role: 'therapist' });
+  const r = await request(app).post('/api/assist/chat').set('x-test-user', me.id).send({ message: 'Rewrite this case note for [CLIENT_1].', format: 'casenote' });
+  expect(r.body.kind).toBe('casenote');
+
+  const row = await db.pool.query('SELECT kind, content, edited_at FROM assist_messages WHERE id = $1', [r.body.messageId]);
+  expect(row.rows[0].kind).toBe('casenote');
+  expect(row.rows[0].edited_at).toBeNull();
+
+  const edited = { ...NOTE, blocks: [...NOTE.blocks.slice(0, 5), { t: 'li', text: 'Review with [CLIENT_1] next week.' }] };
+  expect((await request(app).put(`/api/assist/conversations/${r.body.conversationId}/messages/${r.body.messageId}`).set('x-test-user', me.id).send({ document: edited })).status).toBe(200);
+  expect((await request(app).put(`/api/assist/conversations/${r.body.conversationId}/messages/${r.body.messageId}`).set('x-test-user', me.id).send({ document: { blocks: [{ t: 'p', text: 'Aiden Blackwood-Tan was settled.' }] } })).status).toBe(422);
+
+  const back = await request(app).get('/api/assist/conversations/' + r.body.conversationId).set('x-test-user', me.id);
+  const doc = back.body.messages.find((m) => m.kind === 'casenote');
+  expect(doc.document.blocks[5].text).toBe('Review with [CLIENT_1] next week.');
+  expect(doc.edited_at).not.toBeNull();
+  expect(doc.content).toContain('Session details:');
+
+  const other = await seedUser({ role: 'owner' });
+  expect((await request(app).put(`/api/assist/conversations/${r.body.conversationId}/messages/${r.body.messageId}`).set('x-test-user', other.id).send({ document: NOTE })).status).toBe(404);
+  const bad = await db.pool.query(`SELECT 1 FROM pg_constraint WHERE conname = 'assist_messages_kind_check'`);
+  expect(bad.rows).toHaveLength(1);
+});

@@ -270,3 +270,44 @@ describe('the AI has its own mark; the cell is the portal\'s', () => {
     expect(read('mockup_v3.html')).toContain('class="logo brand-pebble" id="opa-pebble"');
   });
 });
+
+describe('editable documents on the page', () => {
+  const fs = require('fs'); const path = require('path');
+  const { detectFormat } = require('../../frontend/current/assist.js');
+  const doc = require('../../frontend/current/assist-doc.js');
+  const read = (f) => fs.readFileSync(path.join(__dirname, '../../frontend/current', f), 'utf8');
+
+  test('the request decides the shape: case note, editable document, or a chat answer', () => {
+    expect(detectFormat('Rewrite this case note: Mia was in her room')).toBe('casenote');
+    expect(detectFormat('Session notes from today, please tidy')).toBe('casenote');
+    expect(detectFormat('Rephrase this email to a parent')).toBe('document');
+    expect(detectFormat('Make this shorter and clearer without changing the meaning')).toBe('document');
+    expect(detectFormat('Turn these notes into a progress letter paragraph')).toBe('document');
+    expect(detectFormat('What does the NDIS mean by reasonable and necessary?')).toBe('chat');
+  });
+
+  test('names read as first names by default, full names on request; an unknown token reads as a role, never a bracket', () => {
+    const names = { CLIENT_1: 'Mia Testwell', PERSON_2: 'Jo Example', PHONE_1: '0412 345 678' };
+    expect(doc.displayName('CLIENT_1', names, 'first')).toBe('Mia');
+    expect(doc.displayName('CLIENT_1', names, 'full')).toBe('Mia Testwell');
+    expect(doc.displayName('PHONE_1', names, 'first')).toBe('0412 345 678');
+    expect(doc.displayName('CONTACT_3', names, 'first')).toBe('the contact');
+    expect(doc.displayName('EMAIL_1', {}, 'first')).toBe('the email address');
+    expect(doc.restoreText('[PERSON_2] met [CLIENT_1] and [STAFF_4].', names, 'first')).toBe('Jo met Mia and a colleague.');
+  });
+
+  test('copy gives clean text: section headings, dot points with their bold label, real names', () => {
+    const note = { kind: 'casenote', blocks: [
+      { t: 'h', text: 'Identify' }, { t: 'p', text: 'The OT saw [CLIENT_1] at home.' },
+      { t: 'h', text: 'Session details' }, { t: 'li', lead: 'Session setup', text: '[CLIENT_1] chose the fan.' },
+      { t: 'h', text: 'Plan' }, { t: 'li', text: 'Continue.' }] };
+    expect(doc.docToPlain(note, { CLIENT_1: 'Mia Testwell' }, 'first')).toBe('Identify:\nThe OT saw Mia at home.\n\nSession details:\n• Session setup: Mia chose the fan.\n\nPlan:\n• Continue.');
+    expect(doc.docToHtml(note, { CLIENT_1: 'Mia Testwell' }, 'first')).toContain('<span class="oa-tok" contenteditable="false" data-token="CLIENT_1">Mia</span>');
+    expect(doc.docToClipboardHtml(note, { CLIENT_1: 'Mia Testwell' }, 'first')).not.toContain('data-token');
+  });
+
+  test('the editor itself makes no network call — every save and rewrite goes through the checked paths in assist.js', () => {
+    expect(read('assist-doc.js')).not.toMatch(/fetch\s*\(|XMLHttpRequest|sendBeacon|WebSocket|\/api\//);
+    expect(read('assist.html')).toMatch(/<script src="\/assist-doc\.js\?v=\d+"><\/script>\s*<script src="\/assist\.js\?v=\d+"><\/script>/);
+  });
+});

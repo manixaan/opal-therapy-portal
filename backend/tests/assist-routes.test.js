@@ -265,3 +265,75 @@ describe('client chats — one chat, one client, the client always [CLIENT_1]', 
     expect((await agent.get('/api/assist/conversations?client=x;drop')).status).toBe(400);
   });
 });
+
+describe('documents — rephrases and case notes come back editable', () => {
+  const NOTE = { title: null, blocks: [
+    { t: 'h', text: 'Identify' }, { t: 'p', text: 'The OT saw [CLIENT_1] at home.' },
+    { t: 'h', text: 'Session details' }, { t: 'li', lead: 'Session setup', text: 'TACPAC items prepared.' },
+    { t: 'h', text: 'Plan' }, { t: 'li', text: 'Continue TACPAC.' },
+  ] };
+  beforeEach(() => {
+    db.pool.query.mockImplementation(async (sql) => {
+      if (/INSERT INTO assist_conversations/.test(sql)) return { rows: [{ ...CONV, client_ref: null }], rowCount: 1 };
+      if (/INSERT INTO assist_messages .*RETURNING id/s.test(sql)) return { rows: [{ id: 77 }], rowCount: 1 };
+      if (/SELECT \* FROM assist_conversations WHERE id/.test(sql)) return { rows: [{ ...CONV, client_ref: null }], rowCount: 1 };
+      if (/SELECT id, kind FROM assist_messages/.test(sql)) return { rows: [{ id: 77, kind: 'casenote' }], rowCount: 1 };
+      return { rows: [], rowCount: 0 };
+    });
+  });
+
+  test('format=casenote asks for the three-section JSON, unfiltered, and stores the document (tokens only) as kind casenote', async () => {
+    let seen = null;
+    provider._setProviderForTests(async (args) => { seen = args; return { text: JSON.stringify(NOTE) }; });
+    const agent = await login(buildApp(), user());
+    const r = await agent.post('/api/assist/chat/stream').send({ message: 'Rewrite this case note for [CLIENT_1].', format: 'casenote' });
+    expect(r.status).toBe(200);
+    expect(r.body).toEqual(expect.objectContaining({ status: 'ok', kind: 'casenote', messageId: 77 }));
+    expect(r.body.document.blocks.filter((b) => b.t === 'h').map((b) => b.text)).toEqual(['Identify', 'Session details', 'Plan']);
+    expect(seen.raw).toBe(true);
+    expect(seen.system).toContain('THIS REPLY IS A CASE NOTE DOCUMENT');
+    const insert = db.pool.query.mock.calls.find((c) => /INSERT INTO assist_messages .*'assistant'/s.test(c[0]));
+    expect(insert[1][2]).toBe('casenote');
+    expect(JSON.parse(insert[1][1]).blocks[1].text).toBe('The OT saw [CLIENT_1] at home.');
+  });
+
+  test('a reply in the wrong shape is corrected once; still wrong, the prose is kept as ordinary text', async () => {
+    const replies = ['{"blocks":[{"t":"p","text":"no sections"}]}', JSON.stringify(NOTE)];
+    provider._setProviderForTests(async () => ({ text: replies.shift() }));
+    const agent = await login(buildApp(), user());
+    const fixed = await agent.post('/api/assist/chat').send({ message: 'Case note please', format: 'casenote' });
+    expect(fixed.body.kind).toBe('casenote');
+
+    provider._setProviderForTests(async () => ({ text: 'Here is a tidier version of your email.' }));
+    const prose = await agent.post('/api/assist/chat').send({ message: 'Rephrase this email', format: 'document' });
+    expect(prose.body).toEqual(expect.objectContaining({ status: 'ok', kind: 'text', answer: 'Here is a tidier version of your email.' }));
+  });
+
+  test('revise rewrites one passage: guarded, own conversation only, and nothing but the passage, instruction and context is sent', async () => {
+    let seen = null;
+    provider._setProviderForTests(async (args) => { seen = args; return { text: '"Shorter wording for [CLIENT_1]."' }; });
+    const agent = await login(buildApp(), user());
+    const ok = await agent.post('/api/assist/revise').send({ conversationId: CONV.id, passage: 'Long wording about [CLIENT_1].', instruction: 'Make this shorter', context: 'Identify:\nThe OT saw [CLIENT_1].' });
+    expect(ok.body).toEqual({ status: 'ok', text: 'Shorter wording for [CLIENT_1].' });
+    expect(seen.messages).toEqual([{ role: 'user', content: 'Instruction: Make this shorter\n\nPassage:\nLong wording about [CLIENT_1].' }]);
+    expect(seen.system).toContain('REWRITING ONE PASSAGE');
+
+    const named = await agent.post('/api/assist/revise').send({ conversationId: CONV.id, passage: 'Aiden was settled.', instruction: 'Shorter' });
+    expect(named.status).toBe(422);
+    db.pool.query.mockResolvedValue({ rows: [], rowCount: 0 });
+    expect((await agent.post('/api/assist/revise').send({ conversationId: CONV.id, passage: 'x y z', instruction: 'Shorter' })).status).toBe(404);
+  });
+
+  test('saving edits: a name typed into the document is refused, a clean document is stored with edited_at', async () => {
+    const agent = await login(buildApp(), user());
+    const dirty = { blocks: [...NOTE.blocks.slice(0, 5), { t: 'li', text: 'Review with Aiden next week.' }] };
+    expect((await agent.put(`/api/assist/conversations/${CONV.id}/messages/77`).send({ document: dirty })).status).toBe(422);
+    const clean = await agent.put(`/api/assist/conversations/${CONV.id}/messages/77`).send({ document: NOTE });
+    expect(clean.status).toBe(200);
+    const update = db.pool.query.mock.calls.find((c) => /UPDATE assist_messages SET content/.test(c[0]));
+    expect(JSON.parse(update[1][0]).kind).toBe('casenote');
+    expect(update[0]).toMatch(/edited_at = NOW\(\)/);
+    expect((await agent.put(`/api/assist/conversations/${CONV.id}/messages/abc`).send({ document: NOTE })).status).toBe(404);
+    expect((await request(buildApp()).put(`/api/assist/conversations/${CONV.id}/messages/77`).send({ document: NOTE })).status).toBe(401);
+  });
+});

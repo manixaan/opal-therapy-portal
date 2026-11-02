@@ -60,7 +60,20 @@
     });
   }
 
-  if (typeof module !== 'undefined' && module.exports) module.exports = { splitTokens, restoreTokens, clientSeed, filterClients };
+  /**
+   * Which way a request should come back: 'casenote' (fixed Identify /
+   * Session details / Plan document), 'document' (any rephrase or rewrite,
+   * opened as an editable document) or 'chat' (an ordinary answer).
+   */
+  function detectFormat(text) {
+    var t = String(text || '');
+    var head = t.slice(0, 400);
+    if (/\b(case|session|progress|clinical|therapy|soap)[\s-]+notes?\b|\bcase[\s-]?not(?:e|es|ing)\b/i.test(head)) return 'casenote';
+    if (/\b(re-?phrase|re-?write|re-?word|paraphrase|tidy(?: up)?|polish|proof-?read|edit|improve|shorten|condense|draft|compose)\b|\bmake (?:it|this|these)\b[^.?!]{0,40}\b(?:shorter|clearer|longer|formal|professional|concise|friendlier|warmer|simpler)\b|\bturn (?:it|this|these)\b[^.?!]{0,40}\binto\b|\b(?:email|letter|report|paragraph|summary)\b[^.?!]{0,30}\b(?:for|to)\b/i.test(head)) return 'document';
+    return 'chat';
+  }
+
+  if (typeof module !== 'undefined' && module.exports) module.exports = { splitTokens, restoreTokens, clientSeed, filterClients, detectFormat };
   if (!global.document) return;
 
   // ── State ─────────────────────────────────────────────────────────────────
@@ -79,6 +92,7 @@
     busy: false,
     abort: null,
     review: null,        // pending check result awaiting confirmation
+    nameStyle: (function () { try { return localStorage.getItem('oa.nameStyle') === 'full' ? 'full' : 'first'; } catch (e) { return 'first'; } })(),
     client: null,        // { ref, name } — the client this chat belongs to, or null (general)
     clients: [],         // the person's own clients, for the picker
     clientsError: '',
@@ -132,14 +146,35 @@
   }
 
   // ── Rendering ─────────────────────────────────────────────────────────────
-  function renderTokens(text, userSide) {
+  var DOC = function () { return global.OpalAssistDoc; };
+  /** Names read as names — first name by default, no highlight; an unknown token reads as a role, never a bracket. */
+  function renderTokens(text) {
     return splitTokens(text).map(function (run) {
       if (run.text !== undefined) return esc(run.text);
-      var name = S.names[run.token];
-      return name
-        ? '<span class="oa-name" title="Hidden from the AI as [' + esc(run.token) + ']">' + esc(name) + '</span>'
-        : '<span class="oa-name token" title="A person or detail this browser has no name for">[' + esc(run.token) + ']</span>';
+      return '<span class="oa-name">' + esc(DOC().displayName(run.token, S.names, S.nameStyle)) + '</span>';
     }).join('');
+  }
+  var shown = function (text) { return DOC().restoreText(text, S.names, S.nameStyle); };
+
+  // ── Documents: one live editor per document message, kept across re-renders ──
+  var editors = {};
+  function editorFor(m) {
+    var key = m.id || m.key;
+    if (editors[key]) return editors[key];
+    var extra = S.surface !== 'web' ? [['Insert into document', function (doc, btn) {
+      var text = DOC().docToPlain(doc, S.names, S.nameStyle);
+      if (typeof global.OpalAssist.onInsert === 'function') global.OpalAssist.onInsert(text);
+      else if (office()) office().insert(text).then(function (ok) { btn.textContent = ok ? 'Inserted' : 'Could not insert'; setTimeout(function () { btn.textContent = 'Insert into document'; }, 1500); });
+    }]] : [];
+    editors[key] = DOC().mount({
+      doc: m.doc,
+      getNames: function () { return S.names; },
+      getStyle: function () { return S.nameStyle; },
+      onChange: function (doc, status) { m.doc = doc; saveDoc(m, status); },
+      onRevise: reviseText,
+      extraButtons: extra,
+    });
+    return editors[key];
   }
 
   function renderStack() {
@@ -159,15 +194,71 @@
       return;
     }
     stack.innerHTML = S.messages.map(function (m, i) {
-      if (m.role === 'user') return '<div class="oa-msg user"><div class="oa-bubble">' + renderTokens(m.text, true) + '</div></div>';
-      var body = m.live && !m.text ? '<div class="oa-thinking">Opal Assist is thinking</div>' : renderTokens(m.text);
+      if (m.role === 'user') return '<div class="oa-msg user"><div class="oa-bubble">' + renderTokens(m.text) + '</div></div>';
+      if (m.doc && !m.live) return '<div class="oa-msg assistant doc"><img class="oa-avatar" src="/icons/opal-assist.svg?v=3" alt=""><div class="oa-doc-host" data-doc="' + i + '"></div></div>';
+      var body = m.live && !m.text ? '<div class="oa-thinking">' + (m.format && m.format !== 'chat' ? 'Opal Assist is writing the ' + (m.format === 'casenote' ? 'case note' : 'document') : 'Opal Assist is thinking') + '</div>' : renderTokens(m.text);
       // The reply being written wears the thinking mark: the same seeds, breathing faster.
       var avatar = m.live ? '/icons/opal-assist-thinking.svg?v=1' : '/icons/opal-assist.svg?v=3';
       var tools = (!m.live && !m.error) ? '<div class="oa-tools"><button class="oa-btn ghost sm" type="button" data-copy="' + i + '">Copy</button>'
         + (S.surface !== 'web' ? '<button class="oa-btn ghost sm" type="button" data-insert="' + i + '">Insert into document</button>' : '') + '</div>' : '';
       return '<div class="oa-msg assistant' + (m.error ? ' error' : '') + '"><img class="oa-avatar" src="' + avatar + '" alt=""><div><div class="oa-bubble">' + body + '</div>' + tools + '</div></div>';
     }).join('');
+    Array.prototype.forEach.call(stack.querySelectorAll('.oa-doc-host'), function (host) { host.appendChild(editorFor(S.messages[+host.dataset.doc]).el); });
     $('oa-body').scrollTop = $('oa-body').scrollHeight;
+  }
+
+  /** The reply's shape: the menu beside Check & send, or worked out from the request when it says Auto. */
+  function chosenFormat(raw) {
+    var v = $('oa-format') ? $('oa-format').value : 'auto';
+    return v === 'auto' ? detectFormat(raw) : v;
+  }
+
+  /** Run the server check on text the person typed into a document or an instruction: names become tokens. */
+  function checkText(text) {
+    if (!/[A-Za-z0-9]/.test(text.replace(TOKEN_RE, ''))) return Promise.resolve(text);
+    return api('/api/assist/check', { body: { text: text, known: S.known, ignoredWords: S.ignoredWords, clientRef: S.client ? S.client.ref : undefined } })
+      .then(function (r) { if (!r.ok) throw new Error('The text could not be checked for names just now.'); return r.json(); })
+      .then(function (msg) { (msg.hidden || []).forEach(function (h) { S.names[h.token] = h.name; }); S.known = msg.known || S.known; return msg.text; });
+  }
+
+  var SEP = '\n\u2042\n'; // a mark nobody types, between the pieces of one check
+  /** Save edits: everything typed is checked for names first, then stored (tokens only). */
+  function saveDoc(m, status) {
+    if (!m.id || !S.conversationId) { status('Not saved'); return; }
+    var parts = [];
+    m.doc.blocks.forEach(function (b) { parts.push(b.lead || ''); parts.push(b.text || ''); });
+    status('Saving…');
+    checkText(parts.join(SEP)).then(function (checked) {
+      var back = checked.split(SEP);
+      if (back.length !== parts.length) throw new Error('Not saved — please try again.');
+      var doc = { kind: m.doc.kind, title: m.doc.title, blocks: m.doc.blocks.map(function (b, i) {
+        var o = { t: b.t, text: back[i * 2 + 1] }; if (back[i * 2]) o.lead = back[i * 2]; return o;
+      }) };
+      return api('/api/assist/conversations/' + S.conversationId + '/messages/' + m.id, { method: 'PUT', body: { document: doc, known: S.known } })
+        .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.answer || 'Not saved — please try again.'); return { doc: doc, j: j }; }); });
+    }).then(function (res) {
+      var hadNewTokens = !DOC().sameDoc(res.doc, m.doc);
+      m.doc = res.j.document || res.doc; saveMap();
+      if (hadNewTokens && editors[m.id]) editors[m.id].setDoc(m.doc); // a name typed in is now a token: show it as a name span
+      status('Saved');
+      setTimeout(function () { status(''); }, 1500);
+    }).catch(function (err) { status(err.message || 'Not saved'); });
+  }
+
+  /** Rewrite one highlighted passage: passage and instruction are checked for names, then sent with the document as context. */
+  function reviseText(passage, instruction, context) {
+    if (!S.conversationId) return Promise.reject(new Error('Send a message first'));
+    return checkText(passage).then(function (p) {
+      return checkText(instruction).then(function (ins) {
+        return checkText(context).then(function (ctx) {
+          return api('/api/assist/revise', { body: { conversationId: S.conversationId, passage: p, instruction: ins, context: ctx, known: S.known } });
+        });
+      });
+    }).then(function (r) { return r.json().then(function (j) {
+      if (!r.ok || j.status !== 'ok') throw new Error(j.answer || 'Could not rewrite that — try again');
+      saveMap();
+      return j.text;
+    }); });
   }
   var renderQueued = false;
   function scheduleRender() { if (renderQueued) return; renderQueued = true; requestAnimationFrame(function () { renderQueued = false; renderStack(); }); }
@@ -194,6 +285,7 @@
       + '<h2>' + (r.hidden.length ? r.hidden.length + ' item' + (r.hidden.length === 1 ? '' : 's') + ' will be hidden' : 'Nothing to hide') + '</h2>'
       + '<p class="lead">This is exactly what leaves the practice. Tokens stand in for people and contact details; you keep seeing the real names.</p>'
       + '<div class="oa-preview">' + esc(r.text) + (r.selectionText ? '\n\n— selected content —\n' + esc(r.selectionText) : '') + '</div>'
+      + (r.format && r.format !== 'chat' ? '<p class="oa-note">The reply opens as an editable ' + (r.format === 'casenote' ? '<b>case note</b> — Identify, Session details, Plan' : '<b>document</b>') + '. Change this with the menu beside Check &amp; send.</p>' : '')
       + (hidden ? '<ul class="oa-hidden">' + hidden + '</ul>' : '')
       + cands
       + '<div class="oa-addname"><input id="oa-addname" type="text" placeholder="Hide another name the check missed…" aria-label="Name to hide"><button class="oa-btn sm" type="button" id="oa-addname-btn">Hide it</button></div>'
@@ -217,7 +309,7 @@
         if (!r.ok) throw new Error('check_failed'); return r.json();
       })
       .then(function (msg) {
-        var pending = { text: msg.text, hidden: msg.hidden, candidates: msg.candidates, known: msg.known, directoryPartial: msg.directoryPartial, directoryMissing: msg.directoryMissing, directoryNotConnected: msg.directoryNotConnected, cautions: msg.cautions || [], raw: rawText };
+        var pending = { format: chosenFormat(rawText), text: msg.text, hidden: msg.hidden, candidates: msg.candidates, known: msg.known, directoryPartial: msg.directoryPartial, directoryMissing: msg.directoryMissing, directoryNotConnected: msg.directoryNotConnected, cautions: msg.cautions || [], raw: rawText };
         if (!S.selection) return pending;
         return api('/api/assist/check', { body: { text: S.selection, known: msg.known, confirmedNames: confirmed, ignoredWords: S.ignoredWords, clientRef: clientRef } })
           .then(function (r) { if (!r.ok) throw new Error('check_failed'); return r.json(); })
@@ -249,13 +341,14 @@
     S.pendingConfirmed = [];
     S.messages.push({ role: 'user', text: r.text });
     $('oa-input').value = '';
-    var live = { role: 'assistant', text: '', live: true };
+    var live = { role: 'assistant', text: '', live: true, format: r.format, key: 'k' + Date.now() };
     S.messages.push(live);
     renderStack();
     setBusy(true); setStatus('Thinking…'); setThinking(true);
     var ctrl = new AbortController(); S.abort = ctrl;
     var body = { message: r.text, conversationId: S.conversationId, surface: S.surface, hiddenCount: r.hidden.length, known: S.known };
     if (S.client) body.clientRef = S.client.ref;
+    if (r.format && r.format !== 'chat') body.format = r.format;
     if (r.selectionText) body.selection = r.selectionText;
     S.selection = ''; updateSelectionBar();
 
@@ -263,7 +356,13 @@
       if (res.status === 422) return res.json().then(function (j) { live.text = j.answer || 'That text still contains a name or contact detail.'; live.error = true; live.live = false; });
       if (res.status === 429 || res.status === 503 || res.status === 400 || res.status === 403 || res.status === 404 || res.status === 502) return res.json().then(function (j) { live.text = j.answer || j.error || 'Opal Assist is unavailable right now.'; live.error = true; live.live = false; });
       var ct = res.headers.get('content-type') || '';
-      if (ct.indexOf('text/event-stream') < 0) return res.json().then(function (j) { live.text = j.answer || 'Opal Assist is unavailable right now.'; live.error = j.status !== 'ok'; live.live = false; if (j.conversationId) S.conversationId = j.conversationId; });
+      if (ct.indexOf('text/event-stream') < 0) return res.json().then(function (j) {
+        live.text = j.answer || (j.document ? DOC().docToPlainTokens(j.document) : 'Opal Assist is unavailable right now.');
+        live.error = j.status !== 'ok'; live.live = false;
+        if (j.document) { live.doc = j.document; live.kind = j.kind; }
+        if (j.messageId) live.id = j.messageId;
+        if (j.conversationId) { S.conversationId = j.conversationId; if (S.title === 'New chat') { S.title = shown(S.messages[0].text).slice(0, 60); $('oa-title').textContent = S.title; } }
+      });
       return readSse(res, live);
     }).catch(function (err) {
       live.live = false;
@@ -278,7 +377,7 @@
     var reader = res.body.getReader(); var dec = new TextDecoder(); var buf = '';
     function handle(ev, data) {
       if (ev === 'delta') { live.text += (data.t || ''); scheduleRender(); }
-      else if (ev === 'done') { if (data.answer) live.text = data.answer; if (data.conversationId) { S.conversationId = data.conversationId; if (S.title === 'New chat') S.title = restoreTokens(S.messages[0].text, S.names).slice(0, 60); $('oa-title').textContent = S.title; } }
+      else if (ev === 'done') { if (data.answer) live.text = data.answer; if (data.conversationId) { S.conversationId = data.conversationId; if (S.title === 'New chat') S.title = shown(S.messages[0].text).slice(0, 60); $('oa-title').textContent = S.title; } }
       else if (ev === 'blocked' || ev === 'unavailable') { live.text = data.answer; live.error = true; }
     }
     function pump() {
@@ -316,12 +415,14 @@
       S.client = ref ? (S.clients.filter(function (c) { return c.ref === ref; })[0] || { ref: ref, name: '' }) : null;
       pinClientName(); saveMap(); renderClientChip(); renderClients();
       S.title = d.conversation.title || 'Chat'; $('oa-title').textContent = S.title;
-      S.messages = d.messages.map(function (m) { return { role: m.role, text: m.content }; });
+      editors = {};
+      S.messages = d.messages.map(function (m) { return { role: m.role, text: m.content, id: m.id, kind: m.kind, doc: m.document || null }; });
       S.review = null; renderReview(); renderStack(); loadThreads();
     });
   }
   function newChat() {
     var seed = clientSeed(S.client);
+    editors = {};
     S.conversationId = null; S.messages = []; S.names = seed.names; S.known = seed.known; S.ignoredWords = []; S.review = null; S.title = 'New chat';
     $('oa-title').textContent = S.title; renderClientChip(); renderReview(); renderStack(); loadThreads(); $('oa-input').focus();
   }
@@ -404,9 +505,9 @@
     if (t.dataset.client !== undefined) return selectClient(t.dataset.client || null);
     if (t.id === 'oa-install') { if (installPrompt) { installPrompt.prompt(); installPrompt.userChoice.then(function () { installPrompt = null; t.hidden = true; }); } return; }
     if (t.dataset.chip) { $('oa-input').value = t.dataset.chip + ':\n\n'; $('oa-input').focus(); return; }
-    if (t.dataset.copy !== undefined) { var m = S.messages[+t.dataset.copy]; navigator.clipboard.writeText(restoreTokens(m.text, S.names)).then(function () { t.textContent = 'Copied'; setTimeout(function () { t.textContent = 'Copy'; }, 1200); }); return; }
+    if (t.dataset.copy !== undefined) { var m = S.messages[+t.dataset.copy]; navigator.clipboard.writeText(shown(m.text)).then(function () { t.textContent = 'Copied'; setTimeout(function () { t.textContent = 'Copy'; }, 1200); }); return; }
     if (t.dataset.insert !== undefined) {
-      var mm = S.messages[+t.dataset.insert]; var restored = restoreTokens(mm.text, S.names);
+      var mm = S.messages[+t.dataset.insert]; var restored = shown(mm.text);
       if (typeof global.OpalAssist.onInsert === 'function') global.OpalAssist.onInsert(restored);
       else if (office()) office().insert(restored).then(function (ok) { t.textContent = ok ? 'Inserted' : 'Could not insert'; setTimeout(function () { t.textContent = 'Insert into document'; }, 1500); });
       return;
@@ -414,6 +515,13 @@
   });
   $('oa-input').addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSend(); } });
   $('oa-client-search').addEventListener('input', renderClients);
+  $('oa-namestyle').value = S.nameStyle;
+  $('oa-namestyle').addEventListener('change', function (e) {
+    S.nameStyle = e.target.value === 'full' ? 'full' : 'first';
+    try { localStorage.setItem('oa.nameStyle', S.nameStyle); } catch (x) { /* ignore */ }
+    Object.keys(editors).forEach(function (k) { editors[k].rerender(); });
+    renderStack();
+  });
 
   // Inside Office, Microsoft 365 sign-in is tried first. When Office cannot
   // supply it (Word signed in to a different Microsoft account, consent not

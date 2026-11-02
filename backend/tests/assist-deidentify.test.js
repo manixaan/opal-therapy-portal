@@ -244,3 +244,26 @@ describe('contact-detail tokens are stable across a conversation', () => {
     expect(r.text).toBe('[CLIENT_1] and [PHONE_1] noted; [CLIENT_2] rang [PHONE_2].');
   });
 });
+
+describe('organisation contacts and confirmed full names (2 Nov 2026)', () => {
+  const entry = (role, ref, name) => ({ role, ref, name, variants: directory.strictVariants(name), ...(() => { const c = directory.capitalisedVariants(name); return { capVariants: c.cap, midOnly: c.midOnly }; })() });
+
+  test('a plan-manager or support company in the directory never hides the ordinary words of its name', async () => {
+    directory._setCacheForTests({ entries: [
+      entry('contact', 'splose:contact:1', 'Bright Support Services'),
+      entry('contact', 'splose:contact:2', 'Plan Management'),
+      entry('contact', 'splose:contact:3', 'Care'),
+    ], partial: false });
+    const r = await assist.check({ text: 'Support workers said the plan manager will review care. Bright Support Services rang.' });
+    expect(r.text).toBe('Support workers said the plan manager will review care. [CONTACT_1] rang.');
+    expect(directory.NEVER_ALONE.has('support')).toBe(true);
+  });
+
+  test('a full name typed into "Hide another name" is one person: whole, by parts, and short parts when capitalised', async () => {
+    directory._setCacheForTests({ entries: [], partial: false });
+    const first = await assist.check({ text: 'Mia Testwell was in her bedroom; support workers Jo Example and Sam Sample.', confirmedNames: ['Mia Testwell', 'Jo Example', 'Sam Sample'] });
+    expect(first.text).toBe('[PERSON_1] was in her bedroom; support workers [PERSON_2] and [PERSON_3].');
+    const later = await assist.check({ text: 'Later Mia and Jo went outside, so we had a go.', known: first.known });
+    expect(later.text).toBe('Later [PERSON_1] and [PERSON_2] went outside, so we had a go.');
+  });
+});

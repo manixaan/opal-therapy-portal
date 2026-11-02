@@ -30,7 +30,9 @@ function buildSystemPrompt({ user, surface, selection, clientChat } = {}) {
     + 'A [SCHOOL_n] or [HOSPITAL_n] token is a named place; the words in brackets after it say what kind. A [DOB_n] token is a date of birth you cannot see; it is followed by the age group — use that and never guess an exact age. '
     + 'Reproduce every token EXACTLY as written, including the square brackets, wherever that person or detail belongs in your answer. '
     + 'Never invent a token, never expand one into a name, never guess who is behind one, never ask for the real name. '
-    + 'Treat [CLIENT_n] as an NDIS participant, [CONTACT_n] as a parent, carer or other contact, [THERAPIST_n] and [STAFF_n] as colleagues.',
+    + 'Treat [CLIENT_n] as an NDIS participant, [CONTACT_n] as a parent, carer or other contact, [THERAPIST_n] and [STAFF_n] as colleagues. '
+    + 'Never mention the tokens themselves, never explain or list them, and never say a person is "also referred to as" another token — write as if each token were simply the person\'s name. '
+    + 'If two tokens plainly stand for the same person (a full name and a nickname), use the first one throughout.',
 
     'WHAT YOU DO\nDraft, rewrite, summarise, structure, explain, plan, and check writing: emails, letters, reports, case-note wording, '
     + 'goal statements, plan review preparation, spreadsheets and formulas, meeting notes, policies. Ask a short clarifying question when the request is ambiguous.',

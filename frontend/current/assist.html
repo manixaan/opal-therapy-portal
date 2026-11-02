@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assist.css?v=7">
+  <link rel="stylesheet" href="/assist.css?v=8">
 </head>
 <body>
   <div class="oa-app">
@@ -35,7 +35,7 @@
       </div>
       <div class="oa-side-label oa-threads-label" id="oa-threads-label">Chats</div>
       <nav class="oa-threads" id="oa-threads" aria-label="Recent chats"></nav>
-      <div class="oa-side-foot" id="oa-foot">Names and contact details are hidden before anything leaves. Chats are kept for 30 days.<button class="oa-install" id="oa-install" type="button" hidden>Install Opal Assist as an app</button></div>
+      <div class="oa-side-foot" id="oa-foot">Names and contact details are hidden before anything leaves. Chats are kept for 30 days.<label class="oa-namestyle">Show names as <select id="oa-namestyle"><option value="first">First name</option><option value="full">Full name</option></select></label><button class="oa-install" id="oa-install" type="button" hidden>Install Opal Assist as an app</button></div>
     </aside>
 
     <main class="oa-main">
@@ -59,6 +59,13 @@
           <textarea class="oa-textarea" id="oa-input" placeholder="Ask Opal Assist… (Shift+Enter for a new line)"></textarea>
           <div class="oa-compose-row">
             <span class="oa-hint" id="oa-hint">Names, phone numbers, emails, addresses and NDIS numbers are replaced with tokens before sending. You see them; the AI never does.</span>
+            <label class="sr-only" for="oa-format">Reply as</label>
+            <select class="oa-format" id="oa-format" title="How the reply comes back">
+              <option value="auto">Auto</option>
+              <option value="chat">Chat answer</option>
+              <option value="document">Editable document</option>
+              <option value="casenote">Case note</option>
+            </select>
             <button class="oa-btn" id="oa-stop" type="button" style="display:none;">Stop</button>
             <button class="oa-btn primary" id="oa-send" type="button">Check &amp; send</button>
           </div>
@@ -78,6 +85,7 @@
       if (sf === 'excel') document.write('<script src="/assist-excel-format.js?v=2"><\/script>');
     })();
   </script>
-  <script src="/assist.js?v=8"></script>
+  <script src="/assist-doc.js?v=1"></script>
+  <script src="/assist.js?v=9"></script>
 </body>
 </html>

@@ -5,7 +5,9 @@
  *
  *   GET    /api/assist/config                 is it on, for this person
  *   POST   /api/assist/check                  check-before-send: tokens in, list of what was hidden — NO model call
- *   POST   /api/assist/chat                   one reply (JSON)
+ *   POST   /api/assist/chat                   one reply (JSON); format=document|casenote → an editable document
+ *   POST   /api/assist/revise                 rewrite one highlighted passage of a document
+ *   PUT    /api/assist/conversations/:id/messages/:mid   save the practitioner's edits to a document
  *   POST   /api/assist/chat/stream            one reply as server-sent events
  *   GET    /api/assist/clients                the caller's clients, for the side-panel picker
  *   GET    /api/assist/conversations          the caller's recent threads (?client=<ref>|general)
@@ -41,6 +43,7 @@ const deid = require('./assist/assist-deidentify');
 const { buildSystemPrompt, SURFACES } = require('./assist/assist-prompt');
 const directory = require('./assist/identity-directory');
 const caseload = require('./splose-caseload');
+const documents = require('./assist/assist-document');
 
 const router = express.Router();
 const pool = db.pool;
@@ -54,6 +57,7 @@ const RETENTION_DAYS = 30;
 const BLOCKED_ANSWER = 'Opal Assist could not help with that message — a safety check declined it. Please reword and try again, or write it yourself.';
 const UNAVAILABLE = 'Opal Assist is not available right now. Please try again in a moment.';
 const DISABLED = 'Opal Assist is not switched on for this portal yet.';
+const NO_LAYOUT = 'Opal Assist could not lay that out as a document this time. Please try again.';
 
 // Two ways in: the portal session cookie (web page, phone) or a Microsoft
 // 365 bearer token from an Office task pane (entra-auth.js), which maps to
@@ -172,6 +176,7 @@ async function prepare(req, res) {
   const body = req.body || {};
   const message = typeof body.message === 'string' ? body.message.trim() : '';
   const selection = typeof body.selection === 'string' ? body.selection.trim().slice(0, MAX_SELECTION_CHARS) : '';
+  const format = documents.FORMATS[body.format] || null;
   if (!message || message.length > MAX_MESSAGE_CHARS) {
     res.status(400).json({ error: 'invalid_message', answer: `Please send a message between 1 and ${MAX_MESSAGE_CHARS} characters.` });
     return null;
@@ -211,16 +216,25 @@ async function prepare(req, res) {
   }
   let history = [];
   if (conversation) {
-    const { rows } = await pool.query(`SELECT role, content FROM assist_messages WHERE conversation_id = $1 ORDER BY id DESC LIMIT ${HISTORY_TURNS}`, [conversation.id]);
-    history = rows.reverse().map((r) => ({ role: r.role, content: r.content }));
+    const { rows } = await pool.query(`SELECT role, content, kind FROM assist_messages WHERE conversation_id = $1 ORDER BY id DESC LIMIT ${HISTORY_TURNS}`, [conversation.id]);
+    history = rows.reverse().map((r) => ({ role: r.role, content: historyText(r) }));
   }
   const surface = conversation ? conversation.surface : surfaceOf(body);
-  const system = buildSystemPrompt({ user: req.user, surface, selection, clientChat: !!clientRef });
+  let system = buildSystemPrompt({ user: req.user, surface, selection, clientChat: !!clientRef });
+  if (format) system += '\n\n' + documents.formatInstruction(format);
   const hiddenCount = Number.isInteger(body.hiddenCount) && body.hiddenCount >= 0 ? Math.min(body.hiddenCount, 10000) : 0;
-  return { message, selection, conversation, history, surface, system, hiddenCount, clientRef };
+  return { message, selection, conversation, history, surface, system, hiddenCount, clientRef, format, known };
 }
 
-async function persist(req, prep, answer, streamed) {
+/** A stored turn as the model should see it again: documents become their plain text. */
+function historyText(row) {
+  if (row.kind === 'document' || row.kind === 'casenote') {
+    try { return documents.documentToText(JSON.parse(row.content)); } catch (_) { return ''; }
+  }
+  return row.content;
+}
+
+async function persist(req, prep, answer, streamed, kind = 'text') {
   let conversation = prep.conversation;
   if (!conversation) {
     const { rows } = await pool.query(
@@ -232,11 +246,12 @@ async function persist(req, prep, answer, streamed) {
     await pool.query(`UPDATE assist_conversations SET updated_at = NOW(), expires_at = NOW() + ($2 || ' days')::interval WHERE id = $1`, [conversation.id, String(RETENTION_DAYS)]);
   }
   await pool.query(`INSERT INTO assist_messages (conversation_id, role, content, hidden_count) VALUES ($1, 'user', $2, $3)`, [conversation.id, prep.message, prep.hiddenCount]);
-  await pool.query(`INSERT INTO assist_messages (conversation_id, role, content) VALUES ($1, 'assistant', $2)`, [conversation.id, answer]);
+  const saved = await pool.query(`INSERT INTO assist_messages (conversation_id, role, content, kind) VALUES ($1, 'assistant', $2, $3) RETURNING id`, [conversation.id, answer, kind]);
+  conversation.lastMessageId = saved.rows[0] ? saved.rows[0].id : null;
   await db.logAuditEvent({
     actorUserId: req.user.id, organisationId: orgOf(req),
     action: 'assist.chat', targetType: 'assist_conversation', targetId: conversation.id,
-    metadata: { surface: prep.surface, streamed: !!streamed, hiddenCount: prep.hiddenCount, hasSelection: !!prep.selection, messageChars: prep.message.length, clientChat: !!prep.clientRef },
+    metadata: { surface: prep.surface, streamed: !!streamed, hiddenCount: prep.hiddenCount, hasSelection: !!prep.selection, messageChars: prep.message.length, clientChat: !!prep.clientRef, kind },
     ipAddress: req.ip,
   }).catch(() => {});
   return conversation;
@@ -247,6 +262,7 @@ router.post('/api/assist/chat', rateLimit, safe(async (req, res) => {
   if (!provider.isEnabled()) return res.json({ status: 'unavailable', answer: DISABLED });
   const prep = await prepare(req, res);
   if (!prep) return;
+  if (prep.format) return replyWithDocument(req, res, prep);
   let answer;
   try {
     const r = await provider.generate({ system: prep.system, messages: [...prep.history, { role: 'user', content: prep.message }], userId: req.user.id, organisationId: orgOf(req) });
@@ -259,6 +275,39 @@ router.post('/api/assist/chat', rateLimit, safe(async (req, res) => {
   res.json({ status: 'ok', conversationId: conversation.id, answer });
 }));
 
+/**
+ * A document reply: the model returns JSON, the shape is checked, and one
+ * correction is asked for if it is wrong (a case note must have exactly
+ * Identify · Session details · Plan). Still wrong → the reply is kept as
+ * ordinary text rather than lost.
+ */
+async function replyWithDocument(req, res, prep) {
+  const messages = [...prep.history, { role: 'user', content: prep.message }];
+  let parsed = null; let lastText = '';
+  try {
+    for (let attempt = 0; attempt < 2 && !(parsed && parsed.ok); attempt++) {
+      const r = await provider.generate({ system: prep.system, messages, userId: req.user.id, organisationId: orgOf(req), raw: true });
+      lastText = String(r.text || '').slice(0, MAX_ANSWER_CHARS * 2);
+      parsed = documents.parseDocument(lastText, prep.format);
+      if (!parsed.ok) {
+        messages.push({ role: 'assistant', content: lastText }, { role: 'user', content: `That reply did not follow the required format (${parsed.reason}). Send it again as the JSON object only, following the format rules exactly.` });
+      }
+    }
+  } catch (err) {
+    if (err?.message === 'content_blocked') return res.json({ status: 'blocked', answer: BLOCKED_ANSWER });
+    return res.json({ status: 'unavailable', answer: UNAVAILABLE });
+  }
+  if (!parsed.ok) {
+    // Prose the model sent instead of JSON is still useful; broken JSON is not shown.
+    const looksJson = /^\s*[{[]/.test(lastText);
+    const answer = looksJson ? NO_LAYOUT : require('./assist/plain-text').toPlainText(lastText).trim().slice(0, MAX_ANSWER_CHARS);
+    const conversation = await persist(req, prep, answer || UNAVAILABLE, false, 'text');
+    return res.json({ status: 'ok', conversationId: conversation.id, messageId: conversation.lastMessageId, kind: 'text', answer: answer || UNAVAILABLE });
+  }
+  const conversation = await persist(req, prep, JSON.stringify(parsed.doc), false, parsed.doc.kind);
+  res.json({ status: 'ok', conversationId: conversation.id, messageId: conversation.lastMessageId, kind: parsed.doc.kind, document: parsed.doc });
+}
+
 // ── Chat (server-sent events) ────────────────────────────────────────────────
 function sseSend(res, event, data) { res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); }
 
@@ -266,6 +315,7 @@ router.post('/api/assist/chat/stream', rateLimit, safe(async (req, res) => {
   if (!provider.isEnabled()) return res.json({ status: 'unavailable', answer: DISABLED });
   const prep = await prepare(req, res);
   if (!prep) return;
+  if (prep.format) return replyWithDocument(req, res, prep); // a document is not streamed: answered as JSON
 
   res.status(200).set({ 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache, no-transform', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
   if (typeof res.flushHeaders === 'function') res.flushHeaders();
@@ -373,8 +423,90 @@ router.get('/api/assist/conversations/:id', safe(async (req, res) => {
   if (!isUuid(req.params.id)) return res.status(404).json({ error: 'Conversation not found' });
   const c = await pool.query('SELECT id, title, surface, client_ref, updated_at, expires_at FROM assist_conversations WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id]);
   if (!c.rows.length) return res.status(404).json({ error: 'Conversation not found' });
-  const m = await pool.query('SELECT role, content, hidden_count, created_at FROM assist_messages WHERE conversation_id = $1 ORDER BY id ASC', [req.params.id]);
-  res.json({ conversation: c.rows[0], messages: m.rows });
+  const m = await pool.query('SELECT id, role, content, kind, hidden_count, created_at, edited_at FROM assist_messages WHERE conversation_id = $1 ORDER BY id ASC', [req.params.id]);
+  res.json({ conversation: c.rows[0], messages: m.rows.map((r) => {
+    if (r.kind !== 'document' && r.kind !== 'casenote') return r;
+    let doc = null; try { doc = JSON.parse(r.content); } catch (_) { doc = null; }
+    return { ...r, content: doc ? documents.documentToText(doc) : '', document: doc };
+  }) });
+}));
+
+/** The caller's own conversation, or null after answering 404. */
+async function ownConversation(req, res, id) {
+  if (!isUuid(id)) { res.status(404).json({ error: 'Conversation not found' }); return null; }
+  const { rows } = await pool.query('SELECT * FROM assist_conversations WHERE id = $1 AND user_id = $2', [id, req.user.id]);
+  if (!rows.length) { res.status(404).json({ error: 'Conversation not found' }); return null; }
+  return rows[0];
+}
+
+/** Guard every string; responds 422/400/503 and returns false on refusal. */
+async function guardAll(res, strings, knownIn, clientRef) {
+  const known = withClient(knownIn, clientRef);
+  if (!known) { res.status(400).json({ error: 'client_token_conflict', answer: 'This chat\'s client token is out of step. Start a new chat for this client.' }); return false; }
+  if (clientRef && !(await clientResolvable(clientRef))) { res.status(503).json({ error: 'client_unresolvable', answer: NO_CLIENT_CHECK }); return false; }
+  for (const txt of strings) {
+    if (!txt) continue;
+    const reason = await deid.assertClean({ text: txt, known });
+    if (reason) { res.status(422).json({ error: 'identifiers_present', code: reason, answer: 'That text still contains a name or contact detail. It has to be hidden before it can be used.' }); return false; }
+  }
+  return true;
+}
+
+// ── Revise one highlighted passage ───────────────────────────────────────────
+// Only the passage, the instruction and (for coherence) the document around it
+// are sent — all tokenised by the page and guarded here. The answer replaces
+// the passage in the page; the page saves the document afterwards.
+const MAX_PASSAGE_CHARS = 4000;
+const REVISE_PROMPT = 'REWRITING ONE PASSAGE\nThe staff member highlighted one passage of a document and wants only that passage rewritten. '
+  + 'Reply with ONLY the replacement text for the passage — nothing before or after it, no quotation marks, no commentary. '
+  + 'Keep it the same kind of text: a sentence stays a sentence, one dot point stays one dot point (do not add a bullet mark), a heading stays a short heading. '
+  + 'Keep every fact and every token such as [CLIENT_1] exactly as written unless the instruction says otherwise. The DOCUMENT section is context only — do not rewrite it.';
+router.post('/api/assist/revise', rateLimit, safe(async (req, res) => {
+  if (!provider.isEnabled()) return res.json({ status: 'unavailable', answer: DISABLED });
+  const body = req.body || {};
+  const passage = typeof body.passage === 'string' ? body.passage.trim() : '';
+  const instruction = typeof body.instruction === 'string' ? body.instruction.trim().slice(0, 600) : '';
+  const context = typeof body.context === 'string' ? body.context.trim().slice(0, 20000) : '';
+  if (!passage || passage.length > MAX_PASSAGE_CHARS || !instruction) return res.status(400).json({ error: 'invalid_request', answer: 'Highlight some text and say how to change it.' });
+  const conversation = await ownConversation(req, res, body.conversationId);
+  if (!conversation) return;
+  if (!(await guardAll(res, [passage, instruction, context], body.known, conversation.client_ref || null))) return;
+  const system = buildSystemPrompt({ user: req.user, surface: conversation.surface, clientChat: !!conversation.client_ref })
+    + '\n\n' + REVISE_PROMPT + (context ? '\n\nDOCUMENT (context only)\n' + context : '');
+  let text;
+  try {
+    const r = await provider.generate({ system, messages: [{ role: 'user', content: `Instruction: ${instruction}\n\nPassage:\n${passage}` }], userId: req.user.id, organisationId: orgOf(req) });
+    text = String(r.text || '').replace(/^["“]|["”]$/g, '').trim().slice(0, MAX_PASSAGE_CHARS * 2);
+  } catch (err) {
+    if (err?.message === 'content_blocked') return res.json({ status: 'blocked', answer: BLOCKED_ANSWER });
+    return res.json({ status: 'unavailable', answer: UNAVAILABLE });
+  }
+  await db.logAuditEvent({
+    actorUserId: req.user.id, organisationId: orgOf(req), action: 'assist.revise', targetType: 'assist_conversation', targetId: conversation.id,
+    metadata: { passageChars: passage.length, instructionChars: instruction.length, clientChat: !!conversation.client_ref }, ipAddress: req.ip,
+  }).catch(() => {});
+  res.json({ status: 'ok', text });
+}));
+
+// ── Save edits to a document ─────────────────────────────────────────────────
+router.put('/api/assist/conversations/:id/messages/:mid', safe(async (req, res) => {
+  const conversation = await ownConversation(req, res, req.params.id);
+  if (!conversation) return;
+  if (!/^\d{1,18}$/.test(String(req.params.mid))) return res.status(404).json({ error: 'Message not found' });
+  const m = await pool.query(`SELECT id, kind FROM assist_messages WHERE id = $1 AND conversation_id = $2 AND role = 'assistant' AND kind IN ('document', 'casenote')`, [req.params.mid, conversation.id]);
+  if (!m.rows.length) return res.status(404).json({ error: 'Message not found' });
+  // Edits keep the document's kind, but a case note may be freely re-sectioned by its author.
+  const checked = documents.validateDocument(req.body && req.body.document, 'document');
+  if (!checked.ok) return res.status(400).json({ error: 'invalid_document', code: checked.reason });
+  checked.doc.kind = m.rows[0].kind;
+  if (!(await guardAll(res, documents.documentStrings(checked.doc), req.body.known, conversation.client_ref || null))) return;
+  await pool.query('UPDATE assist_messages SET content = $1, edited_at = NOW() WHERE id = $2', [JSON.stringify(checked.doc), m.rows[0].id]);
+  await pool.query(`UPDATE assist_conversations SET updated_at = NOW(), expires_at = NOW() + ($2 || ' days')::interval WHERE id = $1`, [conversation.id, String(RETENTION_DAYS)]);
+  await db.logAuditEvent({
+    actorUserId: req.user.id, organisationId: orgOf(req), action: 'assist.document_edited', targetType: 'assist_conversation', targetId: conversation.id,
+    metadata: { kind: checked.doc.kind, blocks: checked.doc.blocks.length }, ipAddress: req.ip,
+  }).catch(() => {});
+  res.json({ ok: true, document: checked.doc });
 }));
 
 router.delete('/api/assist/conversations/:id', safe(async (req, res) => {

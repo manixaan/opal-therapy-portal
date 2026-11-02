@@ -41,6 +41,26 @@ const EVERYDAY = new Set((
   + 'paige patience penny reed sage sky star tex wade ward wren'
 ).split(/\s+/));
 
+/**
+ * Words that are part of ORGANISATION names in the directory (Splose
+ * contacts include plan managers and support-coordination companies:
+ * "… Support Services", "… Plan Management") and are also the ordinary
+ * vocabulary of a case note. Never a name on their own, in any case — the
+ * organisation's full name is still matched. Found 2 Nov 2026: "support
+ * workers" became "[CONTACT_2] workers".
+ */
+const NEVER_ALONE = new Set((
+  'support supports supported worker workers care carer carers caring team services service coordinator coordinators coordination '
+  + 'plan plans planning planned management manager managers managed school schools home homes family families staff client clients '
+  + 'participant participants therapy therapies therapist therapists session sessions house group groups provider providers centre center '
+  + 'community communities disability disabilities assist assistance health healthcare nurse nursing doctor respite living independent '
+  + 'independence behaviour behavior practitioner practitioners occupational speech physio physiotherapy psychology program programme programs '
+  + 'connect connections link links life lifestyle solutions solution choice choices access ability abilities active kids youth sensory '
+  + 'financial finance accounts admin administration australia australian national pty ltd limited inc foundation association trust '
+  + 'network networks partners partnership consulting consultancy agency hub plus global first allied wellbeing wellness pathways '
+  + 'options horizons future futures inclusion inclusive social clinic clinical medical hospital department office regional metro'
+).split(/\s+/));
+
 /** Short words that open ordinary sentences — as a NAME they need a capital mid-sentence. */
 const SENTENCE_OPENERS = new Set(('an as at be by do go he if in is it me my no of on or so to up us we the and but for not you all any can had her was one our out day get has him his how man new now old see two way who boy did its let put say she too use sun '
   + 'will mark art bill may june august april grace hope faith joy long short young rich read page chase frank guy max ray dean earl').split(/\s+/));
@@ -57,7 +77,7 @@ const SHORT_ENGLISH = new Set('pat rob bob ray max lee bud don dot gus hal jay k
 function capitalisedVariants(fullName) {
   const cap = new Set(); const midOnly = new Set();
   String(fullName || '').trim().split(/\s+/).map((p) => p.replace(/[^A-Za-z'’-]/g, '').toLowerCase()).forEach((w) => {
-    if (w.length < 2 || CALENDAR.has(w)) return;
+    if (w.length < 2 || CALENDAR.has(w) || NEVER_ALONE.has(w)) return;
     if (w.length < 4 || EVERYDAY.has(w)) { cap.add(w); if (SENTENCE_OPENERS.has(w)) midOnly.add(w); }
   });
   return { cap, midOnly };
@@ -75,6 +95,8 @@ function strictVariants(fullName) {
   const parts = String(fullName || '').trim().split(/\s+/).map((p) => p.replace(/[^A-Za-z'’-]/g, '')).filter((p) => p.length > 1);
   const out = new Set();
   if (!parts.length) return out;
+  // A name made only of ordinary words ("Care", "Plan Management") cannot be told apart from ordinary text.
+  if (parts.every((p) => NEVER_ALONE.has(p.toLowerCase()))) return out;
   out.add(parts.join(' ').toLowerCase());
   if (parts.length >= 2) {
     out.add(`${parts[0]} ${parts[parts.length - 1]}`.toLowerCase());
@@ -82,9 +104,10 @@ function strictVariants(fullName) {
   }
   parts.forEach((p) => {
     const w = p.toLowerCase();
+    if (NEVER_ALONE.has(w)) return;
     if (w.length >= 4 && !EVERYDAY.has(w)) out.add(w);
     if (w.length === 3 && !EVERYDAY.has(w) && !SENTENCE_OPENERS.has(w) && !SHORT_ENGLISH.has(w)) out.add(w);
-    p.split('-').forEach((h) => { const hw = h.toLowerCase(); if (hw.length >= 5 && !EVERYDAY.has(hw)) out.add(hw); });
+    p.split('-').forEach((h) => { const hw = h.toLowerCase(); if (hw.length >= 5 && !EVERYDAY.has(hw) && !NEVER_ALONE.has(hw)) out.add(hw); });
   });
   return out;
 }
@@ -170,4 +193,4 @@ async function byRef(ref) {
   return d.entries.find((e) => e.ref === ref) || null;
 }
 
-module.exports = { load, invalidate, byRef, strictVariants, capitalisedVariants, EVERYDAY, _resetForTests, _setCacheForTests: (c) => { _cache = c ? { builtAt: Date.now(), ...c } : null; } };
+module.exports = { load, invalidate, byRef, strictVariants, capitalisedVariants, EVERYDAY, NEVER_ALONE, _resetForTests, _setCacheForTests: (c) => { _cache = c ? { builtAt: Date.now(), ...c } : null; } };

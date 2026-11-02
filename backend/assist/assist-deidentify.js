@@ -93,7 +93,7 @@ async function knownEntries(known) {
       out[out.length - 1].ref = k.ref;
     } else if (typeof k.name === 'string' && k.name.trim().length >= 2) {
       name = k.name.trim(); role = 'person';
-      out.push(entryFor({ token: k.token, role, name, variants: new Set([lower(name)]) }));
+      out.push(entryFor({ token: k.token, role, name, ...personMatch(name) }));
     } else continue;
     used.add(k.token);
   }
@@ -157,8 +157,18 @@ async function check({ text, known, confirmedNames, ignoredWords }) {
 
   // Pass 2: only the people present, with their final tokens, so the
   // returned map is exact and confirmed unknown people number correctly.
-  const confirmed = cleanList(confirmedNames).filter((n) => !prior.entries.some((e) => e.role === 'person' && lower(e.name) === lower(n)));
-  const finalEntries = [...prior.entries, ...assigned];
+  const confirmedAll = cleanList(confirmedNames).filter((n) => !prior.entries.some((e) => e.role === 'person' && lower(e.name) === lower(n)));
+  // A confirmed FULL name ("Mia Testwell") is one person: matched as a whole and
+  // by its parts, under one token. (The primitive's confirmed-name path matches
+  // single words only, so a typed full name used to hide nothing.)
+  const preassigned = new Set();
+  const confirmedPeople = confirmedAll.filter((n) => /\s/.test(n)).map((n) => {
+    const token = nextNumber('person', used);
+    preassigned.add(token);
+    return entryFor({ token, role: 'person', name: n, ...personMatch(n) });
+  });
+  const confirmed = confirmedAll.filter((n) => !/\s/.test(n));
+  const finalEntries = [...prior.entries, ...assigned, ...confirmedPeople];
   const r = deid.deidentify(text, { entries: finalEntries }, { confirmedNames: confirmed, ignoredWords: cleanList(ignoredWords), looseCandidates: true, ...shape });
 
   // The primitive copies entries, so prior ones are recognised by token.
@@ -170,7 +180,7 @@ async function check({ text, known, confirmedNames, ignoredWords }) {
   const personMap = new Map();
   // (The primitive names the first confirmed person [PERSON] and the next
   // [PERSON_2]; here every person token carries a number.)
-  r.map.entries.filter((e) => e.role === 'person' && !priorTokens.has(e.token)).forEach((e) => {
+  r.map.entries.filter((e) => e.role === 'person' && !priorTokens.has(e.token) && !preassigned.has(e.token)).forEach((e) => {
     const fresh = nextNumber('person', used);
     personMap.set(e.token, fresh);
     e.token = fresh;
@@ -213,6 +223,14 @@ function labelFor(e) {
   if (e.role === 'staff') return 'Staff member';
   if (e.role === 'person') return 'Person';
   return deid.describeToken(e.token);
+}
+
+/** A person the user named: the full name, each part a name could be written as, and short parts ("Jo") when capitalised. */
+function personMatch(name) {
+  const variants = directory.strictVariants(name);
+  variants.add(lower(name));
+  const c = directory.capitalisedVariants(name);
+  return { variants, capVariants: c.cap, midOnly: c.midOnly };
 }
 
 function cleanList(list) {

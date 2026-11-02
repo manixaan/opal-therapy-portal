@@ -45,15 +45,19 @@ function mapError(err, where) {
 
 /**
  * Generate a reply. `onText` present ⇒ streaming. Returns { text }.
+ * `raw: true` (document replies, which are JSON the route validates) skips the
+ * plain-text pass and cannot stream.
  * Throws Error('content_blocked') | Error('provider_error') only.
  */
-async function generate({ system, messages, userId, organisationId, onText } = {}) {
+async function generate({ system, messages, userId, organisationId, onText, raw = false } = {}) {
+  if (raw) onText = undefined;
+  const finish = (t) => (raw ? String(t || '').trim() : toPlainText(t).trim());
   // Plain text only, whatever the model sends: streamed a line at a time, and the final text the same.
   const plain = typeof onText === 'function' ? plainTextStream(onText) : null;
   if (_providerOverride) {
-    const r = await _providerOverride({ system, messages, ...(plain ? { onText: plain.push } : {}) });
+    const r = await _providerOverride({ system, messages, raw, ...(plain ? { onText: plain.push } : {}) });
     if (plain) plain.flush();
-    return { ...r, text: toPlainText(r && r.text).trim() };
+    return { ...r, text: finish(r && r.text) };
   }
   try {
     // A dropped connection is tried once more — but never after a word has been shown, and never after a refusal.
@@ -69,7 +73,7 @@ async function generate({ system, messages, userId, organisationId, onText } = {
       ...(plain ? { onText: (t) => { shown = true; plain.push(t); } } : {}),
     }), () => !shown);
     if (plain) plain.flush();
-    const text = toPlainText(res.text || '').trim();
+    const text = finish(res.text || '');
     if (!text) throw new Error('empty_response');
     return { text };
   } catch (err) {
