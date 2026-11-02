@@ -240,10 +240,19 @@ describe('the AI has its own mark; the cell is the portal\'s', () => {
     expect(svg).not.toMatch(/<path/);
   });
 
+  test('the living mark: the same 34 seeds breathe and turn, by CSS alone, and hold still under reduced motion', () => {
+    const live = read('icons/opal-assist-live.svg');
+    expect(live.match(/<circle /g)).toHaveLength(34);
+    expect(live).toMatch(/@keyframes breathe/);
+    expect(live).toMatch(/@keyframes turn/);
+    expect(live).toMatch(/@media \(prefers-reduced-motion:reduce\)\{[^}]*animation:none/);
+    expect(live).not.toMatch(/<script|on[a-z]+=/i);
+  });
+
   test('the Opa AI button draws the AI mark, not the CSS pebble', () => {
     const css = read('opa.css');
     const rule = css.slice(css.indexOf('.opa-fab-pebble {'), css.indexOf('}', css.indexOf('.opa-fab-pebble {')));
-    expect(rule).toContain('/icons/opal-assist.svg');
+    expect(rule).toContain('/icons/opal-assist-live.svg');
     expect(rule).not.toMatch(/pebbleMorph|border-radius/);
     // The portal header keeps the cell.
     expect(read('mockup_v3.html')).toContain('class="logo brand-pebble" id="opa-pebble"');

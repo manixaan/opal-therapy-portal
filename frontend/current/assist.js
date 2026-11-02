@@ -146,8 +146,8 @@
     var stack = $('oa-stack');
     if (!S.messages.length) {
       // A task pane is narrow: one quiet line, not the full welcome.
-      if (S.surface !== 'web') { stack.innerHTML = '<div class="oa-empty oa-empty-pane"><img src="/icons/opal-assist.svg?v=3" alt=""><p>Ask a question, or select text and press Use selection.</p></div>'; return; }
-      stack.innerHTML = '<div class="oa-empty"><img src="/icons/opal-assist.svg?v=3" alt=""><h1>Opal Assist</h1>'
+      if (S.surface !== 'web') { stack.innerHTML = '<div class="oa-empty oa-empty-pane"><img src="/icons/opal-assist-live.svg?v=1" alt=""><p>Ask a question, or select text and press Use selection.</p></div>'; return; }
+      stack.innerHTML = '<div class="oa-empty"><img src="/icons/opal-assist-live.svg?v=1" alt=""><h1>Opal Assist</h1>'
         + '<p>' + (S.client ? 'Everything in this chat is about <b>' + esc(S.client.name) + '</b>, who the AI only ever sees as [CLIENT_1]. ' : '')
         + 'Paste your case note, FCA section or letter and ask for it rephrased, tightened or rewritten — names and contact details are hidden before anything leaves the practice.</p>'
         + '<div class="oa-chips">' + [

@@ -23,11 +23,10 @@
 
 .opa-fab-pebble {
   width: 30px; height: 30px; display: inline-block; position: relative; flex-shrink: 0;
-  background: url("/icons/opal-assist.svg?v=3") center / contain no-repeat;
-  animation: opaSeedTurn 60s linear infinite;
+  /* The living mark animates itself (seeds breathe, the spiral turns) and
+     honours reduced motion inside the SVG — no CSS animation needed here. */
+  background: url("/icons/opal-assist-live.svg?v=1") center / contain no-repeat;
 }
-/* One slow turn a minute: alive, never busy. Reduced motion stops it. */
-@keyframes opaSeedTurn { to { transform: rotate(360deg); } }
 
 /* ── Panel ── */
 #opa-panel {
