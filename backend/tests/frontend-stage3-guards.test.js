@@ -150,8 +150,13 @@ describe('installable web app', () => {
     expect(pages.length).toBeGreaterThanOrEqual(8);
     for (const page of pages) {
       const html = fs.readFileSync(path.join(FRONTEND, page), 'utf8');
-      expect(html).toContain('<link rel="manifest" href="/site.webmanifest" />');
-      expect(html).toContain('<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />');
+      // Opal Assist installs as its own app (2 Nov 2026): its own manifest and
+      // app icon, never the portal's — and never none.
+      const own = page === 'assist.html'
+        ? ['/assist.webmanifest', '/icons/assist-apple-touch.png?v=2']
+        : ['/site.webmanifest', '/icons/apple-touch-icon.png'];
+      expect(html).toContain(`<link rel="manifest" href="${own[0]}" />`);
+      expect(html).toContain(`<link rel="apple-touch-icon" href="${own[1]}" />`);
       expect(html).toContain('<link rel="icon" href="/favicon.svg?v=2" type="image/svg+xml" />');
       expect(html).toContain('<meta name="theme-color" content="#0f7c6c" />');
     }
