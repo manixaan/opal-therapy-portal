@@ -50,6 +50,10 @@ check)
 enable)
   for pair in $APPS; do
     APP=${pair%%:*}; RG=${pair##*:}
+    if [ "$(val "$APP" "$RG" OPAL_ASSIST_ENABLED | tr -d '[:space:]')" = "true" ] && [ "$(val "$APP" "$RG" OPA_AI_ENABLED | tr -d '[:space:]')" = "true" ]; then
+      echo "  = $APP: already on — left alone, no restart"
+      continue
+    fi
     missing=""
     for n in $NEEDED; do [ -n "$(val "$APP" "$RG" "$n")" ] || missing="$missing $n"; done
     if [ -n "$missing" ]; then
