@@ -12,13 +12,15 @@
  *
  *   document — any rephrase: whatever headings the text needs (often none)
  *   casenote — always exactly three sections: Identify · Session details · Plan
+ *   auto     — the model decides from the request: a plain chat answer, or one
+ *              of the two documents (its JSON then carries "kind")
  *
  * Shape: { kind, title|null, blocks: [{ t:'h'|'p'|'li', text, lead? }] }
  * Text carries the conversation's tokens ([CLIENT_1]) — never a name — and the
  * routes guard every block like any other message. Pure: no I/O.
  */
 
-const FORMATS = Object.freeze({ document: 'document', casenote: 'casenote' });
+const FORMATS = Object.freeze({ document: 'document', casenote: 'casenote', auto: 'auto' });
 const CASE_NOTE_HEADINGS = Object.freeze(['Identify', 'Session details', 'Plan']);
 const MAX_BLOCKS = 80;
 const MAX_BLOCK_CHARS = 3000;
@@ -30,19 +32,28 @@ const SHAPE = 'Reply with ONLY one JSON object, no prose before or after it and 
   + '"t" is "h" (heading), "p" (paragraph) or "li" (dot point). "lead" is optional, only on dot points, a two-to-four word label without its colon. '
   + 'No Markdown anywhere: no asterisks, hashes or dashes for formatting — the page does the layout. Keep every token such as [CLIENT_1] exactly as written.';
 
+const CASE_NOTE_RULES = `Use EXACTLY three headings, in this order and with these words: ${CASE_NOTE_HEADINGS.map((h) => `"${h}"`).join(', ')}. `
+  + 'Identify: one short paragraph — the date, where the session happened, who was present and their roles (participant, OT, support workers, family). '
+  + 'Session details: dot points in the order things happened, each starting with a short bold "lead" where it helps (for example "Session setup", "Session course", "Response", "Outcome"); '
+  + 'separate what was reported from what was observed. Plan: dot points for next steps and recommendations from the notes only. '
+  + 'Write in the third person ("the OT"), past tense, objective, person-centred Australian English. Keep every fact, observation, quote, score and date; add nothing that is not in the notes. '
+  + 'If the notes do not say something a section needs, write a short [square-bracket note] for the practitioner in that place rather than inventing it.';
+const DOCUMENT_RULES = 'Return only the finished text as a document: paragraphs for prose, dot points only where the original or the task calls for a list, headings only if the piece genuinely has sections. '
+  + 'For an email, put the greeting, body paragraphs and sign-off as separate paragraphs. No commentary about what you changed.';
+
 function formatInstruction(format) {
   if (format === FORMATS.casenote) {
-    return 'THIS REPLY IS A CASE NOTE DOCUMENT\nThe staff member wants a case note written or rewritten. It overrides the plain-text rule above. '
-      + `Use EXACTLY three headings, in this order and with these words: ${CASE_NOTE_HEADINGS.map((h) => `"${h}"`).join(', ')}. `
-      + 'Identify: one short paragraph — the date, where the session happened, who was present and their roles (participant, OT, support workers, family). '
-      + 'Session details: dot points in the order things happened, each starting with a short bold "lead" where it helps (for example "Session setup", "Session course", "Response", "Outcome"); '
-      + 'separate what was reported from what was observed. Plan: dot points for next steps and recommendations from the notes only. '
-      + 'Write in the third person ("the OT"), past tense, objective, person-centred Australian English. Keep every fact, observation, quote, score and date; add nothing that is not in the notes. '
-      + 'If the notes do not say something a section needs, write a short [square-bracket note] for the practitioner in that place rather than inventing it.\n' + SHAPE;
+    return 'THIS REPLY IS A CASE NOTE DOCUMENT\nThe staff member wants a case note written or rewritten. It overrides the plain-text rule above. ' + CASE_NOTE_RULES + '\n' + SHAPE;
   }
-  return 'THIS REPLY IS A DOCUMENT\nThe staff member wants writing rephrased, rewritten or drafted — an email, a letter, a report section or similar. It overrides the plain-text rule above. '
-    + 'Return only the finished text as a document: paragraphs for prose, dot points only where the original or the task calls for a list, headings only if the piece genuinely has sections. '
-    + 'For an email, put the greeting, body paragraphs and sign-off as separate paragraphs. No commentary about what you changed.\n' + SHAPE;
+  if (format === FORMATS.auto) {
+    return 'CHOOSE THE SHAPE OF YOUR REPLY\nDecide from what the staff member asks:\n'
+      + '1. They want a CASE NOTE (session note, progress note, clinical note) written, rewritten, tidied or reformatted: reply with ONLY a JSON document whose "kind" is "casenote". ' + CASE_NOTE_RULES + '\n'
+      + '2. They want any other piece of WRITING produced or changed (rephrase, rewrite, reword, shorten, expand, tidy, proofread or draft an email, letter, report section, summary, paragraph or similar): reply with ONLY a JSON document whose "kind" is "document". ' + DOCUMENT_RULES + '\n'
+      + '3. Anything else (a question, an explanation, advice, a plan, ideas, conversation): reply in plain text as normal; the plain-text rule applies. Never wrap a plain answer in JSON.\n'
+      + 'A JSON reply overrides the plain-text rule and must start with "{" as its very first character. '
+      + SHAPE.replace('{"title"', '{"kind": "casenote" or "document", "title"');
+  }
+  return 'THIS REPLY IS A DOCUMENT\nThe staff member wants writing rephrased, rewritten or drafted — an email, a letter, a report section or similar. It overrides the plain-text rule above. ' + DOCUMENT_RULES + '\n' + SHAPE;
 }
 
 const clean = (s, max) => String(s == null ? '' : s).replace(/\r/g, '').replace(/[ \t]+\n/g, '\n').trim().slice(0, max);
@@ -93,7 +104,16 @@ function parseDocument(text, format) {
   if (!m) return { ok: false, reason: 'not_json' };
   let raw;
   try { raw = JSON.parse(m[0]); } catch (_) { return { ok: false, reason: 'not_json' }; }
-  return validateDocument(raw, format);
+  // In auto mode the model says which document it chose.
+  const kind = format === FORMATS.auto ? (raw && raw.kind === FORMATS.casenote ? FORMATS.casenote : FORMATS.document) : format;
+  const r = validateDocument(raw, kind);
+  return r.ok ? r : { ...r, kind };
+}
+
+/** Does a reply begin like a JSON document (or a fenced one)? Decided from its first characters: chat streams, a document is collected. */
+function looksLikeDocument(start) {
+  const s = String(start || '').trimStart();
+  return s.startsWith('{') || s.startsWith('```');
 }
 
 /** Plain text of a document — for the model's history and for search/audit sizes. */
@@ -116,5 +136,5 @@ function documentStrings(doc) {
 
 module.exports = {
   FORMATS, CASE_NOTE_HEADINGS, MAX_BLOCK_CHARS,
-  formatInstruction, validateDocument, parseDocument, documentToText, documentStrings,
+  formatInstruction, validateDocument, parseDocument, looksLikeDocument, documentToText, documentStrings,
 };

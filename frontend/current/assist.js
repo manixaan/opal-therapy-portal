@@ -60,20 +60,7 @@
     });
   }
 
-  /**
-   * Which way a request should come back: 'casenote' (fixed Identify /
-   * Session details / Plan document), 'document' (any rephrase or rewrite,
-   * opened as an editable document) or 'chat' (an ordinary answer).
-   */
-  function detectFormat(text) {
-    var t = String(text || '');
-    var head = t.slice(0, 400);
-    if (/\b(case|session|progress|clinical|therapy|soap)[\s-]+notes?\b|\bcase[\s-]?not(?:e|es|ing)\b/i.test(head)) return 'casenote';
-    if (/\b(re-?phrase|re-?write|re-?word|paraphrase|tidy(?: up)?|polish|proof-?read|edit|improve|shorten|condense|draft|compose)\b|\bmake (?:it|this|these)\b[^.?!]{0,40}\b(?:shorter|clearer|longer|formal|professional|concise|friendlier|warmer|simpler)\b|\bturn (?:it|this|these)\b[^.?!]{0,40}\binto\b|\b(?:email|letter|report|paragraph|summary)\b[^.?!]{0,30}\b(?:for|to)\b/i.test(head)) return 'document';
-    return 'chat';
-  }
-
-  if (typeof module !== 'undefined' && module.exports) module.exports = { splitTokens, restoreTokens, clientSeed, filterClients, detectFormat };
+  if (typeof module !== 'undefined' && module.exports) module.exports = { splitTokens, restoreTokens, clientSeed, filterClients };
   if (!global.document) return;
 
   // ── State ─────────────────────────────────────────────────────────────────
@@ -196,7 +183,7 @@
     stack.innerHTML = S.messages.map(function (m, i) {
       if (m.role === 'user') return '<div class="oa-msg user"><div class="oa-bubble">' + renderTokens(m.text) + '</div></div>';
       if (m.doc && !m.live) return '<div class="oa-msg assistant doc"><img class="oa-avatar" src="/icons/opal-assist.svg?v=3" alt=""><div class="oa-doc-host" data-doc="' + i + '"></div></div>';
-      var body = m.live && !m.text ? '<div class="oa-thinking">' + (m.format && m.format !== 'chat' ? 'Opal Assist is writing the ' + (m.format === 'casenote' ? 'case note' : 'document') : 'Opal Assist is thinking') + '</div>' : renderTokens(m.text);
+      var body = m.live && !m.text ? '<div class="oa-thinking">' + (m.format && m.format !== 'chat' ? 'Opal Assist is writing it up' : 'Opal Assist is thinking') + '</div>' : renderTokens(m.text);
       // The reply being written wears the thinking mark: the same seeds, breathing faster.
       var avatar = m.live ? '/icons/opal-assist-thinking.svg?v=1' : '/icons/opal-assist.svg?v=3';
       var tools = (!m.live && !m.error) ? '<div class="oa-tools"><button class="oa-btn ghost sm" type="button" data-copy="' + i + '">Copy</button>'
@@ -205,12 +192,6 @@
     }).join('');
     Array.prototype.forEach.call(stack.querySelectorAll('.oa-doc-host'), function (host) { host.appendChild(editorFor(S.messages[+host.dataset.doc]).el); });
     $('oa-body').scrollTop = $('oa-body').scrollHeight;
-  }
-
-  /** The reply's shape: the menu beside Check & send, or worked out from the request when it says Auto. */
-  function chosenFormat(raw) {
-    var v = $('oa-format') ? $('oa-format').value : 'auto';
-    return v === 'auto' ? detectFormat(raw) : v;
   }
 
   /** Run the server check on text the person typed into a document or an instruction: names become tokens. */
@@ -285,7 +266,6 @@
       + '<h2>' + (r.hidden.length ? r.hidden.length + ' item' + (r.hidden.length === 1 ? '' : 's') + ' will be hidden' : 'Nothing to hide') + '</h2>'
       + '<p class="lead">This is exactly what leaves the practice. Tokens stand in for people and contact details; you keep seeing the real names.</p>'
       + '<div class="oa-preview">' + esc(r.text) + (r.selectionText ? '\n\n— selected content —\n' + esc(r.selectionText) : '') + '</div>'
-      + (r.format && r.format !== 'chat' ? '<p class="oa-note">The reply opens as an editable ' + (r.format === 'casenote' ? '<b>case note</b> — Identify, Session details, Plan' : '<b>document</b>') + '. Change this with the menu beside Check &amp; send.</p>' : '')
       + (hidden ? '<ul class="oa-hidden">' + hidden + '</ul>' : '')
       + cands
       + '<div class="oa-addname"><input id="oa-addname" type="text" placeholder="Hide another name the check missed…" aria-label="Name to hide"><button class="oa-btn sm" type="button" id="oa-addname-btn">Hide it</button></div>'
@@ -309,7 +289,7 @@
         if (!r.ok) throw new Error('check_failed'); return r.json();
       })
       .then(function (msg) {
-        var pending = { format: chosenFormat(rawText), text: msg.text, hidden: msg.hidden, candidates: msg.candidates, known: msg.known, directoryPartial: msg.directoryPartial, directoryMissing: msg.directoryMissing, directoryNotConnected: msg.directoryNotConnected, cautions: msg.cautions || [], raw: rawText };
+        var pending = { text: msg.text, hidden: msg.hidden, candidates: msg.candidates, known: msg.known, directoryPartial: msg.directoryPartial, directoryMissing: msg.directoryMissing, directoryNotConnected: msg.directoryNotConnected, cautions: msg.cautions || [], raw: rawText };
         if (!S.selection) return pending;
         return api('/api/assist/check', { body: { text: S.selection, known: msg.known, confirmedNames: confirmed, ignoredWords: S.ignoredWords, clientRef: clientRef } })
           .then(function (r) { if (!r.ok) throw new Error('check_failed'); return r.json(); })
@@ -341,14 +321,14 @@
     S.pendingConfirmed = [];
     S.messages.push({ role: 'user', text: r.text });
     $('oa-input').value = '';
-    var live = { role: 'assistant', text: '', live: true, format: r.format, key: 'k' + Date.now() };
+    // The server (the model, in fact) decides whether this comes back as chat, a document or a case note.
+    var live = { role: 'assistant', text: '', live: true, key: 'k' + Date.now() };
     S.messages.push(live);
     renderStack();
     setBusy(true); setStatus('Thinking…'); setThinking(true);
     var ctrl = new AbortController(); S.abort = ctrl;
     var body = { message: r.text, conversationId: S.conversationId, surface: S.surface, hiddenCount: r.hidden.length, known: S.known };
     if (S.client) body.clientRef = S.client.ref;
-    if (r.format && r.format !== 'chat') body.format = r.format;
     if (r.selectionText) body.selection = r.selectionText;
     S.selection = ''; updateSelectionBar();
 
@@ -378,7 +358,12 @@
     function handle(ev, data) {
       if (ev === 'delta') { live.text += (data.t || ''); scheduleRender(); }
       else if (ev === 'done') { if (data.answer) live.text = data.answer; if (data.conversationId) { S.conversationId = data.conversationId; if (S.title === 'New chat') S.title = shown(S.messages[0].text).slice(0, 60); $('oa-title').textContent = S.title; } }
-      else if (ev === 'blocked' || ev === 'unavailable') { live.text = data.answer; live.error = true; }
+      else if (ev === 'shape') { live.format = data.kind || 'document'; scheduleRender(); }
+      else if (ev === 'document') {
+        live.doc = data.document; live.kind = data.kind; live.id = data.messageId; live.text = DOC().docToPlainTokens(data.document);
+        if (data.conversationId) { S.conversationId = data.conversationId; if (S.title === 'New chat') { S.title = shown(S.messages[0].text).slice(0, 60); $('oa-title').textContent = S.title; } }
+      }
+      else if (ev === 'blocked' || ev === 'unavailable') { live.text = data.answer; live.error = true; live.doc = null; }
     }
     function pump() {
       return reader.read().then(function (step) {

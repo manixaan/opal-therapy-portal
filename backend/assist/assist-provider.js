@@ -46,16 +46,17 @@ function mapError(err, where) {
 /**
  * Generate a reply. `onText` present ⇒ streaming. Returns { text }.
  * `raw: true` (document replies, which are JSON the route validates) skips the
- * plain-text pass and cannot stream.
+ * plain-text pass; with `onText` the chunks arrive untouched, and the route
+ * decides what to show.
  * Throws Error('content_blocked') | Error('provider_error') only.
  */
 async function generate({ system, messages, userId, organisationId, onText, raw = false } = {}) {
-  if (raw) onText = undefined;
   const finish = (t) => (raw ? String(t || '').trim() : toPlainText(t).trim());
   // Plain text only, whatever the model sends: streamed a line at a time, and the final text the same.
-  const plain = typeof onText === 'function' ? plainTextStream(onText) : null;
+  const plain = typeof onText === 'function' && !raw ? plainTextStream(onText) : null;
+  const sink = plain ? plain.push : (typeof onText === 'function' ? onText : null);
   if (_providerOverride) {
-    const r = await _providerOverride({ system, messages, raw, ...(plain ? { onText: plain.push } : {}) });
+    const r = await _providerOverride({ system, messages, raw, ...(sink ? { onText: sink } : {}) });
     if (plain) plain.flush();
     return { ...r, text: finish(r && r.text) };
   }
@@ -70,7 +71,7 @@ async function generate({ system, messages, userId, organisationId, onText, raw 
       messages,
       maxTokens: clampInt(process.env.OPAL_ASSIST_MAX_OUTPUT_TOKENS, DEFAULT_MAX_TOKENS, 64, 8192),
       timeoutMs: clampInt(process.env.OPAL_ASSIST_TIMEOUT_MS, DEFAULT_TIMEOUT_MS, 5000, 120000),
-      ...(plain ? { onText: (t) => { shown = true; plain.push(t); } } : {}),
+      ...(sink ? { onText: (t) => { shown = true; sink(t); } } : {}),
     }), () => !shown);
     if (plain) plain.flush();
     const text = finish(res.text || '');

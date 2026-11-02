@@ -44,6 +44,7 @@ const { buildSystemPrompt, SURFACES } = require('./assist/assist-prompt');
 const directory = require('./assist/identity-directory');
 const caseload = require('./splose-caseload');
 const documents = require('./assist/assist-document');
+const { toPlainText, plainTextStream } = require('./assist/plain-text');
 
 const router = express.Router();
 const pool = db.pool;
@@ -176,7 +177,6 @@ async function prepare(req, res) {
   const body = req.body || {};
   const message = typeof body.message === 'string' ? body.message.trim() : '';
   const selection = typeof body.selection === 'string' ? body.selection.trim().slice(0, MAX_SELECTION_CHARS) : '';
-  const format = documents.FORMATS[body.format] || null;
   if (!message || message.length > MAX_MESSAGE_CHARS) {
     res.status(400).json({ error: 'invalid_message', answer: `Please send a message between 1 and ${MAX_MESSAGE_CHARS} characters.` });
     return null;
@@ -220,6 +220,10 @@ async function prepare(req, res) {
     history = rows.reverse().map((r) => ({ role: r.role, content: historyText(r) }));
   }
   const surface = conversation ? conversation.surface : surfaceOf(body);
+  // On the web page the model chooses the shape of each reply (chat, document,
+  // case note); the Office panes and the phone keep plain answers. An explicit
+  // format still forces one.
+  const format = documents.FORMATS[body.format] || (surface === 'web' ? documents.FORMATS.auto : null);
   let system = buildSystemPrompt({ user: req.user, surface, selection, clientChat: !!clientRef });
   if (format) system += '\n\n' + documents.formatInstruction(format);
   const hiddenCount = Number.isInteger(body.hiddenCount) && body.hiddenCount >= 0 ? Math.min(body.hiddenCount, 10000) : 0;
@@ -276,36 +280,89 @@ router.post('/api/assist/chat', rateLimit, safe(async (req, res) => {
 }));
 
 /**
- * A document reply: the model returns JSON, the shape is checked, and one
- * correction is asked for if it is wrong (a case note must have exactly
- * Identify · Session details · Plan). Still wrong → the reply is kept as
- * ordinary text rather than lost.
+ * Turn a model reply into what is kept: a chat answer, or a checked document.
+ * A document in the wrong shape gets one correction (a case note must have
+ * exactly Identify · Session details · Plan); still wrong, prose is kept as
+ * text and broken JSON is replaced by a short apology — never lost silently,
+ * never shown raw.
  */
+async function settleReply(req, prep, messages, text) {
+  const first = String(text || '').slice(0, MAX_ANSWER_CHARS * 2);
+  if (prep.format === documents.FORMATS.auto && !documents.looksLikeDocument(first)) {
+    return { kind: 'text', answer: toPlainText(first).trim().slice(0, MAX_ANSWER_CHARS) };
+  }
+  let parsed = documents.parseDocument(first, prep.format);
+  let last = first;
+  if (!parsed.ok) {
+    const kind = prep.format === documents.FORMATS.auto ? (parsed.kind || documents.FORMATS.document) : prep.format;
+    const retry = [...messages, { role: 'assistant', content: first }, { role: 'user', content: `That reply did not follow the required format (${parsed.reason}). Send it again as the JSON object only, following the format rules exactly.` }];
+    const r = await provider.generate({ system: prep.system, messages: retry, userId: req.user.id, organisationId: orgOf(req), raw: true });
+    last = String(r.text || '').slice(0, MAX_ANSWER_CHARS * 2);
+    parsed = documents.parseDocument(last, kind);
+  }
+  if (parsed.ok) return { kind: parsed.doc.kind, document: parsed.doc };
+  return { kind: 'text', answer: documents.looksLikeDocument(last) ? NO_LAYOUT : (toPlainText(last).trim().slice(0, MAX_ANSWER_CHARS) || NO_LAYOUT) };
+}
+
+async function keep(req, prep, settled, streamed) {
+  if (settled.document) return persist(req, prep, JSON.stringify(settled.document), streamed, settled.kind);
+  return persist(req, prep, settled.answer, streamed, 'text');
+}
+
+/** A reply that may be a document, answered as one JSON response. */
 async function replyWithDocument(req, res, prep) {
   const messages = [...prep.history, { role: 'user', content: prep.message }];
-  let parsed = null; let lastText = '';
+  let settled;
   try {
-    for (let attempt = 0; attempt < 2 && !(parsed && parsed.ok); attempt++) {
-      const r = await provider.generate({ system: prep.system, messages, userId: req.user.id, organisationId: orgOf(req), raw: true });
-      lastText = String(r.text || '').slice(0, MAX_ANSWER_CHARS * 2);
-      parsed = documents.parseDocument(lastText, prep.format);
-      if (!parsed.ok) {
-        messages.push({ role: 'assistant', content: lastText }, { role: 'user', content: `That reply did not follow the required format (${parsed.reason}). Send it again as the JSON object only, following the format rules exactly.` });
-      }
-    }
+    const r = await provider.generate({ system: prep.system, messages, userId: req.user.id, organisationId: orgOf(req), raw: true });
+    settled = await settleReply(req, prep, messages, r.text);
   } catch (err) {
     if (err?.message === 'content_blocked') return res.json({ status: 'blocked', answer: BLOCKED_ANSWER });
     return res.json({ status: 'unavailable', answer: UNAVAILABLE });
   }
-  if (!parsed.ok) {
-    // Prose the model sent instead of JSON is still useful; broken JSON is not shown.
-    const looksJson = /^\s*[{[]/.test(lastText);
-    const answer = looksJson ? NO_LAYOUT : require('./assist/plain-text').toPlainText(lastText).trim().slice(0, MAX_ANSWER_CHARS);
-    const conversation = await persist(req, prep, answer || UNAVAILABLE, false, 'text');
-    return res.json({ status: 'ok', conversationId: conversation.id, messageId: conversation.lastMessageId, kind: 'text', answer: answer || UNAVAILABLE });
+  const conversation = await keep(req, prep, settled, false);
+  res.json({ status: 'ok', conversationId: conversation.id, messageId: conversation.lastMessageId, kind: settled.kind, ...(settled.document ? { document: settled.document } : { answer: settled.answer }) });
+}
+
+/**
+ * Auto mode, streamed. The first characters decide: a reply that opens like
+ * JSON is a document — collected, checked, then sent whole as a `document`
+ * event (a `shape` event says one is coming); anything else is a chat answer
+ * and streams as `delta`s exactly as before.
+ */
+async function streamAuto(req, res, prep) {
+  res.status(200).set({ 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache, no-transform', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
+  if (typeof res.flushHeaders === 'function') res.flushHeaders();
+  const messages = [...prep.history, { role: 'user', content: prep.message }];
+  const chat = plainTextStream((t) => sseSend(res, 'delta', { t }));
+  let mode = null; let head = '';
+  const onText = (t) => {
+    if (mode === 'text') { chat.push(t); return; }
+    if (mode === 'doc') return;
+    head += t;
+    const start = head.trimStart();
+    if (!start) return;
+    if (start[0] === '`' && start.length < 3) return; // wait: a code fence or just a backtick?
+    if (documents.looksLikeDocument(start)) { mode = 'doc'; sseSend(res, 'shape', { kind: 'document' }); return; }
+    mode = 'text'; chat.push(head);
+  };
+  let settled;
+  try {
+    const r = await provider.generate({ system: prep.system, messages, userId: req.user.id, organisationId: orgOf(req), raw: true, onText });
+    if (mode === 'text' || (mode === null && !documents.looksLikeDocument(r.text))) {
+      chat.flush();
+      settled = { kind: 'text', answer: toPlainText(String(r.text || '')).trim().slice(0, MAX_ANSWER_CHARS) };
+    } else {
+      settled = await settleReply(req, prep, messages, r.text);
+    }
+  } catch (err) {
+    sseSend(res, err?.message === 'content_blocked' ? 'blocked' : 'unavailable', { answer: err?.message === 'content_blocked' ? BLOCKED_ANSWER : UNAVAILABLE });
+    return res.end();
   }
-  const conversation = await persist(req, prep, JSON.stringify(parsed.doc), false, parsed.doc.kind);
-  res.json({ status: 'ok', conversationId: conversation.id, messageId: conversation.lastMessageId, kind: parsed.doc.kind, document: parsed.doc });
+  const conversation = await keep(req, prep, settled, true);
+  if (settled.document) sseSend(res, 'document', { conversationId: conversation.id, messageId: conversation.lastMessageId, kind: settled.kind, document: settled.document });
+  else sseSend(res, 'done', { conversationId: conversation.id, answer: settled.answer });
+  res.end();
 }
 
 // ── Chat (server-sent events) ────────────────────────────────────────────────
@@ -315,7 +372,8 @@ router.post('/api/assist/chat/stream', rateLimit, safe(async (req, res) => {
   if (!provider.isEnabled()) return res.json({ status: 'unavailable', answer: DISABLED });
   const prep = await prepare(req, res);
   if (!prep) return;
-  if (prep.format) return replyWithDocument(req, res, prep); // a document is not streamed: answered as JSON
+  if (prep.format === documents.FORMATS.auto) return streamAuto(req, res, prep);
+  if (prep.format) return replyWithDocument(req, res, prep); // a forced document is not streamed: answered as JSON
 
   res.status(200).set({ 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache, no-transform', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
   if (typeof res.flushHeaders === 'function') res.flushHeaders();

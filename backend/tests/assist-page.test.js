@@ -273,17 +273,15 @@ describe('the AI has its own mark; the cell is the portal\'s', () => {
 
 describe('editable documents on the page', () => {
   const fs = require('fs'); const path = require('path');
-  const { detectFormat } = require('../../frontend/current/assist.js');
   const doc = require('../../frontend/current/assist-doc.js');
   const read = (f) => fs.readFileSync(path.join(__dirname, '../../frontend/current', f), 'utf8');
 
-  test('the request decides the shape: case note, editable document, or a chat answer', () => {
-    expect(detectFormat('Rewrite this case note: Mia was in her room')).toBe('casenote');
-    expect(detectFormat('Session notes from today, please tidy')).toBe('casenote');
-    expect(detectFormat('Rephrase this email to a parent')).toBe('document');
-    expect(detectFormat('Make this shorter and clearer without changing the meaning')).toBe('document');
-    expect(detectFormat('Turn these notes into a progress letter paragraph')).toBe('document');
-    expect(detectFormat('What does the NDIS mean by reasonable and necessary?')).toBe('chat');
+  test('no menu: the reply decides its own shape (the page only reacts to the shape and document events)', () => {
+    expect(read('assist.html')).not.toMatch(/id="oa-format"|<option value="casenote">/);
+    const js = read('assist.js');
+    expect(js).not.toMatch(/body\.format\s*=/);
+    expect(js).toContain("ev === 'shape'");
+    expect(js).toContain("ev === 'document'");
   });
 
   test('names read as first names by default, full names on request; an unknown token reads as a role, never a bracket', () => {
@@ -329,7 +327,7 @@ describe('Opal Assist follows the portal: day / night and its dropdowns', () => 
   test('dropdowns use the portal style, and no page rule resets the chevron with a background shorthand', () => {
     const css = read('assist.css');
     expect(css).toMatch(/select \{\s*appearance: none;/);
-    expect(css).not.toMatch(/(?:\.oa-format|\.oa-namestyle select)\s*\{[^}]*background:/);
+    expect(css).not.toMatch(/\.oa-namestyle select\s*\{[^}]*background:/);
   });
 
   test('thread titles and the welcome line never show a raw token', () => {

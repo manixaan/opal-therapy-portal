@@ -31,8 +31,8 @@ test('the reply may wrap the JSON in prose; anything that is not the shape is re
   const r = d.parseDocument('Sure, here it is:\n' + JSON.stringify(NOTE) + '\nHope that helps', 'casenote');
   expect(r.ok).toBe(true);
   expect(d.parseDocument('Just some words.', 'document')).toEqual({ ok: false, reason: 'not_json' });
-  expect(d.parseDocument('{"blocks":[{"t":"table","text":"x"}]}', 'document')).toEqual({ ok: false, reason: 'block_type' });
-  expect(d.parseDocument('{"blocks":[]}', 'document')).toEqual({ ok: false, reason: 'block_count' });
+  expect(d.parseDocument('{"blocks":[{"t":"table","text":"x"}]}', 'document')).toEqual(expect.objectContaining({ ok: false, reason: 'block_type' }));
+  expect(d.parseDocument('{"blocks":[]}', 'document')).toEqual(expect.objectContaining({ ok: false, reason: 'block_count' }));
 });
 
 test('plain text of a document keeps tokens; every string is offered to the guard', () => {

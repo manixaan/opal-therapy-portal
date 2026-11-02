@@ -337,3 +337,67 @@ describe('documents — rephrases and case notes come back editable', () => {
     expect((await request(buildApp()).put(`/api/assist/conversations/${CONV.id}/messages/77`).send({ document: NOTE })).status).toBe(401);
   });
 });
+
+describe('auto mode — the model decides the shape of each reply on the web page', () => {
+  const NOTE = { kind: 'casenote', title: null, blocks: [
+    { t: 'h', text: 'Identify' }, { t: 'p', text: 'The OT saw [CLIENT_1] at home.' },
+    { t: 'h', text: 'Session details' }, { t: 'li', lead: 'Session setup', text: 'TACPAC items prepared.' },
+    { t: 'h', text: 'Plan' }, { t: 'li', text: 'Continue TACPAC.' },
+  ] };
+  beforeEach(() => {
+    db.pool.query.mockImplementation(async (sql) => {
+      if (/INSERT INTO assist_conversations/.test(sql)) return { rows: [{ ...CONV, client_ref: null }], rowCount: 1 };
+      if (/INSERT INTO assist_messages .*RETURNING id/s.test(sql)) return { rows: [{ id: 88 }], rowCount: 1 };
+      return { rows: [], rowCount: 0 };
+    });
+  });
+
+  test('a question streams as chat, as before; the model was told how to choose', async () => {
+    let seen = null;
+    provider._setProviderForTests(async (args) => { seen = args; args.onText('Reasonable and '); args.onText('necessary means **fair**.'); return { text: 'Reasonable and necessary means **fair**.' }; });
+    const agent = await login(buildApp(), user());
+    const r = await agent.post('/api/assist/chat/stream').send({ message: 'What does reasonable and necessary mean?' });
+    expect(r.text).toMatch(/event: delta/);
+    expect(r.text).toMatch(/event: done/);
+    expect(r.text).not.toMatch(/event: (shape|document)/);
+    expect(r.text).not.toContain('**');
+    expect(seen.system).toContain('CHOOSE THE SHAPE OF YOUR REPLY');
+    expect(seen.raw).toBe(true);
+  });
+
+  test('a case-note request comes back as one checked document event — no partial JSON is ever streamed', async () => {
+    const json = JSON.stringify(NOTE);
+    provider._setProviderForTests(async (args) => { args.onText(json.slice(0, 20)); args.onText(json.slice(20)); return { text: json }; });
+    const agent = await login(buildApp(), user());
+    const r = await agent.post('/api/assist/chat/stream').send({ message: 'Rewrite this case note for [CLIENT_1].' });
+    expect(r.text).toMatch(/event: shape/);
+    expect(r.text).not.toMatch(/event: delta/);
+    const ev = r.text.split('\n\n').find((b) => b.startsWith('event: document'));
+    const data = JSON.parse(ev.split('\ndata: ')[1]);
+    expect(data).toEqual(expect.objectContaining({ kind: 'casenote', messageId: 88 }));
+    expect(data.document.blocks[0]).toEqual({ t: 'h', text: 'Identify' });
+    const insert = db.pool.query.mock.calls.find((c) => /INSERT INTO assist_messages .*'assistant'/s.test(c[0]));
+    expect(insert[1][2]).toBe('casenote');
+  });
+
+  test('a fenced document still counts; a broken one becomes an apology, never raw JSON on screen', async () => {
+    provider._setProviderForTests(async (args) => { args.onText('```json\n'); args.onText('{"kind":"document","blocks":[{"t":"p","text":"Dear [CONTACT_1],"}]}\n```'); return { text: '```json\n{"kind":"document","blocks":[{"t":"p","text":"Dear [CONTACT_1],"}]}\n```' }; });
+    const agent = await login(buildApp(), user());
+    const fenced = await agent.post('/api/assist/chat/stream').send({ message: 'Rephrase this email' });
+    expect(fenced.text).toMatch(/event: document/);
+
+    provider._setProviderForTests(async (args) => { if (args.onText) args.onText('{"kind":"casenote","blocks":['); return { text: '{"kind":"casenote","blocks":[' }; });
+    const broken = await agent.post('/api/assist/chat/stream').send({ message: 'Case note please' });
+    const done = JSON.parse(broken.text.split('\n\n').find((b) => b.startsWith('event: done')).split('\ndata: ')[1]);
+    expect(done.answer).toMatch(/could not lay that out as a document/);
+  });
+
+  test('Office panes keep plain answers: no shape instruction outside the web page', async () => {
+    let seen = null;
+    provider._setProviderForTests(async (args) => { seen = args; return { text: 'Plain.' }; });
+    const agent = await login(buildApp(), user());
+    await agent.post('/api/assist/chat').send({ message: 'Rephrase this', surface: 'word' });
+    expect(seen.system).not.toContain('CHOOSE THE SHAPE OF YOUR REPLY');
+    expect(seen.raw).toBe(false);
+  });
+});
