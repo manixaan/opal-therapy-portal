@@ -27,7 +27,9 @@
 set -euo pipefail
 
 APPS="opal-portal-staging:opal-portal-staging-rg opal-portal-prod:opal-portal-prod-rg"
-NEEDED="AWS_REGION AWS_ROLE_ARN AZURE_BEDROCK_AUDIENCE BEDROCK_MODEL_ID_ASSISTANT_FAST BEDROCK_GUARDRAIL_ID BEDROCK_GUARDRAIL_VERSION"
+# Opal Assist runs on BEDROCK_MODEL_ID_ASSISTANT_FAST when set, else BEDROCK_MODEL_ID
+# (ai-model-registry.js) — so the base model id is what must exist.
+NEEDED="AWS_REGION AWS_ROLE_ARN AZURE_BEDROCK_AUDIENCE BEDROCK_MODEL_ID BEDROCK_GUARDRAIL_ID BEDROCK_GUARDRAIL_VERSION"
 
 val() { az webapp config appsettings list -g "$2" -n "$1" --query "[?name=='$3'].value | [0]" -o tsv; }
 
