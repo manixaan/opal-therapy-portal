@@ -65,6 +65,7 @@ async function ownClients(req) {
   }
 }
 
+/** Awaited by every caller: the entry is written before the response goes, so the trail is complete when the client sees success (CI caught the race, 3 Nov 2026). */
 function audit(req, action, metadata, targetId) {
   return db.logAuditEvent({
     actorUserId: req.session.userId, organisationId: req.user.organisation_id || null,
@@ -79,7 +80,7 @@ router.get('/api/block-review', safe(async (req, res) => {
   const since = sinceFrom(req.query || {});
   const { clients, clientsAvailable, clientsError } = await ownClients(req);
   const swept = await svc().sweep(userId, { since, clients });
-  if (swept.classified) audit(req, 'block_review.sweep', { since, ...swept });
+  if (swept.classified) await audit(req, 'block_review.sweep', { since, ...swept });
   const rows = await svc().list(userId, { since });
   // Suggested clients are named from the caller's own caseload only.
   const byId = new Map(clients.map(c => [String(c.id), c]));
@@ -109,7 +110,7 @@ router.post('/api/block-review/confirm-guessed', safe(async (req, res) => {
   const ids = Array.isArray(req.body && req.body.eventIds) ? req.body.eventIds.filter(id => UUID_RE.test(String(id))).slice(0, 300) : [];
   if (!ids.length) return res.status(400).json({ error: 'No blocks named' });
   const out = await svc().confirmAllGuessed(String(req.session.userId), ids);
-  audit(req, 'block_review.confirm_guessed', { requested: ids.length, confirmed: out.confirmed });
+  await audit(req, 'block_review.confirm_guessed', { requested: ids.length, confirmed: out.confirmed });
   res.json(out);
 }));
 
@@ -143,7 +144,7 @@ router.post('/api/block-review/:eventId/confirm', safe(async (req, res) => {
   });
   if (out.error === 'not_found') return res.status(404).json({ error: 'No such block' });
   if (out.error === 'already_resolved') return res.status(409).json({ error: 'This block has already been settled', code: 'already_resolved' });
-  audit(req, 'block_review.confirm', { kind, group, withClient: !!client, withLocation: !!location }, eventId);
+  await audit(req, 'block_review.confirm', { kind, group, withClient: !!client, withLocation: !!location }, eventId);
   res.json({ ok: true });
 }));
 
@@ -153,7 +154,7 @@ router.post('/api/block-review/:eventId/dismiss', safe(async (req, res) => {
   const out = await svc().dismiss(String(req.session.userId), eventId);
   if (out.error === 'not_found') return res.status(404).json({ error: 'No such block' });
   if (out.error === 'already_resolved') return res.status(409).json({ error: 'This block has already been settled', code: 'already_resolved' });
-  audit(req, 'block_review.dismiss', {}, eventId);
+  await audit(req, 'block_review.dismiss', {}, eventId);
   res.json({ ok: true });
 }));
 
