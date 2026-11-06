@@ -787,12 +787,14 @@
     unlinked: 'is in the portal but was never written to Splose',
   };
 
+  var ALERT_ACK_TIMEOUT_MS = 45000;
   function pollAlerts() {
     if (!canUse() || doc.hidden) return Promise.resolve();
     return fetchJson('/api/splose-sync/alerts').then(function (r) {
       if (!r.ok) return;
       var seen = {};
       S.alertQueue.forEach(function (a) { seen[a.id] = true; });
+      if (S.alertCurrentId) seen[S.alertCurrentId] = true; // the one on screen is still open on the server until answered
       (r.json.alerts || []).forEach(function (a) { if (!seen[a.id]) S.alertQueue.push(a); });
       showNextAlert();
     }).catch(function () {});
@@ -815,6 +817,7 @@
     if (S.alertShowing || !S.alertQueue.length) return;
     var a = S.alertQueue.shift();
     S.alertShowing = true;
+    S.alertCurrentId = a.id;
     var b = ensureAlertBox();
     var d = a.details || {};
     var when = a.kind === 'moved'
@@ -838,20 +841,46 @@
         : 'Yes: the portal and Outlook are updated to match Splose. No: the portal keeps its own copy, the owner is told, and the correction is made in Splose.') + '</div>' +
       '</div>';
     b.hidden = false;
-    b.querySelectorAll('[data-verdict]').forEach(function (btn) {
+    var buttons = b.querySelectorAll('[data-verdict]');
+    function finish() {
+      b.hidden = true;
+      S.alertShowing = false;
+      S.alertCurrentId = null;
+      showNextAlert();
+    }
+    buttons.forEach(function (btn) {
+      var label = btn.textContent;
       btn.addEventListener('click', function () {
-        btn.disabled = true;
-        fetchJson('/api/splose-sync/alerts/' + encodeURIComponent(a.id) + '/ack', { method: 'POST', body: { verdict: btn.getAttribute('data-verdict') } })
+        // One answer at a time: both buttons wait, and the pressed one says so.
+        // Applying can take a while because it also updates Outlook.
+        buttons.forEach(function (x) { x.disabled = true; });
+        btn.textContent = 'Working on it…';
+        // Never wait for ever: a request the network lost would leave the dialog stuck.
+        var ctrl = global.AbortController ? new AbortController() : null;
+        var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, ALERT_ACK_TIMEOUT_MS) : null;
+        fetchJson('/api/splose-sync/alerts/' + encodeURIComponent(a.id) + '/ack', { method: 'POST', signal: ctrl ? ctrl.signal : undefined, body: { verdict: btn.getAttribute('data-verdict') } })
           .then(function (r) {
-            if (!r.ok) toast(r.json.error || 'Could not record your answer', true);
-            else if (r.json.verdict === 'valid') {
-              toast('Calendar updated to match Splose');
+            if (r.ok) {
+              if (r.json.verdict === 'valid') {
+                toast('Calendar updated to match Splose');
+                if (typeof global.loadOutlookEventsToCalendar === 'function') { try { global.loadOutlookEventsToCalendar(); } catch (e) {} }
+              } else toast('Noted. Please correct it in Splose so the systems agree.');
+              return finish();
+            }
+            // Already answered (an earlier attempt got through, or another window): nothing left to ask.
+            if (r.status === 404) {
               if (typeof global.loadOutlookEventsToCalendar === 'function') { try { global.loadOutlookEventsToCalendar(); } catch (e) {} }
-            } else toast('Noted. Please correct it in Splose so the systems agree.');
-            b.hidden = true;
-            S.alertShowing = false;
-            showNextAlert();
-          });
+              return finish();
+            }
+            throw new Error(r.json.error || 'Could not record your answer');
+          })
+          .catch(function (err) {
+            // Keep the question on screen so it can be answered again.
+            toast(err && err.name !== 'AbortError' && err.message && err.message !== 'Failed to fetch' ? err.message : 'That did not go through. Please check your connection and try again.', true);
+            buttons.forEach(function (x) { x.disabled = false; });
+            btn.textContent = label;
+          })
+          .then(function () { if (timer) clearTimeout(timer); });
       });
     });
     var first = b.querySelector('[data-verdict=valid]');
