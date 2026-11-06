@@ -43,24 +43,36 @@
   --info-soft: #1d2b42;
   --info-ink: #a5c4f2;
 
-  /* Calendar tiles: the pastel washes become deep washes of the same hue;
-     the mid-tone border strips are kept so each type stays recognisable. */
-  --c-therapy-bg: #3b3212;   --c-initial-bg: #3b3212;   --c-assessment-bg: #3b3212;
-  --c-mdt-bg: #15383e;
-  --c-report-bg: #40211f;
-  --c-travel-bg: #2b274f;
-  --c-admin-bg: #173146;
-  --c-meeting-bg: #173a27;
-  --c-cpd-bg: #222c4c;
-  --c-lunch-bg: #153a32;
-  --c-personal-bg: #173443;
-  --c-sick-bg: #40202a;
-  --c-annual-bg: #25381a;
-  --c-teams-bg: #2b274f;
-  --c-outlook-bg: #3b3212;
-  --c-leave-bg: #173a27;
-  --tile-fg: #ece6dc;
-  --tile-fg-soft: #bdb5aa;
+  /* Calendar tiles: the pastel washes become rich washes of the same hue, far
+     enough from the grid to stand out, with text still comfortably readable
+     (tests/theme-night-contrast.test.js holds both). The side bars brighten too. */
+  --c-therapy-bg: #5c4b14;   --c-initial-bg: #5c4b14;   --c-assessment-bg: #5c4b14;
+  --c-mdt-bg: #17585f;
+  --c-report-bg: #6b2f2a;
+  --c-travel-bg: #443d80;
+  --c-admin-bg: #1f4d70;
+  --c-meeting-bg: #1f5c3b;
+  --c-cpd-bg: #33437a;
+  --c-lunch-bg: #1b5c4e;
+  --c-personal-bg: #1f5168;
+  --c-sick-bg: #6a2d40;
+  --c-annual-bg: #3a5a22;
+  --c-teams-bg: #443d80;
+  --c-outlook-bg: #5c4b14;
+  --c-leave-bg: #1f5c3b;
+  --c-therapy: #eabf45;  --c-initial: #eabf45;  --c-assessment: #eabf45;
+  --c-mdt: #5fd0dc;
+  --c-report: #f08f84;
+  --c-travel: #b3a8f5;
+  --c-admin: #6fbdf0;
+  --c-meeting: #6edb9c;
+  --c-cpd: #92a8f2;
+  --c-lunch: #66dcc0;
+  --c-personal: #7fcdeb;
+  --c-sick: #f28fa8;
+  --c-annual: #a2dc78;
+  --tile-fg: #f6f1e8;
+  --tile-fg-soft: #dcd5ca;
 
   /* Names some feature sheets use with a light fallback and the shell never
      defines — give them night values so those surfaces flip too. */
@@ -108,6 +120,45 @@ html:root[data-theme="dark"] select:not([multiple]) {
    category palette; by night the wash is rebuilt from the category's own
    border hue over the panel, and the text goes light. */
 :root[data-theme="dark"] .session.has-cat {
-  background: color-mix(in srgb, var(--cat-border) 26%, var(--panel)) !important;
+  background: color-mix(in srgb, var(--cat-border) 42%, var(--panel)) !important;
   color: var(--tile-fg) !important;
 }
+
+/* Tiles lift off the dark grid: a hairline edge and a soft shadow. */
+:root[data-theme="dark"] .session {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.09), 0 1px 3px rgba(0, 0, 0, 0.45);
+}
+
+/* Travel blocks. Their day colours are fixed dark inks on faint stripes, which
+   vanish on charcoal: by night each family gets a bright ink, a bright bar and
+   stronger stripes of its own hue. */
+:root[data-theme="dark"] .travel-overlay {
+  --tr: 64, 214, 186;
+  color: #a6f2e2;
+  border-left-color: rgb(var(--tr));
+  background: repeating-linear-gradient(45deg, rgba(var(--tr), 0.20), rgba(var(--tr), 0.20) 5px, rgba(var(--tr), 0.32) 5px, rgba(var(--tr), 0.32) 10px);
+  box-shadow: inset 0 0 0 1px rgba(var(--tr), 0.30);
+}
+:root[data-theme="dark"] .travel-overlay.start {
+  --tr: 106, 170, 245;
+  color: #c6e0ff;
+  border-left-color: rgb(var(--tr));
+  background: repeating-linear-gradient(45deg, rgba(var(--tr), 0.20), rgba(var(--tr), 0.20) 5px, rgba(var(--tr), 0.32) 5px, rgba(var(--tr), 0.32) 10px);
+}
+:root[data-theme="dark"] .travel-overlay.end,
+:root[data-theme="dark"] .travel-overlay.preview.home-after {
+  --tr: 179, 162, 250;
+  color: #e0d9ff;
+  border-left-color: rgb(var(--tr));
+  background: repeating-linear-gradient(45deg, rgba(var(--tr), 0.20), rgba(var(--tr), 0.20) 5px, rgba(var(--tr), 0.32) 5px, rgba(var(--tr), 0.32) 10px);
+}
+:root[data-theme="dark"] .travel-overlay.tight { border-left-color: #ff7a63; }
+:root[data-theme="dark"] .travel-overlay.skipped { background: transparent; box-shadow: none; }
+:root[data-theme="dark"] .travel-overlay.preview.placeholder {
+  color: #c6e0ff;
+  background: repeating-linear-gradient(135deg, rgba(106, 170, 245, 0.22) 0 6px, transparent 6px 12px);
+}
+/* The labels carry an inline 0.7 opacity written for the day theme. */
+:root[data-theme="dark"] .travel-overlay .t-ico { opacity: 1 !important; }
+:root[data-theme="dark"] .travel-overlay:hover { filter: brightness(1.18); }
+:root[data-theme="dark"] .travel-overlay .t-switch:hover { background: rgba(255, 255, 255, 0.14); }

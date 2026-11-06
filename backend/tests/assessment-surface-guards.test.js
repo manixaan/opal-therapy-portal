@@ -796,7 +796,7 @@ describe('changed assets are cache-busted', () => {
       ['templates.js', 8], ['templates.css', 6],
       // 1: day / night mode — theme.js stamps data-theme before first paint
       // (auto follows the clock), theme.css re-values the shell tokens.
-      ['theme.js', 2], ['theme.css', 3],
+      ['theme.js', 2], ['theme.css', 4],
     ]) {
       const ext = file.endsWith('.css') ? 'href' : 'src';
       expect(`${file}:${SHELL.includes(`${ext}="/${file}?v=${version}"`)}`).toBe(`${file}:true`);
