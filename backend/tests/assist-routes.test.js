@@ -428,3 +428,48 @@ describe('the model shown on the page', () => {
     expect(buildSystemPrompt({ surface: 'word', selection: 'x' })).toContain('SELECTED CONTENT');
   });
 });
+
+describe('a chat is not poisoned by its own earlier reply', () => {
+  const stored = (rows) => db.pool.query.mockImplementation(async (sql) => {
+    if (/SELECT \* FROM assist_conversations WHERE id/.test(sql)) return { rows: [{ ...CONV, client_ref: null }], rowCount: 1 };
+    if (/SELECT role, content, kind FROM assist_messages/.test(sql)) return { rows: [...rows].reverse(), rowCount: rows.length };
+    if (/INSERT INTO assist_messages .*RETURNING id/s.test(sql)) return { rows: [{ id: 5 }], rowCount: 1 };
+    return { rows: [], rowCount: 0 };
+  });
+
+  test('an earlier reply holding a name or phone is de-identified before it is sent again, and the prompt still works', async () => {
+    stored([
+      { role: 'user', content: 'Draft a note for [CLIENT_1].', kind: 'text' },
+      { role: 'assistant', content: 'Aiden rang from 0412 345 678 about the session.', kind: 'text' },
+    ]);
+    let seen = null;
+    provider._setProviderForTests(async (args) => { seen = args; return { text: 'Shorter version.' }; });
+    const agent = await login(buildApp(), user());
+    const r = await agent.post('/api/assist/chat').send({ message: 'Make it shorter', conversationId: CONV.id, surface: 'word' });
+    expect(r.body.status).toBe('ok');
+    const sent = JSON.stringify(seen.messages);
+    expect(sent).not.toMatch(/Aiden|0412/);
+    expect(sent).toMatch(/\[PHONE_\d+\]/);
+    expect(seen.messages.map((m) => m.role)).toEqual(['user', 'assistant', 'user']);
+  });
+
+  test('clean history is passed through unchanged', async () => {
+    stored([{ role: 'user', content: 'Draft for [CLIENT_1].', kind: 'text' }, { role: 'assistant', content: 'Here is [CLIENT_1] draft.', kind: 'text' }]);
+    let seen = null;
+    provider._setProviderForTests(async (args) => { seen = args; return { text: 'ok' }; });
+    const agent = await login(buildApp(), user());
+    await agent.post('/api/assist/chat').send({ message: 'Again', conversationId: CONV.id, surface: 'word' });
+    expect(seen.messages[1].content).toBe('Here is [CLIENT_1] draft.');
+  });
+
+  test('a refusal at the gateway leaves its reason code in the log, and no content', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const gateway = require('../ai/ai-gateway');
+    const spy = jest.spyOn(gateway, 'generate').mockRejectedValue(new gateway.AiPolicyError('not_deidentified:contact_detail_present'));
+    provider._setProviderForTests(null);
+    await expect(provider.generate({ system: 's', messages: [{ role: 'user', content: 'private words' }] })).rejects.toThrow('provider_error');
+    expect(warn.mock.calls.flat().join(' ')).toContain('not_deidentified:contact_detail_present');
+    expect(warn.mock.calls.flat().join(' ')).not.toContain('private words');
+    spy.mockRestore(); warn.mockRestore();
+  });
+});

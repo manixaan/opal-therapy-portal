@@ -221,7 +221,7 @@ async function prepare(req, res) {
   let history = [];
   if (conversation) {
     const { rows } = await pool.query(`SELECT role, content, kind FROM assist_messages WHERE conversation_id = $1 ORDER BY id DESC LIMIT ${HISTORY_TURNS}`, [conversation.id]);
-    history = rows.reverse().map((r) => ({ role: r.role, content: historyText(r) }));
+    history = await cleanHistory(rows.reverse().map((r) => ({ role: r.role, content: historyText(r) })), known);
   }
   const surface = conversation ? conversation.surface : surfaceOf(body);
   // On the web page the model chooses the shape of each reply (chat, document,
@@ -232,6 +232,29 @@ async function prepare(req, res) {
   if (format) system += '\n\n' + documents.formatInstruction(format);
   const hiddenCount = Number.isInteger(body.hiddenCount) && body.hiddenCount >= 0 ? Math.min(body.hiddenCount, 10000) : 0;
   return { message, selection, conversation, history, surface, system, hiddenCount, clientRef, format, known };
+}
+
+/**
+ * The gateway re-checks EVERY message on every call, the model's earlier
+ * replies included. A reply that happened to contain a name in the directory,
+ * an address or a long number therefore refused every later prompt in that
+ * chat, and the person only saw "not available" (Nov 2026). Such a turn is
+ * de-identified here before it is sent again; one that still cannot be made
+ * clean is left out. The model never sees the detail either way.
+ */
+async function cleanHistory(turns, known) {
+  const out = [];
+  for (const t of turns) {
+    if (!(await deid.assertClean({ text: t.content, known }))) { out.push(t); continue; }
+    try {
+      const checked = await deid.check({ text: t.content, known });
+      if (!(await deid.assertClean({ text: checked.text, known }))) { out.push({ role: t.role, content: checked.text }); continue; }
+    } catch (_) { /* fall through: leave the turn out */ }
+    console.warn('[assist] a stored turn could not be made clean and was left out of the history');
+  }
+  // The model needs turns to start with the user and alternate; dropping one can break that.
+  while (out.length && out[0].role !== 'user') out.shift();
+  return out.filter((t, i) => i === 0 || t.role !== out[i - 1].role);
 }
 
 /** A stored turn as the model should see it again: documents become their plain text. */

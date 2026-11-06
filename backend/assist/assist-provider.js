@@ -35,7 +35,11 @@ const clampInt = (raw, fallback, min, max) => {
 };
 
 function mapError(err, where) {
-  if (err instanceof gateway.AiPolicyError) return new Error('provider_error');
+  if (err instanceof gateway.AiPolicyError) {
+    // A refusal used to vanish into "not available" with no trace here. The reason is a code, never content.
+    console.warn(`[assist-provider] ${where} refused (reason: ${err.reason || 'unknown'})`);
+    return new Error('provider_error');
+  }
   if (err?.message === 'guardrail_intervened') return new Error('content_blocked');
   if (err?.message === 'guardrail_not_configured') return new Error('provider_error');
   if (err?.message === 'provider_error') return err;
