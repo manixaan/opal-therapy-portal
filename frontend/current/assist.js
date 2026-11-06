@@ -191,6 +191,7 @@
       return '<div class="oa-msg assistant' + (m.error ? ' error' : '') + '"><img class="oa-avatar" src="' + avatar + '" alt=""><div><div class="oa-bubble">' + body + '</div>' + tools + '</div></div>';
     }).join('');
     Array.prototype.forEach.call(stack.querySelectorAll('.oa-doc-host'), function (host) { host.appendChild(editorFor(S.messages[+host.dataset.doc]).el); });
+    updateContext();
     $('oa-body').scrollTop = $('oa-body').scrollHeight;
   }
 
@@ -265,7 +266,7 @@
     slot.innerHTML = '<div class="oa-review" role="dialog" aria-label="Check before sending">'
       + '<h2>' + (r.hidden.length ? r.hidden.length + ' item' + (r.hidden.length === 1 ? '' : 's') + ' will be hidden' : 'Nothing to hide') + '</h2>'
       + '<p class="lead">This is exactly what leaves the practice. Tokens stand in for people and contact details; you keep seeing the real names.</p>'
-      + '<div class="oa-preview">' + esc(r.text) + (r.selectionText ? '\n\n— selected content —\n' + esc(r.selectionText) : '') + '</div>'
+      + '<div class="oa-preview">' + esc(r.text) + (r.selectionText ? (S.surface === 'web' ? '\n\n— attached —\n' : '\n\n— selected content —\n') + esc(r.selectionText) : '') + '</div>'
       + (hidden ? '<ul class="oa-hidden">' + hidden + '</ul>' : '')
       + cands
       + '<div class="oa-addname"><input id="oa-addname" type="text" placeholder="Hide another name the check missed…" aria-label="Name to hide"><button class="oa-btn sm" type="button" id="oa-addname-btn">Hide it</button></div>'
@@ -321,6 +322,7 @@
     S.pendingConfirmed = [];
     S.messages.push({ role: 'user', text: r.text });
     $('oa-input').value = '';
+    if (COMPOSER()) { COMPOSER().clearAttachments(); COMPOSER().autosize(); }
     // The server (the model, in fact) decides whether this comes back as chat, a document or a case note.
     var live = { role: 'assistant', text: '', live: true, key: 'k' + Date.now() };
     S.messages.push(live);
@@ -472,11 +474,28 @@
   function setSelection(text) { S.selection = String(text || '').slice(0, 20000); updateSelectionBar(); }
 
   // ── Events ────────────────────────────────────────────────────────────────
+  var COMPOSER = function () { return global.OpalAssistComposer; };
   function onSend() {
     if (S.busy || !S.enabled) return;
+    if (S.surface === 'web') {
+      if (COMPOSER().busyReading()) { setStatus('Still reading the file…', 'warn'); return; }
+      // Attached files travel as the "selected content": checked for names like the message, then guarded again by the server.
+      S.selection = COMPOSER().attachmentsText();
+    }
     var raw = $('oa-input').value.trim();
+    if (!raw && S.selection) raw = 'Please help with the attached file.';
     if (!raw) return;
+    COMPOSER().stopDictation();
     runCheck(raw);
+  }
+
+  /** Roughly how much of the model's context this chat already uses: the recent turns sent with each message, the draft, and the attachments. */
+  function updateContext() {
+    if (!COMPOSER()) return;
+    var turns = S.historyTurns || 16;
+    var recent = S.messages.slice(-turns).map(function (m) { return m.text || ''; }).join('\n');
+    var draft = ($('oa-input').value || '') + (S.surface === 'web' ? COMPOSER().attachmentsText() : S.selection);
+    COMPOSER().renderContext(1500 + COMPOSER().estimateTokens(recent) + COMPOSER().estimateTokens(draft)); // ~1,500 for the instructions themselves
   }
   document.addEventListener('click', function (e) {
     var t = e.target.closest('button, a'); if (!t) return;
@@ -535,6 +554,7 @@
     if (S.surface !== 'web') { document.body.classList.add('oa-pane'); $('oa-hint').textContent = 'Names and contact details are hidden before sending.'; $('oa-input').placeholder = 'Ask Opal Assist…'; }
     if (global.innerWidth < 760) $('oa-menu').style.display = '';
     pruneMaps(); wirePortalButton();
+    COMPOSER().init({ attachments: S.surface === 'web', onChange: updateContext });
     // The client comes from the link (?client=splose:patient:<id>), else the last one picked in this browser.
     var startRef = params.get('client');
     if (startRef === null) { try { startRef = localStorage.getItem('oa.client') || ''; } catch (e) { startRef = ''; } }
@@ -552,6 +572,8 @@
       .then(function (c) {
         if (!c) return;
         S.enabled = !!c.enabled;
+        S.historyTurns = c.historyTurns || 16;
+        COMPOSER().setModel(c.model || null);
         setStatus(S.enabled ? 'Ready' : 'Not switched on', S.enabled ? '' : 'off');
         $('oa-send').disabled = !S.enabled;
         if (!S.enabled) $('oa-hint').textContent = 'Opal Assist is not switched on for this portal yet. Ask the practice owner.';

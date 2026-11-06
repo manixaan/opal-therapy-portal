@@ -84,4 +84,7 @@ async function generate({ system, messages, userId, organisationId, onText, raw 
 
 function _setProviderForTests(fn) { _providerOverride = typeof fn === 'function' ? fn : null; }
 
-module.exports = { FEATURE, generate, isEnabled, configError, _setProviderForTests };
+/** The model's public name, host, residency and context size — for the page. Never the profile id. */
+function describeModel() { return isEnabled() ? gateway.describeModel(FEATURE) : null; }
+
+module.exports = { FEATURE, generate, isEnabled, configError, describeModel, _setProviderForTests };

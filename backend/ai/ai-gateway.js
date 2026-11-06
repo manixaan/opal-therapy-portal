@@ -519,10 +519,28 @@ async function generate(opts = {}) {
   };
 }
 
+/**
+ * What a feature would run on right now, for showing to the person using it:
+ * the model's public name, where it runs, and its context size. Never the
+ * inference-profile id (see bedrock-config.describe). Not available → null.
+ */
+function describeModel(feature) {
+  const decision = evaluate({ feature });
+  if (!decision.ok) return null;
+  const provider = decision.model.provider;
+  return {
+    name: registry.displayName(decision.model.id) || 'AI model',
+    host: provider === registry.PROVIDER_BEDROCK ? 'Amazon Bedrock' : provider === registry.PROVIDER_MOCK ? 'Offline test' : 'Direct',
+    residency: decision.model.residency === 'australia' ? 'Australia' : null,
+    contextTokens: registry.CONTEXT_TOKENS,
+  };
+}
+
 module.exports = {
   generate,
   evaluate,
   isAvailable,
+  describeModel,
   unavailableReason,
   resolveRegion,
   AiPolicyError,

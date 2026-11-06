@@ -401,3 +401,30 @@ describe('auto mode — the model decides the shape of each reply on the web pag
     expect(seen.raw).toBe(false);
   });
 });
+
+describe('the model shown on the page', () => {
+  const registry = require('../ai/ai-model-registry');
+  test('a person-facing name only: family and version, never the inference-profile id', () => {
+    expect(registry.displayName('au.anthropic.claude-sonnet-4-5-20250929-v1:0')).toBe('Claude Sonnet 4.5');
+    expect(registry.displayName('au.anthropic.claude-haiku-4-5-20251001-v1:0')).toBe('Claude Haiku 4.5');
+    expect(registry.displayName('apac.anthropic.claude-3-5-sonnet-20241022-v2:0')).toBe('Claude 3.5 Sonnet');
+    expect(registry.displayName('au.anthropic.claude-sonnet-4-20250514-v1:0')).toBe('Claude Sonnet 4');
+    expect(registry.displayName('something-else')).toBe('AI model');
+  });
+
+  test('config carries the name, host, residency and context size — and no model id', async () => {
+    const agent = await login(buildApp(), user());
+    const r = await agent.get('/api/assist/config');
+    expect(r.body.historyTurns).toBe(16);
+    expect(r.body.model).toEqual(expect.objectContaining({ name: expect.any(String), contextTokens: 200000 }));
+    expect(JSON.stringify(r.body)).not.toMatch(/au\.anthropic|test-profile|arn:aws/);
+    process.env.OPAL_ASSIST_ENABLED = 'false';
+    expect((await agent.get('/api/assist/config')).body.model).toBeNull();
+  });
+
+  test('on the web page attachments are called attached content; in Office, selected content', () => {
+    const { buildSystemPrompt } = require('../assist/assist-prompt');
+    expect(buildSystemPrompt({ surface: 'web', selection: 'x' })).toContain('ATTACHED CONTENT');
+    expect(buildSystemPrompt({ surface: 'word', selection: 'x' })).toContain('SELECTED CONTENT');
+  });
+});

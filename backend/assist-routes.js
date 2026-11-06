@@ -151,7 +151,11 @@ router.get('/api/assist/clients', safe(async (req, res) => {
 
 // ── Config ───────────────────────────────────────────────────────────────────
 router.get('/api/assist/config', safe(async (req, res) => {
-  res.json({ enabled: provider.isEnabled(), reason: provider.isEnabled() ? null : provider.configError(), name: 'Opal Assist', retentionDays: RETENTION_DAYS });
+  res.json({
+    enabled: provider.isEnabled(), reason: provider.isEnabled() ? null : provider.configError(), name: 'Opal Assist', retentionDays: RETENTION_DAYS,
+    // What the page shows beside the send button, and what it needs to show how full a chat is.
+    model: provider.describeModel(), historyTurns: HISTORY_TURNS, maxMessageChars: MAX_MESSAGE_CHARS, maxAttachmentChars: MAX_SELECTION_CHARS,
+  });
 }));
 
 // ── Check before sending — no model call ─────────────────────────────────────

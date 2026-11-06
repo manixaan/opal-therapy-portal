@@ -73,7 +73,9 @@ function buildSystemPrompt({ user, surface, selection, clientChat } = {}) {
       + 'and refer to the client as [CLIENT_1] — never as "the client" where the token reads naturally, and never by any other name.');
   }
   if (selection && typeof selection === 'string' && selection.trim()) {
-    sections.push('SELECTED CONTENT\nThe staff member has selected the following content in their document. Treat it as the material to work on unless they say otherwise:\n\n' + selection.trim());
+    sections.push(surface === 'web' || !surface
+      ? 'ATTACHED CONTENT\nThe staff member attached the following file content to this message. Treat it as the material to work on unless they say otherwise:\n\n' + selection.trim()
+      : 'SELECTED CONTENT\nThe staff member has selected the following content in their document. Treat it as the material to work on unless they say otherwise:\n\n' + selection.trim());
   }
   return sections.join('\n\n');
 }

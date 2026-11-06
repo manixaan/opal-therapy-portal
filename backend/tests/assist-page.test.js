@@ -306,7 +306,9 @@ describe('editable documents on the page', () => {
 
   test('the editor itself makes no network call — every save and rewrite goes through the checked paths in assist.js', () => {
     expect(read('assist-doc.js')).not.toMatch(/fetch\s*\(|XMLHttpRequest|sendBeacon|WebSocket|\/api\//);
-    expect(read('assist.html')).toMatch(/<script src="\/assist-doc\.js\?v=\d+"><\/script>\s*<script src="\/assist\.js\?v=\d+"><\/script>/);
+    const page = read('assist.html');
+    expect(page.indexOf('<script src="/assist-doc.js?v=')).toBeGreaterThan(0);
+    expect(page.indexOf('<script src="/assist-doc.js?v=')).toBeLessThan(page.indexOf('<script src="/assist.js?v='));
   });
 });
 
@@ -334,5 +336,43 @@ describe('Opal Assist follows the portal: day / night and its dropdowns', () => 
     const js = read('assist.js');
     expect(js).toContain("esc(threadTitle(c.title))");
     expect(js).not.toContain('who the AI only ever sees as [CLIENT_1]');
+  });
+});
+
+describe('the composer: grows, attaches, dictates on-device, shows the model and how full the chat is', () => {
+  const fs = require('fs'); const path = require('path');
+  const comp = require('../../frontend/current/assist-composer.js');
+  const read = (f) => fs.readFileSync(path.join(__dirname, '../../frontend/current', f), 'utf8');
+
+  test('token estimate and the ring bands', () => {
+    expect(comp.estimateTokens('a'.repeat(400))).toBe(100);
+    expect(comp.contextBand(10000, 200000)).toEqual({ fraction: 0.05, band: 'ok' });
+    expect(comp.contextBand(130000, 200000).band).toBe('high');
+    expect(comp.contextBand(190000, 200000).band).toBe('full');
+    expect(comp.contextBand(400000, 200000).fraction).toBe(1);
+  });
+
+  test('a Word file is read to plain paragraphs in the browser', () => {
+    expect(comp.docxXmlToText('<w:p><w:r><w:t>Session</w:t></w:r><w:r><w:tab/><w:t>details</w:t></w:r></w:p><w:p><w:r><w:t>Fan &amp; sponge</w:t></w:r></w:p>')).toBe('Session\tdetails\nFan & sponge');
+  });
+
+  test('files are read locally: no upload, only the portal\'s own vendored readers are fetched', () => {
+    const src = read('assist-composer.js');
+    expect(src).not.toMatch(/fetch\s*\(|XMLHttpRequest|sendBeacon|WebSocket|\/api\//);
+    (src.match(/import\('([^']+)'\)|loadScript\('([^']+)'\)/g) || []).forEach((m) => expect(m).toMatch(/'\/vendor\//));
+  });
+
+  test('dictation never starts unless the browser promises to process speech on this computer', () => {
+    const src = read('assist-composer.js');
+    expect(src).toContain('rec.processLocally = true;');
+    expect(src).toMatch(/if \(rec\.processLocally !== true\) throw new Error\('not_local'\)/);
+    expect(src).toMatch(/Ctor\.available\(\{ langs: \[lang\], processLocally: true \}\)/);
+  });
+
+  test('the page has the one-box composer: attach, mic, model, context ring, round send', () => {
+    const page = read('assist.html');
+    ['id="oa-composer"', 'id="oa-attach"', 'id="oa-file"', 'id="oa-mic"', 'id="oa-model"', 'id="oa-context"', 'class="oa-send" id="oa-send"'].forEach((s) => expect(page).toContain(s));
+    expect(page).toMatch(/<script src="\/assist-composer\.js\?v=\d+"><\/script>\s*<script src="\/assist\.js\?v=\d+">/);
+    expect(read('assist.css')).toMatch(/\.oa-textarea \{[^}]*resize: none;/);
   });
 });

@@ -179,7 +179,30 @@ function validate(key, region) {
   return null;
 }
 
+/**
+ * A person-facing name for a model id — "Claude Sonnet 4.5" — and nothing
+ * else: the family and version are public facts about the model, the full
+ * inference-profile id is an account internal and never leaves the server.
+ * Unknown shapes get a generic name rather than a guess.
+ */
+function displayName(id) {
+  const s = String(id || '').toLowerCase();
+  if (!s) return null;
+  if (s === 'mock-model') return 'Test model (no AI)';
+  let m = s.match(/claude-(opus|sonnet|haiku|fable)-(\d+)(?:-(\d{1,2}))?(?=-\d{8}|-v\d|:|$)/);
+  if (m) return `Claude ${m[1][0].toUpperCase()}${m[1].slice(1)} ${m[2]}${m[3] ? '.' + m[3] : ''}`;
+  m = s.match(/claude-(\d+)(?:-(\d))?-(opus|sonnet|haiku)/);
+  if (m) return `Claude ${m[1]}${m[2] ? '.' + m[2] : ''} ${m[3][0].toUpperCase()}${m[3].slice(1)}`;
+  if (s.includes('anthropic')) return 'Claude';
+  return 'AI model';
+}
+
+/** Context window by family, in tokens — for the page's "how full is this chat" ring. */
+const CONTEXT_TOKENS = 200000;
+
 module.exports = {
+  displayName,
+  CONTEXT_TOKENS,
   APPROVED_MODELS,
   PERMANENTLY_BLOCKED,
   AU_REGIONS,
