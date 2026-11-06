@@ -23,7 +23,7 @@ None, and none expected.
 
 ## Disagreement
 None. The tracker's own `claude_update` text already says this is "untouched
-by design," which independent inspection confirms. As with the Docs
-Register, the "re-confirmed tonight" phrasing in that text does not match
-this repository's history (no prior dated brief exists) — treat tonight's
-finding as this audit's own first check, not a re-confirmation.
+by design," which independent inspection confirms. Real prior audits of this repo do exist
+(2026-11-01/02/04/05, on `origin/claude/nightly-audit`, confirmed genuine) and already said
+the same thing each night — tonight's check re-derives the same conclusion independently
+rather than copying it forward.

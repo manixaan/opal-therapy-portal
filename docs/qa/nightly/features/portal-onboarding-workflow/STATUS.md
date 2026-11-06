@@ -1,7 +1,7 @@
 Feature: Portal Onboarding Workflow
 Tracker stage: idea | Tracker environment: none
 Evidence label: needs-refinement
-Addressed this window (since 2026-10-23): no — no onboarding-prefixed commit appears in the 40-commit backend/frontend change list for this window.
+Addressed since the last audit (2026-11-05, cutoff `8853376`, 4 commits since: `704a51f`, `0a365c4`, `cd8c4a8`, `e3c0b90`): no — none of the 4 touches an `onboarding-*` file.
 Created at all: yes — this is one of the most built-out subsystems in the repo.
 
 ## Located
@@ -15,6 +15,7 @@ Created at all: yes — this is one of the most built-out subsystems in the repo
 ## Tests
 - Unit (8 files, `npx jest tests/onboarding-contract-docx.test.js tests/onboarding-offer-docx.test.js tests/onboarding-offer-pdf.test.js tests/onboarding-offer-template.test.js tests/onboarding-journey.test.js tests/onboarding-workflow-guards.test.js tests/onboarding-journey-frontend-guards.test.js tests/onboarding-frontend-guards.test.js`): **239/239 passed.**
 - Integration (`DB_NAME=therapy_scheduler_audit_b DB_PASSWORD=audit npx jest --config jest.integration.config.js tests/integration/onboarding-journey.itest.js --runInBand`): **26/26 passed.**
+- `tests/onboarding-document-reader.test.js` (re-run separately tonight, not part of the 8-file batch above): **14/15 passed, 1 failed** — `Cannot find module '@tesseract.js-data/eng/package.json'`. Same environment gap the 2026-11-05 brief recorded (missing OCR language-data sub-package); confirmed unchanged tonight, not fixed per the "no npm install" limit, not a code regression.
 - Many further onboarding unit/integration files exist (`onboarding-pack`, `onboarding-payroll`, `onboarding-returns`, `onboarding-extraction`, etc.) that were not run tonight — out of scope for a non-weekly run; see `docs/qa/BROWSER_QA_RESULTS.md` row C for employee-facing wizard browser evidence (7/7 ✅, covers login → `/onboarding` routing → setup-card rendering), but that covers the self-serve wizard, not the admin "Edit Onboarding" management tab used to build/send the Letter of Offer and Stage 2 packages — no browser/E2E coverage was found for that admin flow.
 
 ## Open tracker tasks
@@ -24,7 +25,16 @@ Created at all: yes — this is one of the most built-out subsystems in the repo
 - "stage 3" task has no explanation/checklist at all.
 
 ## Commits in window
-None touching `onboarding-*` found in the 14-day change list (since 2026-10-23, HEAD 704a51f).
+None touching `onboarding-*` since the 2026-11-05 audit's cutoff (`8853376`).
 
 ## Disagreement
-The tracker's own prior `claude_update` text claims this was "re-confirmed tonight" by a previous audit — but no dated brief exists anywhere under `docs/qa/nightly/` before this one, and `docs/qa/nightly/features/` did not exist before tonight. That claim could not have come from a prior run of this audit; tonight's findings are independently verified, not a "re-confirmation." Separately: the tracker's Stage 2 checklist still lists "Make the employee contract dynamic" as not done, but the code already implements it (`onboarding-contract-docx.js` pulls remuneration/pay/superannuation/probation straight from the Letter of Offer) — code is ahead of the tracker checklist here, worth a tracker tidy-up rather than more build work.
+The tracker's own prior `claude_update` text claims this was "re-confirmed tonight." Real prior
+audits do exist — 2026-11-01/02/04/05, on `origin/claude/nightly-audit` (confirmed genuine; that
+branch is just never merged into `develop`, which is why this checkout initially looked like it
+had no history). The 2026-11-05 brief independently found the same SharePoint-vs-database
+question open and the same single OCR-environment test failure — tonight's findings confirm that
+one, rather than being a first-ever check. Separately: the tracker's Stage 2 checklist still lists
+"Make the employee contract dynamic" as not done, but the code already implements it
+(`onboarding-contract-docx.js` pulls remuneration/pay/superannuation/probation straight from the
+Letter of Offer) — code is ahead of the tracker checklist here, worth a tracker tidy-up rather
+than more build work.

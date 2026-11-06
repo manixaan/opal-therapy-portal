@@ -4,7 +4,7 @@
 - Tracker environment: none
 - Evidence label: **tab-unproven**
 - Created (any code located): yes (backend API only)
-- Addressed in this change window (2026-10-23 → 2026-11-06, HEAD 704a51f): yes — `e1af24e fix(mobile): the phone diary matches the portal calendar` touched `backend/mobile-routes.js`, `backend/database.js`.
+- Addressed since the last audit (2026-11-05, cutoff commit `8853376`, through tonight's HEAD `704a51f` — 4 commits: `704a51f`, `0a365c4`, `cd8c4a8`, `e3c0b90`): **no**. `e1af24e fix(mobile): the phone diary matches the portal calendar` touches `backend/mobile-routes.js`/`backend/database.js` but predates the 2026-11-05 audit's cutoff — already covered by prior audits, not new tonight.
 
 ## Located
 - `backend/mobile-routes.js` — the whole mobile API surface (events, voice notes, tasks, reminders, case-note draft generation alias).
@@ -28,7 +28,7 @@ Result: **1 suite passed, 50 tests passed, 0 failed** (covers voice notes, tasks
 - "Calendar View" (todo, no explanation/checklist recorded).
 
 ## Commits in window touching it
-- `e1af24e fix(mobile): the phone diary matches the portal calendar` — aligns the mobile day view with the portal calendar.
+None since the 2026-11-05 audit's cutoff. (`e1af24e fix(mobile): the phone diary matches the portal calendar` is older than that cutoff — it was already in scope for the 2026-11-04/05 audits, not new tonight.)
 
 ## Disagreement note
-**Disagreement with the tracker's own `claude_update` text**, which calls this feature outright `proven`. That text cannot be trusted as a prior finding either way (no dated brief or `features/` folder existed before tonight, so there is no real "last audit" to match). Independently: the *backend API* is guarded, AI-gateway-compliant, and passing 50 tests — that part is solid. But the feature as scoped ("Opa Mobile Companion") is the mobile app, and its client code is entirely absent from this repository, with no e2e spec and no browser-QA entry proving the dictation/case-noting/calendar flow actually works for a user on a device. Labelling the whole feature `proven` overstates what this repo can show. `tab-unproven` is the honest label: proven API, unproven user-facing flow, and the user-facing flow is the point of a "mobile companion."
+**Disagreement with three straight prior nights' classification**, not just the tracker's `claude_update` text. The 2026-11-01/02/04/05 briefs on `origin/claude/nightly-audit` (real prior audits — confirmed genuine, not fabricated) all called this feature `proven`, "figures matching exactly" night over night. Tonight's independent re-derivation agrees the *backend API* is guarded, AI-gateway-compliant, and passing 50 tests — that part is solid and unchanged. But re-examining the feature as scoped ("Opa Mobile Companion" — the mobile app, not just its API), its client code is entirely absent from this repository, with no e2e spec and no browser-QA entry proving the dictation/case-noting/calendar flow actually works for a user on a device. Three prior nights calling the whole feature `proven` overstates what this repo can actually show; `tab-unproven` is the more honest label — proven API, unproven user-facing flow, and the user-facing flow is the point of a "mobile companion." This is a genuine change of label from history, not a fabrication issue — worth a human's attention on whether "proven" was ever the right call here, or whether the scope should explicitly be "backend API only."

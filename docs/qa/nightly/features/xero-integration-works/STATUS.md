@@ -4,7 +4,7 @@
 - Tracker environment: none
 - Evidence label: **tab-unproven**
 - Created (any code located): yes
-- Addressed in this change window (2026-10-23 → 2026-11-06, HEAD 704a51f): no — no commit in the window touches `accounting-routes.js`, `accounting-db.js`, `accounting-exceptions.js`, `xero-api.js`, `xero-payroll-*.js`, or `xero-sync.js`.
+- Addressed since the last audit (2026-11-05, cutoff `8853376`, through tonight's HEAD `704a51f` — 4 commits: `704a51f`, `0a365c4`, `cd8c4a8`, `e3c0b90`): no — none of the 4 touches `accounting-routes.js`, `accounting-db.js`, `accounting-exceptions.js`, `xero-api.js`, `xero-payroll-*.js`, or `xero-sync.js`.
 
 ## Located
 - `backend/accounting-routes.js`, `backend/accounting-db.js`, `backend/accounting-exceptions.js` — Financial Dashboard + accounting extraction.
@@ -40,7 +40,7 @@ Result: **4 suites passed, 39 tests passed, 0 failed** (Xero calls correctly fai
 - "Payroll Automation" (todo) — checklist 0/5 top-level items done.
 
 ## Commits in window touching it
-None.
+None since the 2026-11-05 audit's cutoff.
 
 ## Disagreement note
-The tracker's own `claude_update` text claims "70 tests ... corrected from a miscounted 120 last time" and cites a checklist still at "0 of N done." Neither claim can be trusted as a genuine prior finding — there is no dated brief or `features/` folder predating tonight, so no real previous audit produced those numbers. Independently recounted tonight: **116 tests (77 unit + 39 integration), not 70 and not 120** — both prior figures were wrong. The "0 of N done" checklist claim is independently correct (verified directly against the tracker's own checklist data, not against the untrustworthy prose). Real disagreement stands: the tracker stage is `idea` with 0% of either task's checklist ticked, while the code is fully built, owner-guarded, and passing 116 tests — substantially ahead of what the stage/checklist implies. The one genuine gap, also independently confirmed via the existing browser-QA entry, is that no flow has been exercised against a live Xero sandbox.
+The tracker's `claude_update` text claims "70 tests ... corrected from a miscounted 120 last time" and cites a checklist still at "0 of N done." This is a genuine real prior finding, not fabricated — the 2026-11-05 brief on `origin/claude/nightly-audit` independently recounted this same test surface file-by-file as exactly 70 unit tests, correcting the 2026-11-04 brief's "120" (confirmed against that real brief's own text). Tonight's recount is **116 tests (77 unit + 39 integration)** — wider than 70 because tonight's batch additionally included `tests/xero-payroll-sync.test.js` (unit) and `tests/integration/onboarding-payroll-xero.itest.js` (integration), both of which genuinely exercise Xero payroll code but weren't named in the 2026-11-05 count. No code changed (0 commits touch this subsystem since then), so this is a scope correction to a more complete test list, not a contradiction of a prior count — worth a human noting so the "116" figure, not "70," becomes the one that's tracked going forward. The "0 of N done" checklist claim is independently correct (verified directly against the tracker's own checklist data). Real disagreement stands, carried from every prior audit: the tracker stage is `idea` with 0% of either task's checklist ticked, while the code is fully built, owner-guarded, and passing all 116 tests — substantially ahead of what the stage/checklist implies. The one genuine gap, also independently confirmed via the existing browser-QA entry, is that no flow has been exercised against a live Xero sandbox — unresolved across every audit so far.

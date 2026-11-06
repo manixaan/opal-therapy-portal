@@ -4,7 +4,7 @@
 - Tracker environment: none
 - Evidence label: **tab-unproven**
 - Created (any code located): yes
-- Addressed in this change window (2026-10-23 → 2026-11-06, HEAD 704a51f): no — no commit in the window touches whodas-routes.js, assessments-routes.js, fca-routes.js, backend/whodas/, backend/fca/ or backend/assessments/.
+- Addressed since the last audit (2026-11-05, cutoff `8853376`, through tonight's HEAD `704a51f` — 4 commits: `704a51f`, `0a365c4`, `cd8c4a8`, `e3c0b90`): no — none of the 4 touches whodas-routes.js, assessments-routes.js, fca-routes.js, backend/whodas/, backend/fca/ or backend/assessments/.
 
 ## Located
 - `backend/whodas-routes.js`, `backend/whodas/` (templates, scoring, registry)
