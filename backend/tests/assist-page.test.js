@@ -337,6 +337,19 @@ describe('Opal Assist follows the portal: day / night and its dropdowns', () => 
     expect(js).toContain("esc(threadTitle(c.title))");
     expect(js).not.toContain('who the AI only ever sees as [CLIENT_1]');
   });
+
+  test('Hide / Not a person act at once, but Send waits for the server re-check', () => {
+    const js = read('assist.js');
+    // The click updates the card itself — no blocking round-trip per click.
+    expect(js).toContain('if (t.dataset.hide) return decide(t.dataset.hide, true);');
+    expect(js).toContain('if (t.dataset.ignore) return decide(t.dataset.ignore, false);');
+    expect(js).toMatch(/r\.pending = true;[\s\S]{0,80}renderReview\(false\);[\s\S]{0,120}runCheck\(r\.raw, true\)/);
+    // The provisional preview is never what is sent: Send is disabled and refused while pending.
+    expect(js).toContain("(r.pending ? ' disabled' : '')");
+    expect(js).toContain('if (!r || r.pending) return;');
+    // A slower, older check never overwrites a newer decision.
+    expect(js).toMatch(/if \(!current\(\)\) return; \/\/ a newer decision/);
+  });
 });
 
 describe('the composer: grows, attaches, dictates on-device, shows the model and how full the chat is', () => {

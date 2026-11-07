@@ -254,7 +254,7 @@
   function setBusy(b) { S.busy = b; $('oa-send').disabled = b || !S.enabled; $('oa-stop').style.display = b ? '' : 'none'; $('oa-input').disabled = b; }
 
   // ── Review card ───────────────────────────────────────────────────────────
-  function renderReview() {
+  function renderReview(focusSend) {
     var slot = $('oa-review-slot');
     var r = S.review;
     if (!r) { slot.innerHTML = ''; return; }
@@ -273,15 +273,42 @@
       + (r.directoryPartial ? '<p class="oa-note warn"><b>Names may not be recognised right now.</b> ' + esc((r.directoryMissing || []).join(', ') || 'Part of the practice directory') + ' could not be loaded, so people from there are not hidden automatically. Type any name into the box above and press Hide it, or wait thirty seconds and press Check &amp; send again.</p>' : '')
       + (r.cautions || []).map(function (c) { return '<p class="oa-note warn"><b>' + (c.kind === 'combination' ? 'Could still identify someone.' : 'Sensitive topic.') + '</b> ' + esc(c.message) + '</p>'; }).join('')
       + ((r.directoryNotConnected || []).length ? '<p class="oa-note warn"><b>Splose is not connected on this server,</b> so client and contact names are not recognised. Hide them yourself with the box above.</p>' : '')
-      + '<div class="oa-review-actions"><button class="oa-btn" type="button" id="oa-review-edit">Edit message</button><button class="oa-btn primary" type="button" id="oa-review-send">Send</button></div>'
+      + (r.failed ? '<p class="oa-note warn"><b>The check could not be updated.</b> Press Edit message, then send again to re-check.</p>' : '')
+      + '<div class="oa-review-actions"><button class="oa-btn" type="button" id="oa-review-edit">Edit message</button><button class="oa-btn primary" type="button" id="oa-review-send"' + (r.pending ? ' disabled' : '') + '>' + (r.pending ? (r.failed ? 'Send' : 'Updating…') : 'Send') + '</button></div>'
       + '</div>';
-    $('oa-review-send').focus();
+    if (focusSend !== false && !r.pending) $('oa-review-send').focus();
   }
 
-  /** Run the server check on the message (and selection) and open the review card. */
-  function runCheck(rawText) {
-    setBusy(true);
-    setStatus('Checking…');
+  /**
+   * A Hide / Not a person / Hide it decision. The card changes at once; the
+   * server check re-runs behind it (quick clicks share one run). Send stays
+   * off until that run is back, so what leaves is always the server's text,
+   * never this provisional preview.
+   */
+  function decide(word, hide) {
+    var r = S.review; if (!r || !word) return;
+    var lw = word.toLowerCase();
+    r.candidates = r.candidates.filter(function (c) { return c.word.toLowerCase() !== lw; });
+    if (hide) {
+      S.pendingConfirmed = (S.pendingConfirmed || []).concat([word]);
+      var re = new RegExp('\\b' + word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'gi');
+      r.text = r.text.replace(re, '[PERSON]');
+      if (r.selectionText) r.selectionText = r.selectionText.replace(re, '[PERSON]');
+      r.hidden = r.hidden.concat([{ name: word, token: 'PERSON' }]);
+    } else {
+      S.ignoredWords.push(word);
+    }
+    r.pending = true; r.failed = false;
+    renderReview(false);
+    clearTimeout(S.recheckTimer);
+    S.recheckTimer = setTimeout(function () { if (S.review === r) runCheck(r.raw, true); }, 120);
+  }
+
+  /** Run the server check on the message (and selection) and open the review card. `quiet` re-checks an open card in the background. */
+  function runCheck(rawText, quiet) {
+    var seq = S.checkSeq = (S.checkSeq || 0) + 1;
+    var current = function () { return seq === S.checkSeq && (!quiet || !!S.review); };
+    if (!quiet) { setBusy(true); setStatus('Checking…'); }
     var confirmed = S.known.filter(function (k) { return k.name; }).map(function (k) { return k.name; }).concat(S.pendingConfirmed || []);
     var clientRef = S.client ? S.client.ref : undefined;
     return api('/api/assist/check', { body: { text: rawText, known: S.known, confirmedNames: confirmed, ignoredWords: S.ignoredWords, clientRef: clientRef } })
@@ -302,12 +329,15 @@
           });
       })
       .then(function (pending) {
+        if (!current()) return; // a newer decision, or the card was closed
         pending.hidden.forEach(function (h) { S.names[h.token] = h.name; });
         S.review = pending;
-        setBusy(false); setStatus('Ready');
-        renderReview();
+        if (!quiet) { setBusy(false); setStatus('Ready'); }
+        renderReview(!quiet);
       })
       .catch(function (err) {
+        if (!current()) return;
+        if (quiet) { S.review.failed = true; renderReview(false); return; } // Send stays off
         setBusy(false); setStatus('Check failed', 'warn');
         if (err && err.message && err.message !== 'check_failed') $('oa-review-slot').innerHTML = '<p class="oa-note warn">' + esc(err.message) + '</p>';
       });
@@ -316,7 +346,7 @@
   // ── Sending ───────────────────────────────────────────────────────────────
   function confirmSend() {
     var r = S.review;
-    if (!r) return;
+    if (!r || r.pending) return;
     S.review = null; renderReview();
     S.known = r.known || S.known;
     S.pendingConfirmed = [];
@@ -504,12 +534,12 @@
     if (t.id === 'oa-new') return newChat();
     if (t.id === 'oa-menu') { $('oa-side').classList.toggle('open'); return; }
     if (t.id === 'oa-review-send') return confirmSend();
-    if (t.id === 'oa-review-edit') { S.review = null; renderReview(); $('oa-input').focus(); return; }
-    if (t.id === 'oa-addname-btn') { var v = $('oa-addname').value.trim(); if (v) { S.pendingConfirmed = (S.pendingConfirmed || []).concat([v]); runCheck(S.review.raw); } return; }
+    if (t.id === 'oa-review-edit') { clearTimeout(S.recheckTimer); S.review = null; renderReview(); $('oa-input').focus(); return; }
+    if (t.id === 'oa-addname-btn') { var v = $('oa-addname').value.trim(); if (v) decide(v, true); return; }
     if (t.id === 'oa-selection-clear') { setSelection(''); return; }
     if (t.id === 'oa-use-selection') { if (office()) office().readSelection().then(function (txt) { setSelection(txt); if (!txt) setStatus('Nothing selected', 'warn'); }); return; }
-    if (t.dataset.hide) { S.pendingConfirmed = (S.pendingConfirmed || []).concat([t.dataset.hide]); runCheck(S.review.raw); return; }
-    if (t.dataset.ignore) { S.ignoredWords.push(t.dataset.ignore); runCheck(S.review.raw); return; }
+    if (t.dataset.hide) return decide(t.dataset.hide, true);
+    if (t.dataset.ignore) return decide(t.dataset.ignore, false);
     if (t.dataset.open) return openThread(t.dataset.open);
     if (t.dataset.client !== undefined) return selectClient(t.dataset.client || null);
     if (t.id === 'oa-install') { if (installPrompt) { installPrompt.prompt(); installPrompt.userChoice.then(function () { installPrompt = null; t.hidden = true; }); } return; }
