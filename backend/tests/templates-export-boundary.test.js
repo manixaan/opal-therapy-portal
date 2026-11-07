@@ -107,6 +107,8 @@ describe('export boundary — the portal-bound document still carries its bindin
 describe.each([
   ['service_agreement'],
   ['progress_note'],
+  ['support_letter'],
+  ['progress_report'],
   ['fca'],
 ])('export boundary — %s', (templateId) => {
   let docxParts;

@@ -139,15 +139,18 @@ describe('layers are declared honestly', () => {
   });
 });
 
-describe('the catalogue exposes exactly the three required templates', () => {
-  test('three, in the required order, with the required names', () => {
+describe('the catalogue exposes exactly the offered templates', () => {
+  test('four, in the required order, with the required names — the retired Progress Note left out', () => {
     expect(catalogue.listTemplates().map((t) => t.id))
-      .toEqual(['service_agreement', 'progress_note', 'fca']);
+      .toEqual(['service_agreement', 'support_letter', 'progress_report', 'fca']);
     expect(catalogue.listTemplates().map((t) => t.name)).toEqual([
       'Service Agreement',
-      'Progress Note',
+      'Support Letter',
+      'Progress Report',
       'Functional Capacity Assessment (FCA)',
     ]);
+    // Retired, not removed: documents already started from it still open.
+    expect(catalogue.getTemplate('progress_note').retired).toBe(true);
   });
 
   test('each points at a master that exists', () => {
@@ -162,6 +165,10 @@ describe('the catalogue exposes exactly the three required templates', () => {
       .toMatch(/fca\/templates\/progress-note-letter-v1\.docx$/);
     expect(catalogue.getTemplate('service_agreement').file)
       .toMatch(/service-agreements\/templates\/service-agreement-v2\.2\.docx$/);
+    expect(catalogue.getTemplate('support_letter').file)
+      .toMatch(/fca\/templates\/support-letter-v1\.docx$/);
+    expect(catalogue.getTemplate('progress_report').file)
+      .toMatch(/fca\/templates\/progress-report-v1\.docx$/);
   });
 
   test('every field is grouped, and no group is empty', () => {

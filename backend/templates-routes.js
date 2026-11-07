@@ -151,17 +151,58 @@ async function loadOwnDocument(req, id) {
   return rows[0] || null;
 }
 
+// ── Splose, read through a short cache ──────────────────────────────────────
+//
+// The editor autosaves and re-previews on every pause in typing. Reading the
+// client from Splose live on each of those made two Splose round-trips per
+// keystroke-pause — slow, and every transient Splose blip surfaced as "Could
+// not save". The client record does not change while a clinician types a
+// paragraph, so editing reads it through a short cache instead:
+//
+//   fresh for SPLOSE_FRESH_MS   served without calling Splose
+//   then refreshed              a failed refresh serves the last good copy for
+//                               up to SPLOSE_STALE_MS rather than refusing
+//
+// Exports always try Splose first (`fresh`), and fall back only to a copy that
+// is still inside the fresh window — the downloaded document is never built
+// from anything older than what the preview had just shown. Keyed by
+// organisation and client; values only ever reach a caller that has already
+// passed the same guards and own-document lookup as before.
+const SPLOSE_FRESH_MS = 2 * 60 * 1000;
+const SPLOSE_STALE_MS = 30 * 60 * 1000;
+const SPLOSE_CACHE_MAX = 500;
+const sploseCache = new Map();      // `${org}:${clientId}` → { value, at }
+
+async function sploseClientFor(req, clientId, { fresh = false } = {}) {
+  const key = `${orgOf(req)}:${clientId}`;
+  const hit = sploseCache.get(key);
+  const age = hit ? Date.now() - hit.at : Infinity;
+  if (hit && !fresh && age < SPLOSE_FRESH_MS) return hit.value;
+  try {
+    const value = await loadSploseClient(clientId);
+    sploseCache.delete(key);                     // re-insert: Map order = age
+    sploseCache.set(key, { value, at: Date.now() });
+    if (sploseCache.size > SPLOSE_CACHE_MAX) sploseCache.delete(sploseCache.keys().next().value);
+    return value;
+  } catch (err) {
+    const limit = fresh ? SPLOSE_FRESH_MS : SPLOSE_STALE_MS;
+    if (err.sploseFailure && hit && age < limit) return hit.value;
+    throw err;
+  }
+}
+
 /**
- * Everything needed to resolve the document, read fresh. The client is taken
- * from the STORED row: a request cannot name a different one.
+ * Everything needed to resolve the document. The client is taken from the
+ * STORED row: a request cannot name a different one. `fresh` is set by the
+ * exports — see the Splose cache note above.
  */
-async function loadState(req, row) {
+async function loadState(req, row, { fresh = false } = {}) {
   const template = catalogue.getTemplate(row.template_id);
   if (!template) throw new Error(`unknown template_id ${row.template_id}`);
 
   let client = { splose: null, profile: null, currentPlan: null, goals: [] };
   if (row.splose_client_id) {
-    const splose = await loadSploseClient(row.splose_client_id);
+    const splose = await sploseClientFor(req, row.splose_client_id, { fresh });
     const { profile, currentPlan, goals } = await loadClientProfile(orgOf(req), row.splose_client_id);
     client = { splose, profile, currentPlan, goals };
   }
@@ -183,10 +224,12 @@ async function loadState(req, row) {
 }
 
 /**
- * The section the FCA master's custom anchor sits inside — clinician-created
- * sections render there, and the editor shows them under it.
+ * The section a template's custom anchor sits inside — clinician-created
+ * sections render there, and the editor shows them under it. Null when the
+ * anchor sits at the top level (the Support Letter), in which case they are
+ * shown after `customAfterTag`.
  */
-const CUSTOM_ANCHOR_PARENT = 'OPAL_SECTION_ASSESSMENT_RESULTS';
+const customAnchorParent = (template) => template.customAnchorParent || null;
 
 /**
  * The section structure as the editor shows it — the EFFECTIVE state after
@@ -226,8 +269,9 @@ function sectionsDescriptor(template, row, hasAppendices = false) {
         included: s.included !== false,
         headingLevel: levels[s.tag] || null,
         // The size the master's own heading renders at when no override is
-        // stored: top-level sections are Heading 1, nested ones Heading 2.
-        defaultLevel: meta.parent ? 2 : 1,
+        // stored: the map's own level, else top-level sections are Heading 1
+        // and nested ones Heading 2.
+        defaultLevel: meta.level || (meta.parent ? 2 : 1),
         order: s.order,
       };
     });
@@ -248,24 +292,26 @@ function sectionsDescriptor(template, row, hasAppendices = false) {
         title: s.title,
         description: entry.guidance || '',
         group: 'custom',
-        // Custom sections render at the master's anchor, inside Assessment
-        // Results — the panel shows them there so it mirrors the document.
-        parent: CUSTOM_ANCHOR_PARENT,
+        // Custom sections render at the master's anchor — the panel shows
+        // them there so it mirrors the document.
+        parent: customAnchorParent(template),
         required: false,
         custom: true,
         included: true,
-        headingLevel: s.headingLevel || null,
-        defaultLevel: 2,
+        headingLevel: entry.level || null,
+        defaultLevel: template.customDefaultLevel || 2,
         order: s.order,
       };
     });
 
   // Splice customs where they actually render: after the last row belonging
-  // to Assessment Results (the parent itself when it has no children shown).
+  // to the anchor's parent (the parent itself when it has no children shown),
+  // or after the section a top-level anchor follows.
+  const after = customAnchorParent(template) || template.customAfterTag || null;
   let at = templateRows.length;
   for (let i = templateRows.length - 1; i >= 0; i--) {
     const r = templateRows[i];
-    if (r.tag === CUSTOM_ANCHOR_PARENT || r.parent === CUSTOM_ANCHOR_PARENT) {
+    if (after && (r.tag === after || r.parent === after)) {
       at = i + 1;
       break;
     }
@@ -277,6 +323,11 @@ function sectionsDescriptor(template, row, hasAppendices = false) {
 /** The wire shape of a document instance. */
 function serialiseDocument(state) {
   const { template, row, scalarData, scalarSources, missingFields } = state;
+  const sections = sectionsDescriptor(template, row, (state.appendices || []).length > 0);
+  // A field in a removed section is not outstanding: it will not print.
+  const removed = new Set((sections || []).filter((s) => !s.included).map((s) => s.tag));
+  const counted = template.scalars.filter((s) => !(s.section && removed.has(s.section)));
+  const countedMissing = counted.filter((s) => missingFields.includes(s.tag)).length;
   return {
     id: row.id,
     templateId: template.id,
@@ -297,19 +348,21 @@ function serialiseDocument(state) {
         entered: Object.prototype.hasOwnProperty.call(row.field_values || {}, f.tag),
       })),
     })),
-    missingCount: missingFields.length,
-    completedCount: template.scalars.length - missingFields.length,
-    fieldCount: template.scalars.length,
-    // Present only for templates whose structure the editor may shape (the
-    // FCA); null elsewhere so the frontend renders no section panel.
-    sections: sectionsDescriptor(template, row, (state.appendices || []).length > 0),
+    missingCount: countedMissing,
+    completedCount: counted.length - countedMissing,
+    fieldCount: counted.length,
+    // Present only for templates whose structure the editor may shape; null
+    // elsewhere so the frontend renders no section panel.
+    sections,
+    // Whether this template prints attached PDFs in an Appendices section.
+    appendicesSupported: Boolean(template.appendices),
     // Supporting material attached to this document, in appendix order.
     // Ids, titles and sizes only — the bytes have their own route.
     appendices: (state.appendices || []).map(appendices.serialiseAppendix),
     // Where clinician-created sections render: the section that hosts the
     // master's custom anchor. Supplied by the server so the frontend never
     // carries a binding identifier of its own.
-    customParent: template.sectionCatalogue ? CUSTOM_ANCHOR_PARENT : null,
+    customParent: template.sectionCatalogue ? customAnchorParent(template) : null,
   };
 }
 
@@ -476,7 +529,9 @@ router.get('/api/templates/clients', requireTemplateRead, safe(async (req, res) 
 
 router.post('/api/templates/documents', requireTemplateWrite, safe(async (req, res) => {
   const template = catalogue.getTemplate(req.body?.templateId);
-  if (!template) return res.status(400).json({ error: 'unknown_template' });
+  // A retired template still serves the documents already started from it,
+  // but no new document may be started from one.
+  if (!template || template.retired) return res.status(400).json({ error: 'unknown_template' });
 
   const title = str(req.body?.title, MAX_TITLE_CHARS) || template.name;
 
@@ -486,7 +541,7 @@ router.post('/api/templates/documents', requireTemplateWrite, safe(async (req, r
   if (clientId) {
     let client;
     try {
-      client = await loadSploseClient(clientId);
+      client = await sploseClientFor(req, clientId, { fresh: true });
     } catch (err) {
       if (err.sploseFailure) return sploseDown(res);
       throw err;
@@ -560,6 +615,34 @@ router.get('/api/templates/documents/:id', requireTemplateRead, safe(async (req,
  * returns the field to whatever the portal resolves — clearing an override is
  * how a user goes back to the authoritative value.
  */
+/**
+ * Validate a fieldValues payload against the template and merge it over
+ * `current`. Shared by the save and the draft preview so both accept exactly
+ * the same input. An empty string clears a field back to its resolved value.
+ *
+ * @returns {{ ok: true, values } | { ok: false, status, body }}
+ */
+function mergeFieldValues(template, current, incoming) {
+  if (!incoming || typeof incoming !== 'object' || Array.isArray(incoming)) {
+    return { ok: false, status: 400, body: { error: 'invalid_field_values' } };
+  }
+  const unknown = Object.keys(incoming).filter((t) => !template.catalogue.SCALAR_BY_TAG.has(t));
+  if (unknown.length) {
+    return {
+      ok: false, status: 400,
+      body: { error: 'unknown_field', message: `This template has no field named ${unknown[0]}.` },
+    };
+  }
+  const values = { ...(current || {}) };
+  for (const [tag, raw] of Object.entries(incoming)) {
+    // Narrative fields carry a longer ceiling of their own.
+    const value = str(raw, template.catalogue.SCALAR_BY_TAG.get(tag).maxChars || MAX_FIELD_CHARS);
+    if (value === '') delete values[tag];
+    else values[tag] = value;
+  }
+  return { ok: true, values };
+}
+
 router.patch('/api/templates/documents/:id', requireTemplateWrite, safe(async (req, res) => {
   const row = await loadOwnDocument(req, req.params.id);
   if (!row) return res.status(404).json({ error: 'not_found' });
@@ -567,25 +650,12 @@ router.patch('/api/templates/documents/:id', requireTemplateWrite, safe(async (r
   const template = catalogue.getTemplate(row.template_id);
   if (!template) return res.status(404).json({ error: 'not_found' });
 
-  const next = { ...(row.field_values || {}) };
+  let next = { ...(row.field_values || {}) };
 
   if (req.body?.fieldValues !== undefined) {
-    const incoming = req.body.fieldValues;
-    if (!incoming || typeof incoming !== 'object' || Array.isArray(incoming)) {
-      return res.status(400).json({ error: 'invalid_field_values' });
-    }
-    const unknown = Object.keys(incoming).filter((t) => !template.catalogue.SCALAR_BY_TAG.has(t));
-    if (unknown.length) {
-      return res.status(400).json({
-        error: 'unknown_field',
-        message: `This template has no field named ${unknown[0]}.`,
-      });
-    }
-    for (const [tag, raw] of Object.entries(incoming)) {
-      const value = str(raw, MAX_FIELD_CHARS);
-      if (value === '') delete next[tag];
-      else next[tag] = value;
-    }
+    const merged = mergeFieldValues(template, next, req.body.fieldValues);
+    if (!merged.ok) return res.status(merged.status).json(merged.body);
+    next = merged.values;
   }
 
   const title = req.body?.title !== undefined
@@ -609,8 +679,12 @@ router.patch('/api/templates/documents/:id', requireTemplateWrite, safe(async (r
       // holds, so one panel's save cannot reset another's.
       const prior = (row.sections && typeof row.sections === 'object') ? row.sections : {};
       const allTags = template.sectionCatalogue.SECTIONS.map((s) => s.tag);
+      // The master's own default selection — a section that starts removed
+      // (a fifth goal slot) must not appear because only the order changed.
+      const defaultTags = template.sectionCatalogue.SECTIONS
+        .filter((s) => s.defaultSelected !== false).map((s) => s.tag);
       sections = {
-        selected: checked.value.selected ?? prior.selected ?? allTags,
+        selected: checked.value.selected ?? prior.selected ?? defaultTags,
         order: checked.value.order ?? prior.order ?? allTags,
         custom: checked.value.custom ?? prior.custom ?? [],
         levels: checked.value.levels ?? prior.levels ?? {},
@@ -680,10 +754,7 @@ router.delete('/api/templates/documents/:id', requireTemplateWrite, safe(async (
  * master's own prompts for anything outstanding. The export boundary is what
  * removes them, and it runs only on the export routes below.
  */
-router.get('/api/templates/documents/:id/preview.docx', requireTemplateRead, safe(async (req, res) => {
-  const row = await loadOwnDocument(req, req.params.id);
-  if (!row) return res.status(404).json({ error: 'not_found' });
-
+async function sendPreview(req, res, row) {
   let buffer;
   try {
     const state = await loadState(req, row);
@@ -699,6 +770,35 @@ router.get('/api/templates/documents/:id/preview.docx', requireTemplateRead, saf
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Cache-Control', 'no-store');
   return res.end(buffer);
+}
+
+router.get('/api/templates/documents/:id/preview.docx', requireTemplateRead, safe(async (req, res) => {
+  const row = await loadOwnDocument(req, req.params.id);
+  if (!row) return res.status(404).json({ error: 'not_found' });
+  return sendPreview(req, res, row);
+}));
+
+/**
+ * The DRAFT preview: the same composition, with the values the clinician is
+ * typing right now laid over the stored ones — so the preview keeps pace with
+ * the keyboard instead of waiting for the autosave round-trip. Nothing is
+ * written: the draft exists only for the length of this request, and the
+ * autosave remains the one path that persists anything. Validated exactly as
+ * the save is, so a draft can show nothing a save could not store.
+ */
+router.post('/api/templates/documents/:id/preview.docx', requireTemplateWrite, safe(async (req, res) => {
+  const row = await loadOwnDocument(req, req.params.id);
+  if (!row) return res.status(404).json({ error: 'not_found' });
+  const template = catalogue.getTemplate(row.template_id);
+  if (!template) return res.status(404).json({ error: 'not_found' });
+
+  let draft = row;
+  if (req.body?.fieldValues !== undefined) {
+    const merged = mergeFieldValues(template, row.field_values, req.body.fieldValues);
+    if (!merged.ok) return res.status(merged.status).json(merged.body);
+    draft = { ...row, field_values: merged.values };
+  }
+  return sendPreview(req, res, draft);
 }));
 
 // ── Export: the boundary ─────────────────────────────────────────────────────
@@ -709,7 +809,7 @@ async function sendExport(req, res, format) {
 
   let out;
   try {
-    out = await exportDocument(await loadState(req, row), format);
+    out = await exportDocument(await loadState(req, row, { fresh: true }), format);
   } catch (err) {
     if (err.sploseFailure) return sploseDown(res);
     if (err.exportBoundaryBreach) {
@@ -811,7 +911,7 @@ router.post('/api/templates/documents/:id/appendices', requireTemplateWrite, saf
   const row = await loadOwnDocument(req, req.params.id);
   if (!row) return res.status(404).json({ error: 'not_found' });
   const template = catalogue.getTemplate(row.template_id);
-  if (!template || !template.sectionCatalogue) {
+  if (!template || !template.appendices) {
     return res.status(400).json({ error: 'appendices_not_supported', message: 'This template has no appendices section.' });
   }
 

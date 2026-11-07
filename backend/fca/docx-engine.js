@@ -23,6 +23,12 @@
  *   dropParagraphWhenEmpty  tags whose ENTIRE enclosing w:p is deleted when the
  *                           value is absent, so a label like "CC: " can never
  *                           ship naked (empty for the FCA)
+ *   paragraphTags           block-level narrative tags: each line of the value
+ *                           becomes its own paragraph, cloned from the control's
+ *                           one prototype paragraph (body text or a bullet)
+ *   dropRowWhenEmpty        tags whose table row (w:tr) is deleted when EVERY
+ *                           tagged control in that row is absent, so an unused
+ *                           "Support 6" row never prints as a band of blanks
  *   rebuildToc              whether to regenerate the cached contents list
  *   label                   prefix used in thrown messages
  *
@@ -224,7 +230,45 @@ function el(doc, name, attrs) {
  * Populate every occurrence of every scalar tag in one part.
  * Returns the number of occurrences written.
  */
-function populateScalars(doc, scalarData, warnings, partName, multilineTags) {
+/**
+ * Write a narrative value as paragraphs. The control wraps ONE prototype w:p;
+ * every non-blank line of the value becomes a deep clone of it, so each
+ * paragraph keeps the prototype's style and run properties — a bullet stays a
+ * bullet, body text stays body text. Returns false when the control is not a
+ * block-level control, so the caller can fall back to a plain write.
+ */
+function setParagraphValue(content, value) {
+  const proto = directChildren(content, 'w:p')[0];
+  if (!proto) return false;
+  const lines = String(value).split(/\r\n|\r|\n/).map((l) => l.trim()).filter(Boolean);
+  if (lines.length === 0) return false;
+
+  for (const extra of directChildren(content, 'w:p').slice(1)) content.removeChild(extra);
+  const write = (p, text) => {
+    const texts = ownDescendants(p, 'w:t');
+    if (texts.length === 0) {
+      const r = el(p.ownerDocument, 'w:r');
+      const t = el(p.ownerDocument, 'w:t');
+      r.appendChild(t);
+      p.appendChild(r);
+      texts.push(t);
+    }
+    for (let i = 1; i < texts.length; i++) setTextNode(texts[i], '');
+    setTextNode(texts[0], text);
+  };
+  const template = proto.cloneNode(true);
+  write(proto, lines[0]);
+  let after = proto;
+  for (let i = 1; i < lines.length; i++) {
+    const p = template.cloneNode(true);
+    write(p, lines[i]);
+    content.insertBefore(p, after.nextSibling);
+    after = p;
+  }
+  return true;
+}
+
+function populateScalars(doc, scalarData, warnings, partName, multilineTags, paragraphTags) {
   let written = 0;
 
   for (const sdt of allSdts(doc)) {
@@ -240,6 +284,13 @@ function populateScalars(doc, scalarData, warnings, partName, multilineTags) {
     const content = directChild(sdt, 'w:sdtContent');
     if (!content) {
       warnings.push(`Control ${tag} in ${partName} has no w:sdtContent; left unpopulated.`);
+      continue;
+    }
+
+    if (paragraphTags && paragraphTags.has(tag) && setParagraphValue(content, value)) {
+      const pr = directChild(sdt, 'w:sdtPr');
+      if (pr) for (const ph of directChildren(pr, 'w:showingPlcHdr')) pr.removeChild(ph);
+      written += 1;
       continue;
     }
 
@@ -336,6 +387,33 @@ function removeParagraphsContaining(doc, tags, removed) {
     const target = para && para.parentNode ? para : sdt;
     target.parentNode.removeChild(target);
     removed.push(tag);
+  }
+}
+
+/**
+ * Delete each table row whose tagged controls are ALL in `emptyTags`. A row
+ * that still carries one resolved value stays whole, and a table is never
+ * emptied: its last remaining row is kept, because a w:tbl without a w:tr is
+ * not a valid document.
+ */
+function removeEmptyRows(doc, rowTags, emptyTags, removed) {
+  if (!rowTags || rowTags.size === 0) return;
+  const rows = new Set();
+  for (const sdt of allSdts(doc)) {
+    const tag = ownTag(sdt);
+    if (!tag || !rowTags.has(tag) || !emptyTags.has(tag)) continue;
+    for (let n = sdt.parentNode; n; n = n.parentNode) {
+      if (n.nodeName === 'w:tr') { rows.add(n); break; }
+      if (n.nodeName === 'w:body') break;
+    }
+  }
+  for (const tr of rows) {
+    const tags = Array.from(tr.getElementsByTagName('w:sdt')).map(ownTag).filter(Boolean);
+    if (!tags.every((t) => rowTags.has(t) && emptyTags.has(t))) continue;
+    const tbl = tr.parentNode;
+    if (!tbl || directChildren(tbl, 'w:tr').length <= 1) continue;
+    tbl.removeChild(tr);
+    removed.push(...tags);
   }
 }
 
@@ -823,6 +901,8 @@ const FCA_OPTIONS = {
   buildCustomSection,
   multilineTags: null,
   dropParagraphWhenEmpty: null,
+  paragraphTags: null,
+  dropRowWhenEmpty: null,
   rebuildToc: true,
 };
 
@@ -934,6 +1014,16 @@ async function composeDocx({ templateBuffer, manifest, options = FCA_OPTIONS }) 
   }
   for (const [, doc] of parts) removeParagraphsContaining(doc, dropTags, removedParagraphTags);
 
+  // Optional table rows: the same rule, one row at a time.
+  const rowTags = opts.dropRowWhenEmpty ? new Set(opts.dropRowWhenEmpty) : new Set();
+  const emptyRowTags = new Set();
+  for (const tag of rowTags) {
+    const v = scalarData[tag];
+    if (excludedTags.has(tag) || v === null || v === undefined || String(v).trim() === '') emptyRowTags.add(tag);
+  }
+  const removedRowTags = [];
+  for (const [, doc] of parts) removeEmptyRows(doc, rowTags, emptyRowTags, removedRowTags);
+
   for (const [, doc] of parts) removeSections(doc, removeTags, removedTags);
 
   // Dependent content travels with its section: a results row whose assessment
@@ -972,9 +1062,11 @@ async function composeDocx({ templateBuffer, manifest, options = FCA_OPTIONS }) 
     ? opts.multilineTags
     : (Array.isArray(opts.multilineTags) ? new Set(opts.multilineTags) : null);
 
+  const paragraphTags = opts.paragraphTags ? new Set(opts.paragraphTags) : null;
+
   let scalarsWritten = 0;
   for (const [name, doc] of parts) {
-    scalarsWritten += populateScalars(doc, renderedScalars, warnings, name, multilineTags);
+    scalarsWritten += populateScalars(doc, renderedScalars, warnings, name, multilineTags, paragraphTags);
   }
 
   // ── Table of contents (last: the body must be final) ──────────────────────
@@ -1006,6 +1098,8 @@ async function composeDocx({ templateBuffer, manifest, options = FCA_OPTIONS }) 
     scalarsWritten,
     removedSections: removedTags,
     removedParagraphs: removedParagraphTags,
+    // Tags whose optional table row was deleted because it was empty.
+    removedRows: removedRowTags,
     // Results-table rows deleted because their assessment section was excluded.
     removedDependentRows: removedRows,
     // What the therapist excluded, split by what actually happened to it, so a
@@ -1037,7 +1131,7 @@ module.exports = {
   // Exported for focused unit tests only.
   _internals: {
     ownTag, directChild, ownDescendants, countPageFields, paragraphStyle, paragraphText,
-    setMultilineTextNode, removeParagraphsContaining, styledParagraph, el, allSdts,
+    setMultilineTextNode, setParagraphValue, removeParagraphsContaining, removeEmptyRows, styledParagraph, el, allSdts,
     applyHeadingLevels,
   },
 };

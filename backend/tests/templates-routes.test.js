@@ -125,6 +125,9 @@ const WRITE_ENDPOINTS = [
   ['post', '/api/templates/documents'],
   ['patch', `/api/templates/documents/${DOC_ID}`],
   ['delete', `/api/templates/documents/${DOC_ID}`],
+  // The draft preview composes from values being typed, so it is a write-tier
+  // route even though it stores nothing.
+  ['post', `/api/templates/documents/${DOC_ID}/preview.docx`],
 ];
 
 const ALL_ENDPOINTS = [...READ_ENDPOINTS, ...WRITE_ENDPOINTS];
@@ -167,7 +170,7 @@ describe('read_only may look but not write', () => {
     const res = await agent.get('/api/templates');
     expect(res.status).toBe(200);
     expect(res.body.templates.map((t) => t.id))
-      .toEqual(['service_agreement', 'progress_note', 'fca']);
+      .toEqual(['service_agreement', 'support_letter', 'progress_report', 'fca']);
   });
 
   test('every write endpoint is 403 and no query runs', async () => {
@@ -197,7 +200,7 @@ describe('therapist and owner may reach the capability', () => {
     const agent = await loginAs(user);
     const res = await agent.get('/api/templates');
     expect(res.status).toBe(200);
-    expect(res.body.templates).toHaveLength(3);
+    expect(res.body.templates).toHaveLength(4);
   });
 
   test('the field spec never exposes a binding identifier', async () => {
@@ -222,6 +225,25 @@ describe('therapist and owner may reach the capability', () => {
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('unknown_template');
     expect(db.pool.query).not.toHaveBeenCalled();
+  });
+
+  test('the retired Progress Note cannot start a new document', async () => {
+    const agent = await loginAs(THERAPIST);
+    db.pool.query.mockClear();
+    const res = await agent.post('/api/templates/documents').send({ templateId: 'progress_note' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('unknown_template');
+    expect(db.pool.query).not.toHaveBeenCalled();
+  });
+
+  test('read_only cannot start a Support Letter or a Progress Report', async () => {
+    const agent = await loginAs(READ_ONLY);
+    for (const templateId of ['support_letter', 'progress_report']) {
+      db.pool.query.mockClear();
+      const res = await agent.post('/api/templates/documents').send({ templateId });
+      expect([templateId, res.status]).toEqual([templateId, 403]);
+      expect(db.pool.query).not.toHaveBeenCalled();
+    }
   });
 });
 
@@ -435,5 +457,87 @@ describe('a document instance cannot be used to write arbitrary content', () => 
     // Values travel as parameters, never interpolated.
     expect(update[0]).not.toContain('01/01/2027');
     expect(update[1][1]).toContain('01/01/2027');
+  });
+});
+
+describe('editing reads Splose through a short cache, and the draft preview stores nothing', () => {
+  const splose = require('../splose-api');
+  const rowFor = (clientId, templateId = 'support_letter') => ({
+    id: DOC_ID, organisation_id: ORG, template_id: templateId, template_version: 'v1',
+    title: 'Letter', splose_client_id: clientId, field_values: {}, sections: null,
+    created_at: new Date('2026-11-07T00:00:00Z'), updated_at: new Date('2026-11-07T00:00:00Z'),
+  });
+  const serveRow = (row) => db.pool.query.mockImplementation(async (sql) => (
+    /template_documents/i.test(sql) && !/appendices/i.test(sql) ? { rows: [row], rowCount: 1 } : { rows: [], rowCount: 0 }
+  ));
+  const binary = (r) => r.buffer(true).parse((res, cb) => {
+    const c = []; res.on('data', (d) => c.push(d)); res.on('end', () => cb(null, Buffer.concat(c)));
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+    db.pool.query.mockReset();
+    db.pool.query.mockResolvedValue({ rows: [], rowCount: 0 });
+    splose.getPatient.mockReset();
+    splose.getPatient.mockResolvedValue(null);
+  });
+
+  test('two previews in a row call Splose once', async () => {
+    const agent = await loginAs(THERAPIST);
+    serveRow(rowFor('cache-a'));
+    splose.getPatient.mockResolvedValue({ id: 'cache-a', fullName: 'Jane Smith', ndisNumber: '430000000' });
+    expect((await binary(agent.get(`/api/templates/documents/${DOC_ID}/preview.docx`))).status).toBe(200);
+    expect((await binary(agent.get(`/api/templates/documents/${DOC_ID}/preview.docx`))).status).toBe(200);
+    expect(splose.getPatient).toHaveBeenCalledTimes(1);
+  });
+
+  test('a Splose blip while editing serves the last good copy instead of "Could not save"', async () => {
+    const agent = await loginAs(THERAPIST);
+    serveRow(rowFor('cache-b'));
+    splose.getPatient.mockResolvedValueOnce({ id: 'cache-b', fullName: 'Jane Smith', ndisNumber: '430000000' });
+    expect((await binary(agent.get(`/api/templates/documents/${DOC_ID}/preview.docx`))).status).toBe(200);
+
+    const now = Date.now();
+    jest.spyOn(Date, 'now').mockReturnValue(now + 5 * 60 * 1000);          // past the fresh window
+    splose.getPatient.mockRejectedValueOnce(new Error('splose 429'));
+    const res = await agent.patch(`/api/templates/documents/${DOC_ID}`)
+      .send({ fieldValues: { OPAL_LETTER_SUBJECT: 'Funding request' } });
+    expect(res.status).toBe(200);
+    const name = res.body.document.groups.flatMap((g) => g.fields).find((f) => f.label === 'Participant name');
+    expect(name.value).toBe('Jane Smith');
+  });
+
+  test('an export never uses a copy older than the fresh window', async () => {
+    const agent = await loginAs(THERAPIST);
+    serveRow(rowFor('cache-c'));
+    splose.getPatient.mockResolvedValueOnce({ id: 'cache-c', fullName: 'Jane Smith', ndisNumber: '430000000' });
+    expect((await binary(agent.get(`/api/templates/documents/${DOC_ID}/preview.docx`))).status).toBe(200);
+
+    jest.spyOn(Date, 'now').mockReturnValue(Date.now() + 5 * 60 * 1000);
+    splose.getPatient.mockRejectedValueOnce(new Error('splose down'));
+    const res = await agent.get(`/api/templates/documents/${DOC_ID}/export.docx`);
+    expect(res.status).toBe(503);
+    expect(res.body.error).toBe('splose_unavailable');
+  });
+
+  test('the draft preview composes the typed value and writes nothing', async () => {
+    const agent = await loginAs(THERAPIST);
+    serveRow(rowFor(null));
+    const res = await binary(agent.post(`/api/templates/documents/${DOC_ID}/preview.docx`)
+      .send({ fieldValues: { OPAL_LETTER_SUBJECT: 'Draft subject line' } }));
+    expect(res.status).toBe(200);
+    const xml = await (await require('jszip').loadAsync(res.body)).file('word/document.xml').async('string');
+    expect(xml).toContain('Draft subject line');
+    const writes = db.pool.query.mock.calls.filter((c) => /UPDATE|INSERT|DELETE/i.test(c[0]) && /template_documents/i.test(c[0]));
+    expect(writes).toEqual([]);
+  });
+
+  test('the draft preview refuses a field the master does not declare', async () => {
+    const agent = await loginAs(THERAPIST);
+    serveRow(rowFor(null));
+    const res = await agent.post(`/api/templates/documents/${DOC_ID}/preview.docx`)
+      .send({ fieldValues: { OPAL_NOT_A_FIELD: 'x' } });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('unknown_field');
   });
 });

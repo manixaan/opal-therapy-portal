@@ -33,7 +33,13 @@
   var doc = global.document;
   var API = '/api/templates';
   var SAVE_DEBOUNCE_MS = 700;
+  // The preview follows typing on its own, shorter clock — it composes from
+  // the values on screen (a draft), so it never waits for the save.
+  var PREVIEW_DEBOUNCE_MS = 250;
   var PREVIEW_TIMEOUT_MS = 20000;
+  // A save that meets a transient failure is retried quietly before the user
+  // is told; the typed values are still on screen and still queued.
+  var SAVE_RETRY_MS = [1500, 4000];
 
   var S = {
     view: 'catalogue',
@@ -368,6 +374,12 @@
           // A real calendar picker; the value round-trips as d/mm/yyyy.
           input = '<input class="tpl-input tpl-date" type="date" data-tag="' + esc(f.tag) + '" ' +
             'id="tplf-' + esc(f.tag) + '" value="' + esc(iso) + '">';
+        } else if (f.narrative) {
+          // Long-form writing: a tall box, one paragraph (or bullet) per line.
+          input = '<textarea class="tpl-input tpl-textarea tpl-textarea-long" rows="' + (f.bullets ? 4 : 7) + '" ' +
+            'data-tag="' + esc(f.tag) + '" id="tplf-' + esc(f.tag) + '"' +
+            (f.maxChars ? ' maxlength="' + esc(f.maxChars) + '"' : '') +
+            ' placeholder="' + esc(f.hint || placeholder) + '">' + esc(shown) + '</textarea>';
         } else if (f.multiline) {
           input = '<textarea class="tpl-input tpl-textarea" rows="3" data-tag="' + esc(f.tag) + '" ' +
             'id="tplf-' + esc(f.tag) + '" placeholder="' + esc(placeholder) + '">' + esc(shown) + '</textarea>';
@@ -378,13 +390,19 @@
         return '' +
           '<div class="tpl-field">' +
             '<label class="tpl-label" for="tplf-' + esc(f.tag) + '">' + esc(f.label) + '</label>' +
+            (f.hint ? '<span class="tpl-field-hint">' + esc(f.hint) + '</span>' : '') +
             input +
             '<span class="' + sourceClass(f.source) + '" data-chip="' + esc(f.tag) + '">' +
               esc(SOURCE_LABEL[f.source] || 'Not yet completed') + '</span>' +
           '</div>';
       }).join('');
+      // A group whose fields all print in one section is set aside while that
+      // section is removed (see syncFieldGroups).
+      var sec = g.fields.length && g.fields.every(function (f) { return f.section && f.section === g.fields[0].section; })
+        ? g.fields[0].section : '';
       return '' +
-        '<details class="tpl-group"' + (gi === 0 ? ' open' : '') + '>' +
+        '<details class="tpl-group"' + (gi === 0 ? ' open' : '') +
+          (sec ? ' data-section="' + esc(sec) + '"' : '') + '>' +
           '<summary class="tpl-group-summary">' + esc(g.group) +
             ' <span class="tpl-quiet">(' + g.fields.length + ')</span></summary>' +
           '<div class="tpl-group-body">' + rows + '</div>' +
@@ -397,6 +415,23 @@
     if (!host) return;
     host.innerHTML = fieldsHtml();
     host.addEventListener('input', onFieldInput);
+    syncFieldGroups();
+  }
+
+  /**
+   * Hide the field groups of sections the document no longer includes — a
+   * removed goal's boxes are not something left to fill in. Hidden, not
+   * destroyed: anything already typed is kept and returns with the section.
+   */
+  function syncFieldGroups() {
+    var host = el('tpl-fieldhost');
+    if (!host) return;
+    var out = {};
+    (S.sections || []).forEach(function (s) { if (s.included === false) out[s.tag] = true; });
+    var groups = host.querySelectorAll('details[data-section]');
+    for (var i = 0; i < groups.length; i++) {
+      groups[i].hidden = Boolean(out[groups[i].getAttribute('data-section')]);
+    }
   }
 
   // ── Section structure (templates that offer it — the FCA) ─────────────────
@@ -526,6 +561,7 @@
     var hadFocus = titleBox && doc.activeElement === titleBox;
 
     host.innerHTML = S.sections ? sectionsHtml() : '';
+    syncFieldGroups();
 
     titleBox = el('tpl-newsec-title');
     levelBox = el('tpl-newsec-level');
@@ -624,7 +660,7 @@
   function mountAppendices() {
     var host = el('tpl-appendixhost');
     if (!host) return;
-    host.innerHTML = (S.docu && S.docu.sections) ? appendicesHtml() : '';
+    host.innerHTML = (S.docu && S.docu.appendicesSupported) ? appendicesHtml() : '';
   }
 
   async function loadAppendixCandidates() {
@@ -922,6 +958,13 @@
     S.dirty = true;
     setSaveState('Saving…');
     scheduleSave();
+    schedulePreview();
+  }
+
+  var previewTimer = null;
+  function schedulePreview() {
+    if (previewTimer) clearTimeout(previewTimer);
+    previewTimer = setTimeout(refreshPreview, PREVIEW_DEBOUNCE_MS);
   }
 
   function setSaveState(text) {
@@ -940,6 +983,7 @@
    * form. The inputs are left exactly as the user left them — same nodes, same
    * caret — which is the whole reason the form is not re-rendered here.
    */
+  var saveAttempt = 0;
   async function save() {
     if (!S.docu || S.saving) { if (S.dirty) scheduleSave(); return; }
     S.saving = true;
@@ -953,16 +997,29 @@
     S.saving = false;
 
     if (!r.ok) {
+      // Transient (network, 5xx): keep the values queued and retry quietly.
+      // Only a failure that outlasts the retries is put in front of the user.
+      var transient = r.status === 0 || r.status >= 500;
+      if (transient && saveAttempt < SAVE_RETRY_MS.length) {
+        S.dirty = true;
+        setSaveState('Saving… (retrying)');
+        if (saveTimer) clearTimeout(saveTimer);
+        saveTimer = setTimeout(save, SAVE_RETRY_MS[saveAttempt++]);
+        return;
+      }
+      saveAttempt = 0;
+      S.dirty = true;                              // still unsaved; the next edit retries
       S.saveErr = r.error;
       setSaveState('Not saved');
       toast('Could not save', r.error, 'warn');
       return;
     }
+    saveAttempt = 0;
     S.saveErr = '';
     S.docu = r.document;
-    setSaveState('Saved');
+    setSaveState(S.dirty ? 'Saving…' : 'Saved');
     repaintChips();
-    refreshPreview();
+    // No preview here: the preview has already been following the typing.
     if (S.dirty) scheduleSave();
   }
 
@@ -1114,7 +1171,27 @@
    * position, so a refresh never blanks the pane or jumps a long FCA back to
    * page one.
    */
+  /**
+   * One preview in flight at a time. A request asked for while one is running
+   * is not started alongside it (which only queued more server work and
+   * discarded the older result); it is remembered, and exactly one follow-up
+   * runs when the current one lands — always with the latest values.
+   */
+  var previewBusy = false;
+  var previewAgain = false;
   async function refreshPreview() {
+    if (previewTimer) { clearTimeout(previewTimer); previewTimer = null; }
+    if (previewBusy) { previewAgain = true; return; }
+    previewBusy = true;
+    try {
+      await renderPreviewOnce();
+    } finally {
+      previewBusy = false;
+      if (previewAgain) { previewAgain = false; refreshPreview(); }
+    }
+  }
+
+  async function renderPreviewOnce() {
     if (!S.docu) return;
     if (!global.docx || typeof global.docx.renderAsync !== 'function') {
       previewState('Preview unavailable in this browser.');
@@ -1122,6 +1199,7 @@
     }
     var rev = ++S.preview.rev;
     previewState('Updating…');
+    var staged = null;
 
     var ctrl = global.AbortController ? new global.AbortController() : null;
     var timer = setTimeout(function () {
@@ -1129,9 +1207,18 @@
       if (ctrl) { try { ctrl.abort(); } catch (_) {} }
     }, PREVIEW_TIMEOUT_MS);
 
+    // The values on screen, saved or not. With nothing typed this session the
+    // stored document is previewed as-is (read-only viewers land here).
+    var draft = {};
+    Object.keys(S.values).forEach(function (k) { draft[k] = S.values[k]; });
+    var hasDraft = Object.keys(draft).length > 0;
+
     try {
       var res = await fetch(API + '/documents/' + encodeURIComponent(S.docu.id)
         + '/preview.docx?rev=' + rev, {
+        method: hasDraft ? 'POST' : 'GET',
+        headers: hasDraft ? { 'Content-Type': 'application/json' } : undefined,
+        body: hasDraft ? JSON.stringify({ fieldValues: draft }) : undefined,
         credentials: 'same-origin', cache: 'no-store',
         signal: ctrl ? ctrl.signal : undefined,
       });
@@ -1148,7 +1235,7 @@
       // rule styled the letterheads differently and every split point and
       // pinned page height was computed against geometry the reader never
       // sees.
-      var staged = doc.createElement('div');
+      staged = doc.createElement('div');
       staged.className = 'tpl-preview-host';
       staged.style.cssText = 'position:absolute;left:-10000px;top:0;visibility:hidden;pointer-events:none;max-height:none;overflow:visible;';
       (root() || doc.body).appendChild(staged);
@@ -1203,7 +1290,7 @@
       mountFields();
       syncStep();
       refreshPreview();
-      if (S.docu.sections && S.appendixCands === null) loadAppendixCandidates();
+      if (S.docu.appendicesSupported && S.appendixCands === null) loadAppendixCandidates();
       return;
     }
     host.innerHTML = renderCatalogue();
