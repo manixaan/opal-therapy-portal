@@ -2,18 +2,18 @@
   "format": "opal-induction-pack/1",
   "slug": "writing-an-fca-report",
   "workflow": {
-    "title": "Writing an FCA report",
+    "title": "Writing an FCA Report",
     "category": "clinical",
     "sequential": true,
-    "description": "How to build, write, and send a functional capacity assessment report in the portal, with clear, sourced and honest content that links each support to a goal and to reasonable and necessary criteria. Five interactive walkthroughs, including a live tour of the FCA template.",
+    "description": "How to build, write and send a functional capacity assessment report in the portal, with clear, sourced and honest content that links each support to a goal and to reasonable and necessary criteria. The induction includes five interactive walkthroughs, including a live tour of the FCA template.",
     "sections": [
       {
         "title": "Why FCA reports matter",
         "items": [
           {
             "type": "task",
-            "title": "Walkthrough: Paint the picture",
-            "body": "**Start here.** What an FCA is for, the five NDIS domains, and why an honest report the planner can trust beats a dramatic one.\n\nYour place is saved if you stop part-way.",
+            "title": "Walkthrough: The purpose of an FCA report",
+            "body": "This walkthrough explains the purpose of an FCA, the five NDIS domains, and why an honest report the NDIS planner can trust is more useful than a dramatic one.\n\nYour progress is saved if you stop part-way.",
             "minutes": 6,
             "required": true,
             "walkthrough_key": "fca-paint-the-picture"
@@ -21,20 +21,20 @@
         ]
       },
       {
-        "title": "Evidence: what goes in",
+        "title": "Gathering and presenting evidence",
         "items": [
           {
             "type": "task",
-            "title": "Walkthrough: Build the evidence",
-            "body": "Tailor the report to the disability, name every source, and choose each assessment for a reason — with a sorting game and the independent-domain scenario.",
+            "title": "Walkthrough: Gathering and presenting evidence",
+            "body": "Tailor the report to the disability, name every source and choose each assessment for a clear purpose, with practice exercises and a scenario on reporting an independent domain.",
             "minutes": 8,
             "required": true,
             "walkthrough_key": "fca-evidence"
           },
           {
             "type": "content",
-            "title": "Cheat sheet: evidence",
-            "body": "Keep this handy while you write.\n\n**The five domains**\n- Mobility\n- Cognition\n- Communication\n- Self-care and domestic ADL\n- Social interaction\n\n**Only what relates to the disability.** If something has no functional implication, leave it out. Tailor the report to the participant.\n\n**Name every source.** Combine formal documentation, assessment results, reported information and functional observations (include these where possible).\n\n**Every assessment has a purpose.** Refer to each one by name throughout the report.\n\n**Where to find assessments:** the NDIS website (search for types of disability evidence), the Resource Hub, and sites such as Q Global.",
+            "title": "Reference: evidence",
+            "body": "Refer to this summary while you write.\n\n**The five domains**\n- Mobility\n- Cognition\n- Communication\n- Self-care and domestic ADL\n- Social interaction\n\n**Only what relates to the disability.** If something has no functional implication, leave it out. Tailor the report to the participant.\n\n**Name every source.** Combine formal documentation, assessment results, reported information and functional observations (include these where possible).\n\n**Every assessment has a purpose.** Refer to each one by name throughout the report.\n\n**Where to find assessments:** the NDIS website (search for types of disability evidence), the Resource Hub, and sites such as Q Global.",
             "minutes": 2,
             "required": true
           }
@@ -45,8 +45,8 @@
         "items": [
           {
             "type": "task",
-            "title": "Walkthrough: Recommendations that link up",
-            "body": "Link every support to a need, to reasonable and necessary, and to a goal. Write the risk of no support honestly — then spot the mistakes that weaken a report.",
+            "title": "Walkthrough: Linking recommendations to needs and goals",
+            "body": "Link every support to a need, to reasonable and necessary criteria and to a goal. State the risk of no support honestly, then identify the mistakes that weaken a report.",
             "minutes": 7,
             "required": true,
             "walkthrough_key": "fca-recommendations"
@@ -54,12 +54,12 @@
         ]
       },
       {
-        "title": "How we build it in the portal",
+        "title": "Building the report in the portal",
         "items": [
           {
             "type": "task",
-            "title": "Live tour: build an FCA in the portal",
-            "body": "The walkthrough takes you through the real screens — Resource Hub › Templates › **Functional Capacity Assessment (FCA)** › Start a document — and you click each step yourself. Use a practice or test record if your supervisor has one.",
+            "title": "Live tour: Building an FCA in the portal",
+            "body": "The tour guides you through the live screens (Resource Hub › Templates › **Functional Capacity Assessment (FCA)** › Start a document), and you select each step yourself.",
             "minutes": 5,
             "required": true,
             "walkthrough_key": "fca-template-tour"
@@ -67,7 +67,7 @@
           {
             "type": "task",
             "title": "Walkthrough: Timing and supervisor review",
-            "body": "How long a report takes, when to send it, and why your first reports go to your clinical supervisor first.",
+            "body": "How long a report takes to write, when to send it, and why your first reports are reviewed by your clinical supervisor before they are sent.",
             "minutes": 4,
             "required": true,
             "walkthrough_key": "fca-timing-review"
@@ -81,20 +81,20 @@
           },
           {
             "type": "task",
-            "title": "Start a practice template",
-            "body": "In the portal, open the Resource Hub › Templates and select **Functional Capacity Assessment (FCA)**. Use **Start a document** with a practice or test record if your supervisor has one. Do not use a real client without a reason to.\n\nThen:\n\n- Download the template.\n- Decide which sections you would remove or add for a participant with a physical disability.\n- Note which assessments you would use and why.\n\nBring your notes to your next supervision.",
+            "title": "Practical task: start a practice template",
+            "body": "In the portal, open the Resource Hub › Templates and select **Functional Capacity Assessment (FCA)**. Select **Start a document**. Do not use a real client without a specific reason.\n\nThen:\n\n- Download the template.\n- Decide which sections you would remove or add for a participant with a physical disability.\n- Note which assessments you would use and why.\n\nBring your notes to your next supervision session.",
             "minutes": 5,
             "required": true
           }
         ]
       },
       {
-        "title": "Check your understanding and sign-off",
+        "title": "Knowledge check and sign-off",
         "items": [
           {
             "type": "quiz",
             "title": "Knowledge check",
-            "body": "Seven questions across the whole induction. You need 80% to pass, and you can retry.",
+            "body": "Seven questions covering the whole induction. The pass mark is 80%, and you may retry.",
             "minutes": 5,
             "required": true,
             "quiz": {
@@ -110,7 +110,7 @@
                   "correctIndex": 1
                 },
                 {
-                  "question": "A participant is independent in communication. What should you do?",
+                  "question": "A participant is independent in communication. How should you report this?",
                   "options": [
                     "Leave communication out",
                     "Describe difficulties that are not there",
@@ -119,7 +119,7 @@
                   "correctIndex": 2
                 },
                 {
-                  "question": "You found a piece of information with no functional impact on the disability. What do you do?",
+                  "question": "You have found a piece of information with no functional impact on the disability. What should you do?",
                   "options": [
                     "Include it for completeness",
                     "Put it in the appendix",
@@ -148,18 +148,18 @@
                 {
                   "question": "How do you write the risk of a support not being provided?",
                   "options": [
-                    "Paint the worst case, even if the evidence does not show it",
+                    "Describe the worst case, even if the evidence does not support it",
                     "Describe what could realistically happen, based on the evidence, as a potential outcome",
                     "Leave it out to keep the report short"
                   ],
                   "correctIndex": 1
                 },
                 {
-                  "question": "It is your second FCA report. Your supervisor is away and the deadline is close. What do you do?",
+                  "question": "It is your second FCA report. Your clinical supervisor is away and the deadline is close. What should you do?",
                   "options": [
                     "Send it, since deadlines come first",
                     "Send it only if it is under 8 weeks",
-                    "Arrange the supervisor review before it is sent"
+                    "Arrange the clinical supervisor review before it is sent"
                   ],
                   "correctIndex": 2
                 }
@@ -168,11 +168,11 @@
           },
           {
             "type": "acknowledgement",
-            "title": "Sign-off",
-            "body": "Confirm you have read this induction and understand how we write FCA reports.",
+            "title": "FCA report sign-off",
+            "body": "Confirm that you have read this induction and understand how we write FCA reports.",
             "minutes": 1,
             "required": true,
-            "ack_statement": "I have read the induction on writing an FCA report. I will keep reports accurate, sourced, consistent and limited to information related to the participant's disability. I will link each recommendation to a reasonable and necessary need and a goal. I will not invent or exaggerate information. I will have my clinical supervisor review my reports before they are sent until my supervisor confirms I can submit them on my own."
+            "ack_statement": "I have read the induction on writing an FCA report. I will ensure my reports are accurate, sourced, consistent and limited to information related to the participant's disability. I will link each recommendation to a reasonable and necessary need and to a goal. I will not invent or exaggerate information. I will have my clinical supervisor review my reports before they are sent until my clinical supervisor confirms that I may submit them independently."
           }
         ]
       }
@@ -181,8 +181,8 @@
   "walkthroughs": [
     {
       "key": "fca-paint-the-picture",
-      "title": "Paint the picture",
-      "description": "What an FCA is for, the five domains, and honest reporting.",
+      "title": "The purpose of an FCA report",
+      "description": "The purpose of an FCA, the five NDIS domains and honest reporting.",
       "group": "fca-reports",
       "minutes": 6,
       "roles": ["owner", "admin", "therapist", "read_only"],
@@ -191,53 +191,53 @@
         {
           "type": "intro",
           "title": "What an FCA report is for",
-          "body": "A functional capacity assessment (FCA) is one of the main reports an OT writes under the NDIS.\n\nYour job is to show the planner that the participant has an NDIS-recognised disability and that it reduces their independence. **That is why they need support.**"
+          "body": "A functional capacity assessment (FCA) is one of the main reports an OT writes under the NDIS.\n\nYour role is to show the NDIS planner that the participant has an NDIS-recognised disability and that it reduces their independence. **This is why they need support.**"
         },
         {
           "type": "screenshot",
-          "title": "Five NDIS domains",
+          "title": "The five NDIS domains",
           "image": { "src": "/assets/tutorials/writing-an-fca-report/domains.svg", "alt": "The participant at the centre of five NDIS domains." },
           "body": "The report looks at how the participant functions across the main NDIS domains:\n• Mobility\n• Cognition\n• Communication\n• Self-care and domestic ADL\n• Social interaction"
         },
         {
           "type": "quiz",
-          "title": "Quick check: the job of the report",
+          "title": "Knowledge check: purpose of the report",
           "quiz": {
-            "question": "What does your FCA report need to show the planner?",
+            "question": "What does your FCA report need to show the NDIS planner?",
             "options": [
               "That the participant has an NDIS-recognised disability that reduces their independence in these domains",
               "Every assessment you know how to run",
               "The most supports the participant could possibly receive"
             ],
             "correctIndex": 0,
-            "explain": "That is why they need support — and it is the thread the whole report follows."
+            "explain": "This is why they need support, and it is the thread that runs through the whole report."
           }
         },
         {
           "type": "screenshot",
-          "title": "Paint a picture of daily life",
+          "title": "Describing daily life",
           "image": { "src": "/assets/tutorials/writing-an-fca-report/planner-picture.svg", "alt": "A vague statement next to a sourced report built from named sources and functional observations." },
-          "body": "The planner will most likely never meet the participant. **Your report is all they have.**\n\nOur reports tell the story of what the participant is like and what their day-to-day life looks like. Use sourced detail and functional observations. Do not use vague or general statements."
+          "body": "The NDIS planner will most likely never meet the participant. **Your report is all they have.**\n\nOur reports describe what the participant is like and what their day-to-day life involves. Use sourced detail and functional observations. Do not use vague or general statements."
         },
         {
           "type": "quiz",
-          "title": "Which reads better?",
+          "title": "Knowledge check: effective statements",
           "quiz": {
-            "question": "Which kind of statement helps the planner picture the participant?",
+            "question": "Which kind of statement helps the NDIS planner understand the participant?",
             "options": [
               "A general statement that the participant finds things hard",
               "Sourced detail and functional observations of their day-to-day life",
               "A long list of diagnoses with no description"
             ],
             "correctIndex": 1,
-            "explain": "The planner should finish reading and understand how this person presents."
+            "explain": "After reading the report, the NDIS planner should understand how this person presents."
           }
         },
         {
           "type": "screenshot",
           "title": "Honest reporting",
           "image": { "src": "/assets/tutorials/writing-an-fca-report/honest.svg", "alt": "Say when a participant is independent, then show remaining needs; never invent or exaggerate." },
-          "body": "**Do not invent or exaggerate information.**\n\nIf a participant is independent in a domain, say so. Then highlight the weaknesses and support needs that remain in that domain.\n\nA report the planner can trust is more useful to the participant than a dramatic one."
+          "body": "**Do not invent or exaggerate information.**\n\nIf a participant is independent in a domain, say so. Then highlight the weaknesses and support needs that remain in that domain.\n\nA report the NDIS planner can trust is more useful to the participant than a dramatic one."
         },
         {
           "type": "quiz",
@@ -255,15 +255,15 @@
         },
         {
           "type": "complete",
-          "title": "Picture painted",
-          "body": "**Five domains, sourced detail, honest reporting.**\n\nBack in your induction, next up: building the evidence."
+          "title": "Summary: the purpose of an FCA report",
+          "body": "**Five domains, sourced detail and honest reporting.**\n\nReturn to your induction to continue with the next module: gathering and presenting evidence."
         }
       ]
     },
     {
       "key": "fca-evidence",
-      "title": "Build the evidence",
-      "description": "Tailor to the disability, name your sources, choose assessments with a purpose.",
+      "title": "Gathering and presenting evidence",
+      "description": "Tailoring the report to the disability, naming sources and choosing assessments with a purpose.",
       "group": "fca-reports",
       "minutes": 8,
       "roles": ["owner", "admin", "therapist", "read_only"],
@@ -277,21 +277,21 @@
         },
         {
           "type": "quiz",
-          "title": "Tailor it",
+          "title": "Knowledge check: tailoring the report",
           "quiz": {
             "question": "Your participant has a mainly intellectual disability and walks without difficulty. How much of the report goes on mobility?",
             "options": [
               "As much as every other domain, to be thorough",
-              "Little — mobility may not be affected, so do not spend long on it",
+              "Little, as mobility may not be affected, so do not spend long on it",
               "None, and do not mention mobility at all"
             ],
             "correctIndex": 1,
-            "explain": "Tailor the report to the participant: spend your words where the disability has a functional impact."
+            "explain": "Tailor the report to the participant: focus on the areas where the disability has a functional impact."
           }
         },
         {
           "type": "quiz",
-          "title": "Keep or cut?",
+          "title": "Knowledge check: relevance",
           "quiz": {
             "question": "You found a piece of information with no functional implication for the disability. What do you do?",
             "options": ["Include it for completeness", "Leave it out", "Move it to the end"],
@@ -309,11 +309,11 @@
           "type": "screenshot",
           "title": "Every assessment has a purpose",
           "image": { "src": "/assets/tutorials/writing-an-fca-report/assessments.svg", "alt": "Match each assessment to a purpose, and where to find them." },
-          "body": "Choose assessments based on the disability and on what you need to show the planner. Refer to each assessment **by name** throughout the report. Do not use an assessment without a purpose.\n\nIn your first reports, your clinical supervisor will go through with you which ones suit each participant."
+          "body": "Choose assessments based on the disability and on what you need to show the NDIS planner. Refer to each assessment **by name** throughout the report. Do not use an assessment without a purpose.\n\nFor your first reports, your clinical supervisor will help you decide which assessments suit each participant."
         },
         {
           "type": "quiz",
-          "title": "Match it · 1 of 2",
+          "title": "Knowledge check: choosing assessments (1 of 2)",
           "quiz": {
             "question": "The participant has cognitive difficulties. What do your assessments need to include?",
             "options": ["Specific cognitive assessments", "A focus on carer burden", "As many assessments as possible"],
@@ -323,10 +323,10 @@
         },
         {
           "type": "quiz",
-          "title": "Match it · 2 of 2",
+          "title": "Knowledge check: choosing assessments (2 of 2)",
           "quiz": {
             "question": "The participant's informal carer is burning out. Where should your assessment focus?",
-            "options": ["Mobility", "Carer burden", "Nowhere — it is not about the participant"],
+            "options": ["Mobility", "Carer burden", "Nowhere, as it is not about the participant"],
             "correctIndex": 1,
             "explain": "Informal carer burnout calls for a focus on carer burden."
           }
@@ -338,15 +338,15 @@
         },
         {
           "type": "complete",
-          "title": "Evidence built",
-          "body": "**Only what relates to the disability, every source named, every assessment with a purpose.**\n\nThe cheat sheet in your induction keeps this to hand. Next: recommendations and risk."
+          "title": "Summary: gathering and presenting evidence",
+          "body": "**Include only what relates to the disability, name every source and give every assessment a purpose.**\n\nThe reference sheet in your induction summarises this. Return to your induction to continue with the next module: linking recommendations to needs and goals."
         }
       ]
     },
     {
       "key": "fca-recommendations",
-      "title": "Recommendations that link up",
-      "description": "Need, reasonable and necessary, goal — the risk of no support, and mistakes to avoid.",
+      "title": "Linking recommendations to needs and goals",
+      "description": "Need, reasonable and necessary criteria and goals, the risk of no support, and mistakes to avoid.",
       "group": "fca-reports",
       "minutes": 7,
       "roles": ["owner", "admin", "therapist", "read_only"],
@@ -354,13 +354,13 @@
       "steps": [
         {
           "type": "screenshot",
-          "title": "Write recommendations that link up",
+          "title": "Linking each recommendation",
           "image": { "src": "/assets/tutorials/writing-an-fca-report/rec-chain.svg", "alt": "A support linked to its need, to reasonable and necessary, and to a goal, plus the risk if not provided." },
-          "body": "For each recommended support, show:\n• the need it responds to\n• why it is reasonable and necessary\n• the participant goal it relates to\n\nThe template gives you the format for this. It takes more time, but it shows the planner you have thought through each recommendation."
+          "body": "For each recommended support, show:\n• the need it responds to\n• why it is reasonable and necessary\n• the participant goal it relates to\n\nThe template provides the format for this. It takes more time, but it shows the NDIS planner that you have considered each recommendation carefully."
         },
         {
           "type": "quiz",
-          "title": "Quick check: a linked recommendation",
+          "title": "Knowledge check: a linked recommendation",
           "quiz": {
             "question": "Which recommendation is written the way the template asks?",
             "options": [
@@ -369,14 +369,14 @@
               "Each support linked to the most expensive option"
             ],
             "correctIndex": 1,
-            "explain": "This shows the planner how each support meets reasonable and necessary criteria."
+            "explain": "This shows the NDIS planner how each support meets reasonable and necessary criteria."
           }
         },
         {
           "type": "screenshot",
           "title": "State the risk of no support",
           "image": { "src": "/assets/tutorials/writing-an-fca-report/risk.svg", "alt": "Do: evidence-based, realistic, a potential outcome. Don't: the invented worst case." },
-          "body": "Also state what could happen if a recommended support is not provided. This does not say it will happen. It shows the **potential outcome**.\n\nYou are not making anything up. Describe what could realistically happen for this participant, based on the evidence you have gathered. Remember the planner has never met them.\n\nIf you are unsure how to word a risk, talk it through with your supervisor."
+          "body": "Also state what could happen if a recommended support is not provided. This does not say it will happen. It shows the **potential outcome**.\n\nYou are not inventing anything. Describe what could realistically happen for this participant, based on the evidence you have gathered. Remember that the NDIS planner has never met them.\n\nIf you are unsure how to word a risk, discuss it with your clinical supervisor."
         },
         {
           "type": "quiz",
@@ -386,7 +386,7 @@
             "options": [
               "Describe the worst outcome you can imagine, to make the case strong",
               "Describe what could realistically happen if the support is not funded, using your sources, and make clear it is a potential outcome",
-              "Leave the risk out — it is only a possibility"
+              "Leave the risk out, as it is only a possibility"
             ],
             "correctIndex": 1,
             "explain": "For example, the carer may no longer be able to continue and Alex's daily routines may break down. Do not add outcomes the evidence does not support."
@@ -396,38 +396,38 @@
           "type": "screenshot",
           "title": "Mistakes to avoid",
           "image": { "src": "/assets/tutorials/writing-an-fca-report/mistakes.svg", "alt": "Six mistakes to avoid in an FCA report." },
-          "body": "• Inconsistent information across the report\n• Repeating information, which makes a long report hard to read\n• Including information with no link to the disability\n• Using an assessment and then not referring back to it\n• Not naming where information came from\n• Inventing or exaggerating information\n\nKeep it concise and straight to the point."
+          "body": "• Inconsistent information across the report\n• Repeating information, which makes a long report hard to read\n• Including information with no link to the disability\n• Using an assessment and then not referring back to it\n• Not naming where information came from\n• Inventing or exaggerating information\n\nKeep the report concise and to the point."
         },
         {
           "type": "quiz",
-          "title": "Spot the mistake · 1 of 2",
+          "title": "Knowledge check: common mistakes (1 of 2)",
           "quiz": {
-            "question": "Your draft runs a standardised assessment in the method section, but the results are never mentioned again. What is wrong?",
-            "options": ["Nothing — it was listed", "The assessment is never referred back to", "It should have been in the appendix only"],
+            "question": "Your draft includes a standardised assessment in the method section, but the results are never mentioned again. What is wrong?",
+            "options": ["Nothing, as it was listed", "The assessment is never referred back to", "It should have been in the appendix only"],
             "correctIndex": 1,
             "explain": "Refer to each assessment by name throughout the report. Do not use an assessment without a purpose."
           }
         },
         {
           "type": "quiz",
-          "title": "Spot the mistake · 2 of 2",
+          "title": "Knowledge check: common mistakes (2 of 2)",
           "quiz": {
             "question": "The same background paragraph appears in three sections of your draft. What is the problem?",
-            "options": ["Repetition makes a long report hard to read", "It is fine — repetition shows consistency", "It needs a fourth copy in the summary"],
+            "options": ["Repetition makes a long report hard to read", "It is acceptable, as repetition shows consistency", "It needs a fourth copy in the summary"],
             "correctIndex": 0,
-            "explain": "Keep it concise and straight to the point."
+            "explain": "Keep the report concise and to the point."
           }
         },
         {
           "type": "complete",
-          "title": "Recommendations linked",
-          "body": "**Need → reasonable and necessary → goal**, plus an honest risk of no support.\n\nNext: building the report in the portal."
+          "title": "Summary: linking recommendations",
+          "body": "**Link each support to a need, to reasonable and necessary criteria and to a goal**, and state the risk of no support honestly.\n\nReturn to your induction to continue with the next module: building an FCA in the portal."
         }
       ]
     },
     {
       "key": "fca-template-tour",
-      "title": "Build an FCA in the portal",
+      "title": "Building an FCA in the portal",
       "description": "A live tour: Templates › Functional Capacity Assessment (FCA) › Start a document › Content.",
       "group": "fca-reports",
       "minutes": 5,
@@ -437,8 +437,8 @@
       "steps": [
         {
           "type": "intro",
-          "title": "From start to download",
-          "body": "You will click each step yourself:\n\n**Resource Hub › Templates › Functional Capacity Assessment (FCA) › Start a document**\n\nThen pick the client, edit the template in the portal, and download it to your laptop. Use a practice or test record if your supervisor has one."
+          "title": "Overview: from template to download",
+          "body": "You will select each step yourself:\n\n**Resource Hub › Templates › Functional Capacity Assessment (FCA) › Start a document**\n\nThen select the client, edit the template in the portal and download it to your laptop."
         },
         {
           "type": "action",
@@ -470,11 +470,11 @@
           "pad": 6,
           "rounded": "10px",
           "image": { "src": "/assets/tutorials/writing-an-fca-report/fca-dialog.svg", "alt": "The New FCA dialog with a participant search box." },
-          "body": "Enter the client's **name or NDIS number**, then pick them from the list. The portal creates a pre-populated template."
+          "body": "Enter the client's **name or NDIS number**, then select them from the list. The portal creates a pre-populated template."
         },
         {
           "type": "action",
-          "title": "Create it",
+          "title": "Create the document",
           "target": "button[onclick*=\"confirmNew\"]",
           "advance": "click",
           "pad": 6,
@@ -503,7 +503,7 @@
         },
         {
           "type": "highlight",
-          "title": "Download it",
+          "title": "Download the document",
           "target": "#tpl-dl-docx",
           "pad": 6,
           "rounded": "10px",
@@ -512,15 +512,15 @@
         },
         {
           "type": "complete",
-          "title": "Template built",
-          "body": "**Templates › FCA › Start a document → client → Content → download.**\n\nNext in your induction: timing and supervisor review."
+          "title": "Summary: building an FCA in the portal",
+          "body": "**Resource Hub › Templates › Functional Capacity Assessment (FCA) › Start a document**, then select the client, open **Content** and download the document.\n\nReturn to your induction to continue with the next module: timing and supervisor review."
         }
       ]
     },
     {
       "key": "fca-timing-review",
       "title": "Timing and supervisor review",
-      "description": "When to send, how long it takes, and why early reports are reviewed first.",
+      "description": "When to send a report, how long it takes to write, and why early reports are reviewed first.",
       "group": "fca-reports",
       "minutes": 4,
       "roles": ["owner", "admin", "therapist", "read_only"],
@@ -528,45 +528,45 @@
       "steps": [
         {
           "type": "screenshot",
-          "title": "Timing: a guide, not a stopwatch",
+          "title": "Timing guidelines",
           "image": { "src": "/assets/tutorials/writing-an-fca-report/timeline.svg", "alt": "Send within about 4 to 8 weeks of the assessment starting; allow about 5 to 10 hours to write." },
-          "body": "Aim to send reports within **4 to 8 weeks** of the start of the assessment. This is a guide. It depends on access to the client and how quickly assessments are completed. Aiming for it stops reports piling up.\n\nIf there is a deadline, we honour it. Reports are prioritised accordingly.\n\nA report usually takes about **5 to 10 hours** to write, and more if it is complex. Early on it will take longer, and your clinical supervisor will help you decide how many hours to allow."
+          "body": "Aim to send reports within **4 to 8 weeks** of the start of the assessment. This is a guide. It depends on access to the client and how quickly assessments are completed. Working to it prevents reports from accumulating.\n\nIf there is a deadline, we honour it. Reports are prioritised accordingly.\n\nA report usually takes about **5 to 10 hours** to write, and more if it is complex. Early on it will take longer, and your clinical supervisor will help you decide how many hours to allow."
         },
         {
           "type": "quiz",
-          "title": "Quick check: the deadline",
+          "title": "Knowledge check: deadlines",
           "quiz": {
-            "question": "A referrer has set a deadline earlier than the usual 4 to 8 weeks. What happens?",
-            "options": ["We honour the deadline and prioritise the report", "The 4 to 8 week guide wins", "The report waits until the assessments are all perfect"],
+            "question": "A referrer has set a deadline earlier than the usual 4 to 8 weeks. What should happen?",
+            "options": ["We honour the deadline and prioritise the report", "The 4 to 8 week guide takes precedence", "The report waits until all assessments are perfect"],
             "correctIndex": 0,
             "explain": "If there is a deadline, we honour it. Reports are prioritised accordingly."
           }
         },
         {
           "type": "page",
-          "title": "What every report must be",
-          "body": "Opal's FCA writing procedure says reports must be:\n\n**accurate · sourced · consistent · limited to disability-related information · reviewed before sending**"
+          "title": "Report standards",
+          "body": "Every FCA report must be:\n\n**accurate · sourced · consistent · limited to disability-related information · reviewed before sending**"
         },
         {
           "type": "screenshot",
-          "title": "Supervisor review",
+          "title": "Clinical supervisor review",
           "image": { "src": "/assets/tutorials/writing-an-fca-report/review-ladder.svg", "alt": "Early reports each reviewed by the supervisor; independent submission once the supervisor is confident." },
-          "body": "For your first few reports, your clinical supervisor must review each one and give you feedback before it is sent.\n\nOnce your supervisor is confident in your reports, you can submit them on your own. This is likely to be after about five reports have gone well. **Your supervisor decides when.**\n\nUntil then, do not send a report without your supervisor's review."
+          "body": "For your first few reports, your clinical supervisor must review each one and give you feedback before it is sent.\n\nOnce your clinical supervisor is confident in your reports, you may submit them independently. **Your clinical supervisor decides when.**\n\nUntil then, do not send a report without your clinical supervisor's review."
         },
         {
           "type": "quiz",
-          "title": "Scenario: the supervisor is away",
+          "title": "Scenario: your clinical supervisor is away",
           "quiz": {
-            "question": "It is your second FCA report. Your supervisor is away and the deadline is close. What do you do?",
-            "options": ["Send it, since deadlines come first", "Arrange the supervisor review before it is sent", "Ask a colleague to send it for you"],
+            "question": "It is your second FCA report. Your clinical supervisor is away and the deadline is close. What should you do?",
+            "options": ["Send it, since deadlines come first", "Arrange the clinical supervisor review before it is sent", "Ask a colleague to send it for you"],
             "correctIndex": 1,
             "explain": "Early reports must be reviewed by your clinical supervisor before they are sent."
           }
         },
         {
           "type": "complete",
-          "title": "Ready to write",
-          "body": "**4 to 8 weeks as a guide, deadlines honoured, supervisor review first.**\n\nBack in your induction: who to contact, a practice template, the knowledge check and sign-off."
+          "title": "Summary: timing and supervisor review",
+          "body": "**Use 4 to 8 weeks as a guide, honour deadlines, and obtain clinical supervisor review before sending.**\n\nReturn to your induction to complete the contact information, the practice template, the knowledge check and the sign-off."
         }
       ]
     }

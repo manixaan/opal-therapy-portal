@@ -3,15 +3,15 @@
   <rect width="720" height="405" rx="22" fill="#FBF8F3"/>
   <text x="28" y="50" font-size="30" font-weight="800" fill="#1E2B2F">No note, no invoice</text>
   <text x="28" y="80" font-size="18" fill="#6B7C80">Every billable activity needs its own case note</text>
-  <g font-size="17" font-weight="600" fill="#1E2B2F">
-    <g transform="translate(28,104)"><rect width="176" height="62" rx="12" fill="#fff" stroke="#E2DDD3"/><rect width="8" height="62" rx="4" fill="#14988A"/><text x="20" y="37">Therapy session</text></g>
-    <g transform="translate(216,104)"><rect width="176" height="62" rx="12" fill="#fff" stroke="#E2DDD3"/><rect width="8" height="62" rx="4" fill="#14988A"/><text x="20" y="37">Assessment</text></g>
-    <g transform="translate(28,178)"><rect width="176" height="62" rx="12" fill="#fff" stroke="#E2DDD3"/><rect width="8" height="62" rx="4" fill="#E3A03A"/><text x="20" y="37">Initial consult</text></g>
-    <g transform="translate(216,178)"><rect width="176" height="62" rx="12" fill="#fff" stroke="#E2DDD3"/><rect width="8" height="62" rx="4" fill="#E3A03A"/><text x="20" y="37">Phone &amp; email</text></g>
-    <g transform="translate(28,252)"><rect width="176" height="62" rx="12" fill="#fff" stroke="#E2DDD3"/><rect width="8" height="62" rx="4" fill="#6C63C9"/><text x="20" y="37">Case management</text></g>
-    <g transform="translate(216,252)"><rect width="176" height="62" rx="12" fill="#fff" stroke="#E2DDD3"/><rect width="8" height="62" rx="4" fill="#6C63C9"/><text x="20" y="37">Travel time</text></g>
+  <g font-size="16" font-weight="600" fill="#1E2B2F">
+    <g transform="translate(28,104)"><rect width="186" height="62" rx="12" fill="#fff" stroke="#E2DDD3"/><rect width="8" height="62" rx="4" fill="#14988A"/><text x="20" y="37">Therapy session</text></g>
+    <g transform="translate(224,104)"><rect width="186" height="62" rx="12" fill="#fff" stroke="#E2DDD3"/><rect width="8" height="62" rx="4" fill="#14988A"/><text x="20" y="37">Assessment</text></g>
+    <g transform="translate(28,178)"><rect width="186" height="62" rx="12" fill="#fff" stroke="#E2DDD3"/><rect width="8" height="62" rx="4" fill="#E3A03A"/><text x="20" y="37">Initial consult</text></g>
+    <g transform="translate(224,178)"><rect width="186" height="62" rx="12" fill="#fff" stroke="#E2DDD3"/><rect width="8" height="62" rx="4" fill="#E3A03A"/><text x="20" y="37">Phone &amp; email</text></g>
+    <g transform="translate(28,252)"><rect width="186" height="62" rx="12" fill="#fff" stroke="#E2DDD3"/><rect width="8" height="62" rx="4" fill="#6C63C9"/><text x="20" y="37">Case management</text></g>
+    <g transform="translate(224,252)"><rect width="186" height="62" rx="12" fill="#fff" stroke="#E2DDD3"/><rect width="8" height="62" rx="4" fill="#6C63C9"/><text x="20" y="37">Travel time</text></g>
   </g>
-  <path d="M404 209 H446" stroke="#0D5E57" stroke-width="5" stroke-linecap="round"/><path d="M440 197 L454 209 L440 221" fill="none" stroke="#0D5E57" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M422 209 H446" stroke="#0D5E57" stroke-width="5" stroke-linecap="round"/><path d="M440 197 L454 209 L440 221" fill="none" stroke="#0D5E57" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
   <g transform="translate(464,120)">
     <rect width="112" height="160" rx="12" fill="#fff" stroke="#14988A" stroke-width="3"/>
     <rect x="16" y="22" width="80" height="10" rx="5" fill="#14988A"/>

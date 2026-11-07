@@ -5,15 +5,15 @@
     "title": "Writing a Case Note",
     "category": "clinical",
     "sequential": true,
-    "description": "How to write a complete, accurate and clear case note for every billable activity, finish it on time, correct it properly, and use AI safely. Four short interactive walkthroughs, a practice note and a knowledge check.",
+    "description": "How to write a complete, accurate and clear case note for every billable activity, complete it on time, correct it appropriately and use AI safely. The induction includes four short interactive walkthroughs, a practice note and a knowledge check.",
     "sections": [
       {
         "title": "Why case notes matter",
         "items": [
           {
             "type": "task",
-            "title": "Walkthrough: No note, no invoice",
-            "body": "**Start here.** A quick, illustrated walkthrough: spot which activities need a note, and meet the four people who will read what you write.\n\nYour place is saved if you stop part-way.",
+            "title": "Walkthrough: Case notes and billable activities",
+            "body": "This illustrated walkthrough explains which activities require a case note and introduces the four readers of the notes you write.\n\nYour progress is saved if you stop part-way.",
             "minutes": 5,
             "required": true,
             "walkthrough_key": "case-note-paper-trail"
@@ -21,32 +21,32 @@
         ]
       },
       {
-        "title": "Build a great note",
+        "title": "Writing a complete case note",
         "items": [
           {
             "type": "task",
-            "title": "Walkthrough: Build a great note",
-            "body": "The six must-haves, our Identity, Assessment and Plan format, and a worked example — then sort real lines into the right heading and spot what a note is missing.",
+            "title": "Walkthrough: Writing a complete case note",
+            "body": "Covers the six required details, our Identity, Assessment and Plan format and a worked example, followed by exercises on placing lines under the correct heading and identifying what a note is missing.",
             "minutes": 8,
             "required": true,
             "walkthrough_key": "case-note-build"
           },
           {
             "type": "content",
-            "title": "Cheat sheet: Identity, Assessment, Plan",
-            "body": "Keep this handy while you write.\n\n**Identity**\n- the type of session (for example therapy, assessment or initial consultation)\n- the date\n- where it was held\n- who was present\n\n**Assessment**\n- your observations and findings\n- any therapy activities used\n\n**Plan**\n- the next session date\n- any tasks to be done before then\n- the billed time breakdown, for example 50 minutes session, 10 minutes case noting, 30 minutes travel\n\n**Every note must show:** date · participant name · location · who was present · what was done · billed time (session, case noting and travel).",
+            "title": "Reference: Identity, Assessment and Plan",
+            "body": "Refer to this summary while you write.\n\n**Identity**\n- the type of session (for example therapy, assessment or initial consultation)\n- the date\n- where it was held\n- who was present\n\n**Assessment**\n- your observations and findings\n- any therapy activities used\n\n**Plan**\n- the next session date\n- any tasks to be done before then\n- the billed time breakdown, for example 50 minutes session, 10 minutes case noting, 30 minutes travel\n\n**Every note must show:** date · participant name · location · who was present · what was done · billed time (session, case noting and travel).",
             "minutes": 2,
             "required": true
           }
         ]
       },
       {
-        "title": "On time, corrected properly",
+        "title": "Timeframes and corrections",
         "items": [
           {
             "type": "task",
-            "title": "Walkthrough: Beat the clock",
-            "body": "How soon to finish a note, what you can still change after you finalise it, and when it has to be an addendum — with scenarios to test yourself.",
+            "title": "Walkthrough: Timeframes and corrections",
+            "body": "When a note must be completed, what can still be changed after it is finalised, and when a correction must be made by addendum, with scenarios to test your understanding.",
             "minutes": 5,
             "required": true,
             "walkthrough_key": "case-note-clock"
@@ -54,12 +54,12 @@
         ]
       },
       {
-        "title": "AI and where you write",
+        "title": "Using AI and where notes are written",
         "items": [
           {
             "type": "task",
-            "title": "Walkthrough: AI is a helper, not the author",
-            "body": "Using AI safely: approved platforms only, and you check every line. Can you spot what the AI got wrong? Then see where notes are written today.",
+            "title": "Walkthrough: Using AI safely",
+            "body": "Using AI safely: approved platforms only, with every line checked by you. Includes an exercise on identifying an AI error, and an overview of where notes are currently written.",
             "minutes": 5,
             "required": true,
             "walkthrough_key": "case-note-ai"
@@ -67,35 +67,35 @@
         ]
       },
       {
-        "title": "Practise and prove it",
+        "title": "Practice, knowledge check and sign-off",
         "items": [
           {
             "type": "task",
-            "title": "Write a practice note",
-            "body": "Write a made-up session note using the Identity, Assessment and Plan headings. Use a made-up client only.\n\nCheck that it includes:\n- the date\n- the participant name\n- the location\n- who was present\n- what was done\n- the billed time breakdown\n\nThen ask: **could a colleague pick up this client's care from this note alone?**",
+            "title": "Practical task: write a practice note",
+            "body": "Write a practice session note using the Identity, Assessment and Plan headings. Use a made-up client only.\n\nCheck that it includes:\n- the date\n- the participant name\n- the location\n- who was present\n- what was done\n- the billed time breakdown\n\nThen consider: **could a colleague take over this client's care from this note alone?**",
             "minutes": 5,
             "required": true
           },
           {
             "type": "quiz",
             "title": "Knowledge check",
-            "body": "Eight questions across the whole induction. You need 80% to pass, and you can retry.",
+            "body": "Eight questions covering the whole induction. The pass mark is 80%, and you may retry.",
             "minutes": 5,
             "required": true,
             "quiz": {
               "passThreshold": 80,
               "questions": [
                 {
-                  "question": "A 15-minute invoiced phone call with a participant's parent is finished. What do you need?",
+                  "question": "You have finished a 15-minute invoiced phone call with a participant's parent. What is required?",
                   "options": [
-                    "Nothing, as it is short",
+                    "Nothing, as the call was short",
                     "A case note, because it is a billable activity",
                     "A note only if the call is longer than an hour"
                   ],
                   "correctIndex": 1
                 },
                 {
-                  "question": "What is the latest you should finish a case note after a session?",
+                  "question": "What is the latest you should complete a case note after a session?",
                   "options": [
                     "Within 7 days",
                     "Within 48 hours",
@@ -114,7 +114,7 @@
                   "correctIndex": 0
                 },
                 {
-                  "question": "You finalised a note three days ago and spotted a mistake. What do you do?",
+                  "question": "You finalised a note three days ago and have found a mistake. What should you do?",
                   "options": [
                     "Revert it to draft and edit it",
                     "Delete it and write a new one",
@@ -123,7 +123,7 @@
                   "correctIndex": 2
                 },
                 {
-                  "question": "Where does the billed time breakdown go in our format?",
+                  "question": "Under which heading does the billed time breakdown belong in our format?",
                   "options": [
                     "Identity",
                     "Assessment",
@@ -141,16 +141,16 @@
                   "correctIndex": 1
                 },
                 {
-                  "question": "Which AI tool can you use to draft a note?",
+                  "question": "Which AI tools may you use to draft a note?",
                   "options": [
-                    "Any free tool you like",
+                    "Any free tool you choose",
                     "Only an Opal-approved platform",
                     "Any tool, if you remove the participant's name"
                   ],
                   "correctIndex": 1
                 },
                 {
-                  "question": "Which wording suits a case note best?",
+                  "question": "Which wording is most appropriate for a case note?",
                   "options": [
                     "Client was difficult today",
                     "Sam needed one verbal prompt to hold the spoon steadily and fed himself most of the meal",
@@ -164,10 +164,10 @@
           {
             "type": "acknowledgement",
             "title": "Case note sign-off",
-            "body": "Confirm that you have read this induction and understand what is expected when you write case notes.",
+            "body": "Confirm that you have read this induction and understand what is expected of you when writing case notes.",
             "minutes": 1,
             "required": true,
-            "ack_statement": "I have read and understood this induction. I will write a complete and accurate case note for every billable activity, finish it within 48 hours, correct it by addendum after that, and only use Opal-approved AI platforms while checking every AI-drafted note myself."
+            "ack_statement": "I have read and understood this induction. I will write a complete and accurate case note for every billable activity, complete it within 48 hours, make any correction after that time by addendum, and use only Opal-approved AI platforms, checking every AI-drafted note myself."
           }
         ]
       }
@@ -176,8 +176,8 @@
   "walkthroughs": [
     {
       "key": "case-note-paper-trail",
-      "title": "No note, no invoice",
-      "description": "Which activities need a case note, and the four people who read it.",
+      "title": "Case notes and billable activities",
+      "description": "Which activities require a case note, and the four readers of each note.",
       "group": "case-notes",
       "minutes": 5,
       "roles": ["owner", "admin", "therapist", "read_only"],
@@ -185,72 +185,72 @@
       "steps": [
         {
           "type": "intro",
-          "title": "Every billable minute leaves a trail",
-          "body": "A case note is required for every billable activity. **Without a case note, we cannot invoice.**\n\nIn the next few minutes you will spot what counts, and meet the people who will read what you write."
+          "title": "Every billable activity requires a case note",
+          "body": "A case note is required for every billable activity. **Without a case note, we cannot invoice.**\n\nThis walkthrough explains which activities are billable and who reads the notes you write."
         },
         {
           "type": "screenshot",
-          "title": "What counts as billable",
+          "title": "Billable activities",
           "image": { "src": "/assets/tutorials/writing-a-case-note/billable.svg", "alt": "Six billable activities flow into a case note, and only then into an invoice." },
-          "body": "Every one of these needs a case note:\n• therapy sessions\n• assessment sessions\n• initial consultations\n• invoiced phone calls and emails\n• case management\n• travel time\n\nThe note must be complete for the billing to be valid."
+          "body": "Each of the following requires a case note:\n• therapy sessions\n• assessment sessions\n• initial consultations\n• invoiced phone calls and emails\n• case management\n• travel time\n\nThe note must be complete for the billing to be valid."
         },
         {
           "type": "quiz",
-          "title": "Quick check: on the road",
+          "title": "Knowledge check: travel time",
           "quiz": {
             "question": "You spent 30 minutes driving to a participant's home and billed it. Does that travel need a case note?",
-            "options": ["No — it is only driving", "Yes — travel time is a billable activity", "Only if the session was cancelled"],
+            "options": ["No, as it is only driving", "Yes, travel time is a billable activity", "Only if the session was cancelled"],
             "correctIndex": 1,
-            "explain": "Travel time is on the list. If it is billed, it needs a note."
+            "explain": "Travel time is a billable activity. If it is billed, it requires a case note."
           }
         },
         {
           "type": "quiz",
-          "title": "Quick check: the inbox",
+          "title": "Knowledge check: invoiced emails",
           "quiz": {
-            "question": "You sent an invoiced email to a participant's family. What do you need?",
-            "options": ["A case note", "Nothing — the email is the record", "A note only if they reply"],
+            "question": "You sent an invoiced email to a participant's family. What is required?",
+            "options": ["A case note", "Nothing, as the email is the record", "A note only if they reply"],
             "correctIndex": 0,
             "explain": "Invoiced phone calls and emails are billable activities, so each one needs a case note."
           }
         },
         {
           "type": "screenshot",
-          "title": "Who reads your notes",
+          "title": "Who reads your case notes",
           "image": { "src": "/assets/tutorials/writing-a-case-note/readers.svg", "alt": "Four readers around one note: auditors, colleagues, participants and families, and you." },
-          "body": "Your notes are read by more people than you might expect.\n\n**Auditors** check them against the actual activity. They must reflect what really happened.\n**Colleagues** may pick up the participant's care from your note. They should understand exactly what you did.\n**Participants and families** may be sent a note. They should be able to see what was done and what was billed.\n**You** will use your notes later to write progress reports."
+          "body": "Your notes are read by more people than you may expect.\n\n**Auditors** check them against the actual activity. They must reflect what really happened.\n**Colleagues** may take over the participant's care from your note. They should understand exactly what you did.\n**Participants and families** may be sent a note. They should be able to see what was done and what was billed.\n**You** will use your notes later to write progress reports."
         },
         {
           "type": "quiz",
-          "title": "Whose eyes? The handover",
+          "title": "Knowledge check: handover to a colleague",
           "quiz": {
-            "question": "A colleague picks up your participant's care and reads your last note. What do they need from it?",
-            "options": ["A rough idea of how it went", "Exactly what you did, so they can carry on the care", "Just the billed time"],
+            "question": "A colleague takes over your participant's care and reads your most recent note. What do they need from it?",
+            "options": ["A general sense of how the session went", "Exactly what you did, so they can continue the participant's care", "Only the billed time"],
             "correctIndex": 1,
-            "explain": "Colleagues may pick up the participant's care from your note — they should understand exactly what you did."
+            "explain": "Colleagues may take over the participant's care from your note, so they must be able to understand exactly what you did."
           }
         },
         {
           "type": "quiz",
-          "title": "Whose eyes? The audit",
+          "title": "Knowledge check: audit",
           "quiz": {
             "question": "Who checks your notes against the activity that actually happened?",
-            "options": ["Auditors", "Nobody", "Only the participant"],
+            "options": ["Auditors", "No one", "Only the participant"],
             "correctIndex": 0,
             "explain": "Auditors check notes against the actual activity, so every note must reflect what really happened."
           }
         },
         {
           "type": "complete",
-          "title": "Trail found",
-          "body": "**No note, no invoice** — and write every note with those four readers in mind.\n\nBack in your induction, next up is building a great note."
+          "title": "Summary: case notes and billable activities",
+          "body": "**Without a case note, we cannot invoice.** Write every note with its four readers in mind.\n\nReturn to your induction to continue with the next module: writing a complete case note."
         }
       ]
     },
     {
       "key": "case-note-build",
-      "title": "Build a great note",
-      "description": "The six must-haves, Identity · Assessment · Plan, a worked example and a sorting game.",
+      "title": "Writing a complete case note",
+      "description": "The six required details, the Identity, Assessment and Plan format, a worked example and practice exercises.",
       "group": "case-notes",
       "minutes": 8,
       "roles": ["owner", "admin", "therapist", "read_only"],
@@ -258,36 +258,36 @@
       "steps": [
         {
           "type": "intro",
-          "title": "What makes a note hold up",
-          "body": "A good note does two jobs: it backs up the billing, and it tells the next reader exactly what happened.\n\nYou will learn the six must-haves and our three headings, look at a worked example, then sort some lines yourself."
+          "title": "What makes a sound case note",
+          "body": "A good note serves two purposes: it supports the billing, and it tells the next reader exactly what happened.\n\nThis walkthrough covers the six required details and our three headings, presents a worked example, and then asks you to apply them."
         },
         {
           "type": "screenshot",
-          "title": "The six must-haves",
+          "title": "The six required details",
           "image": { "src": "/assets/tutorials/writing-a-case-note/must-haves.svg", "alt": "Date, participant name, location, who was present, what was done, and billed time broken into session, case noting and travel." },
-          "body": "Every note must show:\n• the **date**\n• the **participant name**\n• the **location**\n• **who was present**\n• **what was done**\n• the **billed time**, broken into session, case noting and travel\n\nIf one of these is missing, the note may not hold up for billing or audit."
+          "body": "Every note must show:\n• the **date**\n• the **participant name**\n• the **location**\n• **who was present**\n• **what was done**\n• the **billed time**, broken into session, case noting and travel\n\nIf any of these is missing, the note may not withstand billing or audit review."
         },
         {
           "type": "screenshot",
-          "title": "Our format: Identity, Assessment, Plan",
+          "title": "Our format: Identity, Assessment and Plan",
           "image": { "src": "/assets/tutorials/writing-a-case-note/iap.svg", "alt": "Three headings: Identity, Assessment and Plan, and what goes under each." },
           "body": "We currently use three headings.\n\n**Identity** — the type of session (for example therapy, assessment or initial consultation), the date, where it was held, and who was present.\n\n**Assessment** — your observations and findings, and any therapy activities used.\n\n**Plan** — the next session date, any tasks to be done before then, and the billed time breakdown, for example 50 minutes session, 10 minutes case noting, 30 minutes travel."
         },
         {
           "type": "quiz",
-          "title": "Sort it · 1 of 4",
+          "title": "Knowledge check: headings (1 of 4)",
           "quiz": {
             "question": "“Present: Sam, Sam's mother and the therapist.” Which heading does this line belong under?",
             "options": ["Identity", "Assessment", "Plan"],
             "correctIndex": 0,
-            "explain": "Who was present is part of Identity, with the session type, date and place."
+            "explain": "Who was present belongs under Identity, together with the session type, date and location."
           }
         },
         {
           "type": "quiz",
-          "title": "Sort it · 2 of 4",
+          "title": "Knowledge check: headings (2 of 4)",
           "quiz": {
-            "question": "“He needed one verbal prompt to hold the spoon steadily.” Which heading?",
+            "question": "“He needed one verbal prompt to hold the spoon steadily.” Which heading does this line belong under?",
             "options": ["Identity", "Assessment", "Plan"],
             "correctIndex": 1,
             "explain": "Your observations and findings go under Assessment."
@@ -295,19 +295,19 @@
         },
         {
           "type": "quiz",
-          "title": "Sort it · 3 of 4",
+          "title": "Knowledge check: headings (3 of 4)",
           "quiz": {
-            "question": "“Billed: 50 minutes session, 10 minutes case noting, 30 minutes travel.” Which heading?",
+            "question": "“Billed: 50 minutes session, 10 minutes case noting, 30 minutes travel.” Which heading does this line belong under?",
             "options": ["Identity", "Assessment", "Plan"],
             "correctIndex": 2,
-            "explain": "The billed time breakdown sits in Plan, with the next session date and tasks."
+            "explain": "The billed time breakdown belongs under Plan, together with the next session date and any tasks."
           }
         },
         {
           "type": "quiz",
-          "title": "Sort it · 4 of 4",
+          "title": "Knowledge check: headings (4 of 4)",
           "quiz": {
-            "question": "“Sam and his mother will practise the spoon at two meals before then.” Which heading?",
+            "question": "“Sam and his mother will practise the spoon at two meals before then.” Which heading does this line belong under?",
             "options": ["Identity", "Assessment", "Plan"],
             "correctIndex": 2,
             "explain": "Tasks to be done before the next session go under Plan."
@@ -317,44 +317,44 @@
           "type": "screenshot",
           "title": "Worked example (made-up client)",
           "image": { "src": "/assets/tutorials/writing-a-case-note/worked-example.svg", "alt": "A complete example note for a made-up client, Sam Example, with each must-have ticked." },
-          "body": "**Identity**\nTherapy session with Sam Example (made-up). 12 March. Held at Sam's home. Present: Sam, Sam's mother and the therapist.\n\n**Assessment**\nSam practised using a built-up spoon at lunch. He needed one verbal prompt to hold it steadily. He fed himself most of the meal and said he felt \"good\" about it. We also worked on opening a lunch container, which was still difficult.\n\n**Plan**\nNext session 19 March. Sam and his mother will practise the spoon at two meals before then. Billed: 50 minutes session, 10 minutes case noting, 30 minutes travel.\n\nNotice it is specific, factual and easy to follow."
+          "body": "**Identity**\nTherapy session with Sam Example (made-up). 12 March. Held at Sam's home. Present: Sam, Sam's mother and the therapist.\n\n**Assessment**\nSam practised using a built-up spoon at lunch. He needed one verbal prompt to hold it steadily. He fed himself most of the meal and said he felt \"good\" about it. We also worked on opening a lunch container, which was still difficult.\n\n**Plan**\nNext session 19 March. Sam and his mother will practise the spoon at two meals before then. Billed: 50 minutes session, 10 minutes case noting, 30 minutes travel.\n\nNote that the entry is specific, factual and easy to follow."
         },
         {
           "type": "quiz",
-          "title": "Spot what's missing",
+          "title": "Knowledge check: identify the missing detail",
           "quiz": {
-            "question": "“Therapy session with Sam Example. 12 March. Present: Sam and the therapist. Sam practised the built-up spoon at lunch. Next session 19 March. Billed: 50 minutes session, 10 minutes case noting, 30 minutes travel.” Which must-have is missing?",
+            "question": "“Therapy session with Sam Example. 12 March. Present: Sam and the therapist. Sam practised the built-up spoon at lunch. Next session 19 March. Billed: 50 minutes session, 10 minutes case noting, 30 minutes travel.” Which required detail is missing?",
             "options": ["The date", "The location", "Who was present", "The billed time"],
             "correctIndex": 1,
-            "explain": "It never says where the session was held. The location belongs under Identity."
+            "explain": "The note does not state where the session was held. The location belongs under Identity."
           }
         },
         {
           "type": "page",
-          "title": "Language: professional and easy to read",
+          "title": "Language: professional and accessible",
           "body": "Use professional, clinical language that a participant or family member could also read and understand.\n\nWrite what actually happened in the session. Do not write what you assumed, or what a tool suggested.\n\nClear notes make progress reports much easier to write."
         },
         {
           "type": "quiz",
-          "title": "Which line belongs in the note?",
+          "title": "Knowledge check: appropriate wording",
           "quiz": {
-            "question": "Pick the line that is written the way a case note should be.",
+            "question": "Select the line that is written as a case note should be.",
             "options": ["Sam seemed off today, probably tired", "Sam fed himself most of the meal and said he felt “good” about it", "Great session, all good"],
             "correctIndex": 1,
-            "explain": "It records what actually happened, not an assumption, in words a family member could read."
+            "explain": "It records what actually happened, rather than an assumption, in language a family member could understand."
           }
         },
         {
           "type": "complete",
-          "title": "Note built",
-          "body": "Six must-haves, three headings, factual language.\n\nThe cheat sheet in your induction keeps the format to hand. Next: beating the clock."
+          "title": "Summary: writing a complete case note",
+          "body": "Every note includes the six required details, uses the three headings and is written in factual language.\n\nThe reference sheet in your induction summarises the format. Return to your induction to continue with the next module: timeframes and corrections."
         }
       ]
     },
     {
       "key": "case-note-clock",
-      "title": "Beat the clock",
-      "description": "How soon to finish a note, and how to correct it before and after 48 hours.",
+      "title": "Timeframes and corrections",
+      "description": "When a note must be completed, and how to correct it within and after 48 hours.",
       "group": "case-notes",
       "minutes": 5,
       "roles": ["owner", "admin", "therapist", "read_only"],
@@ -362,41 +362,41 @@
       "steps": [
         {
           "type": "screenshot",
-          "title": "Your 48-hour window",
+          "title": "The 48-hour timeframe",
           "image": { "src": "/assets/tutorials/writing-a-case-note/clock.svg", "alt": "A timeline from the session: ideally within a day, no later than 48 hours." },
-          "body": "Finish your note **ideally within a day, and no later than 48 hours** after the session.\n\nThis keeps details fresh so key information is not missed."
+          "body": "Complete your note **ideally within a day, and no later than 48 hours** after the session.\n\nThis ensures details are recorded while they are fresh, so key information is not missed."
         },
         {
           "type": "quiz",
-          "title": "Scenario: the busy day",
+          "title": "Scenario: a demanding day",
           "quiz": {
-            "question": "You finish three sessions and drive home late. You are tired and plan to write the notes in three days. What should you do?",
-            "options": ["Write them in three days — tired notes are worse", "Aim to finish within a day, no later than 48 hours, and raise it with your supervisor if something stops you", "Only write notes for the longest session"],
+            "question": "You complete three sessions and drive home late. You are tired and plan to write the notes in three days. What should you do?",
+            "options": ["Write them in three days, as notes written while tired are worse", "Aim to complete them within a day, and no later than 48 hours after the sessions", "Only write notes for the longest session"],
             "correctIndex": 1,
-            "explain": "Three days is past the 48-hour limit. If something stops you, raise it with your supervisor rather than leaving it."
+            "explain": "Three days exceeds the 48-hour limit. Notes should be completed ideally within a day, and no later than 48 hours after the session."
           }
         },
         {
           "type": "screenshot",
-          "title": "Changing a note after you finalise it",
+          "title": "Changing a finalised note",
           "image": { "src": "/assets/tutorials/writing-a-case-note/finalise.svg", "alt": "Draft, then finalised with 48 hours to edit or revert, then locked: corrections by addendum." },
           "body": "You can save a note as a draft. Once you finalise it:\n• for **48 hours** you can edit it or revert it to draft\n• **after 48 hours** you cannot change the note. You must add an **addendum**."
         },
         {
           "type": "quiz",
-          "title": "Fix it right · yesterday",
+          "title": "Scenario: correction within 48 hours",
           "quiz": {
             "question": "You finalised a note yesterday afternoon and notice a wrong date. What can you do?",
-            "options": ["Edit it or revert it to draft — you are still inside 48 hours", "Nothing — a finalised note can never change", "Delete it and start again"],
+            "options": ["Edit it or revert it to draft, as you are still within 48 hours", "Nothing, as a finalised note can never be changed", "Delete it and start again"],
             "correctIndex": 0,
             "explain": "For 48 hours after you finalise, you can edit the note or revert it to draft."
           }
         },
         {
           "type": "quiz",
-          "title": "Fix it right · last week",
+          "title": "Scenario: correction after 48 hours",
           "quiz": {
-            "question": "It is four days since you finalised a note and you spot a mistake. What now?",
+            "question": "It is four days since you finalised a note and you find a mistake. What should you do?",
             "options": ["Revert it to draft", "Add an addendum", "Leave it as it is"],
             "correctIndex": 1,
             "explain": "After 48 hours the note cannot be changed, so the correction is made by addendum."
@@ -405,19 +405,19 @@
         {
           "type": "warning",
           "title": "Check before you finalise",
-          "body": "Check your note carefully before you finalise it. It is the easiest correction you will ever make."
+          "body": "Check your note carefully before you finalise it. Correcting an error at this stage is far simpler than correcting it later."
         },
         {
           "type": "complete",
-          "title": "Clock beaten",
-          "body": "**Within a day if you can, 48 hours at the latest.** Edit or revert inside 48 hours of finalising; after that, add an addendum.\n\nNext: using AI safely."
+          "title": "Summary: timeframes and corrections",
+          "body": "**Complete notes within a day where possible, and within 48 hours at the latest.** For 48 hours after finalising, you may edit a note or revert it to draft; after that, corrections are made by addendum.\n\nReturn to your induction to continue with the next module: using AI safely."
         }
       ]
     },
     {
       "key": "case-note-ai",
-      "title": "AI is a helper, not the author",
-      "description": "Approved platforms only, check every line, and where notes are written today.",
+      "title": "Using AI safely",
+      "description": "Approved platforms only, checking every line, and where notes are currently written.",
       "group": "case-notes",
       "minutes": 5,
       "roles": ["owner", "admin", "therapist", "read_only"],
@@ -425,28 +425,28 @@
       "steps": [
         {
           "type": "intro",
-          "title": "AI is not banned at Opal",
-          "body": "AI is not banned at Opal, but you must use it carefully.\n\n• Only use **Opal-approved AI platforms**. This protects client confidentiality and privacy.\n• **Review and verify every AI-drafted note** before you save it.\n• You remain responsible for everything in the note."
+          "title": "Using AI at Opal",
+          "body": "AI is not banned at Opal, but it must be used carefully.\n\n• Only use **Opal-approved AI platforms**. This protects client confidentiality and privacy.\n• **Review and verify every AI-drafted note** before you save it.\n• You remain responsible for everything in the note."
         },
         {
           "type": "screenshot",
-          "title": "Spot the stowaway",
+          "title": "Reviewing an AI-drafted note",
           "image": { "src": "/assets/tutorials/writing-a-case-note/ai-draft.svg", "alt": "An AI-drafted note with four lines, under a magnifying glass." },
-          "body": "An approved AI tool drafted this note after a session where you worked on a built-up spoon and opening a lunch container.\n\nRead it closely. **One line describes something that did not happen.**"
+          "body": "An approved AI tool drafted this note following a session in which you worked on a built-up spoon and opening a lunch container.\n\nRead it carefully. **One line describes something that did not happen.**"
         },
         {
           "type": "quiz",
-          "title": "Which line has to go?",
+          "title": "Knowledge check: identify the inaccurate line",
           "quiz": {
             "question": "You did not do stairs in the session. Which line must you remove or correct before saving?",
             "options": ["Sam practised using a built-up spoon at lunch", "Sam practised stair climbing", "We worked on opening a lunch container"],
             "correctIndex": 1,
-            "explain": "It did not happen, so it cannot be in the note. You are responsible for the final note."
+            "explain": "It did not happen, so it cannot appear in the note. You are responsible for the final note."
           }
         },
         {
           "type": "quiz",
-          "title": "Why approved platforms?",
+          "title": "Knowledge check: approved platforms",
           "quiz": {
             "question": "Why does Opal ask you to use only Opal-approved AI platforms?",
             "options": ["To protect client confidentiality and privacy", "Because other tools are slower", "To keep notes short"],
@@ -456,14 +456,14 @@
         },
         {
           "type": "warning",
-          "title": "You stay responsible",
-          "body": "Do not blame AI if it records something that did not happen.\n\nThe note must always reflect your own content and the activities you actually did."
+          "title": "You remain responsible",
+          "body": "You cannot attribute an error to AI if it records something that did not happen.\n\nThe note must always reflect your own content and the activities you actually completed."
         },
         {
           "type": "screenshot",
-          "title": "Where you write notes",
+          "title": "Where case notes are written",
           "image": { "src": "/assets/tutorials/writing-a-case-note/where.svg", "alt": "Two routes into Splose: draft in the portal and transfer, or write directly in Splose." },
-          "body": "We currently use **Splose** for case notes. Each billable activity is documented there.\n\nThe Opal portal is being developed as a client management system. Case noting is being piloted in it, including a mobile app with an AI tool to help prepare notes.\n\nFor now you can either draft in the portal tools and transfer the note to Splose, or write directly in Splose. Both are accepted. This may change as the portal develops."
+          "body": "We currently use **Splose** for case notes. Each billable activity is documented there.\n\nThe Opal portal is being developed as a client management system. Case noting is being piloted in it, including a mobile app with an AI tool to help prepare notes.\n\nAt present, you may either draft in the portal tools and transfer the note to Splose, or write directly in Splose. Both are accepted. This may change as the portal develops."
         },
         {
           "type": "highlight",
@@ -476,8 +476,8 @@
         },
         {
           "type": "complete",
-          "title": "Helper, not author",
-          "body": "Approved platforms only. Check every line. **You own the note.**\n\nBack in your induction: write a practice note, take the knowledge check, and sign off."
+          "title": "Summary: using AI safely",
+          "body": "Use approved platforms only and check every line. **You are responsible for the note.**\n\nReturn to your induction to complete the practice note, the knowledge check and the sign-off."
         }
       ]
     }

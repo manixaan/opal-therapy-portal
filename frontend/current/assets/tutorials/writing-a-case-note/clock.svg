@@ -1,21 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 405" role="img" aria-labelledby="t" font-family="Inter, -apple-system, Segoe UI, Helvetica, Arial, sans-serif">
-  <title id="t">Timeline: finish your note ideally within a day of the session, and no later than 48 hours</title>
+  <title id="t">Timeline: complete your note ideally within a day of the session, and no later than 48 hours</title>
   <rect width="720" height="405" rx="22" fill="#FBF8F3"/>
-  <text x="28" y="50" font-size="30" font-weight="800" fill="#1E2B2F">Beat the clock</text>
+  <text x="28" y="50" font-size="30" font-weight="800" fill="#1E2B2F">Complete notes promptly</text>
   <text x="28" y="80" font-size="18" fill="#6B7C80">Write while the details are fresh</text>
-  <rect x="60" y="196" width="280" height="26" rx="13" fill="#14988A"/>
-  <rect x="330" y="196" width="290" height="26" fill="#E3A03A"/>
-  <path d="M620 196 h20 a13 13 0 0 1 0 26 h-20 z" fill="#E3A03A"/>
-  <rect x="652" y="196" width="40" height="26" rx="13" fill="#E8C9C2"/>
-  <circle cx="60" cy="209" r="22" fill="#0D5E57" stroke="#FBF8F3" stroke-width="5"/>
-  <path d="M50 209 L57 216 L70 202" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
-  <text x="60" y="270" font-size="20" font-weight="800" fill="#0D5E57" text-anchor="middle">Session</text>
-  <circle cx="340" cy="209" r="18" fill="#fff" stroke="#14988A" stroke-width="5"/>
-  <text x="200" y="168" font-size="22" font-weight="800" fill="#0D5E57" text-anchor="middle">Ideally within a day</text>
-  <text x="340" y="270" font-size="20" font-weight="700" fill="#0D5E57" text-anchor="middle">1 day</text>
-  <g transform="translate(640,120)"><path d="M0 0 V89" stroke="#B3412F" stroke-width="4"/><path d="M0 2 H34 L26 16 L34 30 H0 Z" fill="#D9614E"/></g>
-  <text x="480" y="168" font-size="22" font-weight="800" fill="#8A5A12" text-anchor="middle">No later than</text>
-  <text x="640" y="270" font-size="20" font-weight="800" fill="#B3412F" text-anchor="middle">48 hours</text>
-  <rect x="28" y="316" width="664" height="60" rx="14" fill="#fff" stroke="#E2DDD3"/>
-  <text x="360" y="353" font-size="19" font-weight="600" fill="#1E2B2F" text-anchor="middle">Can't make it? Raise it with your supervisor — don't leave it.</text>
+  <rect x="60" y="250" width="280" height="26" rx="13" fill="#14988A"/>
+  <rect x="330" y="250" width="290" height="26" fill="#E3A03A"/>
+  <path d="M620 250 h20 a13 13 0 0 1 0 26 h-20 z" fill="#E3A03A"/>
+  <rect x="652" y="250" width="40" height="26" rx="13" fill="#E8C9C2"/>
+  <circle cx="60" cy="263" r="22" fill="#0D5E57" stroke="#FBF8F3" stroke-width="5"/>
+  <path d="M50 263 L57 270 L70 256" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="60" y="324" font-size="20" font-weight="800" fill="#0D5E57" text-anchor="middle">Session</text>
+  <circle cx="340" cy="263" r="18" fill="#fff" stroke="#14988A" stroke-width="5"/>
+  <text x="200" y="222" font-size="22" font-weight="800" fill="#0D5E57" text-anchor="middle">Ideally within a day</text>
+  <text x="340" y="324" font-size="20" font-weight="700" fill="#0D5E57" text-anchor="middle">1 day</text>
+  <g transform="translate(640,174)"><path d="M0 0 V89" stroke="#B3412F" stroke-width="4"/><path d="M0 2 H34 L26 16 L34 30 H0 Z" fill="#D9614E"/></g>
+  <text x="480" y="222" font-size="22" font-weight="800" fill="#8A5A12" text-anchor="middle">No later than</text>
+  <text x="640" y="324" font-size="20" font-weight="800" fill="#B3412F" text-anchor="middle">48 hours</text>
 </svg>
