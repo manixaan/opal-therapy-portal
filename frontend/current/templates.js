@@ -34,6 +34,11 @@
   var API = '/api/templates';
   var SAVE_DEBOUNCE_MS = 700;
   var PREVIEW_TIMEOUT_MS = 20000;
+  // Composing the preview is a server round-trip plus a full docx render plus
+  // an A4 re-pagination — far too costly to run per click. Clicking three
+  // dropdowns used to queue three of them; now a burst settles into one.
+  var SECTIONS_SAVE_DEBOUNCE_MS = 250;
+  var PREVIEW_DEBOUNCE_MS = 350;
 
   var S = {
     view: 'catalogue',
@@ -56,7 +61,7 @@
     appendixCands: null,    // completed assessments offered as appendices; null = not loaded
     appendixBusy: false,
     banner: null,
-    preview: { rev: 0, status: 'idle', err: '' },
+    preview: { rev: 0, status: 'idle', err: '', focusTag: null, timer: null },
   };
 
   // ── Helpers ───────────────────────────────────────────────────────────────
@@ -847,7 +852,7 @@
 
     S.sections = rest.slice(0, at).concat(block, rest.slice(at));
     mountSections();
-    saveSections();
+    scheduleSectionsSave(tag);
   }
 
   /**
@@ -908,7 +913,23 @@
     mountAppendices();
     setSaveState('Saved');
     repaintChips();
-    refreshPreview();
+    schedulePreview();
+  }
+
+  /**
+   * Reordering and heading-size changes arrive in bursts — a save (and the
+   * preview rebuild that follows it) per click is what made the panel feel
+   * sluggish. One settled save per burst instead.
+   */
+  var sectionsSaveTimer = null;
+  function scheduleSectionsSave(focusTag) {
+    if (focusTag) S.preview.focusTag = focusTag;
+    setSaveState('Saving…');
+    if (sectionsSaveTimer) clearTimeout(sectionsSaveTimer);
+    sectionsSaveTimer = setTimeout(function () {
+      sectionsSaveTimer = null;
+      saveSections();
+    }, SECTIONS_SAVE_DEBOUNCE_MS);
   }
 
   function onFieldInput(e) {
@@ -1114,6 +1135,65 @@
    * position, so a refresh never blanks the pane or jumps a long FCA back to
    * page one.
    */
+  /**
+   * Coalesce preview rebuilds. `focusTag` is the section the reader just
+   * touched: it survives the debounce so the finished render can scroll to
+   * the edit, and the LAST edit in a burst wins.
+   */
+  function schedulePreview(focusTag) {
+    if (focusTag) S.preview.focusTag = focusTag;
+    if (S.preview.timer) clearTimeout(S.preview.timer);
+    previewState('Updating…');
+    S.preview.timer = setTimeout(function () {
+      S.preview.timer = null;
+      refreshPreview();
+    }, PREVIEW_DEBOUNCE_MS);
+  }
+
+  /**
+   * Scroll the preview to the section the reader just edited and flash it, so
+   * they can see at a glance that the change landed where they meant it to.
+   *
+   * The rendered document has no tag attributes to match on — docx-preview
+   * emits Word's own markup — so the heading is found by its printed text.
+   * Scrolling is done by moving the pane's own scrollTop rather than
+   * scrollIntoView, which would also scroll the page and undo the reader's
+   * position in the editor panel beside it.
+   */
+  function focusPreviewOn(tag) {
+    if (!tag) return;
+    var host = el('tpl-preview-host');
+    var rows = S.sections || [];
+    var row = null;
+    for (var i = 0; i < rows.length; i++) { if (rows[i].tag === tag) { row = rows[i]; break; } }
+    if (!host || !row) return;
+    var want = String(row.title || row.label || '').trim().toLowerCase();
+    if (!want) return;
+
+    var nodes = host.querySelectorAll('p, h1, h2, h3, h4, h5, h6');
+    var hit = null;
+    for (var j = 0; j < nodes.length; j++) {
+      var txt = (nodes[j].textContent || '').trim().toLowerCase();
+      // Exact first; a heading that merely contains the title (a numbered or
+      // suffixed variant) is accepted only if nothing matched outright.
+      if (txt === want) { hit = nodes[j]; break; }
+      if (!hit && txt && txt.length < want.length + 24 && txt.indexOf(want) === 0) hit = nodes[j];
+    }
+    if (!hit) return;
+
+    var reduce = global.matchMedia
+      && global.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var hostTop = host.getBoundingClientRect().top;
+    var nodeTop = hit.getBoundingClientRect().top;
+    var target = host.scrollTop + (nodeTop - hostTop) - Math.max(24, host.clientHeight * 0.3);
+    target = Math.max(0, Math.min(target, host.scrollHeight - host.clientHeight));
+    if (host.scrollTo) host.scrollTo({ top: target, behavior: reduce ? 'auto' : 'smooth' });
+    else host.scrollTop = target;
+
+    hit.classList.add('tpl-preview-focus');
+    setTimeout(function () { hit.classList.remove('tpl-preview-focus'); }, 1600);
+  }
+
   async function refreshPreview() {
     if (!S.docu) return;
     if (!global.docx || typeof global.docx.renderAsync !== 'function') {
@@ -1183,6 +1263,13 @@
       staged.parentNode.removeChild(staged);
       host.scrollTop = top;
       previewState('Up to date');
+
+      // An edit moves the reader's attention to one section — take the
+      // preview there rather than leaving them to find it. Consumed once, so
+      // a later refresh that no edit prompted keeps the reader's position.
+      var focusTag = S.preview.focusTag;
+      S.preview.focusTag = null;
+      if (focusTag) focusPreviewOn(focusTag);
     } catch (err) {
       clearTimeout(timer);
       if (staged && staged.parentNode) staged.parentNode.removeChild(staged);
@@ -1368,18 +1455,19 @@
         break;
       }
       mountSections();
-      saveSections();
+      scheduleSectionsSave();
     },
 
     /** Put a removed template section back where it was. */
     restoreSection: function () {
       var pick = el('tpl-restore-pick');
       if (!pick || !pick.value || !S.sections) return;
+      var restored = pick.value;
       for (var i = 0; i < S.sections.length; i++) {
-        if (S.sections[i].tag === pick.value) { S.sections[i].included = true; break; }
+        if (S.sections[i].tag === restored) { S.sections[i].included = true; break; }
       }
       mountSections();
-      saveSections();
+      scheduleSectionsSave(restored);
     },
 
     setSectionLevel: function (tag, value) {
@@ -1393,7 +1481,7 @@
       // The row's indent and weight follow its level — repaint the outline
       // so the hierarchy is visible immediately, not after the save echoes.
       mountSections();
-      saveSections();
+      scheduleSectionsSave(tag);
     },
 
     addSectionStart: function () { S.addingSection = true; mountSections(); var t = el('tpl-newsec-title'); if (t) t.focus(); },
@@ -1427,7 +1515,7 @@
       rows.splice(at, 0, row);
       S.addingSection = false;
       mountSections();
-      saveSections();
+      scheduleSectionsSave(row.tag);
     },
 
     /**
@@ -1473,7 +1561,7 @@
         .concat(rows.slice(bStart, bEnd), rows.slice(aEnd, bStart),
           rows.slice(aStart, aEnd), rows.slice(bEnd));
       mountSections();
-      saveSections();
+      scheduleSectionsSave(tag);
     },
 
     remove: async function (id) {
@@ -1504,6 +1592,15 @@
       if (!S.docu) return;
       if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
       if (S.dirty || S.saving) await save();
+      // Section edits are debounced too, so a download fired within that
+      // window would otherwise export the structure as it was before the
+      // last click. Flush it the same way the field edits are flushed.
+      if (sectionsSaveTimer) {
+        clearTimeout(sectionsSaveTimer);
+        sectionsSaveTimer = null;
+        await saveSections();
+      }
+      while (sectionsSaving) await new Promise(function (r) { setTimeout(r, 40); });
 
       var btn = el(format === 'pdf' ? 'tpl-dl-pdf' : 'tpl-dl-docx');
       if (btn) { btn.disabled = true; btn.textContent = 'Preparing…'; }

@@ -793,7 +793,7 @@ describe('changed assets are cache-busted', () => {
       // drag-to-reorder, multi-article A4 pagination fix. css 5: the
       // stepper and outline styles.
       // 8: the toast wrapper forwards kind; failures pass 'warn' (10 Oct 2026).
-      ['templates.js', 8], ['templates.css', 6],
+      ['templates.js', 9], ['templates.css', 7],
       // 1: day / night mode — theme.js stamps data-theme before first paint
       // (auto follows the clock), theme.css re-values the shell tokens.
       ['theme.js', 2], ['theme.css', 4],
