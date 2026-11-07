@@ -1,0 +1,520 @@
+{
+  "format": "opal-induction-pack/1",
+  "slug": "writing-a-progress-report",
+  "workflow": {
+    "title": "Writing a Progress Report",
+    "category": "clinical",
+    "description": "How to write a clear, goal-focused progress report for each client near the end of their NDIS plan, from finding the template to getting coordinator approval before it is sent. Four interactive walkthroughs, including a live tour of the portal template.",
+    "sections": [
+      {
+        "title": "Why progress reports matter",
+        "items": [
+          {
+            "type": "task",
+            "title": "Walkthrough: Through the planner's eyes",
+            "body": "**Start here.** See your report the way an NDIS planner does — and find out what makes an Opal report different.\n\nYour place is saved if you stop part-way.",
+            "minutes": 5,
+            "required": true,
+            "walkthrough_key": "progress-report-planner"
+          }
+        ]
+      },
+      {
+        "title": "What the report must include",
+        "items": [
+          {
+            "type": "task",
+            "title": "Walkthrough: Build the report",
+            "body": "Background, goal by goal, recommendations. Sort a real-looking goal into its parts, catch the low-hours trap, and decide what to do when progress was limited.",
+            "minutes": 9,
+            "required": true,
+            "walkthrough_key": "progress-report-build"
+          },
+          {
+            "type": "content",
+            "title": "Cheat sheet: the three parts",
+            "body": "Keep this handy while you write.\n\n**1. Background**\n- who the client is\n- their NDIS-recognised disability\n- how long Opal has worked with them\n- how long you have worked with them\n- how many hours have been used — and **why, if hours are lower than usual** (for example cancellations or sickness)\n\n**2. Goal by goal**\n- the progress made, or the barriers to achieving it\n- how this links back to the therapy plan and its strategies\n- if progress was limited, say so plainly and explain the barriers\n\n**3. Recommendations for the next plan**\n- driven by the client's needs, not a set formula\n- include evidence where the recommendations need it\n- further assessments may be needed — talk this through with your clinical supervisor\n\nKeep it easy to read. It does not have to be long.",
+            "minutes": 2,
+            "required": true
+          }
+        ]
+      },
+      {
+        "title": "How we do it: template, approval and sending",
+        "items": [
+          {
+            "type": "task",
+            "title": "Live tour: find the template in the portal",
+            "body": "Try this with a current client. The walkthrough takes you through the real screens — Resource Hub › Templates › **Progress Note** › Start a document — and you click each step yourself.\n\nThe pre-filled details can be edited where needed, so check them.",
+            "minutes": 4,
+            "required": true,
+            "walkthrough_key": "progress-report-template-tour"
+          },
+          {
+            "type": "task",
+            "title": "Walkthrough: Draft, approve, send",
+            "body": "Who reviews the draft, who sends it, and when — with the plan-rollover trap to test yourself on.",
+            "minutes": 5,
+            "required": true,
+            "walkthrough_key": "progress-report-send"
+          }
+        ]
+      },
+      {
+        "title": "Put it into practice",
+        "items": [
+          {
+            "type": "task",
+            "title": "Map one goal",
+            "body": "Pick one NDIS goal for a current client (or a made-up one) and map it the way the report will:\n\n1. **The goal**, as written in the plan\n2. **The therapy plan strategy** you used\n3. **Progress** — or the **barriers**, said plainly\n4. **Your recommendation** for the next plan, and any evidence it needs\n\nIf this is one of your first few reports, take your map to your clinical supervisor and talk it through.",
+            "minutes": 5,
+            "required": true
+          }
+        ]
+      },
+      {
+        "title": "Check your understanding and sign-off",
+        "items": [
+          {
+            "type": "quiz",
+            "title": "Knowledge check",
+            "body": "Seven questions on writing a progress report. You need 80% to pass, and you can retry.",
+            "minutes": 5,
+            "required": true,
+            "quiz": {
+              "passThreshold": 80,
+              "questions": [
+                {
+                  "question": "A client used fewer hours than usual because of cancellations and illness. What should the report do?",
+                  "options": [
+                    "Leave hours out of the report",
+                    "Explain why hours were lower",
+                    "Wait for NDIS to ask"
+                  ],
+                  "correctIndex": 1
+                },
+                {
+                  "question": "How should the main body of the report be set out?",
+                  "options": [
+                    "By date of each session",
+                    "By NDIS goal, with progress or barriers for each",
+                    "As one general summary"
+                  ],
+                  "correctIndex": 1
+                },
+                {
+                  "question": "You are ready to send the report. What comes first?",
+                  "options": [
+                    "Send a draft to the client's family coordinator for review",
+                    "Send it straight to NDIS inquiries",
+                    "Post it to the family"
+                  ],
+                  "correctIndex": 0
+                },
+                {
+                  "question": "What should each goal's progress be linked back to?",
+                  "options": [
+                    "The client's invoice",
+                    "The therapy plan and its strategies",
+                    "Another client's report"
+                  ],
+                  "correctIndex": 1
+                },
+                {
+                  "question": "The coordinator approves the report at plan rollover. What should you do about sending?",
+                  "options": [
+                    "Assume it was sent",
+                    "Clarify who is sending it",
+                    "Send it twice to be safe"
+                  ],
+                  "correctIndex": 1
+                },
+                {
+                  "question": "Progress on a goal was limited. What do you write?",
+                  "options": [
+                    "Nothing about that goal",
+                    "Only the positives",
+                    "The barriers to seeing progress with the client"
+                  ],
+                  "correctIndex": 2
+                },
+                {
+                  "question": "This is your first progress report. What should you do?",
+                  "options": [
+                    "Talk through the content with your clinical supervisor",
+                    "Copy an old report unchanged",
+                    "Keep it as short as possible"
+                  ],
+                  "correctIndex": 0
+                }
+              ]
+            }
+          },
+          {
+            "type": "acknowledgement",
+            "title": "Sign-off",
+            "body": "Confirm you have read and understood this induction.",
+            "minutes": 1,
+            "required": true,
+            "ack_statement": "I have read this induction on writing a progress report. I will link each NDIS goal to the therapy plan, explain low hours and barriers, send a draft to the family coordinator for approval before anything is sent, and clarify who is sending the report."
+          }
+        ]
+      }
+    ]
+  },
+  "walkthroughs": [
+    {
+      "key": "progress-report-planner",
+      "title": "Through the planner's eyes",
+      "description": "What a progress report is, who reads it, and what makes an Opal report different.",
+      "group": "progress-reports",
+      "minutes": 5,
+      "roles": ["owner", "admin", "therapist", "read_only"],
+      "thumb": "/assets/tutorials/writing-a-progress-report/planner-view.svg",
+      "steps": [
+        {
+          "type": "intro",
+          "title": "A progress report, not a progress note",
+          "body": "At Opal, this task is a **progress report**. It is not a progress note.\n\nYou write one for each client, ideally towards the end of their NDIS plan. It is built from the therapy and interventions you have delivered, and it makes recommendations for the next plan."
+        },
+        {
+          "type": "screenshot",
+          "title": "Who picks it up",
+          "image": { "src": "/assets/tutorials/writing-a-progress-report/planner-view.svg", "alt": "An NDIS planner and the four things they should see quickly: what was done, what worked, what did not, and barriers." },
+          "body": "Keep the report easy to read. A planner should be able to pick it up and quickly see:\n• what was done over the last year\n• what worked\n• what did not work\n• any barriers"
+        },
+        {
+          "type": "quiz",
+          "title": "What makes it Opal?",
+          "quiz": {
+            "question": "What is the focus of an Opal progress report?",
+            "options": [
+              "Listing every session in date order",
+              "How hard you have worked towards each NDIS goal, related back to the client's therapy plan",
+              "Making the report as long as possible"
+            ],
+            "correctIndex": 1,
+            "explain": "Our focus is on the work towards each NDIS goal, related back to the therapy plan."
+          }
+        },
+        {
+          "type": "quiz",
+          "title": "How long?",
+          "quiz": {
+            "question": "Does a progress report have to be long?",
+            "options": [
+              "Yes — longer reports look more thorough",
+              "No — keep it easy to read, with more detail only where a recommendation needs more evidence",
+              "No — one paragraph is always enough"
+            ],
+            "correctIndex": 1,
+            "explain": "It does not have to be long. Some recommendations need more evidence, and then the report may need more detail."
+          }
+        },
+        {
+          "type": "page",
+          "title": "Not sure which document you need?",
+          "body": "How a progress report differs from a case note has not been fully set out yet.\n\nIf you are unsure which one a task needs, ask your clinical supervisor."
+        },
+        {
+          "type": "complete",
+          "title": "You've seen it their way",
+          "body": "**Goal-focused, easy to read, linked to the therapy plan.**\n\nBack in your induction, next up: building the report."
+        }
+      ]
+    },
+    {
+      "key": "progress-report-build",
+      "title": "Build the report",
+      "description": "Background, goal by goal, recommendations — with sorting and scenarios.",
+      "group": "progress-reports",
+      "minutes": 9,
+      "roles": ["owner", "admin", "therapist", "read_only"],
+      "thumb": "/assets/tutorials/writing-a-progress-report/anatomy.svg",
+      "steps": [
+        {
+          "type": "screenshot",
+          "title": "Three parts, in this order",
+          "image": { "src": "/assets/tutorials/writing-a-progress-report/anatomy.svg", "alt": "Background, then goal by goal, then recommendations." },
+          "body": "Every progress report has the same shape:\n\n**1. Background** — who the client is and the work so far.\n**2. Goal by goal** — progress or barriers for each NDIS goal.\n**3. Recommendations** — for the next plan."
+        },
+        {
+          "type": "screenshot",
+          "title": "Part 1: the background",
+          "image": { "src": "/assets/tutorials/writing-a-progress-report/background.svg", "alt": "Five background items: who the client is, disability, how long Opal and you have worked with them, and hours used." },
+          "body": "The background section covers:\n• who the client is\n• their NDIS-recognised disability\n• how long Opal has worked with them\n• how long you have worked with them\n• how many hours have been used"
+        },
+        {
+          "type": "screenshot",
+          "title": "The low-hours trap",
+          "image": { "src": "/assets/tutorials/writing-a-progress-report/hours.svg", "alt": "Hours used fall short of hours normally used; the gap is labelled cancellations and sickness." },
+          "body": "**Explain low hours.** If hours used are below what is normally used, say why — for example cancellations or sickness.\n\nOtherwise NDIS may assume the client does not need that many hours."
+        },
+        {
+          "type": "quiz",
+          "title": "Spot the trap",
+          "quiz": {
+            "question": "Your client used far fewer hours than usual because of a run of cancellations. The background just lists the hours. What is the risk?",
+            "options": [
+              "None — the hours speak for themselves",
+              "NDIS may assume the client does not need that many hours",
+              "The report will be too long"
+            ],
+            "correctIndex": 1,
+            "explain": "Say why hours were lower, so the number is not read as less need."
+          }
+        },
+        {
+          "type": "screenshot",
+          "title": "Part 2: goal by goal",
+          "image": { "src": "/assets/tutorials/writing-a-progress-report/goal-chain.svg", "alt": "NDIS goal, then therapy plan strategies, then progress or barriers, then a recommendation." },
+          "body": "Set the report out by NDIS goal. For each goal, describe:\n• the progress made, or the barriers to achieving it\n• how this links back to the therapy plan and its strategies\n\nOnce Opal is a registered company, every client must have a therapy plan listing each NDIS goal with strategies and ideas beside it. Check your report against that plan."
+        },
+        {
+          "type": "screenshot",
+          "title": "Worked example: one goal (made-up client)",
+          "image": { "src": "/assets/tutorials/writing-a-progress-report/worked-goal.svg", "alt": "A worked goal for a made-up client, Sam: goal, strategy, progress, barrier and recommendation." },
+          "body": "**Client:** Sam (made up). Goal: prepare simple meals independently.\n\n**Therapy plan strategy:** step-by-step task practice and kitchen set-up changes.\n\n**Progress:** Sam now makes a sandwich and a hot drink with set-up only. Hot stove tasks are not yet started.\n\n**Barrier:** Several sessions were cancelled due to illness, so practice time was lower than usual. The report says this.\n\n**Recommendation:** continue meal preparation practice in the next plan, with evidence from an assessment of stove safety."
+        },
+        {
+          "type": "quiz",
+          "title": "Sort it · 1 of 3",
+          "quiz": {
+            "question": "“Sam now makes a sandwich and a hot drink with set-up only.” Which part of the goal is this?",
+            "options": ["Therapy plan strategy", "Progress", "Barrier", "Recommendation"],
+            "correctIndex": 1,
+            "explain": "It describes what Sam can now do — the progress made on the goal."
+          }
+        },
+        {
+          "type": "quiz",
+          "title": "Sort it · 2 of 3",
+          "quiz": {
+            "question": "“Step-by-step task practice and kitchen set-up changes.” Which part is this?",
+            "options": ["Therapy plan strategy", "Progress", "Barrier", "Recommendation"],
+            "correctIndex": 0,
+            "explain": "It is the strategy from the therapy plan — what the progress links back to."
+          }
+        },
+        {
+          "type": "quiz",
+          "title": "Sort it · 3 of 3",
+          "quiz": {
+            "question": "“Several sessions were cancelled due to illness, so practice time was lower than usual.” Which part is this?",
+            "options": ["Therapy plan strategy", "Progress", "Barrier", "Recommendation"],
+            "correctIndex": 2,
+            "explain": "It is a barrier — and it also explains lower hours, so the report says it."
+          }
+        },
+        {
+          "type": "quiz",
+          "title": "Scenario: limited progress",
+          "quiz": {
+            "question": "Your client made little progress on one goal this year. You are tempted to leave that goal out. What would you do?",
+            "options": [
+              "Leave it out — it does not help the report",
+              "Include it, explain the barriers, and link it back to the therapy plan and strategies",
+              "Include it, but only mention the positives"
+            ],
+            "correctIndex": 1,
+            "explain": "A planner needs to see what was tried and what did not work. Say so plainly."
+          }
+        },
+        {
+          "type": "page",
+          "title": "Part 3: recommendations",
+          "body": "End with **ongoing recommendations for the next plan**.\n\nThese are driven by the client's needs, not by a set formula. Include evidence where the recommendations need it.\n\nYou may need further assessments to support or consolidate your recommendations. Talk this through with your clinical supervisor."
+        },
+        {
+          "type": "quiz",
+          "title": "What drives a recommendation?",
+          "quiz": {
+            "question": "What should your recommendations for the next plan be driven by?",
+            "options": ["A set formula used for every client", "The client's needs, with evidence where needed", "Whatever was recommended last year"],
+            "correctIndex": 1,
+            "explain": "Recommendations follow the client's needs. Where they need evidence, further assessments may help — talk to your clinical supervisor."
+          }
+        },
+        {
+          "type": "complete",
+          "title": "Report built",
+          "body": "**Background → goal by goal → recommendations.** Explain low hours, name barriers plainly, and link everything to the therapy plan.\n\nThe cheat sheet in your induction keeps this to hand. Next: finding the template in the portal."
+        }
+      ]
+    },
+    {
+      "key": "progress-report-template-tour",
+      "title": "Find the progress report template",
+      "description": "A live tour: Resource Hub › Templates › Progress Note › Start a document.",
+      "group": "progress-reports",
+      "minutes": 4,
+      "roles": ["owner", "admin", "therapist", "read_only"],
+      "thumb": "/assets/tutorials/writing-a-progress-report/templates-catalogue.svg",
+      "start": { "tab": "resources" },
+      "steps": [
+        {
+          "type": "screenshot",
+          "title": "Your route to the template",
+          "image": { "src": "/assets/tutorials/writing-a-progress-report/route-map.svg", "alt": "Resource Hub, then Templates, then Progress Note, then Start a document." },
+          "body": "Try this with a current client. You will click each step yourself:\n\n**Resource Hub › Templates › Progress Note › Start a document**\n\nIn the portal, the template for a progress report is labelled **Progress Note**. That is the one to use."
+        },
+        {
+          "type": "action",
+          "title": "Open Templates",
+          "target": ".rh2-nav-btn[onclick*=\"'templates'\"]",
+          "route": { "tab": "resources" },
+          "advance": "click",
+          "pad": 4,
+          "rounded": "8px",
+          "image": { "src": "/assets/tutorials/writing-a-progress-report/templates-catalogue.svg", "alt": "The Templates screen with the Progress Note card highlighted." },
+          "body": "In the Resource Hub, select **Templates**."
+        },
+        {
+          "type": "action",
+          "title": "Start a Progress Note",
+          "target": "button[onclick*=\"startNew('progress_note')\"]",
+          "advance": "click",
+          "pad": 6,
+          "rounded": "10px",
+          "image": { "src": "/assets/tutorials/writing-a-progress-report/templates-catalogue.svg", "alt": "The Progress Note card's Start a document button." },
+          "body": "On the **Progress Note** card, select **Start a document**."
+        },
+        {
+          "type": "highlight",
+          "title": "Find your client",
+          "target": "#tpl-client-q",
+          "pad": 6,
+          "rounded": "10px",
+          "image": { "src": "/assets/tutorials/writing-a-progress-report/new-dialog.svg", "alt": "The New Progress Note dialog with a participant search box." },
+          "body": "Search for the client by **name or NDIS number**, then pick them from the list.\n\nChoosing the client is what fills in their details."
+        },
+        {
+          "type": "action",
+          "title": "Create it",
+          "target": "button[onclick*=\"confirmNew\"]",
+          "advance": "click",
+          "pad": 6,
+          "rounded": "10px",
+          "image": { "src": "/assets/tutorials/writing-a-progress-report/new-dialog.svg", "alt": "The Create button in the New Progress Note dialog." },
+          "body": "Select **Create**. A template populates with many of the client's details."
+        },
+        {
+          "type": "highlight",
+          "title": "Check the pre-filled details",
+          "target": ".tpl-fields",
+          "pad": 6,
+          "rounded": "12px",
+          "image": { "src": "/assets/tutorials/writing-a-progress-report/editor.svg", "alt": "The editor: pre-filled fields with a label showing where each came from, and the live document." },
+          "body": "Each pre-filled detail shows where it came from. The pre-filled details **can be edited where needed, so check them**."
+        },
+        {
+          "type": "highlight",
+          "title": "Download it to work on",
+          "target": "#tpl-dl-docx",
+          "pad": 6,
+          "rounded": "10px",
+          "image": { "src": "/assets/tutorials/writing-a-progress-report/editor.svg", "alt": "The Download Word and Download PDF buttons." },
+          "body": "**Download** the report to your laptop to work on. The download is a document in its own right — it keeps everything already filled in."
+        },
+        {
+          "type": "complete",
+          "title": "Template found",
+          "body": "**Resource Hub › Templates › Progress Note › Start a document** — then search, create, check and download.\n\nNext in your induction: draft, approve, send."
+        }
+      ]
+    },
+    {
+      "key": "progress-report-send",
+      "title": "Draft, approve, send",
+      "description": "Coordinator review first, clarify who sends, and the timing window.",
+      "group": "progress-reports",
+      "minutes": 5,
+      "roles": ["owner", "admin", "therapist", "read_only"],
+      "thumb": "/assets/tutorials/writing-a-progress-report/approval-flow.svg",
+      "steps": [
+        {
+          "type": "screenshot",
+          "title": "Draft first, always",
+          "image": { "src": "/assets/tutorials/writing-a-progress-report/approval-flow.svg", "alt": "Draft, then coordinator review, then approved and sent." },
+          "body": "Always send a **draft** to the client's family coordinator to review.\n\nOnly send the report to NDIS inquiries or the family after the coordinator approves. Sometimes the family or coordinator submits it themselves."
+        },
+        {
+          "type": "quiz",
+          "title": "Quick check: waiting on approval",
+          "quiz": {
+            "question": "The coordinator has the draft but has not approved it yet. The family asks for a copy. What do you do?",
+            "options": [
+              "Send it to the family now",
+              "Wait until the coordinator approves before sending it anywhere",
+              "Send it to NDIS inquiries instead"
+            ],
+            "correctIndex": 1,
+            "explain": "The report goes to NDIS inquiries or the family only after the coordinator approves."
+          }
+        },
+        {
+          "type": "warning",
+          "title": "Always clarify who is sending it",
+          "body": "Reports sometimes do not get sent, especially at plan rollover.\n\nSending a report can also trigger a plan review that is not needed. Do not assume — find out who is sending it."
+        },
+        {
+          "type": "quiz",
+          "title": "Scenario: the plan is about to roll over",
+          "quiz": {
+            "question": "Your client's plan ends soon. The report is drafted. The coordinator says they will “sort it out”. What would you do?",
+            "options": [
+              "Nothing — the coordinator has it covered",
+              "Clarify who is actually sending the report, and ask your clinical supervisor if it is still unclear",
+              "Send it yourself straight away, just in case"
+            ],
+            "correctIndex": 1,
+            "explain": "Reports sometimes go unsent at rollover, and a report sent when it is not needed can trigger a plan review."
+          }
+        },
+        {
+          "type": "screenshot",
+          "title": "When to send it",
+          "image": { "src": "/assets/tutorials/writing-a-progress-report/timing.svg", "alt": "A plan timeline with the sending window around 8 to 6 weeks before the plan end date." },
+          "body": "Timing is usually around **8 to 6 weeks before the plan end date**.\n\nThis is still to be confirmed."
+        },
+        {
+          "type": "page",
+          "title": "Your first few reports",
+          "body": "For your first few progress reports, talk through the content with your clinical supervisor.\n\nThey will help you decide what information to focus on. They can also help you work out whether further assessments are needed to back up your recommendations."
+        },
+        {
+          "type": "complete",
+          "title": "Ready to send — safely",
+          "body": "**Draft to the coordinator → approval → clarify who sends.**\n\nBack in your induction: map one goal, take the knowledge check, and sign off."
+        }
+      ]
+    }
+  ],
+  "meta": {
+    "source": "Opal Readiness Workshop",
+    "topic": "Writing a progress report",
+    "generatedAt": "2026-11-07T11:59:09.473Z",
+    "template": "standard",
+    "features": [
+      "quiz",
+      "example",
+      "walkthroughs",
+      "live-tour"
+    ],
+    "reuseTours": [],
+    "policy": {
+      "name": "Progress Report Procedure (suggested name, to be confirmed)",
+      "summary": "Progress reports are written near the end of each plan, link each NDIS goal to the therapy plan and its strategies, and are drafted for the family coordinator's approval before they are sent.",
+      "status": "unknown"
+    },
+    "openQuestions": [
+      "Is the timing 8 to 6 weeks before the plan end date, or was this meant differently?",
+      "Who sends the report when a plan rolls over, given that sending it may trigger an unnecessary plan review?",
+      "Who signs off the progress report before it goes out? The discussion only mentions the coordinator's approval.",
+      "Is there a named Opal policy or procedure for progress reports, and does it match the suggested name Progress Report Procedure?",
+      "How is a progress report different from a case note or progress note at Opal, and how often are progress notes due?",
+      "D16 (document and communication turnaround, including completion standard and supervisor review turnaround) is not decided. Is the seven-day timeframe from the existing email adopted?",
+      "The portal's template for this is labelled 'Progress Note', while this induction says it is a progress report, not a progress note. Should the template be renamed?"
+    ]
+  }
+}
