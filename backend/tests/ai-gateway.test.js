@@ -470,3 +470,30 @@ test('markReviewed rejects anything that is not a real review decision', async (
   await expect(audit.markReviewed({ interactionId: null, reviewedBy: 'u', decision: 'approved' }))
     .rejects.toThrow('invalid_review_target');
 });
+
+describe('the AI queue, through the gateway', () => {
+  const requestQueue = require('../ai/ai-request-queue');
+  const ask = () => gateway.generate({ feature: 'opa_assistant', modelKey: 'mock', messages: [{ role: 'user', content: 'hello' }] });
+  beforeEach(() => requestQueue._resetForTests({ sleep: async () => {} }));
+  const fail = (diagnostic) => { const e = new Error('provider_error'); e.diagnostic = diagnostic; return e; };
+
+  test('a rate-limited call is retried and succeeds, recorded once as generated', async () => {
+    let calls = 0;
+    mockProvider._setHandlerForTests(async () => {
+      if (++calls === 1) throw fail({ stage: 'invoke', code: 'ThrottlingException', status: 429 });
+      return { text: 'ok', usage: {} };
+    });
+    await expect(ask()).resolves.toEqual(expect.objectContaining({ text: 'ok' }));
+    expect(calls).toBe(2);
+    expect(events.map((e) => e.event.status)).toEqual(['generated']);
+  });
+
+  test('a failure records its type code, short enough for the column, and no content', async () => {
+    mockProvider._setHandlerForTests(async () => { throw fail({ stage: 'invoke', code: 'AccessDeniedException'.repeat(10), status: 403 }); });
+    await expect(ask()).rejects.toThrow('provider_error');
+    expect(events[0].event.status).toBe('provider_error');
+    expect(events[0].event.denyReason.startsWith('invoke:AccessDeniedException')).toBe(true);
+    expect(events[0].event.denyReason.length).toBeLessThanOrEqual(120); // ai_interactions.deny_reason is VARCHAR(120)
+    expect(JSON.stringify(events[0])).not.toContain('hello');
+  });
+});

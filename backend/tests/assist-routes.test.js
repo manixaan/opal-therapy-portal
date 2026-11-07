@@ -473,3 +473,16 @@ describe('a chat is not poisoned by its own earlier reply', () => {
     spy.mockRestore(); warn.mockRestore();
   });
 });
+
+describe('a very busy moment reads as busy, not broken', () => {
+  test('the chat says so plainly when the line is too long', async () => {
+    provider._setProviderForTests(async () => { throw new Error('ai_busy'); });
+    const agent = await login(buildApp(), user());
+    const r = await agent.post('/api/assist/chat').send({ message: 'Hello', surface: 'word' });
+    expect(r.body.status).toBe('unavailable');
+    expect(r.body.answer).toMatch(/very busy/);
+    const s = await agent.post('/api/assist/chat/stream').send({ message: 'Hello' });
+    expect(s.text).toMatch(/event: unavailable/);
+    expect(s.text).toMatch(/very busy/);
+  });
+});

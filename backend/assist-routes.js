@@ -57,6 +57,8 @@ const RETENTION_DAYS = 30;
 
 const BLOCKED_ANSWER = 'Opal Assist could not help with that message — a safety check declined it. Please reword and try again, or write it yourself.';
 const UNAVAILABLE = 'Opal Assist is not available right now. Please try again in a moment.';
+const BUSY = 'Opal Assist is very busy right now. Please try again in a minute — nothing you typed has been lost.';
+const failureAnswer = (err) => (err?.message === 'ai_busy' ? BUSY : UNAVAILABLE);
 const DISABLED = 'Opal Assist is not switched on for this portal yet.';
 const NO_LAYOUT = 'Opal Assist could not lay that out as a document this time. Please try again.';
 
@@ -300,7 +302,7 @@ router.post('/api/assist/chat', rateLimit, safe(async (req, res) => {
     answer = String(r.text || '').slice(0, MAX_ANSWER_CHARS);
   } catch (err) {
     if (err?.message === 'content_blocked') return res.json({ status: 'blocked', answer: BLOCKED_ANSWER });
-    return res.json({ status: 'unavailable', answer: UNAVAILABLE });
+    return res.json({ status: 'unavailable', answer: failureAnswer(err) });
   }
   const conversation = await persist(req, prep, answer, false);
   res.json({ status: 'ok', conversationId: conversation.id, answer });
@@ -345,7 +347,7 @@ async function replyWithDocument(req, res, prep) {
     settled = await settleReply(req, prep, messages, r.text);
   } catch (err) {
     if (err?.message === 'content_blocked') return res.json({ status: 'blocked', answer: BLOCKED_ANSWER });
-    return res.json({ status: 'unavailable', answer: UNAVAILABLE });
+    return res.json({ status: 'unavailable', answer: failureAnswer(err) });
   }
   const conversation = await keep(req, prep, settled, false);
   res.json({ status: 'ok', conversationId: conversation.id, messageId: conversation.lastMessageId, kind: settled.kind, ...(settled.document ? { document: settled.document } : { answer: settled.answer }) });
@@ -383,7 +385,7 @@ async function streamAuto(req, res, prep) {
       settled = await settleReply(req, prep, messages, r.text);
     }
   } catch (err) {
-    sseSend(res, err?.message === 'content_blocked' ? 'blocked' : 'unavailable', { answer: err?.message === 'content_blocked' ? BLOCKED_ANSWER : UNAVAILABLE });
+    sseSend(res, err?.message === 'content_blocked' ? 'blocked' : 'unavailable', { answer: err?.message === 'content_blocked' ? BLOCKED_ANSWER : failureAnswer(err) });
     return res.end();
   }
   const conversation = await keep(req, prep, settled, true);
@@ -414,7 +416,7 @@ router.post('/api/assist/chat/stream', rateLimit, safe(async (req, res) => {
     answer = String(r.text || '').slice(0, MAX_ANSWER_CHARS);
   } catch (err) {
     // A `blocked` event means the client MUST discard every delta shown.
-    sseSend(res, err?.message === 'content_blocked' ? 'blocked' : 'unavailable', { answer: err?.message === 'content_blocked' ? BLOCKED_ANSWER : UNAVAILABLE });
+    sseSend(res, err?.message === 'content_blocked' ? 'blocked' : 'unavailable', { answer: err?.message === 'content_blocked' ? BLOCKED_ANSWER : failureAnswer(err) });
     return res.end();
   }
   const conversation = await persist(req, prep, answer, true);
@@ -482,7 +484,7 @@ router.post('/api/assist/actions', rateLimit, safe(async (req, res) => {
     text = String(r.text || '');
   } catch (err) {
     if (err?.message === 'content_blocked') return res.json({ status: 'blocked', actions: [], note: BLOCKED_ANSWER });
-    return res.json({ status: 'unavailable', actions: [], note: UNAVAILABLE });
+    return res.json({ status: 'unavailable', actions: [], note: failureAnswer(err) });
   }
   let parsed = null;
   try { parsed = JSON.parse((text.match(/\{[\s\S]*\}/) || [''])[0]); } catch (e) { parsed = null; }
@@ -564,7 +566,7 @@ router.post('/api/assist/revise', rateLimit, safe(async (req, res) => {
     text = String(r.text || '').replace(/^["“]|["”]$/g, '').trim().slice(0, MAX_PASSAGE_CHARS * 2);
   } catch (err) {
     if (err?.message === 'content_blocked') return res.json({ status: 'blocked', answer: BLOCKED_ANSWER });
-    return res.json({ status: 'unavailable', answer: UNAVAILABLE });
+    return res.json({ status: 'unavailable', answer: failureAnswer(err) });
   }
   await db.logAuditEvent({
     actorUserId: req.user.id, organisationId: orgOf(req), action: 'assist.revise', targetType: 'assist_conversation', targetId: conversation.id,

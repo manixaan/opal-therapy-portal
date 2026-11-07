@@ -42,6 +42,7 @@ function mapError(err, where) {
   }
   if (err?.message === 'guardrail_intervened') return new Error('content_blocked');
   if (err?.message === 'guardrail_not_configured') return new Error('provider_error');
+  if (err?.message === 'ai_busy') return err; // the route tells the person plainly
   if (err?.message === 'provider_error') return err;
   console.warn(`[assist-provider] ${where} failed (reason: ${err?.message || 'unknown'})`);
   return new Error('provider_error');

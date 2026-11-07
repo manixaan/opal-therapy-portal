@@ -75,7 +75,7 @@ function status() { return { directory_warmed_at: state.directoryAt, model_warme
 async function withOneRetry(call, canRetry = () => true) {
   try { return await call(); }
   catch (err) {
-    const decision = err instanceof gateway.AiPolicyError || ['guardrail_intervened', 'guardrail_not_configured', 'content_blocked'].includes(err?.message);
+    const decision = err instanceof gateway.AiPolicyError || ['guardrail_intervened', 'guardrail_not_configured', 'content_blocked', 'ai_busy'].includes(err?.message);
     if (decision || !canRetry()) throw err;
     await new Promise((r) => setTimeout(r, 600));
     return call();

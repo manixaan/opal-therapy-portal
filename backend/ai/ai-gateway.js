@@ -52,6 +52,7 @@ const directApiConfig = require('./direct-api-config');
 
 const bedrockProvider = require('./providers/bedrock-provider');
 const mockProvider = require('./providers/mock-provider');
+const requestQueue = require('./ai-request-queue');
 const directApiProvider = require('./providers/direct-api-provider');
 
 
@@ -321,6 +322,14 @@ async function deidentificationGate(messages) {
   return null;
 }
 
+/** A short, content-free reason for a failed call. */
+function failureCode(err) {
+  if (err?.aiBusy) return 'ai_busy';
+  const d = err?.diagnostic;
+  if (d) return [d.stage, d.code, d.status].filter((v) => v !== null && v !== undefined && v !== '').join(':').slice(0, 120) || 'provider_error';
+  return 'provider_error';
+}
+
 async function generate(opts = {}) {
   const {
     feature, messages, system, userId, organisationId,
@@ -429,9 +438,15 @@ async function generate(opts = {}) {
       toolChoice,
       guardInputScope: decision.guardrailInputScope,
     };
-    result = streaming
-      ? await provider.invokeStream({ ...invokeOpts, onText })
-      : await provider.invoke(invokeOpts);
+    // In turn, with waits on rate limits: see ai-request-queue.js. A stream is
+    // only retried while nothing has reached the person.
+    let shown = false;
+    result = await requestQueue.run(
+      () => (streaming
+        ? provider.invokeStream({ ...invokeOpts, onText: (t) => { shown = true; onText(t); } })
+        : provider.invoke(invokeOpts)),
+      { canRetry: () => !shown },
+    );
   } catch (err) {
     // A guardrail refusal, and a refusal to call an unguarded model, are
     // DENIALS — a control did its job. Recording them as provider_error would
@@ -442,7 +457,9 @@ async function generate(opts = {}) {
       || err?.message === 'guardrail_not_configured';
     const failure = guardrailStop
       ? { status: 'denied', denyReason: err.message }
-      : { status: 'provider_error' };
+      // The failure's type code (never content), so the audit trail says why:
+      // "ThrottlingException", not just "something failed".
+      : { status: 'provider_error', denyReason: failureCode(err) };
 
     if (reserved) {
       await audit.finalise(reserved.eventId, { ...failure, latencyMs: Date.now() - startedAt });
