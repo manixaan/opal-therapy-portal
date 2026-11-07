@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 405" role="img" aria-labelledby="t" font-family="Inter, -apple-system, Segoe UI, Helvetica, Arial, sans-serif">
+  <title id="t">Two accepted routes to a case note in Splose: draft in the portal tools and transfer it, or write directly in Splose</title>
+  <rect width="720" height="405" rx="22" fill="#FBF8F3"/>
+  <text x="28" y="50" font-size="28" font-weight="800" fill="#1E2B2F">Where you write notes — for now</text>
+  <g transform="translate(28,92)"><rect width="270" height="104" rx="16" fill="#E3F4F1" stroke="#14988A" stroke-width="2"/><text x="22" y="40" font-size="21" font-weight="800" fill="#0D5E57">Draft in the portal</text><text x="22" y="70" font-size="17" fill="#3D5A54">Case Notes tab or the</text><text x="22" y="92" font-size="17" fill="#3D5A54">mobile app (being piloted)</text></g>
+  <g transform="translate(28,236)"><rect width="270" height="104" rx="16" fill="#fff" stroke="#E2DDD3" stroke-width="2"/><text x="22" y="46" font-size="21" font-weight="800" fill="#1E2B2F">Write directly</text><text x="22" y="76" font-size="17" fill="#3D5A54">straight into Splose</text></g>
+  <g fill="none" stroke="#0D5E57" stroke-width="5" stroke-linecap="round"><path d="M306 144 C380 144 380 214 448 214"/><path d="M306 288 C380 288 380 226 448 226"/></g>
+  <text x="372" y="134" font-size="16" font-weight="700" fill="#0D5E57" text-anchor="middle">transfer</text>
+  <path d="M444 206 l16 14 l-16 14 z" fill="#0D5E57"/>
+  <g transform="translate(470,140)"><rect width="222" height="160" rx="20" fill="#0D5E57"/><text x="111" y="76" font-size="32" font-weight="800" fill="#fff" text-anchor="middle">Splose</text><text x="111" y="108" font-size="17" fill="#CFE9E5" text-anchor="middle">every billable activity</text><text x="111" y="130" font-size="17" fill="#CFE9E5" text-anchor="middle">documented here</text></g>
+  <text x="360" y="380" font-size="18" font-weight="700" fill="#1E2B2F" text-anchor="middle">Both are accepted. This may change as the portal develops.</text>
+</svg>

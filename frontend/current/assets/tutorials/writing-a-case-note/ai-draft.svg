@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 405" role="img" aria-labelledby="t" font-family="Inter, -apple-system, Segoe UI, Helvetica, Arial, sans-serif">
+  <title id="t">An AI-drafted note under a magnifying glass: one of its lines describes something that did not happen</title>
+  <rect width="720" height="405" rx="22" fill="#FBF8F3"/>
+  <g transform="translate(28,28)">
+    <rect width="470" height="350" rx="18" fill="#fff" stroke="#E2DDD3"/>
+    <rect width="470" height="58" rx="18" fill="#ECEAFA"/><rect y="40" width="470" height="18" fill="#ECEAFA"/>
+    <path d="M30 18 l4 9 l9 4 l-9 4 l-4 9 l-4 -9 l-9 -4 l9 -4 z" fill="#6C63C9"/>
+    <text x="54" y="37" font-size="19" font-weight="800" fill="#463E9E">AI draft — not yet reviewed</text>
+    <g font-size="17" fill="#1E2B2F">
+      <rect x="18" y="80" width="434" height="54" rx="10" fill="#F7F5F0"/><text x="34" y="104">Therapy session with Sam Example</text><text x="34" y="124" fill="#6B7C80">(made-up), held at home.</text>
+      <rect x="18" y="146" width="434" height="44" rx="10" fill="#F7F5F0"/><text x="34" y="174">Sam practised using a built-up spoon at lunch.</text>
+      <rect x="18" y="202" width="434" height="44" rx="10" fill="#F7F5F0"/><text x="34" y="230">Sam practised stair climbing.</text>
+      <rect x="18" y="258" width="434" height="44" rx="10" fill="#F7F5F0"/><text x="34" y="286">We worked on opening a lunch container.</text>
+    </g>
+    <text x="34" y="330" font-size="15" font-weight="600" fill="#6B7C80">Drafted by an approved AI tool</text>
+  </g>
+  <g transform="translate(540,110)">
+    <circle cx="70" cy="70" r="62" fill="#fff" stroke="#0D5E57" stroke-width="12"/>
+    <path d="M115 118 L160 166" stroke="#0D5E57" stroke-width="20" stroke-linecap="round"/>
+    <text x="70" y="94" font-size="66" font-weight="800" fill="#D9614E" text-anchor="middle">?</text>
+  </g>
+  <text x="612" y="330" font-size="18" font-weight="800" fill="#0D5E57" text-anchor="middle">Did all of this</text>
+  <text x="612" y="354" font-size="18" font-weight="800" fill="#0D5E57" text-anchor="middle">really happen?</text>
+</svg>

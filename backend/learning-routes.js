@@ -748,6 +748,21 @@ async function importExistingInductions(org, createdBy) {
     }
   }
 
+  // ── Induction packs ────────────────────────────────────────────────────────
+  // Inductions planned outside the portal and committed as reviewed JSON
+  // (backend/induction-packs/). Each arrives as a draft like the others; a
+  // malformed pack is reported as skipped, never half-imported.
+  // A pack's walkthroughs are installed (published, idempotent by key) only
+  // when its workflow is new, so the task tiles have something to launch.
+  const { packs, invalid } = require('./induction-packs').loadPacks();
+  for (const bad of invalid) skipped.push({ title: bad.title || bad.file, reason: 'invalid_content' });
+  for (const p of packs) {
+    if (p.walkthroughs.length && !haveTitle.has(p.title.trim().toLowerCase())) {
+      await require('./walkthrough-catalogue').installModules(org, p.walkthroughs, createdBy);
+    }
+    await insert(p.title, p.description, p.category, p.sections);
+  }
+
   return { created, skipped };
 }
 

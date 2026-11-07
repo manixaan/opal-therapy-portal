@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 405" role="img" aria-labelledby="t" font-family="Inter, -apple-system, Segoe UI, Helvetica, Arial, sans-serif">
+  <title id="t">Draft, finalised, then after 48 hours locked: corrections are made by addendum</title>
+  <rect width="720" height="405" rx="22" fill="#FBF8F3"/>
+  <text x="28" y="50" font-size="28" font-weight="800" fill="#1E2B2F">Draft → Finalise → Addendum</text>
+  <g font-size="18" fill="#3D5A54">
+    <g transform="translate(20,86)"><rect width="210" height="250" rx="18" fill="#fff" stroke="#E2DDD3"/><circle cx="105" cy="64" r="36" fill="#E3F4F1"/><path d="M90 80 L93 68 L114 47 L123 56 L102 77 Z" fill="#14988A"/><text x="105" y="136" font-size="23" font-weight="800" fill="#0D5E57" text-anchor="middle">Draft</text><text x="105" y="170" text-anchor="middle">Save as you go.</text><text x="105" y="194" text-anchor="middle">Change anything.</text></g>
+    <g transform="translate(255,86)"><rect width="210" height="250" rx="18" fill="#fff" stroke="#E3A03A" stroke-width="2.5"/><circle cx="105" cy="64" r="36" fill="#FDF1DC"/><circle cx="105" cy="64" r="20" fill="none" stroke="#E3A03A" stroke-width="5"/><path d="M105 52 V64 L113 70" stroke="#E3A03A" stroke-width="4.5" fill="none" stroke-linecap="round"/><text x="105" y="136" font-size="23" font-weight="800" fill="#8A5A12" text-anchor="middle">Finalised</text><text x="105" y="170" text-anchor="middle">For 48 hours you</text><text x="105" y="194" text-anchor="middle">can edit it or</text><text x="105" y="218" text-anchor="middle">revert to draft.</text></g>
+    <g transform="translate(490,86)"><rect width="210" height="250" rx="18" fill="#fff" stroke="#D9614E" stroke-width="2.5"/><circle cx="105" cy="64" r="36" fill="#FBE7E3"/><rect x="89" y="62" width="32" height="24" rx="5" fill="#D9614E"/><path d="M95 62 V54 a10 10 0 0 1 20 0 V62" fill="none" stroke="#D9614E" stroke-width="5"/><text x="105" y="136" font-size="23" font-weight="800" fill="#A3402F" text-anchor="middle">After 48 hours</text><text x="105" y="170" text-anchor="middle">The note is locked.</text><text x="105" y="194" text-anchor="middle">Add an <tspan font-weight="800" fill="#A3402F">addendum</tspan></text><text x="105" y="218" text-anchor="middle">to correct it.</text></g>
+  </g>
+  <g fill="#0D5E57"><path d="M234 200 l14 11 l-14 11 z"/><path d="M469 200 l14 11 l-14 11 z"/></g>
+  <text x="360" y="374" font-size="18" font-weight="700" fill="#1E2B2F" text-anchor="middle">Check carefully before you finalise.</text>
+</svg>

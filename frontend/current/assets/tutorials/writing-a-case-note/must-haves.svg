@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 405" role="img" aria-labelledby="t" font-family="Inter, -apple-system, Segoe UI, Helvetica, Arial, sans-serif">
+  <title id="t">The six things every case note must show</title>
+  <rect width="720" height="405" rx="22" fill="#FBF8F3"/>
+  <text x="28" y="50" font-size="30" font-weight="800" fill="#1E2B2F">Every note must show</text>
+  <text x="28" y="80" font-size="18" fill="#6B7C80">Miss one and the note may not hold up for billing or audit</text>
+  <g font-size="21" font-weight="700" fill="#1E2B2F">
+    <g transform="translate(28,104)"><rect width="322" height="74" rx="14" fill="#fff" stroke="#E2DDD3"/><circle cx="38" cy="37" r="20" fill="#14988A"/><text x="38" y="44" font-size="20" fill="#fff" text-anchor="middle">1</text><text x="72" y="44">Date</text></g>
+    <g transform="translate(370,104)"><rect width="322" height="74" rx="14" fill="#fff" stroke="#E2DDD3"/><circle cx="38" cy="37" r="20" fill="#14988A"/><text x="38" y="44" font-size="20" fill="#fff" text-anchor="middle">2</text><text x="72" y="44">Participant name</text></g>
+    <g transform="translate(28,190)"><rect width="322" height="74" rx="14" fill="#fff" stroke="#E2DDD3"/><circle cx="38" cy="37" r="20" fill="#E3A03A"/><text x="38" y="44" font-size="20" fill="#fff" text-anchor="middle">3</text><text x="72" y="44">Location</text></g>
+    <g transform="translate(370,190)"><rect width="322" height="74" rx="14" fill="#fff" stroke="#E2DDD3"/><circle cx="38" cy="37" r="20" fill="#E3A03A"/><text x="38" y="44" font-size="20" fill="#fff" text-anchor="middle">4</text><text x="72" y="44">Who was present</text></g>
+    <g transform="translate(28,276)"><rect width="322" height="98" rx="14" fill="#fff" stroke="#E2DDD3"/><circle cx="38" cy="49" r="20" fill="#6C63C9"/><text x="38" y="56" font-size="20" fill="#fff" text-anchor="middle">5</text><text x="72" y="56">What was done</text></g>
+    <g transform="translate(370,276)"><rect width="322" height="98" rx="14" fill="#E3F4F1" stroke="#14988A" stroke-width="2"/><circle cx="38" cy="49" r="20" fill="#6C63C9"/><text x="38" y="56" font-size="20" fill="#fff" text-anchor="middle">6</text><text x="72" y="42">Billed time</text>
+      <g font-size="15" font-weight="700"><rect x="72" y="56" width="74" height="26" rx="13" fill="#14988A"/><text x="109" y="74" fill="#fff" text-anchor="middle">session</text><rect x="152" y="56" width="96" height="26" rx="13" fill="#E3A03A"/><text x="200" y="74" fill="#fff" text-anchor="middle">case noting</text><rect x="254" y="56" width="58" height="26" rx="13" fill="#6C63C9"/><text x="283" y="74" fill="#fff" text-anchor="middle">travel</text></g></g>
+  </g>
+</svg>

@@ -144,7 +144,28 @@ async function modulesForRole(orgId, role) {
  * Returns { created: [...keys], skipped: [...keys] }.
  */
 async function seedBuiltIns(orgId, createdBy) {
-  const built = builtInCatalogue();
+  return insertPublished(orgId, builtInCatalogue(), 'builtin', createdBy);
+}
+
+/**
+ * Install already-normalised walkthroughs as published custom modules — the
+ * walkthroughs an induction pack (backend/induction-packs/) ships with its
+ * workflow. Idempotent by key, exactly like seedBuiltIns: an existing module
+ * (perhaps edited by the Owner in the workshop) is never overwritten.
+ *
+ * catalogueFor() serves the shipped built-ins only while an organisation has
+ * NO rows, so the first custom row would silently hide them. The built-ins
+ * are therefore seeded first for an organisation that has none yet.
+ */
+async function installModules(orgId, modules, createdBy) {
+  const { rows } = await pool.query(
+    `SELECT 1 FROM walkthrough_modules WHERE organisation_id IS NOT DISTINCT FROM $1 LIMIT 1`,
+    [orgId || null]);
+  if (!rows.length) await seedBuiltIns(orgId, createdBy);
+  return insertPublished(orgId, modules || [], 'custom', createdBy);
+}
+
+async function insertPublished(orgId, built, source, createdBy) {
   const created = [];
   const skipped = [];
   const client = await pool.connect();
@@ -156,13 +177,13 @@ async function seedBuiltIns(orgId, createdBy) {
           `INSERT INTO walkthrough_modules
              (organisation_id, key, title, description, group_key, minutes, roles,
               thumb, start_context, draft_steps, current_version, source, created_by)
-           VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9::jsonb, $10::jsonb, $11, 'builtin', $12)
+           VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9::jsonb, $10::jsonb, $11, $13, $12)
            ON CONFLICT (COALESCE(organisation_id, '00000000-0000-0000-0000-000000000000'::uuid), key)
              DO NOTHING
            RETURNING id`,
           [orgId || null, m.key, m.title, m.description, m.group_key, m.minutes,
            JSON.stringify(m.roles), m.thumb || null, JSON.stringify(m.start_context),
-           JSON.stringify(m.steps), m.version, createdBy || null]);
+           JSON.stringify(m.steps), m.version, createdBy || null, source]);
 
         if (!ins.rows[0]) {
           await client.query('ROLLBACK');
@@ -197,6 +218,7 @@ module.exports = {
   moduleByKey,
   modulesForRole,
   seedBuiltIns,
+  installModules,
   invalidate,
   builtInCatalogue,
   stepsForRole: content.stepsForRole,

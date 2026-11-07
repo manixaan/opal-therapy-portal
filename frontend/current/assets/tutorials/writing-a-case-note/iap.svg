@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 405" role="img" aria-labelledby="t" font-family="Inter, -apple-system, Segoe UI, Helvetica, Arial, sans-serif">
+  <title id="t">The three headings of an Opal case note: Identity, Assessment and Plan, and what goes under each</title>
+  <rect width="720" height="405" rx="22" fill="#FBF8F3"/>
+  <text x="28" y="50" font-size="28" font-weight="800" fill="#1E2B2F">Identity · Assessment · Plan</text>
+  <g font-size="18" fill="#1E2B2F">
+    <g transform="translate(20,76)"><rect width="218" height="306" rx="16" fill="#fff" stroke="#14988A" stroke-width="2.5"/><path d="M0 16 a16 16 0 0 1 16 -16 h186 a16 16 0 0 1 16 16 v42 h-218 z" fill="#14988A"/><text x="20" y="38" font-size="23" font-weight="800" fill="#fff">I · Identity</text>
+      <g><circle cx="26" cy="96" r="5" fill="#14988A"/><text x="40" y="102">type of session</text><circle cx="26" cy="140" r="5" fill="#14988A"/><text x="40" y="146">the date</text><circle cx="26" cy="184" r="5" fill="#14988A"/><text x="40" y="190">where it was held</text><circle cx="26" cy="228" r="5" fill="#14988A"/><text x="40" y="234">who was present</text></g></g>
+    <g transform="translate(251,76)"><rect width="218" height="306" rx="16" fill="#fff" stroke="#E3A03A" stroke-width="2.5"/><path d="M0 16 a16 16 0 0 1 16 -16 h186 a16 16 0 0 1 16 16 v42 h-218 z" fill="#E3A03A"/><text x="20" y="38" font-size="23" font-weight="800" fill="#fff">A · Assessment</text>
+      <g><circle cx="26" cy="96" r="5" fill="#E3A03A"/><text x="40" y="102">your observations</text><circle cx="26" cy="140" r="5" fill="#E3A03A"/><text x="40" y="146">your findings</text><circle cx="26" cy="184" r="5" fill="#E3A03A"/><text x="40" y="190">therapy activities</text><text x="40" y="214">used</text></g></g>
+    <g transform="translate(482,76)"><rect width="218" height="306" rx="16" fill="#fff" stroke="#6C63C9" stroke-width="2.5"/><path d="M0 16 a16 16 0 0 1 16 -16 h186 a16 16 0 0 1 16 16 v42 h-218 z" fill="#6C63C9"/><text x="20" y="38" font-size="23" font-weight="800" fill="#fff">P · Plan</text>
+      <g><circle cx="26" cy="96" r="5" fill="#6C63C9"/><text x="40" y="102">next session date</text><circle cx="26" cy="140" r="5" fill="#6C63C9"/><text x="40" y="146">tasks before then</text><circle cx="26" cy="184" r="5" fill="#6C63C9"/><text x="40" y="190">billed time</text><text x="40" y="214">breakdown</text>
+      <rect x="18" y="244" width="182" height="44" rx="10" fill="#ECEAFA"/><text x="109" y="272" font-size="16" font-weight="700" fill="#463E9E" text-anchor="middle">e.g. 50 · 10 · 30 min</text></g></g>
+  </g>
+</svg>

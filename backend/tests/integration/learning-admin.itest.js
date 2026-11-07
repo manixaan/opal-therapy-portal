@@ -545,6 +545,41 @@ test('the Splose induction imports with launchable lessons and a formal close', 
   empQuiz.quiz.questions.forEach((q) => expect(q.correctIndex).toBeUndefined());
 });
 
+test('an induction pack imports as a draft with its walkthroughs published beside the built-ins', async () => {
+  const catalogue = require('../../walkthrough-catalogue');
+  const owner = await agentFor('owner', org.id);
+  const res = await owner.agent.post('/api/learning/workflows/import');
+  const made = res.body.created.find((c) => c.title === 'Writing a Case Note');
+  expect(made).toBeTruthy();
+
+  const detail = await owner.agent.get(`/api/learning/workflows/${made.id}`);
+  expect(detail.body.workflow.category).toBe('clinical');
+  expect(Number(detail.body.workflow.current_version)).toBe(0); // a draft until the Owner assigns
+  const keys = detail.body.workflow.draft_content.sections.flatMap((s) => s.items)
+    .filter((i) => i.type === 'task' && i.walkthrough_key).map((i) => i.walkthrough_key);
+  expect(keys).toEqual(['case-note-paper-trail', 'case-note-build', 'case-note-clock', 'case-note-ai']);
+
+  // Every launch tile has a published walkthrough behind it — and the first
+  // custom row did not hide the shipped built-ins (catalogueFor serves them
+  // only while an organisation has no rows at all).
+  const mods = await catalogue.catalogueFor(org.id);
+  keys.forEach((k) => expect(mods.find((m) => m.key === k && m.version === 1)).toBeTruthy());
+  expect(mods.some((m) => m.key === 'portal-getting-started' && m.source === 'builtin')).toBe(true);
+
+  // An Owner's workshop edit to a pack walkthrough survives a later import,
+  // and nothing is duplicated.
+  await db.pool.query(
+    `UPDATE walkthrough_modules SET title = 'Owner retitled' WHERE organisation_id = $1 AND key = 'case-note-ai'`,
+    [org.id]);
+  const again = await owner.agent.post('/api/learning/workflows/import');
+  expect(again.body.skipped.some((s) => s.title === 'Writing a Case Note' && s.reason === 'already_present')).toBe(true);
+  const { rows } = await db.pool.query(
+    `SELECT key, title FROM walkthrough_modules WHERE organisation_id = $1 AND key LIKE 'case-note-%' ORDER BY key`,
+    [org.id]);
+  expect(rows).toHaveLength(4);
+  expect(rows.find((r) => r.key === 'case-note-ai').title).toBe('Owner retitled');
+});
+
 test('a path whose resources are gone is reported, not silently dropped', async () => {
   const owner = await agentFor('owner', org.id);
   await db.pool.query(
