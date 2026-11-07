@@ -16,7 +16,7 @@
  *   {
  *     format: 'opal-induction-pack/1',
  *     slug:   'writing-a-case-note',     // must equal the file name
- *     workflow: { title, category, description, sections: [...] },
+ *     workflow: { title, category, description, sequential, sections: [...] },
  *                                         // sections as learning-content.js
  *     walkthroughs: [{ key, title, description, group, minutes, roles,
  *                      thumb, steps: [...] }],
@@ -64,7 +64,7 @@ function validatePack(raw, expectedSlug) {
   const category = (typeof wf.category === 'string' && wf.category.trim()) || 'induction';
   if (category.length > 60) return { ok: false, error: 'workflow category is too long' };
 
-  const norm = lc.normaliseContent({ sections: wf.sections });
+  const norm = lc.normaliseContent({ sections: wf.sections, sequential: wf.sequential });
   if (!norm.ok) return { ok: false, error: norm.error };
   if (!lc.contentStats(norm.content).items) return { ok: false, error: 'workflow has no learning items' };
 
@@ -75,7 +75,8 @@ function validatePack(raw, expectedSlug) {
     ok: true,
     pack: {
       slug, title, description: description || null, category,
-      sections: norm.content.sections, walkthroughs: wv.walkthroughs,
+      sections: norm.content.sections, sequential: !!norm.content.sequential,
+      walkthroughs: wv.walkthroughs,
     },
   };
 }

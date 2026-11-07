@@ -4,6 +4,7 @@
   "workflow": {
     "title": "Writing a Progress Report",
     "category": "clinical",
+    "sequential": true,
     "description": "How to write a clear, goal-focused progress report for each client near the end of their NDIS plan, from finding the template to getting coordinator approval before it is sent. Four interactive walkthroughs, including a live tour of the portal template.",
     "sections": [
       {

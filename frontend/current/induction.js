@@ -596,6 +596,10 @@
     }
 
     if (card) {
+      // A step with nothing to point at is read, not glanced at beside a
+      // control: it opens as the large centred reader card. Set before
+      // measuring, so a spotlit step is placed at its own compact size.
+      card.classList.toggle('ind-card-reader', !hole);
       var cw = card.offsetWidth || 380, ch = card.offsetHeight || 240;
       if (hole) {
         var pos = indPlaceCard(
@@ -720,7 +724,9 @@
       } }));
     } catch (e) { /* old browser */ }
     if (S.el && !S.fallback) {
-      try { S.el.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'nearest' }); } catch (e) { /* ok */ }
+      // Centre, not 'nearest': nearest parks a control at the very top edge,
+      // under the sticky app header, where the learner cannot see it.
+      try { S.el.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'center' }); } catch (e) { /* ok */ }
       setTimeout(positionOverlay, reducedMotion() ? 0 : 320);
     }
     attachAdvanceClick(step);

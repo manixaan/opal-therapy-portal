@@ -4,6 +4,7 @@
   "workflow": {
     "title": "Writing a Case Note",
     "category": "clinical",
+    "sequential": true,
     "description": "How to write a complete, accurate and clear case note for every billable activity, finish it on time, correct it properly, and use AI safely. Four short interactive walkthroughs, a practice note and a knowledge check.",
     "sections": [
       {

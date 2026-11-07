@@ -635,7 +635,7 @@ describe('changed assets are cache-busted', () => {
       // SharePoint-style document library); the old folder grid, owner bar,
       // right-click menu and upload code left this file. A removed resource
       // reads "This resource was removed" in Detail and in the learner player.
-      ['resourcehub.js', 'r56'], ['resourcehub.css', 'r31'],
+      ['resourcehub.js', 'r57'], ['resourcehub.css', 'r32'],
       // resourcelibrary 1: the document library — folder tree, breadcrumbs,
       // list/tiles, command bar, menus, drag-and-drop, recycle bin, versions.
       // 3: a privacy-refused upload shows a tickable checklist of why — kind,
@@ -670,7 +670,7 @@ describe('changed assets are cache-busted', () => {
       // and a sign-here recorded against the published wording. Neither can
       // be paged, arrowed or skipped past. The CSS carries the quoted
       // statement and its tick.
-      ['induction.js', 10], ['induction.css', 3],
+      ['induction.js', 11], ['induction.css', 4],
       // 1: the walkthrough workshop — the shelf, the author dock, the block
       // palette and the live target picker (docs/INDUCTION_WORKSHOP.md).
       // 2: the palette offers Page, Checkpoint and Sign here, and the editor

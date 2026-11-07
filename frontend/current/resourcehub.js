@@ -3943,6 +3943,59 @@
     return req.length ? req : all;
   }
 
+  /**
+   * Sections that unlock in order (content.sequential): the index of the
+   * furthest section the reader may open. Mirrors the server's
+   * openSectionLimit, which is what actually refuses a locked item — this
+   * only decides what to draw. Non-sequential content opens everything.
+   */
+  function alOpenLimit(content) {
+    var sections = (content && content.sections) || [];
+    if (!(content && content.sequential)) return sections.length;
+    var counted = {};
+    alCountedItems(sections).forEach(function (e) { counted[e.item.key] = true; });
+    for (var i = 0; i < sections.length; i++) {
+      var pending = (sections[i].items || []).some(function (it) { return counted[it.key] && !alItemDone(it.key); });
+      if (pending) return i;
+    }
+    return sections.length;
+  }
+
+  /** What still stands between the reader and the next section: the counted
+   *  items not yet done, split into what Continue may record for them
+   *  (readings, plain tasks, resources) and what only they can do
+   *  (a walkthrough to finish, a knowledge check, a sign-off). */
+  function alSectionOwed(sections, si) {
+    var counted = {};
+    alCountedItems(sections).forEach(function (e) { counted[e.item.key] = true; });
+    var owed = ((sections[si] && sections[si].items) || []).filter(function (it) {
+      return counted[it.key] && !alItemDone(it.key);
+    });
+    var blocking = owed.filter(function (it) {
+      return it.type === 'quiz' || it.type === 'acknowledgement' || (it.type === 'task' && !!alWalkModule(it));
+    });
+    return { owed: owed, blocking: blocking, sweep: owed.filter(function (it) { return blocking.indexOf(it) === -1; }) };
+  }
+
+  /** Close the open section: record its readings and plain tasks, then bring
+   *  the newly unlocked section into view. */
+  async function alContinue(si) {
+    var st = S.assignment;
+    if (!st || !st.data || st.busy) return;
+    var sections = indSections(indMode());
+    var o = alSectionOwed(sections, si);
+    if (o.blocking.length) return;
+    for (var i = 0; i < o.sweep.length; i++) {
+      var d = await alComplete(o.sweep[i].key, {}, { stay: true });
+      if (!d) return;
+    }
+    render();
+    try {
+      var next = global.document.getElementById('rh2-sec-' + (si + 1));
+      if (next && next.scrollIntoView) next.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    } catch (e) { /* scrolling is a courtesy */ }
+  }
+
   async function openAssignment(id) {
     // Re-entering the induction that is already open — back from a resource,
     // back from a walkthrough, a history restore — keeps its loaded data.
@@ -4388,8 +4441,12 @@
         var verb = mod
           ? ((done ? 'Replay' : 'Open') + ' the interactive walkthrough')
           : ('Open' + (it.resource_title ? ': ' + it.resource_title : ' the resource'));
-        return '<li class="rh2-ind-item rh2-ind-item-launch' + (done ? ' is-done' : '') + '" id="rh2-item-' + esc(it.key) + '">' +
-          '<button type="button" class="rh2-ind-launch" onclick="RH2.alOpenWalk(\'' + esc(it.key) + '\')">' +
+        // The click lives on the whole tile — title, hint and description —
+        // and the button inside keeps it reachable by keyboard (its click
+        // bubbles to the tile, so it is one launch, not two).
+        return '<li class="rh2-ind-item rh2-ind-item-launch' + (done ? ' is-done' : '') + '" id="rh2-item-' + esc(it.key) + '" ' +
+          'onclick="RH2.alOpenWalk(\'' + esc(it.key) + '\')">' +
+          '<button type="button" class="rh2-ind-launch">' +
             '<span class="rh2-ind-item-head">' + head + '</span>' +
             '<span class="rh2-ind-launch-hint">' + esc(verb) + ' &rarr;</span>' +
           '</button>' + alItemBody(it, done) + '</li>';
@@ -4496,16 +4553,43 @@
     // search and a way to jump — it never replaces the page, it indexes it.
     out += '<div class="rh2-player">' + alRail(a, sections, mode) +
       '<section class="rh2-card rh2-ind-stage rh2-ind-flat rh2-player-stage">';
+    // Sequential inductions open one section at a time: the sections after
+    // the open one show only their title and what unlocks them, and the
+    // closing block waits until the last section is open.
+    var limit = alOpenLimit(st.data.content);
     out += sections.length
       ? sections.map(function (s, i) {
+          if (i > limit) {
+            return '<div class="rh2-ind-flatsec rh2-ind-locked" id="rh2-sec-' + i + '">' +
+              '<h2 class="rh2-ind-chapter"><span class="rh2-ind-chapter-no rh2-ind-chapter-lock" aria-hidden="true">' + icn('lock', 'lock', 14) + '</span>' +
+                esc(s.title) + '<span class="rh2-visually-hidden"> (locked)</span></h2>' +
+              '<p class="rh2-ind-lockline">Unlocks when you finish &ldquo;' + esc((sections[i - 1] || {}).title || 'the section before') + '&rdquo;.</p></div>';
+          }
           return '<div class="rh2-ind-flatsec" id="rh2-sec-' + i + '">' +
             '<h2 class="rh2-ind-chapter"><span class="rh2-ind-chapter-no">' + (i + 1) + '</span>' + esc(s.title) + '</h2>' +
-            indSectionRead(s, i + 1, sections.length, true) + '</div>';
+            indSectionRead(s, i + 1, sections.length, true) +
+            (i === limit && i < sections.length - 1 ? alContinueBlock(sections, i) : '') + '</div>';
         }).join('')
       : '<div class="rh2-empty">There is nothing in this induction yet.</div>';
-    out += '<div class="rh2-ind-flatsec rh2-ind-flatclose">' + indFinishRead(a, sections, mode) + '</div>';
+    if (limit >= sections.length - 1) {
+      out += '<div class="rh2-ind-flatsec rh2-ind-flatclose">' + indFinishRead(a, sections, mode) + '</div>';
+    }
     out += '</section></div>';
     return out + '</div>';
+  }
+
+  /** The foot of the open section in a sequential induction: what is still
+   *  needed, or the button that records the readings and opens the next. */
+  function alContinueBlock(sections, si) {
+    var o = alSectionOwed(sections, si);
+    var nextTitle = (sections[si + 1] || {}).title || 'the next section';
+    if (o.blocking.length) {
+      return '<div class="rh2-ind-continue is-waiting" role="status">' + icn('lock', 'lock', 14) +
+        '<span>Finish <strong>' + esc(o.blocking[0].title) + '</strong> to unlock &ldquo;' + esc(nextTitle) + '&rdquo;.</span></div>';
+    }
+    return '<div class="rh2-ind-continue">' +
+      '<button type="button" class="rh2-btn rh2-btn-primary rh2-ind-continue-btn" ' + (S.assignment.busy ? 'disabled ' : '') +
+        'onclick="RH2.alContinue(' + si + ')">Done &mdash; continue to &ldquo;' + esc(nextTitle) + '&rdquo; &rarr;</button></div>';
   }
 
   // ── The player rail ───────────────────────────────────────────────────────
@@ -4531,7 +4615,16 @@
       '<input class="rh2-input rh2-player-rail-q" id="al-rail-q" type="search" placeholder="Search by lesson title" value="' +
         esc(st.railQ || '') + '" oninput="RH2.alRailSearch(this.value)">';
     if (!sections.length) return out + '<p class="rh2-quiet">Nothing here yet.</p></aside>';
+    var limit = alOpenLimit(st.data && st.data.content);
     out += sections.map(function (s, si) {
+      if (si > limit) {
+        return '<section class="rh2-player-chapter is-locked">' +
+          '<div class="rh2-player-chead" aria-disabled="true">' +
+            '<span class="rh2-player-ctick" aria-hidden="true">' + icn('lock', 'lock', 12) + '</span>' +
+            '<span class="rh2-player-ctitle">' + esc(s.title) + '</span>' +
+            '<span class="rh2-player-ccount">Locked</span>' +
+          '</div></section>';
+      }
       var items = s.items || [];
       var shown = q ? items.filter(function (it) { return String(it.title || '').toLowerCase().indexOf(q) !== -1; }) : items;
       if (q && !shown.length) return '';
@@ -5503,6 +5596,7 @@
       title: w.title,
       description: w.description || '',
       category: w.category || 'induction',
+      sequential: !!(w.draft_content && w.draft_content.sequential),
       sections: (w.draft_content && w.draft_content.sections || []).map(function (s) {
         return {
           key: s.key, title: s.title,
@@ -5556,6 +5650,7 @@
 
   function laEditorContentForApi(ed) {
     return {
+      sequential: !!ed.sequential,
       sections: ed.sections.map(function (s) {
         return {
           key: s.key, title: s.title,
@@ -5645,7 +5740,7 @@
 
   /** The editor's own content, as one comparable string. */
   function laSnapshot(ed) {
-    return JSON.stringify({ title: ed.title, description: ed.description, category: ed.category, sections: ed.sections });
+    return JSON.stringify({ title: ed.title, description: ed.description, category: ed.category, sequential: !!ed.sequential, sections: ed.sections });
   }
 
   /**
@@ -5679,6 +5774,7 @@
     ed.title = prev.title;
     ed.description = prev.description;
     ed.category = prev.category;
+    ed.sequential = !!prev.sequential;
     ed.sections = prev.sections;
     ed._snap = snap;
     ed._dirty = true;
@@ -6101,6 +6197,7 @@
     ed.title = prev.title;
     ed.description = prev.description;
     ed.category = prev.category;
+    ed.sequential = !!prev.sequential;
     ed.sections = prev.sections;
     ed._snap = ed._saved;
     ed._dirty = false;
@@ -6590,6 +6687,10 @@
               }).join('') +
             '</select>' +
             '<p class="rh2-quiet rh2-cb-tip">The category is printed on the card and can be filtered on. It never limits who can be assigned.</p>' +
+            '<label class="rh2-check rh2-cb-seq">' +
+              '<input type="checkbox" id="la-ed-seq"' + (ed.sequential ? ' checked' : '') +
+                ' onchange="RH2.laMeta(\'sequential\',this.checked)"> Unlock sections in order</label>' +
+            '<p class="rh2-quiet rh2-cb-tip">Learners see section 1 first. Each later section opens once everything required before it is done.</p>' +
             '</div></section>' +
           '<section class="rh2-cb-setcard" id="la-set-desc"><h3 class="rh2-cb-seth">Description</h3>' +
             '<div class="rh2-cb-form">' +
@@ -7541,6 +7642,7 @@
     laCbDelete: laCbDelete,
     alRailSearch: alRailSearch,
     alRailFold: alRailFold,
+    alContinue: alContinue,
     laCbRender: laCbRender,
     laRichInput: laRichInput,
     laRichKey: laRichKey,

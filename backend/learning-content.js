@@ -13,6 +13,9 @@
  * into learning_workflow_versions.content):
  *
  *   {
+ *     sequential: true,          // optional: sections unlock in order — a
+ *                                // section opens once every counted item in
+ *                                // the sections before it is done
  *     sections: [{
  *       key:   's-…'            // stable across edits — progress maps by key
  *       title: 'Welcome',
@@ -171,7 +174,9 @@ function normaliseContent(raw) {
     }
     sections.push({ key: takeKey(s.key, 's'), title, items });
   }
-  return { ok: true, content: { sections } };
+  const content = { sections };
+  if (raw.sequential === true) content.sequential = true;
+  return { ok: true, content };
 }
 
 function normaliseQuiz(raw, itemTitle) {
@@ -225,6 +230,31 @@ function countedKeys(content) {
   const items = allItems(content);
   const required = items.filter((it) => it.required !== false);
   return (required.length ? required : items).map((it) => it.key);
+}
+
+/**
+ * Sequential content: the index of the furthest section a learner may open
+ * given the item keys they have completed. Every section up to and including
+ * it is open; everything after is locked. A section with no counted items
+ * never holds anyone back. Non-sequential content opens everything.
+ */
+function openSectionLimit(content, doneKeys) {
+  const sections = (content && content.sections) || [];
+  if (!(content && content.sequential)) return sections.length;
+  const done = doneKeys instanceof Set ? doneKeys : new Set(doneKeys || []);
+  const counted = new Set(countedKeys(content));
+  for (let i = 0; i < sections.length; i++) {
+    const pending = (sections[i].items || []).some((it) => counted.has(it.key) && !done.has(it.key));
+    if (pending) return i;
+  }
+  return sections.length;
+}
+
+/** Whether an item sits in a section the learner has not unlocked yet. */
+function isItemLocked(content, itemKey, doneKeys) {
+  const sections = (content && content.sections) || [];
+  const at = sections.findIndex((s) => (s.items || []).some((it) => it.key === itemKey));
+  return at > openSectionLimit(content, doneKeys);
 }
 
 function contentStats(content) {
@@ -409,6 +439,8 @@ module.exports = {
   normaliseContent,
   allItems,
   countedKeys,
+  openSectionLimit,
+  isItemLocked,
   contentStats,
   progressFor,
   itemByKey,

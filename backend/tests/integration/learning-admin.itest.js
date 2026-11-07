@@ -309,6 +309,32 @@ test('a failing bridge never fails the employee completion', async () => {
   expect(r.body.assignment_completed).toBe(true);
 });
 
+test('sections that unlock in order: a locked item is refused until the section before is done', async () => {
+  const owner = await agentFor('owner', org.id);
+  const wf = await createWorkflow(owner, { content: { sequential: true, sections: [
+    { title: 'First', items: [{ key: 'i-a', type: 'content', title: 'Read first', required: true }] },
+    { title: 'Second', items: [{ key: 'i-b', type: 'content', title: 'Read next', required: true }] },
+  ] } });
+  expect((await owner.agent.get(`/api/learning/workflows/${wf.id}`)).body.workflow.draft_content.sequential).toBe(true);
+  const emp = await agentFor('therapist', org.id);
+  await owner.agent.post(`/api/learning/workflows/${wf.id}/assign`).send({ userIds: [emp.user.id] });
+  const asg = (await emp.agent.get('/api/learning/my')).body.assignments[0];
+
+  // The learner receives the flag the player draws from.
+  expect((await emp.agent.get(`/api/learning/my/${asg.id}`)).body.content.sequential).toBe(true);
+
+  const early = await emp.agent.post(`/api/learning/my/${asg.id}/items/i-b/complete`).send({});
+  expect(early.status).toBe(409);
+  const { rows } = await db.pool.query(
+    'SELECT COUNT(*)::int AS n FROM learning_item_progress WHERE assignment_id = $1', [asg.id]);
+  expect(rows[0].n).toBe(0);
+
+  expect((await emp.agent.post(`/api/learning/my/${asg.id}/items/i-a/complete`).send({})).status).toBe(200);
+  const next = await emp.agent.post(`/api/learning/my/${asg.id}/items/i-b/complete`).send({});
+  expect(next.status).toBe(200);
+  expect(next.body.assignment_completed).toBe(true);
+});
+
 // ═══ Staff rollups feed the review step ══════════════════════════════════════
 
 test('staff reports completed_workflow_ids alongside active_workflow_ids', async () => {
@@ -555,6 +581,7 @@ test('an induction pack imports as a draft with its walkthroughs published besid
   const detail = await owner.agent.get(`/api/learning/workflows/${made.id}`);
   expect(detail.body.workflow.category).toBe('clinical');
   expect(Number(detail.body.workflow.current_version)).toBe(0); // a draft until the Owner assigns
+  expect(detail.body.workflow.draft_content.sequential).toBe(true);
   const keys = detail.body.workflow.draft_content.sections.flatMap((s) => s.items)
     .filter((i) => i.type === 'task' && i.walkthrough_key).map((i) => i.walkthrough_key);
   expect(keys).toEqual(['case-note-paper-trail', 'case-note-build', 'case-note-clock', 'case-note-ai']);

@@ -183,3 +183,47 @@
 @media (prefers-reduced-motion: reduce) {
   .ind-shade, .ind-ring, .ind-bar > span, .ind-btn { transition: none; }
 }
+
+/* ── Reader card: steps with nothing to spotlight (intro, page, picture,
+   quiz, warning, a fallback) open large and centred, sized for reading ── */
+.ind-card.ind-card-reader {
+  width: min(880px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  padding: 0 36px 26px;
+  border-radius: 20px;
+}
+.ind-card-reader .ind-head { padding: 22px 0 12px; }
+.ind-card-reader .ind-module { font-size: 13px; }
+.ind-card-reader .ind-counter { font-size: 14px; }
+.ind-card-reader .ind-x { top: 16px; right: -16px; width: 40px; height: 40px; font-size: 26px; }
+.ind-card-reader .ind-bar { height: 6px; border-radius: 3px; margin-top: 12px; }
+.ind-card-reader .ind-flag { font-size: 14.5px; padding: 9px 14px; }
+.ind-card-reader .ind-title { font-size: 28px; line-height: 1.25; margin: 18px 0 10px; letter-spacing: -.01em; }
+.ind-card-reader .ind-body { font-size: 17.5px; line-height: 1.7; color: var(--ink, #17322d); }
+.ind-card-reader .ind-body p { margin: 12px 0; }
+.ind-card-reader .ind-fig { margin: 14px 0 8px; }
+.ind-card-reader .ind-fig img { width: 100%; max-height: 54vh; object-fit: contain; border-radius: 14px; }
+.ind-card-reader .ind-quiz { padding: 16px 18px 12px; margin-top: 16px; border-radius: 14px; }
+.ind-card-reader .ind-quiz legend { font-size: 19px; line-height: 1.45; padding: 0 6px; }
+.ind-card-reader .ind-q-opt {
+  gap: 12px; padding: 12px 14px; margin: 8px 0; border-radius: 12px;
+  border: 1.5px solid var(--border, #dfe7e5);
+}
+.ind-card-reader .ind-q-opt label { font-size: 17px; line-height: 1.45; flex: 1; }
+.ind-card-reader .ind-q-opt input { width: 18px; height: 18px; margin-top: 3px; }
+.ind-card-reader .ind-q-explain {
+  font-size: 16.5px; line-height: 1.55; padding: 12px 16px; border-radius: 12px;
+  color: var(--ink, #17322d); border-left: 5px solid;
+}
+.ind-card-reader .ind-q-explain.ok { background: rgba(20, 152, 138, .14); border-left-color: #14988a; }
+.ind-card-reader .ind-q-explain.no { background: rgba(217, 97, 78, .14); border-left-color: #d9614e; }
+.ind-card-reader .ind-ack-statement { font-size: 17px; line-height: 1.6; }
+.ind-card-reader .ind-ack-check { font-size: 16px; }
+.ind-card-reader .ind-foot { margin-top: 22px; }
+.ind-card-reader .ind-btn { font-size: 16px; padding: 12px 24px; border-radius: 12px; }
+@media (max-width: 640px) {
+  .ind-card.ind-card-reader { width: calc(100vw - 16px); max-height: calc(100vh - 16px); padding: 0 18px 18px; }
+  .ind-card-reader .ind-x { right: -6px; }
+  .ind-card-reader .ind-title { font-size: 22px; }
+  .ind-card-reader .ind-body { font-size: 16px; }
+}

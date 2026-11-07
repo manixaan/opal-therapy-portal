@@ -1289,8 +1289,9 @@ button.rh2-learn-tile:focus-visible { outline: none; box-shadow: var(--focus-rin
 .rh2-ind-item .rh2-learn-item-body { padding: 8px 0 0; }
 
 /* A resource item is one launch tile: the whole surface is the click. */
-.rh2-ind-item-launch { padding: 0; }
-.rh2-ind-item-launch:hover { border-color: var(--accent); }
+.rh2-ind-item-launch { padding: 0; cursor: pointer; transition: border-color .15s, box-shadow .15s, transform .15s; }
+.rh2-ind-item-launch:hover { border-color: var(--accent); box-shadow: 0 6px 18px rgba(15, 124, 108, .12); transform: translateY(-1px); }
+@media (prefers-reduced-motion: reduce) { .rh2-ind-item-launch:hover { transform: none; } }
 .rh2-ind-launch {
   appearance: none; font: inherit; color: inherit; text-align: left;
   display: flex; flex-direction: column; gap: 8px; width: 100%;
@@ -1868,3 +1869,19 @@ button.rh2-learn-tile:focus-visible { outline: none; box-shadow: var(--focus-rin
 }
 .rh2-backlink:hover { text-decoration: underline; }
 .rh2-backlink:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: 4px; }
+
+/* ── Sections that unlock in order (content.sequential) ── */
+.rh2-ind-locked { opacity: .62; }
+.rh2-ind-locked .rh2-ind-chapter { color: var(--muted); }
+.rh2-ind-chapter-no.rh2-ind-chapter-lock { background: var(--surface-2, #eef0ee); color: var(--muted); }
+.rh2-ind-lockline { margin: 4px 0 0 40px; color: var(--muted); font-size: 13.5px; }
+.rh2-ind-continue {
+  display: flex; align-items: center; gap: 10px; margin: 18px 0 4px; padding: 14px 16px;
+  border-radius: 12px; background: var(--accent-soft, #e3f4f1);
+}
+.rh2-ind-continue.is-waiting { background: var(--surface-2, #f4f3ef); color: var(--muted); font-size: 14px; }
+.rh2-ind-continue-btn { font-size: 14.5px; padding: 10px 18px; }
+.rh2-player-chapter.is-locked { opacity: .55; }
+.rh2-player-chapter.is-locked .rh2-player-chead { cursor: default; }
+.rh2-player-chapter.is-locked .rh2-player-ctick { display: inline-flex; align-items: center; justify-content: center; }
+.rh2-cb-seq { margin-top: 14px; font-size: 13.5px; font-weight: 600; }

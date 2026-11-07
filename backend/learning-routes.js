@@ -781,10 +781,12 @@ async function importInductionPacks(org, createdBy) {
     if (p.walkthroughs.length) {
       await require('./walkthrough-catalogue').installModules(org, p.walkthroughs, createdBy);
     }
+    const content = { sections: p.sections };
+    if (p.sequential) content.sequential = true;
     const { rows } = await pool.query(
       `INSERT INTO learning_workflows (organisation_id, title, description, category, draft_content, created_by)
        VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, title`,
-      [org, p.title, p.description, p.category, JSON.stringify({ sections: p.sections }), createdBy]);
+      [org, p.title, p.description, p.category, JSON.stringify(content), createdBy]);
     haveTitle.add(p.title.trim().toLowerCase());
     created.push({ id: rows[0].id, title: rows[0].title, items: lc.contentStats({ sections: p.sections }).items });
   }
@@ -1475,6 +1477,16 @@ router.post('/api/learning/my/:id/items/:itemKey/complete', safe(async (req, res
     }
     const item = lc.itemByKey(a.content, itemKey);
     if (!item) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Not found' }); }
+    // Sections that unlock in order: an item past the learner's open section
+    // is refused, so the order holds even for a request the player never made.
+    if (a.content && a.content.sequential) {
+      const { rows: doneRows } = await client.query(
+        'SELECT item_key FROM learning_item_progress WHERE assignment_id = $1', [a.id]);
+      if (lc.isItemLocked(a.content, itemKey, doneRows.map((r) => r.item_key))) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'Finish the earlier sections first — this one is still locked.' });
+      }
+    }
 
     const b = req.body || {};
     let evidence = null;

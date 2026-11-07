@@ -327,3 +327,51 @@ test('a kind that recurs later continues rather than repeating its name', () => 
   ]);
   expect(new Set(out.map((s) => s.title)).size).toBe(out.length);
 });
+
+// ═══ Sections that unlock in order ═══════════════════════════════════════════
+
+describe('sequential content', () => {
+  const seq = () => ({
+    sequential: true,
+    sections: [
+      { key: 's-1', title: 'One', items: [{ key: 'i-1', type: 'content', title: 'Read', required: true }] },
+      { key: 's-2', title: 'Two', items: [
+        { key: 'i-2', type: 'content', title: 'Read more', required: true },
+        { key: 'i-2b', type: 'content', title: 'Extra', required: false },
+      ] },
+      { key: 's-3', title: 'Three', items: [{ key: 'i-3', type: 'content', title: 'Last', required: true }] },
+    ],
+  });
+
+  test('the flag survives normalising only when it is exactly true', () => {
+    expect(lc.normaliseContent(seq()).content.sequential).toBe(true);
+    expect(lc.normaliseContent(Object.assign(seq(), { sequential: 'yes' })).content.sequential).toBeUndefined();
+    expect(lc.normaliseContent({ sections: [] }).content.sequential).toBeUndefined();
+  });
+
+  test('only the first section is open until it is done, then the next opens', () => {
+    const c = lc.normaliseContent(seq()).content;
+    expect(lc.openSectionLimit(c, [])).toBe(0);
+    expect(lc.isItemLocked(c, 'i-1', [])).toBe(false);
+    expect(lc.isItemLocked(c, 'i-2', [])).toBe(true);
+    expect(lc.openSectionLimit(c, ['i-1'])).toBe(1);
+    expect(lc.isItemLocked(c, 'i-2', ['i-1'])).toBe(false);
+    expect(lc.isItemLocked(c, 'i-3', ['i-1'])).toBe(true);
+  });
+
+  test('an optional item never holds the next section back', () => {
+    const c = lc.normaliseContent(seq()).content;
+    expect(lc.openSectionLimit(c, ['i-1', 'i-2'])).toBe(2);
+    expect(lc.openSectionLimit(c, ['i-1', 'i-2', 'i-3'])).toBe(3);
+  });
+
+  test('content without the flag opens everything', () => {
+    const c = lc.normaliseContent(Object.assign(seq(), { sequential: false })).content;
+    expect(lc.openSectionLimit(c, [])).toBe(3);
+    expect(lc.isItemLocked(c, 'i-3', [])).toBe(false);
+  });
+
+  test('the employee projection keeps the flag', () => {
+    expect(lc.serialiseForEmployee(lc.normaliseContent(seq()).content).sequential).toBe(true);
+  });
+});
