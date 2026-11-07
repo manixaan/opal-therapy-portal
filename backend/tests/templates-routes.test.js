@@ -167,7 +167,7 @@ describe('read_only may look but not write', () => {
     const res = await agent.get('/api/templates');
     expect(res.status).toBe(200);
     expect(res.body.templates.map((t) => t.id))
-      .toEqual(['service_agreement', 'progress_note', 'fca']);
+      .toEqual(['service_agreement', 'support_letter', 'progress_report', 'fca']);
   });
 
   test('every write endpoint is 403 and no query runs', async () => {
@@ -197,7 +197,7 @@ describe('therapist and owner may reach the capability', () => {
     const agent = await loginAs(user);
     const res = await agent.get('/api/templates');
     expect(res.status).toBe(200);
-    expect(res.body.templates).toHaveLength(3);
+    expect(res.body.templates).toHaveLength(4);
   });
 
   test('the field spec never exposes a binding identifier', async () => {
@@ -222,6 +222,25 @@ describe('therapist and owner may reach the capability', () => {
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('unknown_template');
     expect(db.pool.query).not.toHaveBeenCalled();
+  });
+
+  test('the retired Progress Note cannot start a new document', async () => {
+    const agent = await loginAs(THERAPIST);
+    db.pool.query.mockClear();
+    const res = await agent.post('/api/templates/documents').send({ templateId: 'progress_note' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('unknown_template');
+    expect(db.pool.query).not.toHaveBeenCalled();
+  });
+
+  test('read_only cannot start a Support Letter or a Progress Report', async () => {
+    const agent = await loginAs(READ_ONLY);
+    for (const templateId of ['support_letter', 'progress_report']) {
+      db.pool.query.mockClear();
+      const res = await agent.post('/api/templates/documents').send({ templateId });
+      expect([templateId, res.status]).toEqual([templateId, 403]);
+      expect(db.pool.query).not.toHaveBeenCalled();
+    }
   });
 });
 

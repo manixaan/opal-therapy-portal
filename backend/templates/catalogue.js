@@ -1,12 +1,19 @@
 'use strict';
 
 /**
- * TEMPLATE CATALOGUE — the three templates the Resource Hub offers, each
- * pointing at a master that already exists in this repository.
+ * TEMPLATE CATALOGUE — the templates the Resource Hub offers, each pointing
+ * at a master in this repository.
  *
  *   Service Agreement  service-agreements/templates/service-agreement-v1.0.1.docx
- *   Progress Note      fca/templates/progress-note-letter-v1.docx
+ *   Support Letter     fca/templates/support-letter-v1.docx
+ *   Progress Report    fca/templates/progress-report-v1.docx
  *   FCA                fca/templates/fca-v1.docx
+ *   Progress Note      fca/templates/progress-note-letter-v1.docx   RETIRED
+ *
+ * A RETIRED template is no longer offered for new documents (listTemplates
+ * leaves it out and the create route refuses it), but documents already
+ * started from it still open, preview and export exactly as before. The
+ * Support Letter replaced the Progress Note card on 7 Nov 2026.
  *
  * Nothing here re-authors a template. The wording, the clauses, the section
  * order and the field set are the masters' own; this module only says which
@@ -31,6 +38,8 @@ const path = require('path');
 const fcaMap = require('../fca/template-map');
 const letterMap = require('../fca/letter-template-map');
 const saMap = require('./service-agreement-map');
+const supportLetterMap = require('./support-letter-map');
+const progressReportMap = require('./progress-report-map');
 
 const FCA_TEMPLATE_FILE = path.join(__dirname, '..', 'fca', 'templates', 'fca-v1.docx');
 
@@ -54,6 +63,9 @@ const TEMPLATE_FCA_SECTION_CATALOGUE = {
   MAX_CUSTOM_TITLE_CHARS: fcaMap.MAX_CUSTOM_TITLE_CHARS,
   MAX_CUSTOM_GUIDANCE_CHARS: fcaMap.MAX_CUSTOM_GUIDANCE_CHARS,
 };
+const SUPPORT_LETTER_FILE = path.join(__dirname, '..', 'fca', 'templates', supportLetterMap.TEMPLATE_FILENAME);
+const PROGRESS_REPORT_FILE = path.join(__dirname, '..', 'fca', 'templates', progressReportMap.TEMPLATE_FILENAME);
+
 const LETTER_TEMPLATE_FILE = path.join(
   __dirname, '..', 'fca', 'templates', letterMap.LETTER_TEMPLATE_FILENAME
 );
@@ -125,7 +137,64 @@ const TEMPLATES = [
     footer: 'Opal Therapy · NDIS Service Agreement',
   },
   {
+    id: 'support_letter',
+    name: 'Support Letter',
+    description: 'Letter of support recommending funding for a participant’s disability-related need.',
+    version: supportLetterMap.TEMPLATE_VERSION,
+    masterName: supportLetterMap.TEMPLATE_NAME,
+    file: SUPPORT_LETTER_FILE,
+    catalogue: supportLetterMap.CATALOGUE,
+    scalars: supportLetterMap.SCALAR_TAGS,
+    controlParts: supportLetterMap.CONTROL_PARTS,
+    multilineTags: supportLetterMap.MULTILINE_TAGS,
+    paragraphTags: supportLetterMap.PARAGRAPH_TAGS,
+    optionalLineTags: supportLetterMap.OPTIONAL_LINE_TAGS,
+    optionalRowTags: supportLetterMap.OPTIONAL_ROW_TAGS,
+    sectionTags: supportLetterMap.SECTIONS.map((s) => s.tag),
+    internalTags: [],
+    anchorTags: [supportLetterMap.CUSTOM_SECTION_ANCHOR],
+    customSectionAnchor: supportLetterMap.CUSTOM_SECTION_ANCHOR,
+    // The anchor sits at the top level, after the last body section.
+    customAnchorParent: null,
+    customAfterTag: 'OPAL_SECTION_SUPPORT_LETTER_RECOMMENDATION',
+    customDefaultLevel: 3,
+    sectionCatalogue: supportLetterMap.SECTION_CATALOGUE,
+    participantTag: 'OPAL_CLIENT_FULL_NAME',
+    filenameStem: 'Support-Letter',
+    footer: 'Opal Therapy · Letter of Support',
+  },
+  {
+    id: 'progress_report',
+    name: 'Progress Report',
+    description: 'Occupational therapy progress report against NDIS goals, for plan review.',
+    version: progressReportMap.TEMPLATE_VERSION,
+    masterName: progressReportMap.TEMPLATE_NAME,
+    file: PROGRESS_REPORT_FILE,
+    catalogue: progressReportMap.CATALOGUE,
+    scalars: progressReportMap.SCALAR_TAGS,
+    controlParts: progressReportMap.CONTROL_PARTS,
+    multilineTags: progressReportMap.MULTILINE_TAGS,
+    paragraphTags: progressReportMap.PARAGRAPH_TAGS,
+    optionalLineTags: progressReportMap.OPTIONAL_LINE_TAGS,
+    optionalRowTags: progressReportMap.OPTIONAL_ROW_TAGS,
+    sectionTags: progressReportMap.SECTIONS.map((s) => s.tag),
+    internalTags: [],
+    anchorTags: [progressReportMap.CUSTOM_SECTION_ANCHOR],
+    customSectionAnchor: progressReportMap.CUSTOM_SECTION_ANCHOR,
+    // Custom sections render at the end of Progress Towards NDIS Goals.
+    customAnchorParent: 'OPAL_SECTION_REPORT_PROGRESS',
+    customDefaultLevel: 3,
+    sectionCatalogue: progressReportMap.SECTION_CATALOGUE,
+    appendices: true,
+    participantTag: 'OPAL_CLIENT_FULL_NAME',
+    filenameStem: 'Progress-Report',
+    footer: 'Opal Therapy · Occupational Therapy Progress Report',
+  },
+  {
     id: 'progress_note',
+    // Retired 7 Nov 2026 — superseded by the Support Letter. Existing
+    // documents keep working; no new ones are started from it.
+    retired: true,
     name: 'Progress Note',
     description: 'Progress note letter reporting on a participant’s period of therapy.',
     version: letterMap.LETTER_TEMPLATE_VERSION,
@@ -186,6 +255,8 @@ const TEMPLATES = [
     // shape before export: preview, drop a section, restore it, reorder
     // among siblings. Nothing is required here — see the catalogue's note.
     sectionCatalogue: TEMPLATE_FCA_SECTION_CATALOGUE,
+    customAnchorParent: 'OPAL_SECTION_ASSESSMENT_RESULTS',
+    appendices: true,
     filenameStem: 'Functional-Capacity-Assessment',
     footer: 'Opal Therapy · Functional Capacity Assessment',
   },
@@ -193,7 +264,7 @@ const TEMPLATES = [
 
 const BY_ID = new Map(TEMPLATES.map((t) => [t.id, t]));
 
-/** The ids the migration's CHECK constraint allows, in catalogue order. */
+/** The ids the migrations' CHECK constraint allows, in catalogue order. */
 const TEMPLATE_IDS = TEMPLATES.map((t) => t.id);
 
 function getTemplate(id) {
@@ -232,14 +303,22 @@ function fieldSpec(template) {
       layer: s.layer,
       multiline: Boolean(s.multiline),
       isDate: Boolean(s.isDate),
+      // A long-form field: a tall box, each line a paragraph (or a bullet).
+      narrative: Boolean(s.narrative),
+      bullets: Boolean(s.bullets),
+      hint: s.hint || null,
+      maxChars: s.maxChars || null,
+      // The section this field prints in, so the editor can set it aside
+      // while that section is removed.
+      section: s.section || null,
     });
   }
   return Array.from(groups, ([name, fields]) => ({ group: name, fields }));
 }
 
-/** The catalogue as the Templates landing page shows it. */
+/** The catalogue as the Templates landing page shows it — retired ones left out. */
 function listTemplates() {
-  return TEMPLATES.map((t) => ({
+  return TEMPLATES.filter((t) => !t.retired).map((t) => ({
     id: t.id,
     name: t.name,
     description: t.description,

@@ -170,7 +170,11 @@ function sectionStructure(template, row, { hasAppendices = false } = {}) {
   }
 
   const sections = manifest.sections.map((s) => {
-    const lv = s.kind === 'custom' ? levelByCustomTag.get(s.tag) : levels[s.tag];
+    // A custom section with no stored level takes the template's own default
+    // (a letter's sections print at Heading 3, not the builder's Heading 2).
+    const lv = s.kind === 'custom'
+      ? (levelByCustomTag.get(s.tag) || template.customDefaultLevel)
+      : levels[s.tag];
     return HEADING_LEVELS.includes(lv) ? { ...s, headingLevel: lv } : s;
   });
 
@@ -200,12 +204,15 @@ async function composePortalDocx(state) {
     options: {
       controlParts: template.controlParts,
       customSectionAnchor: template.customSectionAnchor,
-      // Clinician-created sections use the FCA's own builder — the only
-      // template with a section catalogue is the FCA, and its custom
-      // sections must look identical whichever surface composed them.
+      // Clinician-created sections use the FCA's own builder, so a custom
+      // section looks identical in every template that offers them.
       buildCustomSection: template.sectionCatalogue ? FCA_OPTIONS.buildCustomSection : null,
       multilineTags: template.multilineTags,
       dropParagraphWhenEmpty: template.optionalLineTags || new Set(),
+      // Narratives written as one paragraph per line, and table rows left
+      // out when every value in them is empty.
+      paragraphTags: template.paragraphTags || null,
+      dropRowWhenEmpty: template.optionalRowTags || null,
       // A template whose sections can change must keep its cached contents
       // list honest; the others ship the master's own TOC untouched.
       rebuildToc: Boolean(template.sectionCatalogue),

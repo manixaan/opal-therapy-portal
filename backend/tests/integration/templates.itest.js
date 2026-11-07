@@ -101,13 +101,74 @@ afterAll(closePool);
 //  Catalogue and lifecycle
 // ═══════════════════════════════════════════════════════════════════════════
 
-test('the catalogue offers exactly the three required templates', async () => {
+test('the catalogue offers exactly the four current templates', async () => {
   const { agent } = await agentFor(app, 'therapist', orgA);
   const res = await agent.get('/api/templates');
   expect(res.status).toBe(200);
   expect(res.body.templates.map((t) => t.name)).toEqual([
-    'Service Agreement', 'Progress Note', 'Functional Capacity Assessment (FCA)',
+    'Service Agreement', 'Support Letter', 'Progress Report', 'Functional Capacity Assessment (FCA)',
   ]);
+});
+
+test('Support Letter and Progress Report: create, write long-form, shape, export (migration 087)', async () => {
+  const { agent } = await agentFor(app, 'therapist', orgA);
+
+  const ids = {};
+  for (const templateId of ['support_letter', 'progress_report']) {
+    const created = await agent.post('/api/templates/documents')
+      .send({ templateId, title: `Jane — ${templateId}`, clientId: JANE.id });
+    expect([templateId, created.status]).toEqual([templateId, 201]);
+    const id = created.body.document.id;
+    ids[templateId] = id;
+    expect(created.body.document.sections.length).toBeGreaterThan(0);
+
+    // A narrative longer than the ordinary 4,000-character field ceiling is kept whole.
+    const tag = templateId === 'support_letter' ? 'OPAL_LETTER_BACKGROUND' : 'OPAL_REPORT_BACKGROUND';
+    const long = `${'Background sentence. '.repeat(300).trim()}\nSecond paragraph.`;
+    expect(long.length).toBeGreaterThan(4000);
+    const patched = await agent.patch(`/api/templates/documents/${id}`).send({ fieldValues: { [tag]: long } });
+    expect(patched.status).toBe(200);
+    const { rows } = await db.pool.query('SELECT template_id, field_values FROM template_documents WHERE id = $1', [id]);
+    expect(rows[0].template_id).toBe(templateId);
+    expect(rows[0].field_values[tag]).toBe(long);
+
+    for (const fmt of ['docx', 'pdf']) {
+      const res = await agent.get(`/api/templates/documents/${id}/export.${fmt}`).buffer(true)
+        .parse((r, cb) => { const c = []; r.on('data', (d) => c.push(d)); r.on('end', () => cb(null, Buffer.concat(c))); });
+      expect([templateId, fmt, res.status]).toEqual([templateId, fmt, 200]);
+    }
+  }
+
+  // The Progress Report takes appendices; the Support Letter has nowhere to print them.
+  const letter = await agent.post(`/api/templates/documents/${ids.support_letter}/appendices`).send({ kind: 'pdf' });
+  expect(letter.status).toBe(400);
+  expect(letter.body.error).toBe('appendices_not_supported');
+  const report = await agent.get(`/api/templates/documents/${ids.progress_report}`);
+  expect(report.body.document.appendicesSupported).toBe(true);
+});
+
+test('the retired Progress Note starts nothing new, but an existing one still opens and exports', async () => {
+  const { agent, user } = await agentFor(app, 'therapist', orgA);
+  const refused = await agent.post('/api/templates/documents').send({ templateId: 'progress_note', clientId: JANE.id });
+  expect(refused.status).toBe(400);
+
+  const { rows } = await db.pool.query(
+    `INSERT INTO template_documents (organisation_id, created_by_user_id, template_id, template_version, title, splose_client_id)
+     VALUES ($1, $2, 'progress_note', 'v1', 'Older letter', $3) RETURNING id`,
+    [orgA, user.id, JANE.id]
+  );
+  const opened = await agent.get(`/api/templates/documents/${rows[0].id}`);
+  expect(opened.status).toBe(200);
+  expect(opened.body.document.templateName).toBe('Progress Note');
+  expect((await agent.get(`/api/templates/documents/${rows[0].id}/export.docx`)).status).toBe(200);
+});
+
+test('the template id constraint still refuses an id no master backs', async () => {
+  const { user } = await agentFor(app, 'therapist', orgA);
+  await expect(db.pool.query(
+    `INSERT INTO template_documents (organisation_id, created_by_user_id, template_id, template_version, title)
+     VALUES ($1, $2, 'not_a_template', 'v1', 'x')`, [orgA, user.id]
+  )).rejects.toThrow(/valid_template_document_template_id/);
 });
 
 test('a document is created, completed, previewed and listed', async () => {
@@ -268,7 +329,7 @@ test('another therapist in the SAME organisation cannot reach the document', asy
   const { agent: theirs } = await agentFor(app, 'therapist', orgA);
 
   const created = await mine.post('/api/templates/documents')
-    .send({ templateId: 'progress_note', title: 'Mine', clientId: JANE.id });
+    .send({ templateId: 'support_letter', title: 'Mine', clientId: JANE.id });
   const id = created.body.document.id;
 
   for (const path of [

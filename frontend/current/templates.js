@@ -368,6 +368,12 @@
           // A real calendar picker; the value round-trips as d/mm/yyyy.
           input = '<input class="tpl-input tpl-date" type="date" data-tag="' + esc(f.tag) + '" ' +
             'id="tplf-' + esc(f.tag) + '" value="' + esc(iso) + '">';
+        } else if (f.narrative) {
+          // Long-form writing: a tall box, one paragraph (or bullet) per line.
+          input = '<textarea class="tpl-input tpl-textarea tpl-textarea-long" rows="' + (f.bullets ? 4 : 7) + '" ' +
+            'data-tag="' + esc(f.tag) + '" id="tplf-' + esc(f.tag) + '"' +
+            (f.maxChars ? ' maxlength="' + esc(f.maxChars) + '"' : '') +
+            ' placeholder="' + esc(f.hint || placeholder) + '">' + esc(shown) + '</textarea>';
         } else if (f.multiline) {
           input = '<textarea class="tpl-input tpl-textarea" rows="3" data-tag="' + esc(f.tag) + '" ' +
             'id="tplf-' + esc(f.tag) + '" placeholder="' + esc(placeholder) + '">' + esc(shown) + '</textarea>';
@@ -378,13 +384,19 @@
         return '' +
           '<div class="tpl-field">' +
             '<label class="tpl-label" for="tplf-' + esc(f.tag) + '">' + esc(f.label) + '</label>' +
+            (f.hint ? '<span class="tpl-field-hint">' + esc(f.hint) + '</span>' : '') +
             input +
             '<span class="' + sourceClass(f.source) + '" data-chip="' + esc(f.tag) + '">' +
               esc(SOURCE_LABEL[f.source] || 'Not yet completed') + '</span>' +
           '</div>';
       }).join('');
+      // A group whose fields all print in one section is set aside while that
+      // section is removed (see syncFieldGroups).
+      var sec = g.fields.length && g.fields.every(function (f) { return f.section && f.section === g.fields[0].section; })
+        ? g.fields[0].section : '';
       return '' +
-        '<details class="tpl-group"' + (gi === 0 ? ' open' : '') + '>' +
+        '<details class="tpl-group"' + (gi === 0 ? ' open' : '') +
+          (sec ? ' data-section="' + esc(sec) + '"' : '') + '>' +
           '<summary class="tpl-group-summary">' + esc(g.group) +
             ' <span class="tpl-quiet">(' + g.fields.length + ')</span></summary>' +
           '<div class="tpl-group-body">' + rows + '</div>' +
@@ -397,6 +409,23 @@
     if (!host) return;
     host.innerHTML = fieldsHtml();
     host.addEventListener('input', onFieldInput);
+    syncFieldGroups();
+  }
+
+  /**
+   * Hide the field groups of sections the document no longer includes — a
+   * removed goal's boxes are not something left to fill in. Hidden, not
+   * destroyed: anything already typed is kept and returns with the section.
+   */
+  function syncFieldGroups() {
+    var host = el('tpl-fieldhost');
+    if (!host) return;
+    var out = {};
+    (S.sections || []).forEach(function (s) { if (s.included === false) out[s.tag] = true; });
+    var groups = host.querySelectorAll('details[data-section]');
+    for (var i = 0; i < groups.length; i++) {
+      groups[i].hidden = Boolean(out[groups[i].getAttribute('data-section')]);
+    }
   }
 
   // ── Section structure (templates that offer it — the FCA) ─────────────────
@@ -526,6 +555,7 @@
     var hadFocus = titleBox && doc.activeElement === titleBox;
 
     host.innerHTML = S.sections ? sectionsHtml() : '';
+    syncFieldGroups();
 
     titleBox = el('tpl-newsec-title');
     levelBox = el('tpl-newsec-level');
@@ -624,7 +654,7 @@
   function mountAppendices() {
     var host = el('tpl-appendixhost');
     if (!host) return;
-    host.innerHTML = (S.docu && S.docu.sections) ? appendicesHtml() : '';
+    host.innerHTML = (S.docu && S.docu.appendicesSupported) ? appendicesHtml() : '';
   }
 
   async function loadAppendixCandidates() {
@@ -1203,7 +1233,7 @@
       mountFields();
       syncStep();
       refreshPreview();
-      if (S.docu.sections && S.appendixCands === null) loadAppendixCandidates();
+      if (S.docu.appendicesSupported && S.appendixCands === null) loadAppendixCandidates();
       return;
     }
     host.innerHTML = renderCatalogue();

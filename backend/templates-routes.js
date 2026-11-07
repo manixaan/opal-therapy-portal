@@ -183,10 +183,12 @@ async function loadState(req, row) {
 }
 
 /**
- * The section the FCA master's custom anchor sits inside — clinician-created
- * sections render there, and the editor shows them under it.
+ * The section a template's custom anchor sits inside — clinician-created
+ * sections render there, and the editor shows them under it. Null when the
+ * anchor sits at the top level (the Support Letter), in which case they are
+ * shown after `customAfterTag`.
  */
-const CUSTOM_ANCHOR_PARENT = 'OPAL_SECTION_ASSESSMENT_RESULTS';
+const customAnchorParent = (template) => template.customAnchorParent || null;
 
 /**
  * The section structure as the editor shows it — the EFFECTIVE state after
@@ -226,8 +228,9 @@ function sectionsDescriptor(template, row, hasAppendices = false) {
         included: s.included !== false,
         headingLevel: levels[s.tag] || null,
         // The size the master's own heading renders at when no override is
-        // stored: top-level sections are Heading 1, nested ones Heading 2.
-        defaultLevel: meta.parent ? 2 : 1,
+        // stored: the map's own level, else top-level sections are Heading 1
+        // and nested ones Heading 2.
+        defaultLevel: meta.level || (meta.parent ? 2 : 1),
         order: s.order,
       };
     });
@@ -248,24 +251,26 @@ function sectionsDescriptor(template, row, hasAppendices = false) {
         title: s.title,
         description: entry.guidance || '',
         group: 'custom',
-        // Custom sections render at the master's anchor, inside Assessment
-        // Results — the panel shows them there so it mirrors the document.
-        parent: CUSTOM_ANCHOR_PARENT,
+        // Custom sections render at the master's anchor — the panel shows
+        // them there so it mirrors the document.
+        parent: customAnchorParent(template),
         required: false,
         custom: true,
         included: true,
-        headingLevel: s.headingLevel || null,
-        defaultLevel: 2,
+        headingLevel: entry.level || null,
+        defaultLevel: template.customDefaultLevel || 2,
         order: s.order,
       };
     });
 
   // Splice customs where they actually render: after the last row belonging
-  // to Assessment Results (the parent itself when it has no children shown).
+  // to the anchor's parent (the parent itself when it has no children shown),
+  // or after the section a top-level anchor follows.
+  const after = customAnchorParent(template) || template.customAfterTag || null;
   let at = templateRows.length;
   for (let i = templateRows.length - 1; i >= 0; i--) {
     const r = templateRows[i];
-    if (r.tag === CUSTOM_ANCHOR_PARENT || r.parent === CUSTOM_ANCHOR_PARENT) {
+    if (after && (r.tag === after || r.parent === after)) {
       at = i + 1;
       break;
     }
@@ -277,6 +282,11 @@ function sectionsDescriptor(template, row, hasAppendices = false) {
 /** The wire shape of a document instance. */
 function serialiseDocument(state) {
   const { template, row, scalarData, scalarSources, missingFields } = state;
+  const sections = sectionsDescriptor(template, row, (state.appendices || []).length > 0);
+  // A field in a removed section is not outstanding: it will not print.
+  const removed = new Set((sections || []).filter((s) => !s.included).map((s) => s.tag));
+  const counted = template.scalars.filter((s) => !(s.section && removed.has(s.section)));
+  const countedMissing = counted.filter((s) => missingFields.includes(s.tag)).length;
   return {
     id: row.id,
     templateId: template.id,
@@ -297,19 +307,21 @@ function serialiseDocument(state) {
         entered: Object.prototype.hasOwnProperty.call(row.field_values || {}, f.tag),
       })),
     })),
-    missingCount: missingFields.length,
-    completedCount: template.scalars.length - missingFields.length,
-    fieldCount: template.scalars.length,
-    // Present only for templates whose structure the editor may shape (the
-    // FCA); null elsewhere so the frontend renders no section panel.
-    sections: sectionsDescriptor(template, row, (state.appendices || []).length > 0),
+    missingCount: countedMissing,
+    completedCount: counted.length - countedMissing,
+    fieldCount: counted.length,
+    // Present only for templates whose structure the editor may shape; null
+    // elsewhere so the frontend renders no section panel.
+    sections,
+    // Whether this template prints attached PDFs in an Appendices section.
+    appendicesSupported: Boolean(template.appendices),
     // Supporting material attached to this document, in appendix order.
     // Ids, titles and sizes only — the bytes have their own route.
     appendices: (state.appendices || []).map(appendices.serialiseAppendix),
     // Where clinician-created sections render: the section that hosts the
     // master's custom anchor. Supplied by the server so the frontend never
     // carries a binding identifier of its own.
-    customParent: template.sectionCatalogue ? CUSTOM_ANCHOR_PARENT : null,
+    customParent: template.sectionCatalogue ? customAnchorParent(template) : null,
   };
 }
 
@@ -476,7 +488,9 @@ router.get('/api/templates/clients', requireTemplateRead, safe(async (req, res) 
 
 router.post('/api/templates/documents', requireTemplateWrite, safe(async (req, res) => {
   const template = catalogue.getTemplate(req.body?.templateId);
-  if (!template) return res.status(400).json({ error: 'unknown_template' });
+  // A retired template still serves the documents already started from it,
+  // but no new document may be started from one.
+  if (!template || template.retired) return res.status(400).json({ error: 'unknown_template' });
 
   const title = str(req.body?.title, MAX_TITLE_CHARS) || template.name;
 
@@ -582,7 +596,8 @@ router.patch('/api/templates/documents/:id', requireTemplateWrite, safe(async (r
       });
     }
     for (const [tag, raw] of Object.entries(incoming)) {
-      const value = str(raw, MAX_FIELD_CHARS);
+      // Narrative fields carry a longer ceiling of their own.
+      const value = str(raw, template.catalogue.SCALAR_BY_TAG.get(tag).maxChars || MAX_FIELD_CHARS);
       if (value === '') delete next[tag];
       else next[tag] = value;
     }
@@ -609,8 +624,12 @@ router.patch('/api/templates/documents/:id', requireTemplateWrite, safe(async (r
       // holds, so one panel's save cannot reset another's.
       const prior = (row.sections && typeof row.sections === 'object') ? row.sections : {};
       const allTags = template.sectionCatalogue.SECTIONS.map((s) => s.tag);
+      // The master's own default selection — a section that starts removed
+      // (a fifth goal slot) must not appear because only the order changed.
+      const defaultTags = template.sectionCatalogue.SECTIONS
+        .filter((s) => s.defaultSelected !== false).map((s) => s.tag);
       sections = {
-        selected: checked.value.selected ?? prior.selected ?? allTags,
+        selected: checked.value.selected ?? prior.selected ?? defaultTags,
         order: checked.value.order ?? prior.order ?? allTags,
         custom: checked.value.custom ?? prior.custom ?? [],
         levels: checked.value.levels ?? prior.levels ?? {},
@@ -811,7 +830,7 @@ router.post('/api/templates/documents/:id/appendices', requireTemplateWrite, saf
   const row = await loadOwnDocument(req, req.params.id);
   if (!row) return res.status(404).json({ error: 'not_found' });
   const template = catalogue.getTemplate(row.template_id);
-  if (!template || !template.sectionCatalogue) {
+  if (!template || !template.appendices) {
     return res.status(400).json({ error: 'appendices_not_supported', message: 'This template has no appendices section.' });
   }
 
