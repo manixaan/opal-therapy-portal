@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assist.css?v=11">
+  <link rel="stylesheet" href="/assist.css?v=12">
   <link rel="stylesheet" href="/theme.css?v=4">
 </head>
 <body>
@@ -31,13 +31,10 @@
         <a class="oa-btn ghost" href="/" id="oa-portal" title="Back to the portal">Portal</a>
       </div>
       <div class="oa-client" id="oa-client">
-        <div class="oa-side-label">Client</div>
         <label class="sr-only" for="oa-client-search">Find a client</label>
-        <input class="oa-client-search" id="oa-client-search" type="search" placeholder="Search your clients…" autocomplete="off">
-        <div class="oa-client-list" id="oa-client-list" role="listbox" aria-label="Clients"></div>
+        <input class="oa-client-search" id="oa-client-search" type="search" placeholder="Find a client to start a chat…" autocomplete="off">
       </div>
-      <div class="oa-side-label oa-threads-label" id="oa-threads-label">Chats</div>
-      <nav class="oa-threads" id="oa-threads" aria-label="Recent chats"></nav>
+      <nav class="oa-threads" id="oa-threads" aria-label="Chats by client"></nav>
       <div class="oa-side-foot" id="oa-foot">Names and contact details are hidden before anything leaves. Chats are kept for 30 days.<label class="oa-namestyle">Show names as <select id="oa-namestyle"><option value="first">First name</option><option value="full">Full name</option></select></label><button class="oa-install" id="oa-install" type="button" hidden>Install Opal Assist as an app</button></div>
     </aside>
 
@@ -102,6 +99,6 @@
   </script>
   <script src="/assist-doc.js?v=1"></script>
   <script src="/assist-composer.js?v=1"></script>
-  <script src="/assist.js?v=13"></script>
+  <script src="/assist.js?v=14"></script>
 </body>
 </html>
