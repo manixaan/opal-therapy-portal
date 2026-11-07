@@ -33,7 +33,13 @@
   var doc = global.document;
   var API = '/api/templates';
   var SAVE_DEBOUNCE_MS = 700;
+  // The preview follows typing on its own, shorter clock — it composes from
+  // the values on screen (a draft), so it never waits for the save.
+  var PREVIEW_DEBOUNCE_MS = 250;
   var PREVIEW_TIMEOUT_MS = 20000;
+  // A save that meets a transient failure is retried quietly before the user
+  // is told; the typed values are still on screen and still queued.
+  var SAVE_RETRY_MS = [1500, 4000];
 
   var S = {
     view: 'catalogue',
@@ -952,6 +958,13 @@
     S.dirty = true;
     setSaveState('Saving…');
     scheduleSave();
+    schedulePreview();
+  }
+
+  var previewTimer = null;
+  function schedulePreview() {
+    if (previewTimer) clearTimeout(previewTimer);
+    previewTimer = setTimeout(refreshPreview, PREVIEW_DEBOUNCE_MS);
   }
 
   function setSaveState(text) {
@@ -970,6 +983,7 @@
    * form. The inputs are left exactly as the user left them — same nodes, same
    * caret — which is the whole reason the form is not re-rendered here.
    */
+  var saveAttempt = 0;
   async function save() {
     if (!S.docu || S.saving) { if (S.dirty) scheduleSave(); return; }
     S.saving = true;
@@ -983,16 +997,29 @@
     S.saving = false;
 
     if (!r.ok) {
+      // Transient (network, 5xx): keep the values queued and retry quietly.
+      // Only a failure that outlasts the retries is put in front of the user.
+      var transient = r.status === 0 || r.status >= 500;
+      if (transient && saveAttempt < SAVE_RETRY_MS.length) {
+        S.dirty = true;
+        setSaveState('Saving… (retrying)');
+        if (saveTimer) clearTimeout(saveTimer);
+        saveTimer = setTimeout(save, SAVE_RETRY_MS[saveAttempt++]);
+        return;
+      }
+      saveAttempt = 0;
+      S.dirty = true;                              // still unsaved; the next edit retries
       S.saveErr = r.error;
       setSaveState('Not saved');
       toast('Could not save', r.error, 'warn');
       return;
     }
+    saveAttempt = 0;
     S.saveErr = '';
     S.docu = r.document;
-    setSaveState('Saved');
+    setSaveState(S.dirty ? 'Saving…' : 'Saved');
     repaintChips();
-    refreshPreview();
+    // No preview here: the preview has already been following the typing.
     if (S.dirty) scheduleSave();
   }
 
@@ -1144,7 +1171,27 @@
    * position, so a refresh never blanks the pane or jumps a long FCA back to
    * page one.
    */
+  /**
+   * One preview in flight at a time. A request asked for while one is running
+   * is not started alongside it (which only queued more server work and
+   * discarded the older result); it is remembered, and exactly one follow-up
+   * runs when the current one lands — always with the latest values.
+   */
+  var previewBusy = false;
+  var previewAgain = false;
   async function refreshPreview() {
+    if (previewTimer) { clearTimeout(previewTimer); previewTimer = null; }
+    if (previewBusy) { previewAgain = true; return; }
+    previewBusy = true;
+    try {
+      await renderPreviewOnce();
+    } finally {
+      previewBusy = false;
+      if (previewAgain) { previewAgain = false; refreshPreview(); }
+    }
+  }
+
+  async function renderPreviewOnce() {
     if (!S.docu) return;
     if (!global.docx || typeof global.docx.renderAsync !== 'function') {
       previewState('Preview unavailable in this browser.');
@@ -1152,6 +1199,7 @@
     }
     var rev = ++S.preview.rev;
     previewState('Updating…');
+    var staged = null;
 
     var ctrl = global.AbortController ? new global.AbortController() : null;
     var timer = setTimeout(function () {
@@ -1159,9 +1207,18 @@
       if (ctrl) { try { ctrl.abort(); } catch (_) {} }
     }, PREVIEW_TIMEOUT_MS);
 
+    // The values on screen, saved or not. With nothing typed this session the
+    // stored document is previewed as-is (read-only viewers land here).
+    var draft = {};
+    Object.keys(S.values).forEach(function (k) { draft[k] = S.values[k]; });
+    var hasDraft = Object.keys(draft).length > 0;
+
     try {
       var res = await fetch(API + '/documents/' + encodeURIComponent(S.docu.id)
         + '/preview.docx?rev=' + rev, {
+        method: hasDraft ? 'POST' : 'GET',
+        headers: hasDraft ? { 'Content-Type': 'application/json' } : undefined,
+        body: hasDraft ? JSON.stringify({ fieldValues: draft }) : undefined,
         credentials: 'same-origin', cache: 'no-store',
         signal: ctrl ? ctrl.signal : undefined,
       });
@@ -1178,7 +1235,7 @@
       // rule styled the letterheads differently and every split point and
       // pinned page height was computed against geometry the reader never
       // sees.
-      var staged = doc.createElement('div');
+      staged = doc.createElement('div');
       staged.className = 'tpl-preview-host';
       staged.style.cssText = 'position:absolute;left:-10000px;top:0;visibility:hidden;pointer-events:none;max-height:none;overflow:visible;';
       (root() || doc.body).appendChild(staged);

@@ -520,14 +520,28 @@ test('when Splose is down the API says so rather than inventing a client', async
   const id = created.body.document.id;
 
   mockSplose.fail = true;
-  for (const path of [
-    `/api/templates/clients?q=jane`,
-    `/api/templates/documents/${id}`,
-    `/api/templates/documents/${id}/export.docx`,
-  ]) {
-    const res = await agent.get(path);
-    expect([path, res.status]).toEqual([path, 503]);
-    expect(res.body.error).toBe('splose_unavailable');
+
+  // Search always asks Splose: there is nothing to fall back on.
+  const search = await agent.get('/api/templates/clients?q=jane');
+  expect(search.status).toBe(503);
+  expect(search.body.error).toBe('splose_unavailable');
+
+  // A blip moments after Splose answered: editing keeps the copy it just had,
+  // rather than telling the clinician their save failed.
+  const open = await agent.get(`/api/templates/documents/${id}`);
+  expect(open.status).toBe(200);
+
+  // Long after the last good answer there is no copy to trust: say so.
+  const later = Date.now() + 31 * 60 * 1000;
+  const spy = jest.spyOn(Date, 'now').mockReturnValue(later);
+  try {
+    for (const path of [`/api/templates/documents/${id}`, `/api/templates/documents/${id}/export.docx`]) {
+      const res = await agent.get(path);
+      expect([path, res.status]).toEqual([path, 503]);
+      expect(res.body.error).toBe('splose_unavailable');
+    }
+  } finally {
+    spy.mockRestore();
   }
 });
 

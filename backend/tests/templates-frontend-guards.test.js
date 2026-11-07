@@ -70,12 +70,12 @@ describe('the shell wires the surface', () => {
     // drag-to-reorder, multi-article A4 pagination fix.
     // css v=5: the stepper and outline styles.
     expect(SHELL).toContain('<link rel="stylesheet" href="/templates.css?v=7" />');
-    expect(SHELL).toContain('<script src="/templates.js?v=9" defer></script>');
+    expect(SHELL).toContain('<script src="/templates.js?v=10" defer></script>');
   });
 
   test('templates.js loads AFTER docx-preview, which its live preview needs', () => {
     expect(SHELL.indexOf('/vendor/docx-preview.min.js'))
-      .toBeLessThan(SHELL.indexOf('/templates.js?v=9'));
+      .toBeLessThan(SHELL.indexOf('/templates.js?v=10'));
   });
 
   test('the mount is a sibling of #rh2-root, not inside it', () => {
@@ -121,11 +121,28 @@ describe('the live preview stays usable on a long template', () => {
     expect(fn).toMatch(/scheduleSave\(\)/);
   });
 
-  test('a save repaints the chips and the preview, never the inputs', () => {
+  test('a save repaints the chips, never the inputs — the preview follows typing, not the save', () => {
     const fn = TPL.slice(TPL.indexOf('async function save()'), TPL.indexOf('/** Source chips'));
     expect(fn).toContain('repaintChips()');
-    expect(fn).toContain('refreshPreview()');
+    expect(fn).not.toContain('refreshPreview()');
     expect(fn).not.toMatch(/\brender\(\)/);
+    const input = TPL.slice(TPL.indexOf('function onFieldInput'), TPL.indexOf('function setSaveState'));
+    expect(input).toContain('scheduleSave()');
+    expect(input).toContain('schedulePreview()');
+  });
+
+  test('the preview composes from the values on screen, one request at a time', () => {
+    const fn = TPL.slice(TPL.indexOf('async function refreshPreview'), TPL.indexOf('async function renderPreviewOnce'));
+    expect(fn).toMatch(/if \(previewBusy\) \{ previewAgain = true; return; \}/);
+    const once = TPL.slice(TPL.indexOf('async function renderPreviewOnce'));
+    expect(once).toContain("method: hasDraft ? 'POST' : 'GET'");
+    expect(once).toContain('fieldValues: draft');
+  });
+
+  test('a transient save failure is retried quietly before the user is told', () => {
+    const fn = TPL.slice(TPL.indexOf('async function save()'), TPL.indexOf('/** Source chips'));
+    expect(fn).toMatch(/r\.status === 0 \|\| r\.status >= 500/);
+    expect(fn).toContain('SAVE_RETRY_MS');
   });
 
   test('preview refreshes are revision-guarded so a slow reply cannot overwrite a fast one', () => {
