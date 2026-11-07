@@ -345,7 +345,34 @@
     notifications: function () { if (typeof global.openNotificationsPanel === 'function') global.openNotificationsPanel(); },
     opa: function () { if (global.Opa && typeof global.Opa.open === 'function') global.Opa.open(); },
     'invite-modal': function () { if (typeof global.showInviteModal === 'function') global.showInviteModal(); },
+    // The Resource Hub's Templates screen. Lets a tour step stand on its own:
+    // a learner who pressed Next instead of clicking still lands there.
+    'hub-templates': openHubTemplates,
   };
+
+  function openHubTemplates() {
+    var hub = doc.getElementById('rh2-root');
+    if (hub && hub.dataset.view === 'templates') return;
+    if (global.RH2 && typeof global.RH2.nav === 'function') global.RH2.nav('templates');
+  }
+
+  /**
+   * 'template-start:<id>' — the New-document dialog for one template, opened
+   * through the card's own Start a document button once the catalogue has
+   * rendered. Opens a dialog only; nothing is created until the learner
+   * presses Create themselves.
+   */
+  function openTemplateStart(id) {
+    if (!/^[a-z0-9_]+$/.test(id)) return;
+    if (doc.getElementById('tpl-client-q') || doc.querySelector('.tpl-modal')) return;
+    openHubTemplates();
+    var t0 = Date.now();
+    (function tick() {
+      var btn = doc.querySelector('button[onclick*="startNew(\'' + id + '\')"]');
+      if (btn && isVisible(btn)) { btn.click(); return; }
+      if (Date.now() - t0 < 2000) setTimeout(tick, 100);
+    })();
+  }
 
   /** Navigate for a step through the app's own machinery. */
   function navigateTo(route) {
@@ -374,6 +401,8 @@
     }
     if (route.open && OPENERS[route.open]) {
       setTimeout(function () { try { OPENERS[route.open](); } catch (e) { /* surface absent */ } }, 120);
+    } else if (route.open && route.open.indexOf('template-start:') === 0) {
+      setTimeout(function () { try { openTemplateStart(route.open.slice(15)); } catch (e) { /* surface absent */ } }, 120);
     }
   }
 
@@ -467,7 +496,7 @@
     if (step.type === 'warning') {
       html += '<div class="ind-flag ind-flag-warn">Take care</div>';
     } else if (S.fallback) {
-      html += '<div class="ind-flag">This control isn’t on screen right now — here’s what it does.</div>';
+      html += '<div class="ind-flag">You’re not on this screen yet, so here’s a picture of it. Use <strong>Back</strong> to try it live, or <strong>Next</strong> to carry on.</div>';
     }
 
     html += '<h2 id="ind-title" class="ind-title">' + indEsc(step.title || '') + '</h2>';

@@ -454,6 +454,7 @@
         {
           "type": "action",
           "title": "Start an FCA",
+          "route": {"tab": "resources", "open": "hub-templates"},
           "target": "button[onclick*=\"startNew('fca')\"]",
           "advance": "click",
           "pad": 6,
@@ -464,6 +465,7 @@
         {
           "type": "highlight",
           "title": "Find the client",
+          "route": {"tab": "resources", "open": "template-start:fca"},
           "target": "#tpl-client-q",
           "pad": 6,
           "rounded": "10px",

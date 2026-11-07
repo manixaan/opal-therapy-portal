@@ -373,6 +373,7 @@
         {
           "type": "action",
           "title": "Start a Progress Note",
+          "route": {"tab": "resources", "open": "hub-templates"},
           "target": "button[onclick*=\"startNew('progress_note')\"]",
           "advance": "click",
           "pad": 6,
@@ -383,6 +384,7 @@
         {
           "type": "highlight",
           "title": "Find your client",
+          "route": {"tab": "resources", "open": "template-start:progress_note"},
           "target": "#tpl-client-q",
           "pad": 6,
           "rounded": "10px",

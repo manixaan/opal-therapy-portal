@@ -670,7 +670,7 @@ describe('changed assets are cache-busted', () => {
       // and a sign-here recorded against the published wording. Neither can
       // be paged, arrowed or skipped past. The CSS carries the quoted
       // statement and its tick.
-      ['induction.js', 11], ['induction.css', 4],
+      ['induction.js', 12], ['induction.css', 4],
       // 1: the walkthrough workshop — the shelf, the author dock, the block
       // palette and the live target picker (docs/INDUCTION_WORKSHOP.md).
       // 2: the palette offers Page, Checkpoint and Sign here, and the editor
