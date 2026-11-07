@@ -10,7 +10,8 @@
     "test:integration": "jest --config jest.integration.config.js --runInBand",
     "test:all": "npm test && npm run test:integration",
     "migrate": "node migrate.js up",
-    "migrate:status": "node migrate.js status"
+    "migrate:status": "node migrate.js status",
+    "inductions:import": "node scripts/import-induction-packs.js"
   },
   "keywords": [
     "therapy",

@@ -749,20 +749,45 @@ async function importExistingInductions(org, createdBy) {
   }
 
   // ── Induction packs ────────────────────────────────────────────────────────
-  // Inductions planned outside the portal and committed as reviewed JSON
-  // (backend/induction-packs/). Each arrives as a draft like the others; a
-  // malformed pack is reported as skipped, never half-imported.
-  // A pack's walkthroughs are installed (published, idempotent by key) only
-  // when its workflow is new, so the task tiles have something to launch.
+  const fromPacks = await importInductionPacks(org, createdBy);
+  created.push(...fromPacks.created);
+  skipped.push(...fromPacks.skipped);
+
+  return { created, skipped };
+}
+
+/**
+ * Inductions planned outside the portal and committed as reviewed JSON
+ * (backend/induction-packs/). Each arrives as a draft like any other import;
+ * a malformed pack is reported as skipped, never half-imported. A pack's
+ * walkthroughs are installed (published, idempotent by key) only when its
+ * workflow is new, so the task tiles have something to launch.
+ *
+ * Part of "Import existing", and also run on its own by
+ * scripts/import-induction-packs.js. Idempotent by title within the
+ * organisation, so an Owner's edits are never overwritten.
+ */
+async function importInductionPacks(org, createdBy) {
+  const created = [];
+  const skipped = [];
+  const existing = await pool.query(
+    `SELECT title FROM learning_workflows WHERE organisation_id IS NOT DISTINCT FROM $1`, [org]);
+  const haveTitle = new Set(existing.rows.map((r) => String(r.title).trim().toLowerCase()));
+
   const { packs, invalid } = require('./induction-packs').loadPacks();
   for (const bad of invalid) skipped.push({ title: bad.title || bad.file, reason: 'invalid_content' });
   for (const p of packs) {
-    if (p.walkthroughs.length && !haveTitle.has(p.title.trim().toLowerCase())) {
+    if (haveTitle.has(p.title.trim().toLowerCase())) { skipped.push({ title: p.title, reason: 'already_present' }); continue; }
+    if (p.walkthroughs.length) {
       await require('./walkthrough-catalogue').installModules(org, p.walkthroughs, createdBy);
     }
-    await insert(p.title, p.description, p.category, p.sections);
+    const { rows } = await pool.query(
+      `INSERT INTO learning_workflows (organisation_id, title, description, category, draft_content, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, title`,
+      [org, p.title, p.description, p.category, JSON.stringify({ sections: p.sections }), createdBy]);
+    haveTitle.add(p.title.trim().toLowerCase());
+    created.push({ id: rows[0].id, title: rows[0].title, items: lc.contentStats({ sections: p.sections }).items });
   }
-
   return { created, skipped };
 }
 
@@ -1571,3 +1596,4 @@ router.post('/api/learning/my/:id/items/:itemKey/complete', safe(async (req, res
 
 module.exports = router;
 module.exports.importExistingInductions = importExistingInductions;
+module.exports.importInductionPacks = importInductionPacks;
