@@ -1,28 +1,27 @@
 # Password Master Document
 
-- Tracker stage: idea
-- Tracker environment: none
-- Evidence label: **untouched**
-- Addressed in this change window: no
-- Created (any located code): no
+Tracker stage: idea · Tracker environment: none
+Evidence label: **untouched**
+Addressed in this change window: **no** · Created: **no**
 
 ## Located files
-- nothing yet
 
-## Not located
-- No file, route or page anywhere in the repository matches a password/credentials master document. The idea explicitly describes a document kept on OneDrive, outside the portal.
+None. Idea: "A master doc that exists on onedrive with all accounts login details for all portals in use." Why: "Forgetting passwords, confusion surrounding login details." Who uses it: "Owner/Admin." Outcome: "All login details will be contained in one area accessed by relevant parties."
 
-## Guard check
-n/a — no code located.
+Searched the whole repo (case-insensitive, excluding `node_modules`/`frontend/archive`/`docs/archive`/`handover`/`reference`) for "password master", "master document", "docs register", "documentation register", "doc register" — zero matches anywhere. Also checked for a password-vault/credential-manager feature distinct from the existing "Credentials" section in `profile-routes.js` (which is employee certifications — WWCC, first aid, etc. — not a password vault): none exists. The only related hits are two prose lines in a security-practices document recommending staff use a third-party password manager personally, not a feature in this codebase.
 
-## Tests and results
-- none run (no located code)
+## Tests
 
-## Open tracker tasks
-- none
+None — nothing to test.
 
-## Commits in the 14-day change window touching this feature
-n/a
+## Open tasks from the tracker
 
-## Why this label
-Tracker card describes an external OneDrive document, not a portal feature. Nothing to locate.
+None.
+
+## Commits in the window touching this feature
+
+None.
+
+## Disagreement
+
+None.

@@ -1,30 +1,32 @@
 # Portal Onboarding Workflow
 
-- Tracker stage: idea
-- Tracker environment: none
-- Evidence label: **proven**
-- Addressed in this change window: no
-- Created (any located code): yes
+Tracker stage: idea · Tracker environment: none
+Evidence label: **proven**
+Addressed in this change window: **no** · Created: **yes**
 
 ## Located files
-- backend/onboarding-workflow-routes.js, backend/onboarding-routes.js and the other onboarding-*-routes.js files (Stage 1/2/3)
-- frontend/current/onboarding.js
-- mockup_v3.html: ONBOARDING TAB (line 4297)
 
-## Guard check
-requireAuth + requirePermission('onboarding.view' / 'onboarding.assign' / etc.) throughout — 'the first feature in the portal to use requirePermission' per the file's own header comment.
+`backend/onboarding-employee-routes.js`, `onboarding-workflow-routes.js`, `onboarding-journey-routes.js`, `onboarding-pack-routes.js`, `onboarding-returns-routes.js`, `onboarding-payroll-routes.js`, `onboarding-defaults-routes.js`, `onboarding-package-docs-routes.js`, `onboarding-assignment-routes.js`, `onboarding-library-routes.js`, `onboarding-routes.js` (mounted in `backend/server.js`). Frontend: `frontend/current/onboarding.js` and the `ONBOARDING TAB` / `EMPLOYEES TAB` banners in `mockup_v3.html` (lines 4297, 4306).
 
-## Tests and results
-- unit: onboarding-workflow-guards.test.js, onboarding-journey-frontend-guards.test.js (sampled from 27 onboarding unit files) — 203 passed
-- integration: onboarding-workflow.itest.js, sync-settings.itest.js (sampled from 11 onboarding integration files) — 96 passed
+All route groups guarded: `requireAuth` plus `requirePermission('onboarding.*')` (a delegated permission set, not in any role's defaults except owner, per `permissions.js`). No bare unguarded route found. No TODO/FIXME.
 
-## Open tracker tasks
-- Stage 1 (todo)
-- Stage 2 (todo)
-- stage 3 (todo)
+## Tests
 
-## Commits in the 14-day change window touching this feature
-Not touched directly in the 14-day window, though it is adjacent to ongoing onboarding-payroll work (1fd6157 touched the AI gateway, not onboarding itself).
+- Unit (glob `onboarding-*.test.js`, 27 files): **653/654 pass**. The one failure (`onboarding-document-reader.test.js`) is an **environment gap, not a code defect**: the OCR data package `@tesseract.js-data/eng` (declared in `backend/package.json` but absent from `backend/node_modules`) is missing, so the test can't resolve it. Confirmed by direct inspection — the package is a genuine dependency, not optional, and this agent could not run `npm install` to fix it (hard limit). Flagging for the environment setup script, not the onboarding code.
+- Integration (10 files, `tests/integration/onboarding*.itest.js`): **218/218 pass** (confirmed on a clean re-run; a first run that overlapped by a few seconds with another integration run this agent started produced 35 false failures from database truncation contention — discarded, see Technical detail in the daily brief).
 
-## Why this label
-299 tests (203 unit + 96 integration) pass across the onboarding stages, every route is permission-gated, and docs/qa/BROWSER_QA_RESULTS.md entry C proves the new-therapist onboarding flow renders correctly end to end with the setup card tracking real state.
+## Browser / E2E proof
+
+`docs/qa/BROWSER_QA_RESULTS.md` entry C: new-therapist onboarding flow renders correctly end to end, setup card tracks real state, persists after reload.
+
+## Open tasks from the tracker
+
+"Stage 1", "Stage 2", "stage 3" (all todo, no further detail in the tracker).
+
+## Commits in the window touching this feature
+
+None — `backend/onboarding-*.js` did not change in the last 14 days. Stable, already-built code.
+
+## Disagreement
+
+None.

@@ -1,35 +1,23 @@
-/opal-fast-change
+/opal-feature
 
-# Password Master Document
-
-## Idea
-A master doc that exists on onedrive with all accounts login details for all portals in use.
-
-## Why
-Forgetting passwords, confusion surrounding login details.
-
-## Who uses it
-Owner/Admin
-
-## What they see
-(not yet written in the tracker)
-
-## What should happen
-(not yet written in the tracker)
-
-## Outcome
-All login details will be contained in one area accessed by relevant parties.
-
-## Decisions
-(not yet written in the tracker)
+**Idea:** A master doc that exists on onedrive with all accounts login details for all portals in use.
+**Why:** Forgetting passwords, confusion surrounding login details.
+**Who uses it:** Owner/Admin
+**What they see:** (not yet written in the tracker)
+**What should happen:** (not yet written in the tracker)
+**Outcome:** All login details will be contained in one area accessed by relevant parties.
+(No recorded decisions.)
 
 ## Where it lives today
-nothing yet
+
+Nothing yet. This describes an external OneDrive document, not a portal feature — confirmed by a repo-wide search for every plausible term.
 
 ## Start here
-This is not an engineering task as written — it asks for a document on OneDrive, not a portal feature. If the team instead wants login details centralised inside the portal (e.g. the existing Resource Hub or a new Credentials vault), that would need a fresh /opal-critical task, since login secrets are sensitive data and the current onboarding-crypto.js / credential-extraction.js already handle encrypted credentials elsewhere in the portal.
+
+This is a decision for the team, not a coding task: decide whether a password/credential vault belongs inside the portal at all (a real feature, with its own threat model — storing login credentials is high-risk) or whether the OneDrive document should simply stay external and get updated directly. If the team decides it should be a portal feature, treat it as a new CRITICAL-level feature (credential storage) and scope it properly before writing any code.
 
 ## Done means
-No test applies; this card is closed by creating the document itself, outside the repo.
+
+A team decision recorded in the tracker (build it in-portal, or keep it external) before any code is written.
 
 Tracker: f1e01029-71d9-46fa-acc1-1c955cd86da2

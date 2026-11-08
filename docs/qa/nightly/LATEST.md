@@ -1,40 +1,40 @@
-# Nightly tracker audit — 2026-11-07
+# Nightly tracker audit — 2026-11-08
 
 ## 1. Status line
 
-**RAN** — 2026-11-07T18:00–18:27 UTC, commit `1fd6157` on `develop`.
+**RAN** — 2026-11-08T18:11–18:50 UTC, commit `34cf881` on `develop`.
 
-Counts: **proven 5** · **tab-unproven 3** · **built-untested 2** · **needs-refinement 1** · **untouched 2** · **broken 0** (13 features total).
+Counts: **proven 5** · **tab-unproven 4** · **built-untested 1** · **needs-refinement 1** · **untouched 2** · **broken 0** (13 features total).
 
-This is the first run of this audit found in `docs/qa/nightly/` (only a `README.md` existed), so the change window is the last 14 days rather than "since the last audit." The Opal Development Manager tracker itself already carried a `claude_update` on the Xero card dated 2026-11-06 referencing a prior nightly run — that run's output is not in this repository, so tonight's findings were built independently rather than diffed against it.
+This is the first run of this audit found under `docs/qa/nightly/` on `develop` (only a `README.md` exists there — the audit branch `claude/nightly-audit` is never merged back, so prior nights' briefs aren't visible from here), so the change window is the last 14 days rather than "since the last audit." The Opal Development Manager tracker already carries a `claude_update` on every card referencing a prior nightly run with almost identical wording to parts of tonight's findings — that run's output is not reachable from this checkout, so tonight's findings were built independently, by actually locating code and actually running the targeted tests, rather than trusted or copied from the tracker's existing text.
 
 ## 2. Do this first
 
-1. **Automated Reminders — the card's own idea has no code.** "24Hr Automatic Client Appt Reminders" is the headline idea, but nothing in the codebase sends a client-facing appointment reminder. The only thing built under this card is `snapshot-routes.js`, a therapist's personal daily task list — a different feature entirely. See `docs/qa/nightly/features/automated-reminders/`.
-2. **Professional Development and Employee Personal Page (My Profile Tab) look like duplicate cards.** Both point at the same CPD code in `backend/profile-routes.js`, and neither has a single automated test. Worth merging the cards or giving them distinct scope, and either way `backend/tests/profile-routes.test.js` does not exist yet.
-3. **Xero Integration Works — tab-unproven.** Finance/Accounting/Payroll is owner-gated and passes 116 tests, but no run here has ever reached a real Xero sandbox; the integration suite logs "xero offline in test" throughout.
-4. **Report Templates — tab-unproven.** FCA, Progress Letter and Client Agreement Form generation pass 689 tests and are guarded, but no E2E spec or browser QA entry proves a user can open the Resource Hub → Templates screen and actually generate a document.
-5. **Interactive Assessments — tab-unproven.** The assessment overlay passes 154 tests and is guarded, but nothing proves it opens and completes in a real browser.
+1. **Automated Reminders — the card's own idea has no code.** The tracker's own idea text is "24Hr Automatic Client Appt Reminders", but nothing anywhere in the backend sends an automatic reminder to a client about an upcoming appointment — no route, no scheduled job, no email/SMS send path. The only thing built under this card is `backend/snapshot-routes.js`, a therapist's own personal daily task list — a different feature entirely, already complete and tested.
+2. **"Professional Development" is genuinely ambiguous, and it may not mean what last time's run assumed.** There are two unrelated "professional development" subsystems: the Resource Hub's own "Professional development" catalogue page (`frontend/current/resourcehub.js`, guarded, 46 passing tests, no browser proof it renders) and the Profile tab's CPD section (`backend/profile-routes.js`, zero tests) which "Employee Personal Page (My Profile Tab)" already covers. The tracker card has no detail text to tell which is meant — worth a two-minute clarification in the tracker.
+3. **Employee Personal Page (My Profile Tab) — zero automated tests.** Leave approval, CPD approval and credential verification are all correctly owner-only (an inline `canApprove` check), and `docs/qa/BROWSER_QA_RESULTS.md` confirms it renders, but there is no `backend/tests/profile-routes.test.js` at all.
+4. **Xero Integration Works — tab-unproven.** Finance/Accounting/Payroll is owner-gated and passes 133 tests (70 unit + 63 integration), but no run anywhere has ever reached a real Xero sandbox; tonight's integration run logged "xero offline in test" directly.
+5. **Report Templates — tab-unproven.** FCA, Progress Letter and Service Agreement generation pass 457 tests (369 unit + 88 integration) and are guarded, but no E2E spec or browser QA entry proves a user can open the Resource Hub → Templates screen and actually generate a document — and this subsystem had real code changes this window (new Support Letter/Progress Report masters, a live preview rewrite).
 
-No `broken` findings tonight — every located route is guarded and every targeted test that was run passed.
+No `broken` findings tonight — every located route is guarded and every targeted test that was run passed (after discarding one contaminated run, see §7).
 
 ## 3. Every feature
 
 | Feature | Tracker stage | Evidence label | One-line reason | Tests run |
 |---|---|---|---|---|
-| Xero Integration Works | idea | tab-unproven | Owner-gated, 116 tests pass, no live Xero sandbox ever exercised | 77 unit + 39 integration pass |
-| Update Opal Docs Register | idea | untouched | An Excel sheet kept outside the portal; nothing to locate | none |
-| Report Templates | idea | tab-unproven | FCA/Letter/Templates guarded and pass 689 tests, no browser proof of the tab itself | 569 unit + 120 integration pass |
+| Portal - Splose - Outlook \| Integration Works | idea | proven | Guarded, actively maintained this window (5 fixes), e2e + browser QA confirm boundaries | 291 unit + 104 integration pass |
+| Portal Onboarding Workflow | idea | proven | Permission-gated (`onboarding.*`), browser QA proves the flow | 653/654 unit (1 env-only fail) + 218 integration pass |
+| Clinical resources | idea | proven | Maps onto the existing, already-production Resource Hub | 408/420 unit (12 skip) + 168 integration pass |
+| Inductions | idea | proven | Very active this window (6 new/edited packs), e2e proves full learner flow | 306 unit + 133 integration pass |
+| Professional Development | idea | tab-unproven (ambiguous card) | Two possible readings; under either, no browser proof of the page itself | 46 unit pass (Resource Hub PD catalogue reading) |
+| Automated Reminders | idea | needs-refinement | Snapshot built and tested; the card's own client-reminder idea is unbuilt | 88 integration pass (Snapshot only, shared run) |
+| Employee Personal Page (My Profile Tab) | idea | built-untested | Guarded (owner-only approvals), renders per browser QA, zero automated tests | none |
+| Interactive Assessments | idea | tab-unproven | Guarded, 860 tests pass, no browser proof the overlay opens/completes | 738 unit + 122 integration pass |
+| Opa Mobile Companion | idea | proven | Self-scoped guard verified by spot-check, actively maintained this window | 163 unit + 10 integration pass |
 | Password Master Document | idea | untouched | Describes an external OneDrive document; nothing to locate | none |
-| Opa Mobile Companion | idea | proven | Self-scoped API guard, 50 unit tests pass; the mobile app's own UI is outside this repo | 50 unit pass |
-| Interactive Assessments | idea | tab-unproven | Guarded, 154 tests pass, no browser proof the overlay opens/completes | 126 unit + 28 integration pass |
-| Employee Personal Page (My Profile Tab) | idea | built-untested | Guarded (canApprove), renders per browser QA, zero automated tests | none |
-| Automated Reminders | idea | needs-refinement | Therapist Snapshot built and tested; the card's own client-reminder idea is unbuilt | 6 integration pass (Snapshot only) |
-| Professional Development | idea | built-untested | Same untested CPD code as Employee Personal Page; likely a duplicate card | none |
-| Inductions | idea | proven | Guarded, 288 tests pass, e2e proves full learner flow end to end | 223 unit + 65 integration pass |
-| Clinical resources | idea | proven | Maps onto the existing, already-production Resource Hub | 65 unit pass (sampled) |
-| Portal Onboarding Workflow | idea | proven | Permission-gated, 299 tests pass, browser QA proves the onboarding flow | 203 unit + 96 integration pass |
-| Portal - Splose - Outlook \| Integration Works | idea | proven | Guarded, actively maintained this window, browser QA + e2e confirm boundaries | 203 unit + 96 integration pass (shared run) |
+| Report Templates | idea | tab-unproven | Guarded, 457 tests pass, active this window, no browser proof of the tab itself | 369 unit + 88 integration pass |
+| Update Opal Docs Register | idea | untouched | Describes an external Excel register; nothing to locate | none |
+| Xero Integration Works | idea | tab-unproven | Owner-gated, 133 tests pass, no live Xero sandbox ever exercised; fail-closed by design | 70 unit + 63 integration pass |
 
 ## 4. Prompts for the morning
 
@@ -42,29 +42,42 @@ No `broken` findings tonight — every located route is guarded and every target
 ```
 /opal-feature
 Decide where client-facing appointment reminders should send from (email via the
-existing mailer, or Outlook) and build a new scheduled job for them — there is
-nothing to extend in backend/snapshot-routes.js, which only serves the
-therapist's own personal task list. Look at backend/credential-reminder.js for
-the house pattern on a reminder job (schedule, dedupe, audit), then write the
-client-facing equivalent as a new file, e.g. backend/appointment-reminder.js.
+existing mailer, or Outlook/SMS) and build a new scheduled job for them — there is
+nothing to extend in backend/snapshot-routes.js, which only serves the therapist's
+own personal task list. Look at backend/credential-reminder.js for the house
+pattern on a reminder job (decide/notify, no cron of its own), then write the
+client-facing equivalent as a new file, e.g. backend/appointment-reminder.js,
+scheduled the way backend/server.js's existing setInterval jobs are.
 Done means: a new test proves a reminder is generated ~24 hours before a booked
-appointment and not duplicated.
+appointment and not duplicated on a second run.
 ```
 
-**2. Professional Development / Employee Personal Page (My Profile Tab)**
+**2. Professional Development**
+```
+/opal-feature
+Before writing any code, clarify in the Development Manager whether "Professional
+Development" means the Resource Hub's own "Professional development" catalogue
+page (frontend/current/resourcehub.js, already built, guarded, 46 passing tests in
+backend/tests/pd-catalogue-guards.test.js — just needs a browser/E2E proof it
+renders) or the Profile tab's CPD section in backend/profile-routes.js (which
+"Employee Personal Page (My Profile Tab)" already covers — if so, merge the
+cards). Don't duplicate work on both readings.
+```
+
+**3. Employee Personal Page (My Profile Tab)**
 ```
 /opal-critical
-backend/profile-routes.js (Leave requests, CPD/professional development
-activities and documents, Credentials) has no backend/tests/profile-routes.test.js
-at all, despite guarding leave approval with an inline canApprove(owner/admin)
-check. Add that test file (supertest against the mounted router, the pattern in
-case-note-routes.test.js) covering: a therapist managing only their own leave/CPD,
-and an owner/admin approving/rejecting someone else's — assert the 403 path, not
-only the happy path. Also flag to the team that "Professional Development" and
-"Employee Personal Page (My Profile Tab)" appear to be the same underlying card.
+backend/profile-routes.js (Leave requests, CPD/professional development activities
+and documents, Credentials) has no backend/tests/profile-routes.test.js at all,
+despite guarding leave/CPD approval and credential verification with an inline
+canApprove(owner-only) check. Add that test file (supertest against the mounted
+router, the pattern in case-note-routes.test.js) covering: a therapist managing
+only their own leave/CPD/documents (403 on someone else's), and an owner
+approving/rejecting a different user's request while admin is correctly refused.
+Assert the 403 path, not only the happy path.
 ```
 
-**3. Xero Integration Works**
+**4. Xero Integration Works**
 ```
 /opal-critical
 Open the Finance tab (frontend/current/finance.js) as an Owner with a real Xero
@@ -75,7 +88,7 @@ for the request shapes, then add one integration test asserting a populated
 dashboard payload.
 ```
 
-**4. Report Templates**
+**5. Report Templates**
 ```
 /opal-critical
 Add a Playwright spec under e2e/tests/ that logs in as a therapist, opens the
@@ -85,105 +98,45 @@ asserts the resulting document download. Copy the login/role setup from
 e2e/tests/tutorials.spec.js. Add the result to docs/qa/BROWSER_QA_RESULTS.md.
 ```
 
-**5. Interactive Assessments**
-```
-/opal-critical
-Add a Playwright case that opens a client's Assessment Review from the client
-workspace, loads frontend/current/assessment.js's full-page surface, answers an
-instrument, and asserts the saved result. Use backend/tests/assessment-surface-guards.test.js
-to see which endpoint triggers the overlay. Add the result to
-docs/qa/BROWSER_QA_RESULTS.md.
-```
-
 ## 5. Ideas without a start
 
-Every feature folder under `docs/qa/nightly/features/` was created tonight (this is the first run). Five became `proven` and got a two-line START.md instead of a starter prompt: Opa Mobile Companion, Inductions, Clinical resources, Portal Onboarding Workflow, and Portal - Splose - Outlook | Integration Works. The other eight kept a full starter prompt — see "Prompts for the morning" above for the five most urgent, and `docs/qa/nightly/features/README.md` for the rest (Update Opal Docs Register, Password Master Document).
+Every feature folder under `docs/qa/nightly/features/` was created or rewritten tonight (first run reachable from this branch's history). Five reached `proven` and got a two-line START.md instead of a starter prompt: Portal - Splose - Outlook | Integration Works, Portal Onboarding Workflow, Clinical resources, Inductions, and Opa Mobile Companion. The other eight kept a full starter prompt — see "Prompts for the morning" above for the five most urgent, and `docs/qa/nightly/features/README.md` for the rest (Password Master Document, Update Opal Docs Register — both need a team decision, not code).
 
-## 6. What changed since last audit (14-day window)
+## 6. What changed since last audit
 
-Grouped by subsystem, from `git log --since=14.days.ago -- backend frontend/current` (41 commits):
+14-day window (2026-10-25 to 2026-11-08), 52 commits touching `backend`/`frontend/current`. By subsystem:
 
-- **AI gateway / Opal Assist** (largest group): request queue for Bedrock concurrency (`1fd6157`), de-identification history cleanup (`27f324d`), composer rebuild with attachments/dictation/context ring (`cd8c4a8`), reply-shape auto-detection (`8853376`), night mode + per-client chats + AI mark animation (`22f58c1`, `5671dff`, `a5a6607`, `a069b78`, `1d7d1e0`). None of these map to a tracker feature in tonight's snapshot — Opal Assist has no card at all.
-- **Calendar / booking / travel**: block-review classifier for unclassified Outlook/Splose events (`3c85f54`, `e3c0b90`), night-mode calendar contrast (`704a51f`), Make room block-shortening (`ac4912e`, `c86355b`, `58f3fec`, `94dad51`), travel traffic/desk-work (`08da79d`, `6a124db`), maps picker naming (`26ae223`, `75eae1e`). No tracker card covers Calendar/Booking/Travel either.
-- **Splose/Outlook sync**: covered under "Portal - Splose - Outlook | Integration Works" above (`971cac1`, `11aa73f`, `ab75330`, `0a365c4`).
-- **Case notes**: editable note + Copy/Download PDF (`22e68b7`), approval-on-edit fix (`a56173c`), approval-notice revert (`dc5dbc4`). No tracker card for Case Notes.
-- **Dependency patches**: `follow-redirects`, `qs`/`express`, `body-parser`/`nodemailer` security advisories (`b770207`, `15acf0c`, `0628bda`).
-- **Mobile**: phone diary matching the portal calendar (`e1af24e`) — relevant to Opa Mobile Companion, just outside the 14-day window by one day.
+- **Inductions / learning** (very active): 6 new or rewritten induction packs, auto-placement of packs at server start, Progress Report tour switched to the new template, "sections unlock in order" redesign, tour steps that open their own screen.
+- **Assist (Opal Assist chat)** (very active): client-grouped sidebar, instant Hide/Not-a-person review, a Splose 502 fix via the queue, fewer false "is this a person?" candidates, a Claude-style composer, night mode, an AI "breathing" brand mark.
+- **Templates / clinical letters**: Support Letter and Progress Report masters, a live side-by-side preview (no per-keystroke Splose round-trip).
+- **Splose / Outlook sync**: webhook token decrypt fix, auto-sync-after-reset fix, stuck change-alert dialog fix, Calendar sync settings (per-direction, sync-from dates, preview).
+- **Case notes / mobile**: editing an approved note resends it for approval, one editable note with Copy/Download-PDF, the phone diary matches the portal calendar.
+- **Travel**: traffic at each drive's own time, right-click "Not driving this", desk-work-at-home scheduling, a maps picked-place naming fix.
+- **Calendar / review blocks**: review blocks booked straight into Outlook or Splose, night-mode calendar contrast.
+- **Dependency patches**: `follow-redirects`, `qs`/`express` security patches (GHSA advisories).
 
-Subsystems with real activity but no tracker card at all: **Opal Assist (AI)**, **Calendar/Booking/Travel**, **Case Notes**. Worth asking whether those should get cards so future nightly runs have something to audit them against.
+**Subsystems with recent commits but no tracker feature of their own**: Opal Assist (the AI chat/composer) has no tracker card at all despite being the single most actively developed area this window — worth adding as its own tracked feature. The brand/AI mark animation work is purely cosmetic and probably doesn't need one.
 
 ## 7. Technical detail
 
-**Setup**
-- `backend/node_modules/.bin/jest` present; PostgreSQL `16/main` already online.
-- Tracker fetch: `fetch-tracker: 13 features, 19 tasks -> /tmp/tracker.json` (no errors).
-- Change window: no prior `docs/qa/nightly/YYYY-MM-DD.md` existed, so used the last 14 days per the first-run rule.
+**Commands run** (from `backend/`, `DB_PASSWORD=audit` for integration):
+- `NODE_USE_ENV_PROXY=1 SUPABASE_URL="$SUPABASE_URL" node ../scripts/nightly-audit/fetch-tracker.mjs /tmp/tracker.json` → 13 features, 19 tasks fetched successfully.
+- `npx jest <targeted files>` per feature group (see each feature's STATUS.md for the exact file list and pass counts).
+- `DB_NAME=therapy_scheduler_audit DB_PASSWORD=audit npx jest --config jest.integration.config.js <targeted files> --runInBand` per feature group.
+- No complete suite (`npm test`, `npm run test:integration`, `npm run test:all`) was run — tonight is not a Sunday-UTC deep run.
 
-**Commands run (all from `backend/`)**
+**Environment note — PostgreSQL was down at the start of this run** (`service postgresql status` → `down`); started it per the audit's own setup step (`service postgresql start`) before any integration test.
+
+**Discarded contaminated run**: this agent briefly ran two integration-test invocations against the same `therapy_scheduler_audit_test` database concurrently (onboarding + resource-hub) for a few seconds before catching and stopping the second one. The onboarding run that had been running alone before the overlap still showed 35 failures (mostly 500s) when it finished — consistent with truncate-table contention from the overlap, not real defects. Re-ran clean immediately after confirming no other process was touching the database: **218/218 pass**. Treat any nightly-audit process as needing its own `_test` database if this recurs.
+
+**Pre-existing environment gap, not a code defect**: `backend/tests/onboarding-document-reader.test.js` fails because `@tesseract.js-data/eng` (declared in `backend/package.json`, needed for OCR language data) is absent from `backend/node_modules` in this sandbox. This agent could not run `npm install` to fix it (hard limit). Worth adding to the environment's setup script.
+
+**Pre-existing flaky test, not a regression**: `backend/tests/integration/resource-library.itest.js` hit an intermittent `deadlock detected` in its own `truncateAll()` helper on two separate isolated runs (no other process touching the database either time), then passed clean (53/53) on a third attempt. Looks like an unclosed connection/transaction left open by an earlier test in that file — worth a look independent of this audit.
+
+**Could not verify**: whether `docs/qa/BROWSER_QA_RESULTS.md` (dated 2026-08-01, staging build `188334d`/`b7e3308`) still reflects the current build for the subsystems it covers — it predates all 52 commits in this window. No fresher manual browser QA record exists for Inductions, Templates, Assessments or Xero despite the Inductions/Templates activity this window; the existing entries (C, E, F, G, H, I) were taken as still-valid evidence per the audit's own instructions, since nothing in this window's commits touches what they specifically checked.
+
+**Write-back to tracker**: see the result of `post-tracker.mjs` below (run before the git push, per instructions).
+
 ```
-npx jest tests/finance-flags.test.js tests/finance-routes.test.js tests/onboarding-payroll.test.js \
-  tests/xero-payroll-api.test.js tests/xero-payroll-mapping.test.js tests/xero-payroll-sync.test.js
-  → 6 suites, 77 passed
-
-DB_NAME=therapy_scheduler_audit DB_PASSWORD=audit npx jest --config jest.integration.config.js \
-  tests/integration/accounting-phase2.itest.js tests/integration/accounting-routes.itest.js \
-  tests/integration/finance-routes.itest.js tests/integration/onboarding-payroll-xero.itest.js --runInBand
-  → 4 suites, 39 passed
-
-npx jest tests/fca-docx-engine.test.js tests/fca-frontend-helpers.test.js tests/fca-preview-lifecycle.test.js \
-  tests/fca-preview-pages.test.js tests/fca-resolve-scalars.test.js tests/fca-wizard-behaviour.test.js \
-  tests/letter-docx-engine.test.js tests/letter-frontend-helpers.test.js tests/letter-template-map.test.js \
-  tests/templates-service-agreement-map.test.js tests/templates-appendices.test.js \
-  tests/templates-export-boundary.test.js tests/templates-frontend-guards.test.js tests/templates-routes.test.js
-  → 14 suites, 569 passed
-
-DB_NAME=therapy_scheduler_audit DB_PASSWORD=audit npx jest --config jest.integration.config.js \
-  tests/integration/fca-reports.itest.js tests/integration/progress-note-letters.itest.js \
-  tests/integration/templates.itest.js --runInBand
-  → 3 suites, 120 passed
-
-npx jest tests/mobile-routes.test.js  → 1 suite, 50 passed
-DB_NAME=therapy_scheduler_audit DB_PASSWORD=audit npx jest --config jest.integration.config.js \
-  tests/integration/snapshot.itest.js --runInBand  → 1 suite, 6 passed
-
-npx jest tests/assessment-catalogue.test.js tests/assessment-surface-guards.test.js  → 2 suites, 126 passed
-DB_NAME=therapy_scheduler_audit DB_PASSWORD=audit npx jest --config jest.integration.config.js \
-  tests/integration/assessments.itest.js --runInBand  → 1 suite, 28 passed
-
-node --check profile-routes.js  → OK (no automated test exists for this file)
-
-npx jest tests/assign-learning-guards.test.js tests/learning-admin-routes.test.js tests/learning-content.test.js \
-  tests/learning-routes.test.js tests/induction-assistant.test.js tests/induction-registry.test.js
-  → 6 suites, 223 passed
-DB_NAME=therapy_scheduler_audit DB_PASSWORD=audit npx jest --config jest.integration.config.js \
-  tests/integration/learning-admin.itest.js tests/integration/learning.itest.js \
-  tests/integration/induction-assistant.itest.js tests/integration/onboarding-induction.itest.js --runInBand
-  → 4 suites, 65 passed
-
-npx jest tests/resource-hub-final.test.js  → 1 suite, 65 passed (sampled; many more resource-*.test.js exist)
-
-npx jest tests/onboarding-workflow-guards.test.js tests/onboarding-journey-frontend-guards.test.js \
-  tests/sync-preferences.test.js tests/sync-safety.test.js tests/sync-status-route.test.js tests/sync.test.js
-  → 6 suites, 203 passed
-DB_NAME=therapy_scheduler_audit DB_PASSWORD=audit npx jest --config jest.integration.config.js \
-  tests/integration/onboarding-workflow.itest.js tests/integration/sync-settings.itest.js --runInBand
-  → 2 suites, 96 passed
-```
-No complete-suite command (`npm test`, `npm run test:integration`, `npm run test:all`, E2E) was run — today is Saturday, not the Sunday deep-run window, and FEATURE/CRITICAL-level targeted testing is the ceiling for a nightly run regardless.
-
-**Could not locate**
-- A dedicated `service-agreement-routes.js` named in `CLAUDE.md`'s repository map does not exist; the Client Agreement Form lives inside `templates-routes.js`'s generic document engine instead (see `tests/templates-service-agreement-map.test.js`). `CLAUDE.md` may be slightly stale on this point.
-- No code anywhere implements client-facing automatic appointment reminders (Automated Reminders' own stated idea).
-- No frontend page for Opa Mobile Companion inside this repository — the mobile client app is external.
-
-**Open questions for the team**
-- Should "Professional Development" and "Employee Personal Page (My Profile Tab)" be merged into one card?
-- Should "Therapist Snapshot" move out of "Automated Reminders" into its own card, since it is unrelated to client appointment reminders?
-- Should Opal Assist, Calendar/Booking/Travel, and Case Notes get tracker cards, given how much of the 14-day change window landed in those three subsystems with no card to audit them against?
-- Is `sync-settings-routes.js` really what "Multi Calendar Rules" refers to, or is there a different, not-yet-built feature behind that task name?
-
-**Write-back to the tracker**:
-```
-NODE_USE_ENV_PROXY=1 SUPABASE_URL="$SUPABASE_URL" node ../scripts/nightly-audit/post-tracker.mjs /tmp/writeback.json
-→ post-tracker: 13 features posted, 0 already posted tonight, brief posted
+post-tracker: 13 features posted, 0 already posted tonight, brief posted
 ```

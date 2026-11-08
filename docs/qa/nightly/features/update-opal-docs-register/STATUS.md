@@ -1,28 +1,25 @@
 # Update Opal Docs Register
 
-- Tracker stage: idea
-- Tracker environment: none
-- Evidence label: **untouched**
-- Addressed in this change window: no
-- Created (any located code): no
+Tracker stage: idea · Tracker environment: none
+Evidence label: **untouched**
+Addressed in this change window: **no** · Created: **no**
 
 ## Located files
-- nothing yet
 
-## Not located
-- No file, route, table or page anywhere in the repository matches 'docs register' or 'documentation register'.
+None. Task: "Update Excel Sheet to include all documentation required" (todo). Searched the whole repo for "docs register", "documentation register", "doc register" — zero matches. Checked `docs/` and `backend/docs/` directly for anything that might function as an in-repo documentation checklist standing in for the Excel sheet: none found that matches.
 
-## Guard check
-n/a — no code located.
+## Tests
 
-## Tests and results
-- none run (no located code)
+None — nothing to test.
 
-## Open tracker tasks
-- Update Excel Sheet to include all documentation required (todo)
+## Open tasks from the tracker
 
-## Commits in the 14-day change window touching this feature
-n/a
+"Update Excel Sheet to include all documentation required" (todo).
 
-## Why this label
-This tracker card describes an Excel sheet kept outside the codebase (an internal documentation register). Nothing to locate in the portal.
+## Commits in the window touching this feature
+
+None.
+
+## Disagreement
+
+None.
