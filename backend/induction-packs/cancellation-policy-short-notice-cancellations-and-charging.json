@@ -1,0 +1,530 @@
+{
+  "format": "opal-induction-pack/1",
+  "slug": "cancellation-policy-short-notice-cancellations-and-charging",
+  "workflow": {
+    "title": "Cancellation Policy: Short-Notice Cancellations and Charging",
+    "category": "administration",
+    "sequential": true,
+    "description": "How to handle a client cancellation with less than 48 hours' notice: why it matters, the steps to work through, how the reminder and travel shape what can be charged, and what you must discuss with your supervisor before any charge is decided. Three interactive walkthroughs, a practical task and a knowledge check.",
+    "sections": [
+      {
+        "title": "Why short-notice cancellations matter",
+        "items": [
+          {
+            "type": "task",
+            "title": "Walkthrough: Why short-notice cancellations matter",
+            "body": "How a late cancellation affects clients, your day and the practice, the 48-hour starting point, and where the rules sit.\n\nYour progress is saved if you stop part-way.",
+            "minutes": 4,
+            "required": true,
+            "walkthrough_key": "cancellation-why-it-matters"
+          }
+        ]
+      },
+      {
+        "title": "Handling a short-notice cancellation",
+        "items": [
+          {
+            "type": "task",
+            "title": "Walkthrough: Handling a short-notice cancellation",
+            "body": "The four steps to work through when a client cancels with less than 48 hours' notice, including how to consider the reason, with decision checks along the way.",
+            "minutes": 5,
+            "required": true,
+            "walkthrough_key": "cancellation-step-by-step"
+          },
+          {
+            "type": "content",
+            "title": "Reference: step by step",
+            "body": "When a client cancels with less than 48 hours' notice:\n\n- **Try to fill the time** with other work first. We always do this.\n- If you cannot fill it, **talk to your supervisor** about how it affects your billable hours for the week.\n- **Consider the reason** for the cancellation and whether it was beyond the client's control.\n- **Check the facts** on reminders and travel.\n\nDo not push clients for private details they do not want to share.\n\n**Discuss with your supervisor before deciding whether to charge.**",
+            "minutes": 1,
+            "required": true
+          }
+        ]
+      },
+      {
+        "title": "Reminders, travel and charging",
+        "items": [
+          {
+            "type": "task",
+            "title": "Walkthrough: Reminders, travel and charging",
+            "body": "How the reminder and whether travel had started shape what can be charged, followed by two scenarios with made-up clients.",
+            "minutes": 6,
+            "required": true,
+            "walkthrough_key": "cancellation-reminder-and-travel"
+          },
+          {
+            "type": "content",
+            "title": "Reference: reminder and travel",
+            "body": "Two facts shape what can be charged.\n\n- **Travel had started, a reminder was sent and the client did not respond:** the full time you had blocked, plus travel time.\n- **Travel had not started:** the session time, but not travel time.\n- **Exception:** if the cancellation affects other clients' travel, travel time may still come into the discussion. Raise it with your supervisor.\n- **Clients bunched in a similar location:** the same rules apply.\n\nThe rules sit in the client's service agreement and in the NDIS pricing guideline. Always read the actual service agreement for the client in front of you, and discuss with your supervisor before deciding whether to charge.",
+            "minutes": 1,
+            "required": true
+          }
+        ]
+      },
+      {
+        "title": "Practical task",
+        "items": [
+          {
+            "type": "task",
+            "title": "Practical task: walk through a cancellation",
+            "body": "Pick a past or made-up cancellation with less than 48 hours' notice. Write down your answers to these checks:\n\n- Could the time be filled with other work?\n- Was a reminder sent, and did the client respond?\n- Had travel started?\n- Was other clients' travel affected?\n- Was the reason beyond the client's control?\n\nThen go through your answers with your supervisor.",
+            "minutes": 5,
+            "required": true
+          }
+        ]
+      },
+      {
+        "title": "Knowledge check and sign-off",
+        "items": [
+          {
+            "type": "quiz",
+            "title": "Knowledge check",
+            "body": "Eight questions across the whole induction. You need 80% to pass, and you may retry.",
+            "minutes": 5,
+            "required": true,
+            "quiz": {
+              "passThreshold": 80,
+              "questions": [
+                {
+                  "question": "A client cancels with less than 48 hours' notice. What do you do first?",
+                  "options": [
+                    "Charge the full amount straight away",
+                    "Try to fill the time with other work",
+                    "Ask the client to explain the reason in detail",
+                    "Leave it until the end of the week"
+                  ],
+                  "correctIndex": 1
+                },
+                {
+                  "question": "You cannot fill the cancelled time. What do you do next?",
+                  "options": [
+                    "Talk to your supervisor about the effect on your weekly billable hours",
+                    "Cancel the client's service agreement",
+                    "Charge the client without discussing it",
+                    "Say nothing and move on"
+                  ],
+                  "correctIndex": 0
+                },
+                {
+                  "question": "A reminder was sent, the client did not respond, and you had started travelling when the session was cancelled. If a charge goes ahead, what is the approach?",
+                  "options": [
+                    "No charge at all",
+                    "Session time only",
+                    "The full blocked time plus travel time",
+                    "Travel time only"
+                  ],
+                  "correctIndex": 2
+                },
+                {
+                  "question": "You had not started travelling when the client cancelled, and no other clients are affected. What can be charged?",
+                  "options": [
+                    "Session time, but not travel time",
+                    "Travel time, but not session time",
+                    "Nothing, in any circumstances",
+                    "Both session time and travel time"
+                  ],
+                  "correctIndex": 0
+                },
+                {
+                  "question": "You had not started travelling, but the cancellation affects another client's travel. What should you do?",
+                  "options": [
+                    "Treat it exactly the same as any other cancellation",
+                    "Raise it with your supervisor, as travel may be part of the discussion",
+                    "Cancel the other client too",
+                    "Charge travel time without discussing it"
+                  ],
+                  "correctIndex": 1
+                },
+                {
+                  "question": "Which is true of the reason for a short-notice cancellation?",
+                  "options": [
+                    "The reason never matters",
+                    "You must ask the client for full personal details",
+                    "Consider whether it was beyond the client's control, and discuss it with your supervisor",
+                    "Only the client decides whether a charge applies"
+                  ],
+                  "correctIndex": 2
+                },
+                {
+                  "question": "You had several clients bunched in a similar location. Which rules apply to a short-notice cancellation?",
+                  "options": [
+                    "No charge can apply to bunched clients",
+                    "The same rules apply",
+                    "Travel time is always charged to every client",
+                    "Only the first client's rules apply"
+                  ],
+                  "correctIndex": 1
+                },
+                {
+                  "question": "Where do the rules on short-notice cancellations sit?",
+                  "options": [
+                    "In the client's service agreement and the NDIS pricing guideline",
+                    "Only in your calendar",
+                    "In a verbal agreement with the client",
+                    "In the therapist's own notes"
+                  ],
+                  "correctIndex": 0
+                }
+              ]
+            }
+          },
+          {
+            "type": "acknowledgement",
+            "title": "Cancellation policy sign-off",
+            "body": "Confirm that you understand how short-notice cancellations are handled at Opal.",
+            "minutes": 1,
+            "required": true,
+            "ack_statement": "I have read this induction. I understand that a cancellation with less than 48 hours' notice can be charged under the service agreement, and that this is a starting point only. I will try to fill the time first, check the reminder, travel and the reason, read the client's actual service agreement, and discuss with my supervisor before deciding whether to charge."
+          }
+        ]
+      }
+    ]
+  },
+  "walkthroughs": [
+    {
+      "key": "cancellation-why-it-matters",
+      "title": "Why short-notice cancellations matter",
+      "description": "How a late cancellation affects clients, your day and the practice, the 48-hour starting point, and where the rules sit.",
+      "group": "cancellation-policy",
+      "minutes": 4,
+      "roles": [
+        "owner",
+        "admin",
+        "therapist",
+        "read_only"
+      ],
+      "thumb": "/assets/tutorials/cancellation-policy/starting-point.svg",
+      "steps": [
+        {
+          "type": "screenshot",
+          "title": "Why this matters",
+          "image": {
+            "src": "/assets/tutorials/cancellation-policy/rural-run.svg",
+            "alt": "On a rural run, one short-notice cancellation affects the whole run of visits."
+          },
+          "body": "Late cancellations affect clients, your day and Opal's ability to keep running.\n\nWhen a session is cancelled at short notice, you may lose billable time and travel that cannot be recovered. In rural and remote areas, **one cancellation can affect a whole run of visits**."
+        },
+        {
+          "type": "page",
+          "title": "Fair to clients and to Opal",
+          "body": "Charging is not a simple switch. We look at:\n• **what** happened\n• **why** it happened\n• **who** was affected\n\nOur aim is to be fair to clients and to Opal."
+        },
+        {
+          "type": "screenshot",
+          "title": "The 48-hour starting point",
+          "image": {
+            "src": "/assets/tutorials/cancellation-policy/starting-point.svg",
+            "alt": "A cancellation with less than 48 hours' notice can be charged under the service agreement; this is a starting point only."
+          },
+          "body": "Under our service agreement, a cancellation with **less than 48 hours' notice can be charged**.\n\nThis is a starting point only. First try to fill the time, then check the circumstances, and then talk to your supervisor."
+        },
+        {
+          "type": "quiz",
+          "title": "Knowledge check: the 48-hour starting point",
+          "quiz": {
+            "question": "A client cancels 30 hours before a session. Which statement is correct?",
+            "options": [
+              "The client decides whether a charge applies",
+              "A charge can be considered under the service agreement, but this is a starting point only",
+              "No charge can apply, whatever the circumstances"
+            ],
+            "correctIndex": 1,
+            "explain": "Less than 48 hours' notice can be charged under the service agreement, but this is a starting point only. First try to fill the time, then check the circumstances and talk to your supervisor."
+          }
+        },
+        {
+          "type": "screenshot",
+          "title": "Where the rules sit",
+          "image": {
+            "src": "/assets/tutorials/cancellation-policy/where-rules-sit.svg",
+            "alt": "The client's service agreement and the NDIS pricing guideline."
+          },
+          "body": "The rules sit in the client's **service agreement** and in the **NDIS pricing guideline**.\n\nAlways read the actual service agreement for the client in front of you."
+        },
+        {
+          "type": "quiz",
+          "title": "Knowledge check: the service agreement",
+          "quiz": {
+            "question": "A client has cancelled at short notice and you are preparing to talk to your supervisor. Which service agreement do you read?",
+            "options": [
+              "A general template agreement",
+              "The actual service agreement for that client",
+              "The agreement of a similar client"
+            ],
+            "correctIndex": 1,
+            "explain": "The rules sit in the client's own service agreement, so always read the actual agreement for the client in front of you."
+          }
+        },
+        {
+          "type": "complete",
+          "title": "Summary: why short-notice cancellations matter",
+          "body": "Less than 48 hours' notice can be charged under the service agreement, but this is a starting point only, and the client's own service agreement is the one to read.\n\nReturn to your induction to continue with the next module: handling a short-notice cancellation."
+        }
+      ]
+    },
+    {
+      "key": "cancellation-step-by-step",
+      "title": "Handling a short-notice cancellation",
+      "description": "The four steps to work through when a client cancels with less than 48 hours' notice, and how to consider the reason.",
+      "group": "cancellation-policy",
+      "minutes": 5,
+      "roles": [
+        "owner",
+        "admin",
+        "therapist",
+        "read_only"
+      ],
+      "thumb": "/assets/tutorials/cancellation-policy/four-steps.svg",
+      "steps": [
+        {
+          "type": "screenshot",
+          "title": "The four steps",
+          "image": {
+            "src": "/assets/tutorials/cancellation-policy/four-steps.svg",
+            "alt": "Fill the time, talk to your supervisor, consider the reason, check reminder and travel."
+          },
+          "body": "When a client cancels with less than 48 hours' notice, work through these steps:\n• **Try to fill the time** with other work first. We always do this.\n• If you cannot fill it, **talk to your supervisor** about how it affects your billable hours for the week.\n• **Consider the reason** for the cancellation and whether it was beyond the client's control.\n• **Check the facts** on reminders and travel.\n\nDiscuss with your supervisor before deciding whether to charge."
+        },
+        {
+          "type": "quiz",
+          "title": "Knowledge check: the first step",
+          "quiz": {
+            "question": "A client cancels with less than 48 hours' notice. What do you do first?",
+            "options": [
+              "Charge the client straight away",
+              "Try to fill the time with other work",
+              "Ask the client to explain the reason in detail"
+            ],
+            "correctIndex": 1,
+            "explain": "We always try to fill the cancelled time with other work first."
+          }
+        },
+        {
+          "type": "quiz",
+          "title": "Knowledge check: when the time cannot be filled",
+          "quiz": {
+            "question": "You have tried, but you cannot fill the cancelled time. What do you do next?",
+            "options": [
+              "Talk to your supervisor about the effect on your weekly billable hours",
+              "Charge the client without discussing it",
+              "Leave the gap and say nothing"
+            ],
+            "correctIndex": 0,
+            "explain": "If the time cannot be filled, talk to your supervisor about how it affects your billable hours for the week."
+          }
+        },
+        {
+          "type": "page",
+          "title": "Consider the reason",
+          "body": "Always think about why the session was cancelled. Ask yourself: **was it beyond the client's control?**\n\nA reason outside the client's control is something to raise with your supervisor before any charge is decided."
+        },
+        {
+          "type": "warning",
+          "title": "Respect the client's privacy",
+          "body": "Do not push clients for private details they do not want to share."
+        },
+        {
+          "type": "quiz",
+          "title": "Scenario: a reason outside the client's control",
+          "quiz": {
+            "question": "A client cancels on the morning of a session, saying only that a family emergency has come up. You cannot fill the time. What do you do next?",
+            "options": [
+              "Ask for full details of the emergency so you can decide on a charge",
+              "Consider whether it was beyond the client's control, and raise it with your supervisor before any charge is decided",
+              "Charge the client, as the notice was less than 48 hours"
+            ],
+            "correctIndex": 1,
+            "explain": "A reason outside the client's control is raised with your supervisor before any charge is decided. Do not push the client for private details they do not want to share."
+          }
+        },
+        {
+          "type": "warning",
+          "title": "Before deciding whether to charge",
+          "body": "Discuss with your supervisor before deciding whether to charge.\n\nThe next module covers the facts that shape what can be charged: the reminder and travel."
+        },
+        {
+          "type": "complete",
+          "title": "Summary: handling a short-notice cancellation",
+          "body": "Fill the time first, talk to your supervisor if you cannot, consider the reason, check the reminder and travel facts, and discuss with your supervisor before deciding whether to charge.\n\nReturn to your induction to continue with the next module: reminders, travel and charging."
+        }
+      ]
+    },
+    {
+      "key": "cancellation-reminder-and-travel",
+      "title": "Reminders, travel and charging",
+      "description": "How the reminder and whether travel had started shape what can be charged, with two scenarios using made-up clients.",
+      "group": "cancellation-policy",
+      "minutes": 6,
+      "roles": [
+        "owner",
+        "admin",
+        "therapist",
+        "read_only"
+      ],
+      "thumb": "/assets/tutorials/cancellation-policy/charging-matrix.svg",
+      "steps": [
+        {
+          "type": "screenshot",
+          "title": "What decides the charge",
+          "image": {
+            "src": "/assets/tutorials/cancellation-policy/charging-matrix.svg",
+            "alt": "Travel started, reminder sent and no response: full blocked time plus travel time. Travel not started: session time, not travel time. Other clients' travel affected: raise it with your supervisor."
+          },
+          "body": "Two facts shape what can be charged.\n\n**Travel had started, a reminder was sent and the client did not respond:** the full time you had blocked, plus travel time.\n\n**Travel had not started:** the session time, but not travel time.\n\n**Exception:** if the cancellation affects other clients' travel, travel time may still come into the discussion with your supervisor.\n\nIf you had clients bunched in a similar location, the same rules apply."
+        },
+        {
+          "type": "quiz",
+          "title": "Knowledge check: travel had started",
+          "quiz": {
+            "question": "A reminder was sent, the client did not respond, and you had started travelling when the session was cancelled. If a charge goes ahead, what is the approach?",
+            "options": [
+              "No charge at all",
+              "Session time only",
+              "The full blocked time plus travel time",
+              "Travel time only"
+            ],
+            "correctIndex": 2,
+            "explain": "With a reminder sent, no response and travel started, the approach is the full blocked time plus travel time."
+          }
+        },
+        {
+          "type": "quiz",
+          "title": "Knowledge check: travel had not started",
+          "quiz": {
+            "question": "You had not started travelling when the client cancelled, and no other clients are affected. What can be charged?",
+            "options": [
+              "Session time, but not travel time",
+              "Travel time, but not session time",
+              "Both session time and travel time"
+            ],
+            "correctIndex": 0,
+            "explain": "Session time can be charged, but not travel time, because you had not travelled."
+          }
+        },
+        {
+          "type": "quiz",
+          "title": "Knowledge check: other clients' travel",
+          "quiz": {
+            "question": "You had not started travelling, but the cancellation affects another client's travel. What should you do?",
+            "options": [
+              "Treat it exactly the same as any other cancellation",
+              "Raise it with your supervisor, as travel may be part of the discussion",
+              "Cancel the other client's visit too"
+            ],
+            "correctIndex": 1,
+            "explain": "The rule on travel time has an exception where other clients' travel is affected, and that is raised with your supervisor."
+          }
+        },
+        {
+          "type": "screenshot",
+          "title": "Scenario: travel already started",
+          "image": {
+            "src": "/assets/tutorials/cancellation-policy/scenario-sam.svg",
+            "alt": "A reminder was sent, Sam did not reply, you were on the road, and Sam cancelled 20 hours before the session."
+          },
+          "body": "**Situation:** A reminder went to a made-up client, Sam. Sam did not reply. You left for the visit and were on the road when Sam cancelled, 20 hours before the session time.\n\nDecide what you would do on the next two screens."
+        },
+        {
+          "type": "quiz",
+          "title": "Scenario: Sam cancels while you are on the road",
+          "quiz": {
+            "question": "Sam has just cancelled and you are on the road. What do you do first?",
+            "options": [
+              "Charge Sam the full blocked time plus travel time",
+              "Try to fill the time with other work",
+              "Ask Sam to explain the reason in detail"
+            ],
+            "correctIndex": 1,
+            "explain": "Whatever the circumstances, the first step is always to try to fill the time with other work."
+          }
+        },
+        {
+          "type": "quiz",
+          "title": "Scenario: Sam's time cannot be filled",
+          "quiz": {
+            "question": "You cannot fill the time. A reminder was sent, Sam did not reply and you had already started travelling. What do you do next?",
+            "options": [
+              "Charge session time only, without discussing it",
+              "Talk to your supervisor about the effect on your week and consider Sam's reason; if a charge goes ahead, the approach is the full blocked time plus travel time",
+              "Charge travel time only"
+            ],
+            "correctIndex": 1,
+            "explain": "Your supervisor is part of the decision. If a charge goes ahead with a reminder sent, no response and travel started, the approach is the full blocked time plus travel time."
+          }
+        },
+        {
+          "type": "screenshot",
+          "title": "Scenario: travel not started",
+          "image": {
+            "src": "/assets/tutorials/cancellation-policy/scenario-priya.svg",
+            "alt": "Priya cancels the evening before and you have not left; Tom lives nearby and is booked after Priya."
+          },
+          "body": "**Situation:** A made-up client, Priya, cancels the evening before a morning session. You have not left yet. Another made-up client, Tom, lives nearby and was booked after Priya.\n\nDecide what you would do on the next two screens."
+        },
+        {
+          "type": "quiz",
+          "title": "Scenario: Priya cancels the evening before",
+          "quiz": {
+            "question": "You have tried to fill the time. What do you check next, before talking to your supervisor?",
+            "options": [
+              "Whether Priya's cancellation affects Tom's travel or other bunched visits",
+              "Whether Priya can provide evidence of the reason",
+              "Nothing, as travel time is always charged"
+            ],
+            "correctIndex": 0,
+            "explain": "Check whether the cancellation affects Tom's travel or other bunched visits, then talk to your supervisor."
+          }
+        },
+        {
+          "type": "quiz",
+          "title": "Scenario: Tom's travel is affected",
+          "quiz": {
+            "question": "You find that Priya's cancellation affects Tom's travel. What do you do?",
+            "options": [
+              "Charge Priya session time and travel time straight away",
+              "Raise it with your supervisor",
+              "Cancel Tom's visit as well"
+            ],
+            "correctIndex": 1,
+            "explain": "If nothing else were affected, the session time could be charged but not travel time. Because Tom's travel is affected, raise it with your supervisor."
+          }
+        },
+        {
+          "type": "complete",
+          "title": "Summary: reminders, travel and charging",
+          "body": "If travel had started, a reminder was sent and the client did not respond, the approach is the full blocked time plus travel time; if travel had not started, it is session time only; and where other clients' travel is affected, raise it with your supervisor.\n\nReturn to your induction to complete the practical task, the knowledge check and the sign-off."
+        }
+      ]
+    }
+  ],
+  "meta": {
+    "source": "Opal Readiness Workshop",
+    "topic": "Cancellation policy",
+    "generatedAt": "2026-11-08T11:36:44.409Z",
+    "template": "standard",
+    "features": [
+      "quiz",
+      "scenarios",
+      "walkthroughs"
+    ],
+    "reuseTours": [],
+    "policy": {
+      "name": "Cancellation and Late Cancellation Charges",
+      "status": "unknown",
+      "summary": "Cancellations with less than 48 hours' notice can be charged under the service agreement, depending on whether travel had started, whether a reminder was sent and the circumstances, with supervisor discussion first."
+    },
+    "openQuestions": [
+      "What is the definition of a no-show, and how does it differ from a short-notice cancellation?",
+      "Is a sub-48-hour cancellation charged automatically, or only after supervisor discussion? The directors' discussion says both.",
+      "What counts as a reminder (method, timing), and how is a client's response recorded?",
+      "How is 'beyond the client's control' decided, and who decides?",
+      "How do these rules line up with the current NDIS Pricing Arrangements? The discussion only says they are in the pricing guideline.",
+      "How are charges explained to clients up front?",
+      "What should staff say to a client who cancels late?",
+      "How is a cancellation recorded, and in which system?",
+      "Who may approve a charge (D11)?",
+      "How should therapist-initiated cancellations be handled and kept separate from client cancellations (D11, D12)?",
+      "Will a 24-hour reminder be used, and what are its channel, wording and follow-up limits (D14)?",
+      "Does a written policy named 'Cancellation and Late Cancellation Charges' exist, or does it need to be written?"
+    ]
+  }
+}

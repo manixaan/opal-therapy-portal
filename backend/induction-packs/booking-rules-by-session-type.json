@@ -1,0 +1,613 @@
+{
+  "format": "opal-induction-pack/1",
+  "slug": "booking-rules-by-session-type",
+  "workflow": {
+    "title": "Booking Rules by Session Type",
+    "category": "administration",
+    "sequential": true,
+    "description": "The session types Opal offers, how long to book and how to charge for each, what must be in place before any session is booked, how sessions relate to NDIS invoicing, and who to ask. Three interactive walkthroughs and a guided tour of the booking screen.",
+    "sections": [
+      {
+        "title": "Our session types",
+        "items": [
+          {
+            "type": "task",
+            "title": "Walkthrough: Our session types",
+            "body": "The six session types Opal offers, how to tell an initial assessment from an assessment session, and why a home visit is a location rather than a session type.\n\nYour progress is saved if you stop part-way.",
+            "minutes": 5,
+            "required": true,
+            "walkthrough_key": "booking-rules-session-types"
+          },
+          {
+            "type": "content",
+            "title": "Reference: the six session types",
+            "body": "- **Initial assessment:** the first session with a new client\n- **Assessment session:** trials, equipment trials and functional capacity assessments, at any point\n- **Therapy session:** ongoing therapy\n- **Telehealth session:** delivered by video or phone\n- **Case management time:** time spent managing the client's case\n- **Report writing:** time spent writing reports\n\nA **home visit** is a location, not a session type. Book the session type that matches the work, then record the location.",
+            "minutes": 1,
+            "required": true
+          }
+        ]
+      },
+      {
+        "title": "Session length and charging",
+        "items": [
+          {
+            "type": "task",
+            "title": "Walkthrough: Session length and charging",
+            "body": "How long sessions are usually booked for, charging real time, case notes after therapy, sessions that run over, and charging when two therapists attend.",
+            "minutes": 6,
+            "required": true,
+            "walkthrough_key": "booking-rules-length-charging"
+          },
+          {
+            "type": "content",
+            "title": "Reference: length and charging",
+            "body": "- Most sessions are booked for **one hour**.\n- Sessions other than therapy: usually allocate an hour, but charge **real time**.\n- Face-to-face therapy: usually **50 minutes**, plus **10 to 15 minutes** for case notes, written straight after or later the same day.\n- Extra time still uses the client's funding. The service agreement shows the schedule of supports and the funding available.\n- Two therapists at a session: charge for **one therapist only**.\n- Invoicing codes follow the **NDIS pricing guidelines**.",
+            "minutes": 1,
+            "required": true
+          }
+        ]
+      },
+      {
+        "title": "Before you book",
+        "items": [
+          {
+            "type": "task",
+            "title": "Walkthrough: Before you book",
+            "body": "The two things that must be in place before any session is booked, including telehealth, and who to ask when you are unsure.",
+            "minutes": 5,
+            "required": true,
+            "walkthrough_key": "booking-rules-before-booking"
+          },
+          {
+            "type": "task",
+            "title": "Practical task: check a client record before booking",
+            "body": "Pick a current client and check their record. Confirm that you can find:\n\n- the signed service agreement\n- the funding hours available\n\nIf you cannot find either of these, ask the Senior Supervisor before you book.",
+            "minutes": 3,
+            "required": true
+          }
+        ]
+      },
+      {
+        "title": "Session types in the booking screen",
+        "items": [
+          {
+            "type": "task",
+            "title": "Live tour: Session types in the booking screen",
+            "body": "A guided tour of the Smart Booking tab. It highlights the booking picker and shows where each Opal session type is listed.\n\nOn completion, you will be able to find the right booking type for each session type.",
+            "minutes": 4,
+            "required": true,
+            "walkthrough_key": "booking-rules-session-types-tour"
+          }
+        ]
+      },
+      {
+        "title": "Knowledge check and sign-off",
+        "items": [
+          {
+            "type": "quiz",
+            "title": "Knowledge check",
+            "body": "Eight questions across the whole induction. You need 80% to pass, and you may retry.",
+            "minutes": 5,
+            "required": true,
+            "quiz": {
+              "passThreshold": 80,
+              "questions": [
+                {
+                  "question": "Which session is the first one you do for a new client?",
+                  "options": [
+                    "Therapy session",
+                    "Initial assessment",
+                    "Assessment session"
+                  ],
+                  "correctIndex": 1
+                },
+                {
+                  "question": "A client needs an equipment trial. Which session type do you book?",
+                  "options": [
+                    "Initial assessment",
+                    "Case management time",
+                    "Assessment session",
+                    "Telehealth session"
+                  ],
+                  "correctIndex": 2
+                },
+                {
+                  "question": "How should you treat a home visit when booking?",
+                  "options": [
+                    "As its own session type",
+                    "As case management time",
+                    "As a location for another session type"
+                  ],
+                  "correctIndex": 2
+                },
+                {
+                  "question": "A non-therapy session was booked for an hour but took 75 minutes. What do you charge?",
+                  "options": [
+                    "60 minutes",
+                    "50 minutes",
+                    "75 minutes"
+                  ],
+                  "correctIndex": 2
+                },
+                {
+                  "question": "Face-to-face therapy is usually 50 minutes. What else should you allow for?",
+                  "options": [
+                    "Nothing extra",
+                    "10 to 15 minutes for case notes and documentation",
+                    "A full extra hour"
+                  ],
+                  "correctIndex": 1
+                },
+                {
+                  "question": "A client wants a telehealth session but has no service agreement. What do you do?",
+                  "options": [
+                    "Book it, because telehealth has no travel",
+                    "Book it and arrange the agreement later",
+                    "Get a signed service agreement before booking"
+                  ],
+                  "correctIndex": 2
+                },
+                {
+                  "question": "A second therapist attends a session. Who is the client charged for?",
+                  "options": [
+                    "Both therapists",
+                    "One therapist only",
+                    "Whichever therapist is more senior"
+                  ],
+                  "correctIndex": 1
+                },
+                {
+                  "question": "Who do you contact with a booking or funding question?",
+                  "options": [
+                    "The client's family",
+                    "The Senior Supervisor",
+                    "No one; book it and check later"
+                  ],
+                  "correctIndex": 1
+                }
+              ]
+            }
+          },
+          {
+            "type": "acknowledgement",
+            "title": "Booking rules sign-off",
+            "body": "Confirm that you understand the booking rules for each session type.",
+            "minutes": 1,
+            "required": true,
+            "ack_statement": "I have read this induction. I will book the session type that matches the work and record a home visit as a location, charge the time actually spent and for one therapist only, and not book any session until a signed service agreement and a client record showing available funding hours are in place. If I am unsure, I will ask the Senior Supervisor."
+          }
+        ]
+      }
+    ]
+  },
+  "walkthroughs": [
+    {
+      "key": "booking-rules-session-types",
+      "title": "Our session types",
+      "description": "The six session types Opal offers, how to tell an initial assessment from an assessment session, and why a home visit is a location.",
+      "group": "booking-rules",
+      "minutes": 5,
+      "roles": [
+        "owner",
+        "admin",
+        "therapist",
+        "read_only"
+      ],
+      "thumb": "/assets/tutorials/booking-rules-by-session-type/session-types.svg",
+      "steps": [
+        {
+          "type": "intro",
+          "title": "Know the session types before you book",
+          "body": "Every booking starts with choosing the right session type. Opal offers **six** session types, and you should know them before you book anything.\n\nThis walkthrough introduces each one, explains two that are easy to mix up, and clarifies how to treat a home visit."
+        },
+        {
+          "type": "screenshot",
+          "title": "The six session types",
+          "image": {
+            "src": "/assets/tutorials/booking-rules-by-session-type/session-types.svg",
+            "alt": "Initial assessment, assessment session, therapy session, telehealth session, case management time and report writing."
+          },
+          "body": "• **Initial assessment:** the first session you do for a new client.\n• **Assessment session:** trials (including equipment trials) and functional capacity assessments.\n• **Therapy session:** ongoing therapy.\n• **Telehealth session:** a session delivered by video or phone.\n• **Case management time:** time spent managing the client's case.\n• **Report writing:** time spent writing reports."
+        },
+        {
+          "type": "quiz",
+          "title": "Knowledge check: an equipment trial",
+          "quiz": {
+            "question": "A client needs an equipment trial. Which session type do you book?",
+            "options": [
+              "Initial assessment",
+              "Case management time",
+              "Assessment session",
+              "Telehealth session"
+            ],
+            "correctIndex": 2,
+            "explain": "Trials, including equipment trials, are assessment sessions."
+          }
+        },
+        {
+          "type": "screenshot",
+          "title": "Initial assessment or assessment session?",
+          "image": {
+            "src": "/assets/tutorials/booking-rules-by-session-type/initial-vs-assessment.svg",
+            "alt": "An initial assessment is only the first session with a new client; an assessment session covers trials, equipment trials and functional capacity assessments at any point."
+          },
+          "body": "These two are easy to mix up.\n\n**Initial assessment** is only for the first session with a new client.\n\n**Assessment session** is for later work: trials, equipment trials and functional capacity assessments. It can happen at any point in a client's time with us.\n\nIf the client is new and this is your first session with them, it is an initial assessment."
+        },
+        {
+          "type": "quiz",
+          "title": "Scenario: a functional capacity assessment",
+          "quiz": {
+            "question": "A client you have been seeing for some months now needs a functional capacity assessment. Which session type do you book?",
+            "options": [
+              "Initial assessment",
+              "Assessment session",
+              "Therapy session"
+            ],
+            "correctIndex": 1,
+            "explain": "Functional capacity assessments are assessment sessions. The initial assessment is only for the first session with a new client."
+          }
+        },
+        {
+          "type": "quiz",
+          "title": "Knowledge check: a new client",
+          "quiz": {
+            "question": "Which session is the first one you do for a new client?",
+            "options": [
+              "Therapy session",
+              "Initial assessment",
+              "Assessment session"
+            ],
+            "correctIndex": 1,
+            "explain": "The initial assessment is the first session for a new client."
+          }
+        },
+        {
+          "type": "screenshot",
+          "title": "A home visit is a location, not a session type",
+          "image": {
+            "src": "/assets/tutorials/booking-rules-by-session-type/home-visit.svg",
+            "alt": "Book the session type that matches the work, then record the location, such as the client's home."
+          },
+          "body": "You may hear “home visit” used as if it were its own session type. It is not.\n\nA home visit describes **where** a session happens. The session is still an initial assessment, an assessment session or a therapy session.\n\nBook the session type that matches the work you are doing. Then record the location."
+        },
+        {
+          "type": "quiz",
+          "title": "Scenario: therapy at the client's home",
+          "quiz": {
+            "question": "You are seeing an existing client for ongoing therapy at their home. How do you book it?",
+            "options": [
+              "As a home visit session",
+              "As a therapy session, with the client's home recorded as the location",
+              "As case management time"
+            ],
+            "correctIndex": 1,
+            "explain": "A home visit only describes where the session happens. The work is ongoing therapy, so you book a therapy session and record the location."
+          }
+        },
+        {
+          "type": "complete",
+          "title": "Summary: our session types",
+          "body": "Book the session type that matches the work you are doing, and record a home visit as the location rather than a session type.\n\nReturn to your induction to continue with the next module: session length and charging."
+        }
+      ]
+    },
+    {
+      "key": "booking-rules-length-charging",
+      "title": "Session length and charging",
+      "description": "How long sessions are usually booked for, charging real time, case notes after therapy, and charging when two therapists attend.",
+      "group": "booking-rules",
+      "minutes": 6,
+      "roles": [
+        "owner",
+        "admin",
+        "therapist",
+        "read_only"
+      ],
+      "thumb": "/assets/tutorials/booking-rules-by-session-type/real-time.svg",
+      "steps": [
+        {
+          "type": "screenshot",
+          "title": "Allocate an hour, charge real time",
+          "image": {
+            "src": "/assets/tutorials/booking-rules-by-session-type/real-time.svg",
+            "alt": "A non-therapy session booked for an hour that took 75 minutes is charged as 75 minutes."
+          },
+          "body": "Most sessions are booked for **one hour**. Some run over and some finish early.\n\nFor sessions other than therapy, we usually allocate an hour but charge **real time**. If a session takes 75 minutes, you charge 75 minutes."
+        },
+        {
+          "type": "quiz",
+          "title": "Knowledge check: real time",
+          "quiz": {
+            "question": "A non-therapy session was booked for an hour but took 75 minutes. What do you charge?",
+            "options": [
+              "60 minutes",
+              "50 minutes",
+              "75 minutes"
+            ],
+            "correctIndex": 2,
+            "explain": "We usually allocate an hour for sessions other than therapy, but we charge the real time spent."
+          }
+        },
+        {
+          "type": "screenshot",
+          "title": "Therapy sessions and case notes",
+          "image": {
+            "src": "/assets/tutorials/booking-rules-by-session-type/therapy-notes.svg",
+            "alt": "Therapy is usually 50 minutes, followed by 10 to 15 minutes of case notes, written straight after or later the same day."
+          },
+          "body": "Face-to-face therapy is usually **50 minutes**. You then need **10 to 15 minutes** for case noting and documentation.\n\nYou book a block for the therapy session itself. You can write your case notes straight after the session, or later in the same day.\n\nDo not leave case notes to another day."
+        },
+        {
+          "type": "quiz",
+          "title": "Knowledge check: when to write case notes",
+          "quiz": {
+            "question": "Your therapy session has finished. When should you write the case notes?",
+            "options": [
+              "Straight after the session, or later the same day",
+              "Within the next week",
+              "Whenever you next see the client"
+            ],
+            "correctIndex": 0,
+            "explain": "Case notes take 10 to 15 minutes and are done straight after the session or later the same day, never left to another day."
+          }
+        },
+        {
+          "type": "page",
+          "title": "When a session runs over",
+          "body": "Sessions can run longer than the time you booked. **The extra time still uses the client's funding.**\n\nThe client's **service agreement** sets out the schedule of supports. It also shows the funding available for the suggested number of sessions.\n\nIf you are unsure whether the extra time is covered, ask the **Senior Supervisor**."
+        },
+        {
+          "type": "quiz",
+          "title": "Scenario: a session that runs over",
+          "quiz": {
+            "question": "You booked Mia (a made-up client) for an hour of assessment. The equipment trial runs to 75 minutes, and you are not sure whether her funding covers the extra time. What do you do?",
+            "options": [
+              "Charge 60 minutes, because that is what was booked",
+              "Charge 75 minutes, record the actual time, and check her funding against the service agreement, asking the Senior Supervisor if you are unsure",
+              "Charge 75 minutes and take no further action"
+            ],
+            "correctIndex": 1,
+            "explain": "This is not a therapy session, so you charge the real time of 75 minutes. The extra time still uses Mia's funding, so check it against her service agreement and ask the Senior Supervisor if you are unsure."
+          }
+        },
+        {
+          "type": "screenshot",
+          "title": "Two therapists at one session",
+          "image": {
+            "src": "/assets/tutorials/booking-rules-by-session-type/two-therapists.svg",
+            "alt": "When a second therapist attends, the client is charged for one therapist only."
+          },
+          "body": "Sometimes a second therapist attends a session.\n\nThe client is only charged for **one therapist**. Do not charge for the second therapist's attendance."
+        },
+        {
+          "type": "quiz",
+          "title": "Knowledge check: a second therapist",
+          "quiz": {
+            "question": "A second therapist attends a session. Who is the client charged for?",
+            "options": [
+              "Both therapists",
+              "One therapist only",
+              "Whichever therapist is more senior"
+            ],
+            "correctIndex": 1,
+            "explain": "The client is only charged for one therapist, so the second therapist's attendance is not charged."
+          }
+        },
+        {
+          "type": "page",
+          "title": "Session types and NDIS invoicing",
+          "body": "Invoicing codes follow the **NDIS pricing guidelines**. Use the guidelines to find the code that matches the session you delivered.\n\nBook and record the right session type so that the right code can be applied, and charge the time you actually spent."
+        },
+        {
+          "type": "complete",
+          "title": "Summary: session length and charging",
+          "body": "Charge the time you actually spend, allow 10 to 15 minutes for case notes after therapy on the same day, and charge the client for one therapist only.\n\nReturn to your induction to continue with the next module: before you book."
+        }
+      ]
+    },
+    {
+      "key": "booking-rules-before-booking",
+      "title": "Before you book",
+      "description": "The two things that must be in place before any session is booked, including telehealth, and who to ask when you are unsure.",
+      "group": "booking-rules",
+      "minutes": 5,
+      "roles": [
+        "owner",
+        "admin",
+        "therapist",
+        "read_only"
+      ],
+      "thumb": "/assets/tutorials/booking-rules-by-session-type/before-booking.svg",
+      "steps": [
+        {
+          "type": "screenshot",
+          "title": "Two things must be in place first",
+          "image": {
+            "src": "/assets/tutorials/booking-rules-by-session-type/before-booking.svg",
+            "alt": "A signed service agreement and a client record showing funding hours available must be in place before any session is booked."
+          },
+          "body": "Before **any** session is booked, you need:\n• a **signed service agreement**, and\n• a **client record showing how many funding hours are available**.\n\nIf either is missing, do not book the session."
+        },
+        {
+          "type": "warning",
+          "title": "Telehealth needs a service agreement too",
+          "body": "This applies to every session type, including telehealth.\n\nTelehealth is charged against the client's funding, so it still needs a signed service agreement."
+        },
+        {
+          "type": "quiz",
+          "title": "Knowledge check: telehealth",
+          "quiz": {
+            "question": "A client wants a telehealth session but has no service agreement. What do you do?",
+            "options": [
+              "Book it, because telehealth has no travel",
+              "Book it and arrange the agreement later",
+              "Get a signed service agreement before booking"
+            ],
+            "correctIndex": 2,
+            "explain": "Telehealth is charged against the client's funding, so it needs a signed service agreement before it is booked."
+          }
+        },
+        {
+          "type": "quiz",
+          "title": "Scenario: a new client without a service agreement",
+          "quiz": {
+            "question": "Tom (a made-up client) is new. His mother calls and asks for an initial assessment this week. You cannot find a signed service agreement on file. What do you do?",
+            "options": [
+              "Book the initial assessment now, so Tom is not kept waiting",
+              "Explain that the service agreement must be signed and his funding hours confirmed first, then book once both are on his record",
+              "Book it as a telehealth session instead"
+            ],
+            "correctIndex": 1,
+            "explain": "No session is booked until a signed service agreement and a client record showing funding hours are in place, whatever the session type."
+          }
+        },
+        {
+          "type": "page",
+          "title": "Who to ask",
+          "body": "If you have a question about a booking or a client's funding, contact the **Senior Supervisor**.\n\nAsk before you book if you are unsure. It is easier to check first than to fix a booking later."
+        },
+        {
+          "type": "quiz",
+          "title": "Knowledge check: who to ask",
+          "quiz": {
+            "question": "Who do you contact with a booking or funding question?",
+            "options": [
+              "The client's family",
+              "The Senior Supervisor",
+              "No one; book it and check later"
+            ],
+            "correctIndex": 1,
+            "explain": "The Senior Supervisor is the contact for booking and funding questions, and it is best to ask before you book."
+          }
+        },
+        {
+          "type": "complete",
+          "title": "Summary: before you book",
+          "body": "No session of any type is booked until a signed service agreement and a client record showing available funding hours are in place, and any booking or funding question goes to the Senior Supervisor.\n\nReturn to your induction to continue with the practical task and the live tour of the booking screen."
+        }
+      ]
+    },
+    {
+      "key": "booking-rules-session-types-tour",
+      "title": "Session types in the booking screen",
+      "description": "A guided look at the Smart Booking tab, showing where each Opal session type sits in the booking picker.",
+      "group": "booking-rules",
+      "minutes": 4,
+      "roles": [
+        "therapist",
+        "admin",
+        "owner"
+      ],
+      "thumb": "/assets/tutorials/booking-rules-by-session-type/booking-picker.svg",
+      "start": {
+        "tab": "book"
+      },
+      "steps": [
+        {
+          "type": "intro",
+          "title": "Welcome",
+          "body": "This tour shows where each of Opal's session types sits in the portal's booking screen.\n\nThe tour only points things out. It does not make a booking."
+        },
+        {
+          "type": "highlight",
+          "title": "Smart Booking tab",
+          "target": "tab-booking",
+          "pad": 2,
+          "rounded": "8px",
+          "image": {
+            "src": "/assets/tutorials/booking-rules-by-session-type/booking-picker.svg",
+            "alt": "The Smart Booking tab, with booking types grouped under Direct services, Requested reports and Non-face-to-face."
+          },
+          "body": "New appointments are made from the **Smart Booking** tab."
+        },
+        {
+          "type": "highlight",
+          "title": "Booking types",
+          "target": "booking-type-cards",
+          "route": {
+            "tab": "book"
+          },
+          "pad": 6,
+          "rounded": "10px",
+          "image": {
+            "src": "/assets/tutorials/booking-rules-by-session-type/booking-picker.svg",
+            "alt": "The booking picker: Billable groups Direct services, Requested reports and Non-face-to-face, then Non-billable."
+          },
+          "body": "Choose the booking type here. Billable types are grouped under **Direct services**, **Requested reports** and **Non-face-to-face**. Non-billable time, such as supervision, is listed below them."
+        },
+        {
+          "type": "highlight",
+          "title": "Direct services",
+          "target": "bk-direct-services",
+          "route": {
+            "tab": "book"
+          },
+          "pad": 6,
+          "rounded": "10px",
+          "image": {
+            "src": "/assets/tutorials/booking-rules-by-session-type/picker-mapping.svg",
+            "alt": "Initial Assessment / Consultation, Assessment Session, Therapy Session and Telehealth Therapy Session are under Direct services."
+          },
+          "body": "Four of our session types are listed under **Direct services**:\n• Initial assessment: **Initial Assessment / Consultation**\n• Assessment session: **Assessment Session**\n• Therapy session: **Therapy Session**\n• Telehealth session: **Telehealth Therapy Session**\n\nEach of these also has an **Early Intervention Under 9** option in the list."
+        },
+        {
+          "type": "screenshot",
+          "title": "Case management and report writing",
+          "image": {
+            "src": "/assets/tutorials/booking-rules-by-session-type/picker-mapping.svg",
+            "alt": "Case Management is under Non-face-to-face, and reports are listed by name under Requested reports."
+          },
+          "body": "• Case management time is booked as **Case Management**, under **Non-face-to-face**.\n• Reports are listed by name under **Requested reports**, for example Progress Report and Support Letter.\n\nThe picker also lists other options, such as meetings and non-billable time. If you are unsure which option matches the work you are doing, ask the **Senior Supervisor** before you book."
+        },
+        {
+          "type": "warning",
+          "title": "Check before you choose",
+          "body": "Choosing a booking type does not replace the checks you have learned. Before any session is booked, a signed service agreement and a client record showing available funding hours must be in place."
+        },
+        {
+          "type": "quiz",
+          "title": "Knowledge check: telehealth in the picker",
+          "quiz": {
+            "question": "You are booking a telehealth session. Which option do you choose?",
+            "options": [
+              "Therapy Session",
+              "Telehealth Therapy Session",
+              "Phone Calls"
+            ],
+            "correctIndex": 1,
+            "explain": "A telehealth session is booked as Telehealth Therapy Session, under Direct services."
+          }
+        },
+        {
+          "type": "complete",
+          "title": "Summary: session types in the booking screen",
+          "body": "Each Opal session type has its place in the Smart Booking picker, and you choose the one that matches the work you are doing.\n\nReturn to your induction to complete the knowledge check and the sign-off."
+        }
+      ]
+    }
+  ],
+  "meta": {
+    "source": "Opal Readiness Workshop",
+    "topic": "Booking rules by session type",
+    "generatedAt": "2026-11-08T11:34:05.240Z",
+    "template": "blank",
+    "features": [
+      "scenarios",
+      "quiz",
+      "walkthroughs",
+      "live-tour"
+    ],
+    "reuseTours": [],
+    "policy": {
+      "name": "Booking pre-requisites procedure",
+      "status": "to write",
+      "summary": "A signed service agreement and a client record showing available funding hours must be in place before any session is booked."
+    },
+    "openQuestions": [
+      "What is the standard booking length for each session type: initial assessment, assessment session, telehealth, case management and report writing? The directors said usually an hour, charged at real time.",
+      "What buffer or travel time applies around each session type, including sessions held at a client's home?",
+      "Which specific NDIS line item codes apply to each session type? Staff are currently pointed to the NDIS pricing guidelines.",
+      "Where in the portal do staff find the client record showing funding hours? The directors will confirm the location."
+    ]
+  }
+}
