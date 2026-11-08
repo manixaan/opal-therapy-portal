@@ -607,6 +607,39 @@ test('an induction pack imports as a draft with its walkthroughs published besid
   expect(rows.find((r) => r.key === 'case-note-ai').title).toBe('Owner retitled');
 });
 
+test('induction packs are placed once per organisation at startup, and a deleted draft never comes back', async () => {
+  const { autoPlaceInductionPacks } = require('../../learning-routes');
+  const packTitles = require('../../induction-packs').loadPacks().packs
+    .filter((p) => p.walkthroughs.length).map((p) => p.title).sort();
+  await agentFor('owner', org.id);
+  const noOwner = await seedOrganisation('No Owner Org');
+
+  const first = await autoPlaceInductionPacks();
+  expect(first.filter((x) => x.organisationId === org.id).map((x) => x.title).sort()).toEqual(packTitles);
+  expect(first.some((x) => x.organisationId === noOwner.id)).toBe(false);
+  const { rows: drafts } = await db.pool.query(
+    `SELECT title, current_version FROM learning_workflows WHERE organisation_id = $1`, [org.id]);
+  expect(drafts.map((r) => r.title).sort()).toEqual(packTitles);
+  drafts.forEach((r) => expect(Number(r.current_version)).toBe(0));
+
+  // Idempotent, and an Owner's deletion sticks: the installed walkthroughs
+  // are the marker, so the deleted pack is not placed again.
+  expect(await autoPlaceInductionPacks()).toEqual([]);
+  await db.pool.query(`DELETE FROM learning_workflows WHERE organisation_id = $1 AND title = $2`, [org.id, packTitles[0]]);
+  expect(await autoPlaceInductionPacks()).toEqual([]);
+
+  // The switch turns it off entirely.
+  const other = await seedOrganisation('Second Org');
+  await agentFor('owner', other.id);
+  process.env.INDUCTION_PACKS_AUTOPLACE = 'false';
+  try {
+    expect(await autoPlaceInductionPacks()).toEqual([]);
+  } finally {
+    delete process.env.INDUCTION_PACKS_AUTOPLACE;
+  }
+  expect((await autoPlaceInductionPacks()).every((x) => x.organisationId === other.id)).toBe(true);
+});
+
 test('a path whose resources are gone is reported, not silently dropped', async () => {
   const owner = await agentFor('owner', org.id);
   await db.pool.query(

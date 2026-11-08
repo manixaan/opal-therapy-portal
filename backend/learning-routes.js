@@ -1606,6 +1606,61 @@ router.post('/api/learning/my/:id/items/:itemKey/complete', safe(async (req, res
   });
 }));
 
+/**
+ * Place new induction packs in every organisation's Assign Learning, as
+ * drafts, without anyone pressing Import — run once at server start.
+ *
+ * Placement happens ONCE per pack per organisation. The marker is the pack's
+ * own walkthroughs: placing a pack installs them, and they stay installed
+ * even if the Owner deletes the draft, so a deleted draft never comes back
+ * on the next restart. A pack without walkthroughs has no marker and is
+ * therefore never auto-placed — the Import button still brings it in.
+ * A pack whose title already exists is left alone (idempotent by title,
+ * like the import). Set INDUCTION_PACKS_AUTOPLACE=false to switch off.
+ */
+async function autoPlaceInductionPacks() {
+  if (String(process.env.INDUCTION_PACKS_AUTOPLACE || '').toLowerCase() === 'false') return [];
+  const { packs } = require('./induction-packs').loadPacks();
+  const placeable = packs.filter((p) => p.walkthroughs.length);
+  if (!placeable.length) return [];
+  const { rows: owners } = await pool.query(
+    `SELECT DISTINCT ON (organisation_id) organisation_id, id
+       FROM users
+      WHERE role = 'owner' AND organisation_id IS NOT NULL AND is_active IS NOT FALSE
+      ORDER BY organisation_id, created_at ASC`);
+  const placed = [];
+  for (const o of owners) {
+    const { rows: have } = await pool.query(
+      `SELECT key FROM walkthrough_modules WHERE organisation_id = $1 AND key = ANY($2::text[])`,
+      [o.organisation_id, placeable.flatMap((p) => p.walkthroughs.map((w) => w.key))]);
+    const installed = new Set(have.map((r) => r.key));
+    const { rows: titles } = await pool.query(
+      `SELECT title FROM learning_workflows WHERE organisation_id = $1`, [o.organisation_id]);
+    const haveTitle = new Set(titles.map((r) => String(r.title).trim().toLowerCase()));
+    for (const p of placeable) {
+      if (p.walkthroughs.some((w) => installed.has(w.key))) continue;
+      if (haveTitle.has(p.title.trim().toLowerCase())) continue;
+      await require('./walkthrough-catalogue').installModules(o.organisation_id, p.walkthroughs, o.id);
+      const content = { sections: p.sections };
+      if (p.sequential) content.sequential = true;
+      const { rows } = await pool.query(
+        `INSERT INTO learning_workflows (organisation_id, title, description, category, draft_content, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+        [o.organisation_id, p.title, p.description, p.category, JSON.stringify(content), o.id]);
+      haveTitle.add(p.title.trim().toLowerCase());
+      placed.push({ organisationId: o.organisation_id, id: rows[0].id, title: p.title });
+      await db.logAuditEvent({
+        action: 'learning.workflows_imported', targetType: 'learning', targetId: String(rows[0].id),
+        actorUserId: null, organisationId: o.organisation_id, ipAddress: null,
+        metadata: { automatic: true, pack: p.slug },
+      }).catch(() => {});
+    }
+  }
+  if (placed.length) log.info('induction packs placed', { count: placed.length });
+  return placed;
+}
+
 module.exports = router;
 module.exports.importExistingInductions = importExistingInductions;
 module.exports.importInductionPacks = importInductionPacks;
+module.exports.autoPlaceInductionPacks = autoPlaceInductionPacks;

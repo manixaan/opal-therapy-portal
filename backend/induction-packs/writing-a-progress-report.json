@@ -46,7 +46,7 @@
           {
             "type": "task",
             "title": "Live tour: Finding the progress report template",
-            "body": "Complete this tour with a current client. It guides you through the live screens (Resource Hub › Templates › **Progress Note** › Start a document), and you select each step yourself.\n\nThe pre-filled details can be edited where needed, so check them.",
+            "body": "Complete this tour with a current client. It guides you through the live screens (Resource Hub › Templates › **Progress Report** › Start a document), and you select each step yourself.\n\nThe pre-filled details can be edited where needed, so check them.",
             "minutes": 4,
             "required": true,
             "walkthrough_key": "progress-report-template-tour"
@@ -341,7 +341,7 @@
     {
       "key": "progress-report-template-tour",
       "title": "Finding the progress report template",
-      "description": "A live tour: Resource Hub › Templates › Progress Note › Start a document.",
+      "description": "A live tour: Resource Hub › Templates › Progress Report › Start a document.",
       "group": "progress-reports",
       "minutes": 4,
       "roles": ["owner", "admin", "therapist", "read_only"],
@@ -351,8 +351,8 @@
         {
           "type": "screenshot",
           "title": "Route to the template",
-          "image": { "src": "/assets/tutorials/writing-a-progress-report/route-map.svg", "alt": "Resource Hub, then Templates, then Progress Note, then Start a document." },
-          "body": "Complete this tour with a current client. You will select each step yourself:\n\n**Resource Hub › Templates › Progress Note › Start a document**\n\nIn the portal, the template for a progress report is labelled **Progress Note**. That is the one to use."
+          "image": { "src": "/assets/tutorials/writing-a-progress-report/route-map.svg", "alt": "Resource Hub, then Templates, then Progress Report, then Start a document." },
+          "body": "Complete this tour with a current client. You will select each step yourself:\n\n**Resource Hub › Templates › Progress Report › Start a document**"
         },
         {
           "type": "action",
@@ -362,28 +362,28 @@
           "advance": "click",
           "pad": 4,
           "rounded": "8px",
-          "image": { "src": "/assets/tutorials/writing-a-progress-report/templates-catalogue.svg", "alt": "The Templates screen with the Progress Note card highlighted." },
+          "image": { "src": "/assets/tutorials/writing-a-progress-report/templates-catalogue.svg", "alt": "The Templates screen with the Progress Report card highlighted." },
           "body": "In the Resource Hub, select **Templates**."
         },
         {
           "type": "action",
-          "title": "Start a Progress Note",
+          "title": "Start a Progress Report",
           "route": {"tab": "resources", "open": "hub-templates"},
-          "target": "button[onclick*=\"startNew('progress_note')\"]",
+          "target": "button[onclick*=\"startNew('progress_report')\"]",
           "advance": "click",
           "pad": 6,
           "rounded": "10px",
-          "image": { "src": "/assets/tutorials/writing-a-progress-report/templates-catalogue.svg", "alt": "The Progress Note card's Start a document button." },
-          "body": "On the **Progress Note** card, select **Start a document**."
+          "image": { "src": "/assets/tutorials/writing-a-progress-report/templates-catalogue.svg", "alt": "The Progress Report card's Start a document button." },
+          "body": "On the **Progress Report** card, select **Start a document**."
         },
         {
           "type": "highlight",
           "title": "Find the client",
-          "route": {"tab": "resources", "open": "template-start:progress_note"},
+          "route": {"tab": "resources", "open": "template-start:progress_report"},
           "target": "#tpl-client-q",
           "pad": 6,
           "rounded": "10px",
-          "image": { "src": "/assets/tutorials/writing-a-progress-report/new-dialog.svg", "alt": "The New Progress Note dialog with a participant search box." },
+          "image": { "src": "/assets/tutorials/writing-a-progress-report/new-dialog.svg", "alt": "The New Progress Report dialog with a participant search box." },
           "body": "Search for the client by **name or NDIS number**, then select them from the list.\n\nChoosing the client is what fills in their details."
         },
         {
@@ -393,7 +393,7 @@
           "advance": "click",
           "pad": 6,
           "rounded": "10px",
-          "image": { "src": "/assets/tutorials/writing-a-progress-report/new-dialog.svg", "alt": "The Create button in the New Progress Note dialog." },
+          "image": { "src": "/assets/tutorials/writing-a-progress-report/new-dialog.svg", "alt": "The Create button in the New Progress Report dialog." },
           "body": "Select **Create**. The template is populated with many of the client's details."
         },
         {
@@ -417,7 +417,7 @@
         {
           "type": "complete",
           "title": "Summary: finding the template",
-          "body": "**Resource Hub › Templates › Progress Note › Start a document**, then search for the client, create the document, check the details and download it.\n\nReturn to your induction to continue with the next module: review, approval and sending."
+          "body": "**Resource Hub › Templates › Progress Report › Start a document**, then search for the client, create the document, check the details and download it.\n\nReturn to your induction to continue with the next module: review, approval and sending."
         }
       ]
     },
@@ -505,8 +505,7 @@
       "Who signs off the progress report before it goes out? The discussion only mentions the coordinator's approval.",
       "Is there a named Opal policy or procedure for progress reports, and does it match the suggested name Progress Report Procedure?",
       "How is a progress report different from a case note or progress note at Opal, and how often are progress notes due?",
-      "D16 (document and communication turnaround, including completion standard and supervisor review turnaround) is not decided. Is the seven-day timeframe from the existing email adopted?",
-      "The portal's template for this is labelled 'Progress Note', while this induction says it is a progress report, not a progress note. Should the template be renamed?"
+      "D16 (document and communication turnaround, including completion standard and supervisor review turnaround) is not decided. Is the seven-day timeframe from the existing email adopted?"
     ]
   }
 }

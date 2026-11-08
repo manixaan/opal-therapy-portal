@@ -1182,6 +1182,13 @@ async function renewOutlookWebhooks() {
   }
 }
 
+// Place new induction packs (backend/induction-packs/) in each organisation's
+// Assign Learning as drafts — once per pack, never re-adding a deleted draft.
+setTimeout(() => {
+  require('./learning-routes').autoPlaceInductionPacks()
+    .catch((err) => console.warn('⚠️  Induction pack placement error:', err.message));
+}, 10000);
+
 // Register webhooks after startup (only when WEBHOOK_BASE_URL is configured)
 setTimeout(async () => {
   if (!process.env.WEBHOOK_BASE_URL) {
