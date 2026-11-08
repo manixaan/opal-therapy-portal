@@ -33,11 +33,30 @@ body.oa-pane .oa-side { display: none; }
 .oa-brand strong { font-size: 15px; letter-spacing: -.01em; }
 .oa-brand span { display: block; font-size: 11.5px; color: var(--muted); }
 .oa-side-actions { padding: 0 12px 10px; display: flex; gap: 8px; }
-.oa-threads { flex: 1; overflow: auto; padding: 4px 8px 12px; }
-.oa-thread { display: block; width: 100%; text-align: left; background: none; border: 1px solid transparent; border-radius: var(--radius-md); padding: 8px 10px; margin-bottom: 2px; color: var(--ink-soft); }
+.oa-threads { flex: 1; overflow: auto; padding: 2px 8px 12px; }
+/* One group per client, Claude-project style: a quiet header with a caret and a +, chats beneath with a dot. */
+.oa-group { margin-top: 10px; }
+.oa-group-head { display: flex; align-items: center; gap: 2px; padding-right: 2px; }
+.oa-group-toggle { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 6px; background: none; border: 0; border-radius: var(--radius-sm); padding: 5px 8px; text-align: left; color: var(--muted); }
+.oa-group-toggle:hover { color: var(--ink-soft); }
+.oa-group-name { font-size: 12px; font-weight: 700; letter-spacing: .02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.oa-group.current .oa-group-name { color: var(--accent-deep); }
+.oa-group.general .oa-group-name { font-style: italic; font-weight: 600; }
+.oa-group-toggle small { font-size: 11px; color: var(--muted); font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.oa-caret { flex: none; width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 5px solid currentColor; align-self: center; transition: transform var(--t-fast); }
+.oa-group-toggle[aria-expanded="false"] .oa-caret { transform: rotate(-90deg); }
+.oa-group-new { flex: none; width: 26px; height: 26px; display: grid; place-items: center; background: none; border: 0; border-radius: var(--radius-sm); color: var(--ink-soft); font-size: 18px; line-height: 1; }
+.oa-group-new:hover { background: var(--border-soft); color: var(--accent-deep); }
+.oa-group-chats { padding: 1px 0 2px; }
+.oa-thread { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; background: none; border: 0; border-radius: var(--radius-sm); padding: 6px 10px; margin-bottom: 1px; color: var(--ink-soft); font-size: 13px; }
 .oa-thread:hover { background: var(--border-soft); }
-.oa-thread.active { background: var(--accent-soft); color: var(--accent-deep); border-color: transparent; }
-.oa-thread small { display: block; color: var(--muted); font-size: 11px; }
+.oa-thread.active { background: var(--border-soft); color: var(--ink); font-weight: 600; }
+.oa-thread-title { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.oa-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid var(--muted); }
+.oa-thread.active .oa-dot { background: var(--accent); border-color: var(--accent); }
+.oa-group-more { display: block; background: none; border: 0; padding: 4px 10px 4px 27px; font-size: 12px; color: var(--muted); }
+.oa-group-more:hover { color: var(--accent-deep); }
+.oa-side-empty { margin: 2px 10px 4px 27px; font-size: 12px; color: var(--muted); }
 .oa-side-foot { padding: 12px 16px; border-top: 1px solid var(--border-soft); font-size: 11.5px; color: var(--muted); }
 .oa-side-foot a { color: var(--accent-deep); }
 
@@ -186,16 +205,9 @@ body.oa-pane .oa-textarea { min-height: 40px; }
 
 /* ── Client picker: each chat belongs to one client (or none) ──────────── */
 .oa-side-label { font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); padding: 0 16px 6px; }
-.oa-threads-label { padding-top: 10px; border-top: 1px solid var(--border-soft); }
-.oa-client { padding: 4px 0 10px; }
+.oa-client { padding: 2px 0 4px; }
 .oa-client-search { display: block; width: calc(100% - 24px); margin: 0 12px 6px; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 6px 10px; background: var(--bg); font-size: 13px; }
 .oa-client-search:focus-visible { border-color: var(--accent); background: var(--panel); }
-.oa-client-list { max-height: 210px; overflow: auto; padding: 0 8px; }
-.oa-client-opt { display: block; width: 100%; text-align: left; background: none; border: 1px solid transparent; border-radius: var(--radius-sm); padding: 5px 10px; color: var(--ink-soft); font-size: 13px; }
-.oa-client-opt:hover { background: var(--border-soft); }
-.oa-client-opt.active { background: var(--accent-soft); color: var(--accent-deep); font-weight: 600; }
-.oa-client-opt small { color: var(--muted); font-weight: 400; margin-left: 6px; }
-.oa-client-opt.general { font-style: italic; }
 .oa-client-chip { font-size: 12px; font-weight: 600; background: var(--accent-soft); color: var(--accent-deep); border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
 .oa-install { display: block; margin-top: 8px; background: none; border: 0; padding: 0; color: var(--accent-deep); font-size: 12px; font-weight: 600; text-decoration: underline; }
 

@@ -60,7 +60,52 @@
     });
   }
 
-  if (typeof module !== 'undefined' && module.exports) module.exports = { splitTokens, restoreTokens, clientSeed, filterClients };
+  /**
+   * The sidebar, one group per client (Claude-project style): each group holds
+   * that client's chats, newest first. Groups are ordered by their latest chat,
+   * so opening a chat never reorders the list; a client just picked shows (on
+   * top) even before its first chat. "General"
+   * (no client) is a group like any other. A search shows every matching
+   * client, with or without chats, so a new one can be started from there.
+   *
+   * @returns [{ ref: '' | clientRef, name, suburb, chats: [...], latest: ms }]
+   */
+  function groupThreads(conversations, clients, opts) {
+    opts = opts || {};
+    var byRef = {};
+    (clients || []).forEach(function (c) { byRef[c.ref] = c; });
+    var groups = {};
+    var group = function (ref) {
+      if (!groups[ref]) {
+        var c = byRef[ref];
+        groups[ref] = { ref: ref, name: ref ? (c ? c.name : 'Former client') : 'General', suburb: c ? c.suburb || '' : '', chats: [], latest: 0 };
+      }
+      return groups[ref];
+    };
+    (conversations || []).forEach(function (cv) {
+      var g = group(cv.client_ref || '');
+      g.chats.push(cv);
+      g.latest = Math.max(g.latest, new Date(cv.updated_at).getTime() || 0);
+    });
+    var q = String(opts.query || '').trim();
+    if (q) {
+      var keep = {};
+      filterClients(clients, q).forEach(function (c) { group(c.ref); keep[c.ref] = true; });
+      Object.keys(groups).forEach(function (ref) { if (!keep[ref] && filterClients([{ name: groups[ref].name, suburb: groups[ref].suburb }], q).length === 0) delete groups[ref]; });
+    } else {
+      group('');
+      if (opts.current) group(opts.current);
+    }
+    return Object.keys(groups).map(function (k) { return groups[k]; }).sort(function (a, b) {
+      // A client just picked, with no chats yet, sits on top; otherwise nothing jumps when a chat is opened.
+      var aNew = !q && opts.current && a.ref === opts.current && !a.chats.length;
+      var bNew = !q && opts.current && b.ref === opts.current && !b.chats.length;
+      if (aNew !== bNew) return aNew ? -1 : 1;
+      return (b.latest - a.latest) || a.name.localeCompare(b.name);
+    });
+  }
+
+  if (typeof module !== 'undefined' && module.exports) module.exports = { splitTokens, restoreTokens, clientSeed, filterClients, groupThreads };
   if (!global.document) return;
 
   // ── State ─────────────────────────────────────────────────────────────────
@@ -254,7 +299,7 @@
   function setBusy(b) { S.busy = b; $('oa-send').disabled = b || !S.enabled; $('oa-stop').style.display = b ? '' : 'none'; $('oa-input').disabled = b; }
 
   // ── Review card ───────────────────────────────────────────────────────────
-  function renderReview() {
+  function renderReview(focusSend) {
     var slot = $('oa-review-slot');
     var r = S.review;
     if (!r) { slot.innerHTML = ''; return; }
@@ -273,15 +318,42 @@
       + (r.directoryPartial ? '<p class="oa-note warn"><b>Names may not be recognised right now.</b> ' + esc((r.directoryMissing || []).join(', ') || 'Part of the practice directory') + ' could not be loaded, so people from there are not hidden automatically. Type any name into the box above and press Hide it, or wait thirty seconds and press Check &amp; send again.</p>' : '')
       + (r.cautions || []).map(function (c) { return '<p class="oa-note warn"><b>' + (c.kind === 'combination' ? 'Could still identify someone.' : 'Sensitive topic.') + '</b> ' + esc(c.message) + '</p>'; }).join('')
       + ((r.directoryNotConnected || []).length ? '<p class="oa-note warn"><b>Splose is not connected on this server,</b> so client and contact names are not recognised. Hide them yourself with the box above.</p>' : '')
-      + '<div class="oa-review-actions"><button class="oa-btn" type="button" id="oa-review-edit">Edit message</button><button class="oa-btn primary" type="button" id="oa-review-send">Send</button></div>'
+      + (r.failed ? '<p class="oa-note warn"><b>The check could not be updated.</b> Press Edit message, then send again to re-check.</p>' : '')
+      + '<div class="oa-review-actions"><button class="oa-btn" type="button" id="oa-review-edit">Edit message</button><button class="oa-btn primary" type="button" id="oa-review-send"' + (r.pending ? ' disabled' : '') + '>' + (r.pending ? (r.failed ? 'Send' : 'Updating…') : 'Send') + '</button></div>'
       + '</div>';
-    $('oa-review-send').focus();
+    if (focusSend !== false && !r.pending) $('oa-review-send').focus();
   }
 
-  /** Run the server check on the message (and selection) and open the review card. */
-  function runCheck(rawText) {
-    setBusy(true);
-    setStatus('Checking…');
+  /**
+   * A Hide / Not a person / Hide it decision. The card changes at once; the
+   * server check re-runs behind it (quick clicks share one run). Send stays
+   * off until that run is back, so what leaves is always the server's text,
+   * never this provisional preview.
+   */
+  function decide(word, hide) {
+    var r = S.review; if (!r || !word) return;
+    var lw = word.toLowerCase();
+    r.candidates = r.candidates.filter(function (c) { return c.word.toLowerCase() !== lw; });
+    if (hide) {
+      S.pendingConfirmed = (S.pendingConfirmed || []).concat([word]);
+      var re = new RegExp('\\b' + word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'gi');
+      r.text = r.text.replace(re, '[PERSON]');
+      if (r.selectionText) r.selectionText = r.selectionText.replace(re, '[PERSON]');
+      r.hidden = r.hidden.concat([{ name: word, token: 'PERSON' }]);
+    } else {
+      S.ignoredWords.push(word);
+    }
+    r.pending = true; r.failed = false;
+    renderReview(false);
+    clearTimeout(S.recheckTimer);
+    S.recheckTimer = setTimeout(function () { if (S.review === r) runCheck(r.raw, true); }, 120);
+  }
+
+  /** Run the server check on the message (and selection) and open the review card. `quiet` re-checks an open card in the background. */
+  function runCheck(rawText, quiet) {
+    var seq = S.checkSeq = (S.checkSeq || 0) + 1;
+    var current = function () { return seq === S.checkSeq && (!quiet || !!S.review); };
+    if (!quiet) { setBusy(true); setStatus('Checking…'); }
     var confirmed = S.known.filter(function (k) { return k.name; }).map(function (k) { return k.name; }).concat(S.pendingConfirmed || []);
     var clientRef = S.client ? S.client.ref : undefined;
     return api('/api/assist/check', { body: { text: rawText, known: S.known, confirmedNames: confirmed, ignoredWords: S.ignoredWords, clientRef: clientRef } })
@@ -302,12 +374,15 @@
           });
       })
       .then(function (pending) {
+        if (!current()) return; // a newer decision, or the card was closed
         pending.hidden.forEach(function (h) { S.names[h.token] = h.name; });
         S.review = pending;
-        setBusy(false); setStatus('Ready');
-        renderReview();
+        if (!quiet) { setBusy(false); setStatus('Ready'); }
+        renderReview(!quiet);
       })
       .catch(function (err) {
+        if (!current()) return;
+        if (quiet) { S.review.failed = true; renderReview(false); return; } // Send stays off
         setBusy(false); setStatus('Check failed', 'warn');
         if (err && err.message && err.message !== 'check_failed') $('oa-review-slot').innerHTML = '<p class="oa-note warn">' + esc(err.message) + '</p>';
       });
@@ -316,7 +391,7 @@
   // ── Sending ───────────────────────────────────────────────────────────────
   function confirmSend() {
     var r = S.review;
-    if (!r) return;
+    if (!r || r.pending) return;
     S.review = null; renderReview();
     S.known = r.known || S.known;
     S.pendingConfirmed = [];
@@ -385,19 +460,70 @@
 
   // ── Threads ───────────────────────────────────────────────────────────────
   /** Thread titles are stored tokenised: show them with this client's name, other tokens as roles. */
-  function threadTitle(title) {
-    var names = Object.assign({}, S.names, S.client && S.client.name ? { CLIENT_1: S.client.name } : {});
-    return DOC().restoreText(title || 'Chat', names, S.nameStyle);
+  /** A chat's title with names put back: this browser's map for that chat, plus its client. */
+  function threadTitle(c, clientName) {
+    var names = {};
+    if (c.id === S.conversationId) names = S.names;
+    else { try { var raw = localStorage.getItem('oa.map.' + c.id); if (raw) names = JSON.parse(raw).names || {}; } catch (e) { /* ignore */ } }
+    names = Object.assign({}, names, clientName ? { CLIENT_1: clientName } : {});
+    return DOC().restoreText(c.title || 'Chat', names, S.nameStyle);
   }
   function loadThreads() {
-    var q = S.surface === 'web' ? '?client=' + encodeURIComponent(S.client ? S.client.ref : 'general') : '';
-    $('oa-threads-label').textContent = S.surface !== 'web' ? 'Chats' : S.client ? 'Chats about ' + S.client.name : 'General chats (no client)';
-    return api('/api/assist/conversations' + q).then(function (r) { return r.ok ? r.json() : { conversations: [] }; }).then(function (d) {
-      var el = $('oa-threads');
-      el.innerHTML = (d.conversations || []).map(function (c) {
-        return '<button class="oa-thread' + (c.id === S.conversationId ? ' active' : '') + '" type="button" data-open="' + esc(c.id) + '">' + esc(threadTitle(c.title)) + '<small>' + esc(new Date(c.updated_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })) + ' · ' + esc(c.surface) + '</small></button>';
-      }).join('') || '<p class="oa-note" style="padding:8px 10px;">No chats yet.</p>';
+    return api('/api/assist/conversations').then(function (r) { return r.ok ? r.json() : { conversations: [] }; }).then(function (d) {
+      S.threads = d.conversations || [];
+      renderSidebar();
     }).catch(function () {});
+  }
+
+  // ── Sidebar: chats grouped under each client ──────────────────────────────
+  var GROUP_PREVIEW = 5;
+  function loadCollapsed() { try { return JSON.parse(localStorage.getItem('oa.collapsed') || '{}') || {}; } catch (e) { return {}; } }
+  function threadRow(c, clientName) {
+    var when = new Date(c.updated_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
+    return '<button class="oa-thread' + (c.id === S.conversationId ? ' active' : '') + '" type="button" data-open="' + esc(c.id) + '" title="' + esc(when + (c.surface && c.surface !== 'web' ? ' · ' + c.surface : '')) + '">'
+      + '<span class="oa-dot" aria-hidden="true"></span><span class="oa-thread-title">' + esc(threadTitle(c, clientName)) + '</span></button>';
+  }
+  function renderSidebar() {
+    var el = $('oa-threads');
+    if (!el) return;
+    var threads = S.threads || [];
+    if (S.surface !== 'web') {
+      el.innerHTML = threads.map(function (c) { return threadRow(c, ''); }).join('') || '<p class="oa-side-empty">No chats yet.</p>';
+      return;
+    }
+    var q = $('oa-client-search').value;
+    var current = S.client ? S.client.ref : '';
+    var groups = groupThreads(threads, S.clients, { query: q, current: current });
+    var collapsed = loadCollapsed();
+    S.showAll = S.showAll || {};
+    el.innerHTML = (S.clientsError ? '<p class="oa-side-empty">' + esc(S.clientsError) + '</p>' : '')
+      + groups.map(function (g) {
+        var isOpen = !!q || !collapsed[g.ref || 'general'];
+        var clientName = g.ref ? g.name : '';
+        var shown = isOpen ? (S.showAll[g.ref] ? g.chats : g.chats.slice(0, GROUP_PREVIEW)) : [];
+        var more = isOpen && !S.showAll[g.ref] && g.chats.length > GROUP_PREVIEW ? g.chats.length - GROUP_PREVIEW : 0;
+        var label = g.ref ? g.name : 'General — no client';
+        return '<section class="oa-group' + (g.ref === current ? ' current' : '') + (g.ref ? '' : ' general') + '">'
+          + '<div class="oa-group-head">'
+          + '<button class="oa-group-toggle" type="button" data-toggle="' + esc(g.ref || 'general') + '" aria-expanded="' + isOpen + '">'
+          + '<span class="oa-group-name">' + esc(label) + '</span>' + (g.suburb ? '<small>' + esc(g.suburb) + '</small>' : '')
+          + '<span class="oa-caret" aria-hidden="true"></span></button>'
+          + '<button class="oa-group-new" type="button" data-client="' + esc(g.ref) + '" title="New chat' + (g.ref ? ' about ' + esc(g.name) : '') + '" aria-label="New chat' + (g.ref ? ' about ' + esc(g.name) : ' with no client') + '">+</button>'
+          + '</div>'
+          + (isOpen ? '<div class="oa-group-chats">'
+            + shown.map(function (c) { return threadRow(c, clientName); }).join('')
+            + (more ? '<button class="oa-group-more" type="button" data-more="' + esc(g.ref) + '">Show ' + more + ' more</button>' : '')
+            + (!g.chats.length ? '<p class="oa-side-empty">No chats yet — press + to start one.</p>' : '')
+            + '</div>' : '')
+          + '</section>';
+      }).join('')
+      + (q && !groups.length ? '<p class="oa-side-empty">No client matches “' + esc(q) + '”.</p>' : '');
+  }
+  function toggleGroup(key) {
+    var collapsed = loadCollapsed();
+    if (collapsed[key]) delete collapsed[key]; else collapsed[key] = true;
+    try { localStorage.setItem('oa.collapsed', JSON.stringify(collapsed)); } catch (e) { /* ignore */ }
+    renderSidebar();
   }
   function openThread(id) {
     api('/api/assist/conversations/' + id).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
@@ -405,7 +531,7 @@
       S.conversationId = id; loadMap(id);
       var ref = d.conversation.client_ref || null;
       S.client = ref ? (S.clients.filter(function (c) { return c.ref === ref; })[0] || { ref: ref, name: '' }) : null;
-      pinClientName(); saveMap(); renderClientChip(); renderClients();
+      pinClientName(); saveMap(); renderClientChip(); renderSidebar();
       S.title = d.conversation.title || 'Chat'; $('oa-title').textContent = S.title;
       editors = {};
       S.messages = d.messages.map(function (m) { return { role: m.role, text: m.content, id: m.id, kind: m.kind, doc: m.document || null }; });
@@ -424,22 +550,13 @@
     var chip = $('oa-client-chip');
     if (S.client && S.client.name) { chip.hidden = false; chip.textContent = S.client.name; chip.title = 'This chat is about ' + S.client.name + ' — the AI sees [CLIENT_1]'; } else chip.hidden = true;
   }
-  function renderClients() {
-    var el = $('oa-client-list');
-    if (!el) return;
-    if (S.clientsError) { el.innerHTML = '<p class="oa-note" style="padding:4px 10px;">' + esc(S.clientsError) + '</p>'; return; }
-    var list = filterClients(S.clients, $('oa-client-search').value).slice(0, 80);
-    el.innerHTML = '<button class="oa-client-opt general' + (!S.client ? ' active' : '') + '" type="button" role="option" data-client="">General — no client</button>'
-      + list.map(function (c) {
-        return '<button class="oa-client-opt' + (S.client && S.client.ref === c.ref ? ' active' : '') + '" type="button" role="option" data-client="' + esc(c.ref) + '">' + esc(c.name) + (c.suburb ? '<small>' + esc(c.suburb) + '</small>' : '') + '</button>';
-      }).join('');
-  }
   function selectClient(ref) {
     var c = ref ? S.clients.filter(function (x) { return x.ref === ref; })[0] : null;
     if (ref && !c) return;
     S.client = c || null;
     try { localStorage.setItem('oa.client', c ? c.ref : ''); } catch (e) { /* ignore */ }
-    renderClients(); newChat();
+    $('oa-client-search').value = '';
+    newChat();
     if (global.innerWidth < 760) $('oa-side').classList.remove('open');
   }
   function loadClients(initialRef) {
@@ -449,8 +566,8 @@
       S.clients = d.clients || []; S.clientsError = '';
       if (initialRef) { var c = S.clients.filter(function (x) { return x.ref === initialRef; })[0]; if (c && !S.conversationId) { S.client = c; newChat(); } }
       if (S.client && !S.client.name) { var m = S.clients.filter(function (x) { return x.ref === S.client.ref; })[0]; if (m) { S.client = m; pinClientName(); renderClientChip(); renderStack(); loadThreads(); } }
-      renderClients();
-    }).catch(function (err) { S.clients = []; S.clientsError = (err && err.message) || 'Could not load your clients.'; renderClients(); });
+      renderSidebar();
+    }).catch(function (err) { S.clients = []; S.clientsError = (err && err.message) || 'Could not load your clients.'; renderSidebar(); });
   }
 
   // ── Leaving, and installing as an app ─────────────────────────────────────
@@ -504,13 +621,15 @@
     if (t.id === 'oa-new') return newChat();
     if (t.id === 'oa-menu') { $('oa-side').classList.toggle('open'); return; }
     if (t.id === 'oa-review-send') return confirmSend();
-    if (t.id === 'oa-review-edit') { S.review = null; renderReview(); $('oa-input').focus(); return; }
-    if (t.id === 'oa-addname-btn') { var v = $('oa-addname').value.trim(); if (v) { S.pendingConfirmed = (S.pendingConfirmed || []).concat([v]); runCheck(S.review.raw); } return; }
+    if (t.id === 'oa-review-edit') { clearTimeout(S.recheckTimer); S.review = null; renderReview(); $('oa-input').focus(); return; }
+    if (t.id === 'oa-addname-btn') { var v = $('oa-addname').value.trim(); if (v) decide(v, true); return; }
     if (t.id === 'oa-selection-clear') { setSelection(''); return; }
     if (t.id === 'oa-use-selection') { if (office()) office().readSelection().then(function (txt) { setSelection(txt); if (!txt) setStatus('Nothing selected', 'warn'); }); return; }
-    if (t.dataset.hide) { S.pendingConfirmed = (S.pendingConfirmed || []).concat([t.dataset.hide]); runCheck(S.review.raw); return; }
-    if (t.dataset.ignore) { S.ignoredWords.push(t.dataset.ignore); runCheck(S.review.raw); return; }
+    if (t.dataset.hide) return decide(t.dataset.hide, true);
+    if (t.dataset.ignore) return decide(t.dataset.ignore, false);
     if (t.dataset.open) return openThread(t.dataset.open);
+    if (t.dataset.toggle) return toggleGroup(t.dataset.toggle);
+    if (t.dataset.more !== undefined) { S.showAll = S.showAll || {}; S.showAll[t.dataset.more] = true; renderSidebar(); return; }
     if (t.dataset.client !== undefined) return selectClient(t.dataset.client || null);
     if (t.id === 'oa-install') { if (installPrompt) { installPrompt.prompt(); installPrompt.userChoice.then(function () { installPrompt = null; t.hidden = true; }); } return; }
     if (t.dataset.chip) { $('oa-input').value = t.dataset.chip + ':\n\n'; $('oa-input').focus(); return; }
@@ -523,7 +642,7 @@
     }
   });
   $('oa-input').addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSend(); } });
-  $('oa-client-search').addEventListener('input', renderClients);
+  $('oa-client-search').addEventListener('input', renderSidebar);
   $('oa-namestyle').value = S.nameStyle;
   $('oa-namestyle').addEventListener('change', function (e) {
     S.nameStyle = e.target.value === 'full' ? 'full' : 'first';
@@ -559,7 +678,7 @@
     var startRef = params.get('client');
     if (startRef === null) { try { startRef = localStorage.getItem('oa.client') || ''; } catch (e) { startRef = ''; } }
     if (S.surface !== 'web') { $('oa-client').style.display = 'none'; startRef = ''; }
-    renderStack(); updateSelectionBar(); renderClients();
+    renderStack(); updateSelectionBar(); renderSidebar();
     api('/api/auth/me').then(function (r) { return r.ok ? r.json() : null; }).then(function (u) { S.user = u; }).catch(function () {});
     if (office()) { $('oa-use-selection').style.display = ''; }
     api('/api/assist/config').then(function (r) {

@@ -407,8 +407,50 @@ const COMMON_WORDS = new Set(('a about above after again all also am an and any 
   + 'though time to today told too took toward two under until up upon us use used very want was way we week well went were what when where which while who why will with without work would '
   + 'year yes yet you your parent parents mum dad mother father teacher carer coordinator provider support worker therapist doctor nurse everyone someone nobody anyone people person child children kids '
   + 'dark mask mare widen laden loam bike hike mike luck lack lick duke nuke').split(/\s+/));
-// A person is about to be named: "spoke with …", "rang …", "his mum …".
-const PERSON_CUES = /^(with|to|from|rang|called|phoned|emailed|texted|messaged|met|saw|visited|contacted|thanked|asked|told|cc|attn)$/i;
+// A person is about to be named: "rang …", "his mum …".
+const PERSON_CUES = /^(rang|called|phoned|emailed|texted|messaged|met|saw|visited|contacted|thanked|asked|told|cc|attn)$/i;
+// "with", "to" and "from" name a person only after talking or meeting
+// ("spoke with …", "handed over to …", "a message from …"). On their own they
+// introduce every verb and noun in a note: "to provide", "with dropping support".
+const WEAK_CUES = /^(with|to|from)$/i;
+const TALK_WORDS = /^(spoke|speak|speaks|speaking|talked|talk|talks|talking|chatted|chat|met|meet|meets|meeting|meetings|session|sessions|call|calls|phone|liaised|liaise|liaising|consulted|consult|emailed|email|wrote|write|sent|send|handed|introduced|referred|refer|reported|report|explained|explain|said|says|mentioned|message|messages|letter|text|texts|up|over|visit|visits|appointment)$/i;
+// The possessive that turns a relation into a named person: "his mum …".
+// ("the OT completed …" is a role and a verb, not a name.)
+const POSSESSIVE_LEADS = /^(his|her|their|our|my)$/i;
+// Never a name, whatever the capital: "He", "They".
+const PRONOUNS = new Set('he she they we it you him her them his hers their theirs its our ours your yours me my mine us'.split(' '));
+// Capitalised for being a role, a service or an organisation, not a person:
+// "a Support Worker", "the Art Centre", "Positive Behaviour Support".
+const TITLE_NOUNS = new Set(('support supports worker workers centre center coordinator coordination services service clinic hospital '
+  + 'house home program programme team plan review manager practitioner practitioners therapy therapist therapists care carer community council '
+  + 'department unit ward group club hall library office health mental disability behaviour behavior positive speech pathology pathologist occupational '
+  + 'physiotherapy physio psychology psychologist assessment report meeting meetings session sessions intervention independent living accommodation '
+  + 'participant participants provider providers agency association foundation trust network committee board college school kindergarten daycare '
+  + 'police court tribunal medicare centrelink housing transport').split(' '));
+// A capitalised run ending in one of these is an organisation or a role: every word in it ("Art" in "Art Centre").
+const TITLE_HEADS = new Set('worker workers centre center coordinator services service clinic hospital house program programme team unit ward group club hall library office council department agency association foundation college school kindergarten'.split(' '));
+
+/** True when the non-word text between word tokens a and b ends a sentence or clause (. ! ? ; : or a line break). */
+function breaksBetween(toks, a, b) {
+  for (let k = a + 1; k < b; k++) if (!toks[k].word && /[.!?;:\n]/.test(toks[k].text)) return true;
+  return false;
+}
+
+/**
+ * True when word i sits in a run of capitalised words, joined by single spaces,
+ * that is a role or an organisation rather than a person: the word itself is a
+ * role/service noun ("Support"), or the run ends in one that heads an
+ * organisation ("Art Centre", "Positive Behaviour Support Worker").
+ */
+function inTitledRun(toks, words, i) {
+  if (TITLE_NOUNS.has(words[i])) return true;
+  let k = i;
+  while (k + 2 < toks.length && toks[k + 1].text === ' ' && toks[k + 2].word && /^[A-Z][a-z]/.test(toks[k + 2].text)) {
+    k += 2;
+    if (TITLE_HEADS.has(words[k])) return true;
+  }
+  return false;
+}
 
 /** Damerau–Levenshtein distance, capped: returns 2 for anything further than 1. */
 function nearMiss(a, b) {
@@ -541,21 +583,24 @@ function deidentify(text, map, opts = {}) {
     // ── Candidate detection (not replaced, only reported) ──
     const w = words[i];
     const raw = stripPossessive(t.text);
-    if (!ignored.has(w) && !knownNorm.has(w) && w.length >= 2 && !HONORIFICS.test(w)) {
+    if (!ignored.has(w) && !knownNorm.has(w) && w.length >= 2 && !HONORIFICS.test(w) && !PRONOUNS.has(w)) {
       const prevWordIdx = (() => { for (let k = i - 1; k >= 0; k--) if (toks[k].word) return k; return -1; })();
       const prev = prevWordIdx >= 0 ? words[prevWordIdx] : '';
       const prev2Idx = (() => { for (let k = prevWordIdx - 1; k >= 0; k--) if (toks[k].word) return k; return -1; })();
       const prev2 = prev2Idx >= 0 ? words[prev2Idx] : '';
+      // A cue only counts inside the sentence: "…his mum. Apparently" is not his mum's name.
+      const prevLinked = prevWordIdx >= 0 && !breaksBetween(toks, prevWordIdx, i);
+      const prev2Linked = prevLinked && prev2Idx >= 0 && !breaksBetween(toks, prev2Idx, prevWordIdx);
       const beforeText = out.join('');
       const atSentenceStart = out.length === 0 || SENTENCE_END.test(beforeText.trimEnd() + ' ') || /^\s*$/.test(beforeText);
       const capitalised = /^[A-Z][a-z]/.test(raw);
       let reason = null;
-      if (HONORIFICS.test(prev)) reason = 'after a title';
-      else if (NAMING_VERBS.test(prev)) reason = 'after "named"';
-      else if (RELATIONS.test(prev) && RELATION_LEADS.test(prev2) && capitalised) reason = 'named relation';
-      else if (capitalised && !atSentenceStart && !COMMON_CAPITALISED.has(w) && !RELATIONS.test(w)) reason = 'capitalised mid-sentence';
+      if (prevLinked && HONORIFICS.test(prev)) reason = 'after a title';
+      else if (prevLinked && NAMING_VERBS.test(prev)) reason = 'after "named"';
+      else if (prev2Linked && RELATIONS.test(prev) && RELATION_LEADS.test(prev2) && capitalised) reason = 'named relation';
+      else if (capitalised && !atSentenceStart && !COMMON_CAPITALISED.has(w) && !RELATIONS.test(w) && !inTitledRun(toks, words, i)) reason = 'capitalised mid-sentence';
       if (reason && !candidates.has(w)) candidates.set(w, { word: raw, reason });
-      if (!reason) unmatched.push({ w, raw, prev, prev2 });
+      if (!reason) unmatched.push({ w, raw, prev: prevLinked ? prev : '', prev2: prev2Linked ? prev2 : '' });
     }
     out.push(t.text);
     i++;
@@ -569,7 +614,7 @@ function deidentify(text, map, opts = {}) {
       if (candidates.has(u.w) || u.w.length < 3 || COMMON_WORDS.has(u.w) || COMMON_CAPITALISED.has(u.w) || RELATIONS.test(u.w) || /\d/.test(u.w)) continue;
       let reason = null;
       if (u.w.length >= 4 && present.some((v) => nearMiss(u.w, v) === 1)) reason = 'close to a name above';
-      else if (PERSON_CUES.test(u.prev) || (RELATIONS.test(u.prev) && RELATION_LEADS.test(u.prev2))) reason = 'after a person cue';
+      else if (PERSON_CUES.test(u.prev) || (WEAK_CUES.test(u.prev) && TALK_WORDS.test(u.prev2)) || (RELATIONS.test(u.prev) && POSSESSIVE_LEADS.test(u.prev2))) reason = 'after a person cue';
       if (reason) candidates.set(u.w, { word: u.raw, reason });
     }
   }

@@ -95,6 +95,30 @@ describe('deidentify — candidates for the therapist to confirm', () => {
     expect(r.candidates).toEqual([]);
   });
 
+  // A long MDT note offered 23 ordinary words ("completed", "to remain",
+  // "Support Worker", "Apparently") beside the three that were people.
+  test('ordinary words in a meeting note are not offered — only the people', () => {
+    const note = 'The OT completed an online MDT meeting with the PBS practitioner. The purpose was to provide background. '
+      + 'The OT shared that Aiden was living with dropping support and needed help to remain engaged at the Art Centre in town. '
+      + 'Staff are to follow the plan and to always have a Support Worker present. The OT is trying to sort this out with Marisol. '
+      + 'He asks for his mum. Apparently he calls out her name. Then Kwame and Aiden met with the team to discuss safety, '
+      + 'and the speech pathologist is welcome to attend. Positive Behaviour Support Services will send the plan.';
+    const r = deidentify(note, map, { looseCandidates: true });
+    expect(r.candidates.map((c) => c.word).sort()).toEqual(['Kwame', 'Marisol']);
+  });
+
+  test('cues still name people inside their own sentence', () => {
+    const r = deidentify('His mum Ngozi rang. I spoke with tobias, then handed over to priyanka. Got a text from reuben. She is a Support Worker named Kofi.', map, { looseCandidates: true });
+    expect(r.candidates.map((c) => c.word).sort()).toEqual(['Kofi', 'Ngozi', 'priyanka', 'reuben', 'tobias']);
+    expect(r.candidates.find((c) => c.word === 'Ngozi').reason).toBe('named relation');
+    expect(r.candidates.find((c) => c.word === 'Kofi').reason).toBe('after "named"');
+  });
+
+  test('a cue never reaches across a full stop', () => {
+    const r = deidentify('He asked for his mum. Apparently it helped. She said her name. Later the group met.', map, { looseCandidates: true });
+    expect(r.candidates).toEqual([]);
+  });
+
   test('confirmed names become PERSON tokens; ignored words stop being asked', () => {
     const r = deidentify('Aiden played with Tobias and Kofi at Recess', map, { confirmedNames: ['Tobias', 'Kofi'], ignoredWords: ['Recess'] });
     expect(r.text).toBe('[CLIENT] played with [PERSON] and [PERSON_2] at Recess');

@@ -208,6 +208,29 @@ describe('client chats and the installable app', () => {
     expect(clientSeed(null)).toEqual({ names: {}, known: [] });
   });
 
+  test('the sidebar groups chats under each client, ordered by latest chat, so opening one never reorders it', () => {
+    const { groupThreads } = require('../../frontend/current/assist.js');
+    const clients = [{ ref: 'splose:patient:1', name: 'Alexander Whitlock', suburb: 'Como' }, { ref: 'splose:patient:2', name: 'Aiden Blackwood-Tan', suburb: 'Bayswater' }, { ref: 'splose:patient:3', name: 'Mia Testwell', suburb: 'Balga' }];
+    const convs = [
+      { id: 'a', client_ref: 'splose:patient:2', updated_at: '2026-11-07T10:00:00Z' },
+      { id: 'b', client_ref: null, updated_at: '2026-11-06T10:00:00Z' },
+      { id: 'c', client_ref: 'splose:patient:1', updated_at: '2026-11-05T10:00:00Z' },
+      { id: 'd', client_ref: 'splose:patient:2', updated_at: '2026-11-01T10:00:00Z' },
+      { id: 'e', client_ref: 'splose:patient:9', updated_at: '2026-10-30T10:00:00Z' },
+    ];
+    const shape = (gs) => gs.map((g) => [g.name, g.chats.map((c) => c.id).join('')]);
+    expect(shape(groupThreads(convs, clients, {}))).toEqual([['Aiden Blackwood-Tan', 'ad'], ['General', 'b'], ['Alexander Whitlock', 'c'], ['Former client', 'e']]);
+    // Opening Alexander's chat leaves the order alone…
+    expect(shape(groupThreads(convs, clients, { current: 'splose:patient:1' }))[0][0]).toBe('Aiden Blackwood-Tan');
+    // …but a client just picked, with no chats yet, shows on top.
+    expect(shape(groupThreads(convs, clients, { current: 'splose:patient:3' }))[0]).toEqual(['Mia Testwell', '']);
+    // A search shows every matching client, chats or not, and nothing else.
+    expect(shape(groupThreads(convs, clients, { query: 'balga' }))).toEqual([['Mia Testwell', '']]);
+    expect(shape(groupThreads(convs, clients, { query: 'a' })).map((g) => g[0])).toEqual(['Aiden Blackwood-Tan', 'General', 'Alexander Whitlock', 'Mia Testwell']);
+    // General always shows when not searching, even with no chats.
+    expect(shape(groupThreads([], clients, {}))).toEqual([['General', '']]);
+  });
+
   test('the picker search matches every typed word against name and suburb', () => {
     const list = [{ name: 'Alexander Whitlock', suburb: 'Como' }, { name: 'Aiden Blackwood-Tan', suburb: 'Bayswater' }];
     expect(filterClients(list, 'alex como').map((c) => c.name)).toEqual(['Alexander Whitlock']);
@@ -334,8 +357,21 @@ describe('Opal Assist follows the portal: day / night and its dropdowns', () => 
 
   test('thread titles and the welcome line never show a raw token', () => {
     const js = read('assist.js');
-    expect(js).toContain("esc(threadTitle(c.title))");
+    expect(js).toContain("esc(threadTitle(c, clientName))");
     expect(js).not.toContain('who the AI only ever sees as [CLIENT_1]');
+  });
+
+  test('Hide / Not a person act at once, but Send waits for the server re-check', () => {
+    const js = read('assist.js');
+    // The click updates the card itself — no blocking round-trip per click.
+    expect(js).toContain('if (t.dataset.hide) return decide(t.dataset.hide, true);');
+    expect(js).toContain('if (t.dataset.ignore) return decide(t.dataset.ignore, false);');
+    expect(js).toMatch(/r\.pending = true;[\s\S]{0,80}renderReview\(false\);[\s\S]{0,120}runCheck\(r\.raw, true\)/);
+    // The provisional preview is never what is sent: Send is disabled and refused while pending.
+    expect(js).toContain("(r.pending ? ' disabled' : '')");
+    expect(js).toContain('if (!r || r.pending) return;');
+    // A slower, older check never overwrites a newer decision.
+    expect(js).toMatch(/if \(!current\(\)\) return; \/\/ a newer decision/);
   });
 });
 
