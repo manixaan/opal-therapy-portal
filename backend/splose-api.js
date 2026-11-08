@@ -68,11 +68,16 @@ async function testKey(candidateKey) {
 // ─── Rate-limit queue ─────────────────────────────────────────────────────────
 // Splose enforces ~2 req/s. We serialize all outbound calls through a queue
 // with a minimum gap of 600 ms between requests. On a 429 we back off 5 s
-// and retry up to 3 times.
+// and retry up to 3 times. A transient transport failure (connection reset,
+// timeout, a 502/503/504 from Splose's edge) is retried once after 1 s — a
+// GET is safe to repeat, and one blip should not reach the user as an error.
 
 const RATE_LIMIT_MS  = 600;
 const RETRY_AFTER_MS = 5000;
 const MAX_RETRIES    = 3;
+const TRANSIENT_RETRY_MS = 1000;
+const TRANSIENT_CODES = new Set(['ECONNRESET', 'ETIMEDOUT', 'ECONNABORTED', 'EAI_AGAIN', 'ENOTFOUND', 'EPIPE', 'ECONNREFUSED']);
+const isTransient = (err) => [502, 503, 504].includes(err?.response?.status) || (!err?.response && TRANSIENT_CODES.has(err?.code));
 let   _lastRequestAt = 0;
 let   _queue         = Promise.resolve();
 
@@ -89,11 +94,20 @@ function _throttledGet(axiosInstance, path, config = {}) {
     _lastRequestAt = Date.now();
 
     let lastErr;
+    let transientRetried = false;
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       try {
         return await axiosInstance.get(path, config);
       } catch (err) {
         lastErr = err;
+        if (!transientRetried && isTransient(err)) {
+          transientRetried = true;
+          console.warn(`⏳ Splose ${err.response?.status || err.code} — retrying once in ${TRANSIENT_RETRY_MS}ms for ${path}`);
+          await new Promise(r => setTimeout(r, TRANSIENT_RETRY_MS));
+          _lastRequestAt = Date.now();
+          attempt--; // a transport blip does not use up a 429 attempt
+          continue;
+        }
         if (err.response?.status === 429) {
           const backoff = RETRY_AFTER_MS * (attempt + 1);
           console.warn(`⏳ Splose 429 (attempt ${attempt + 1}/${MAX_RETRIES}) — backing off ${backoff}ms for ${path}`);
@@ -516,9 +530,26 @@ function extractPatientAddress(p) {
 }
 
 async function getPatient(id) {
-  const c = client();
-  const response = await c.get(`/patients/${id}`);
-  const p = response.data;
+  // Through the throttle queue like every list read: a bare c.get here raced
+  // the queue's own traffic (directory rebuilds, the sync) into Splose's
+  // ~2 req/s limit, and a 429 had no retry — Opal Assist's "Could not reach
+  // Splose to confirm the client" (Nov 2026).
+  const response = await _throttledGet(client(), `/patients/${id}`);
+  return toPatient(response.data);
+}
+
+/**
+ * The patient from the cached full list, or null when the list is not
+ * cached or does not hold them — no network call either way. A null means
+ * "ask Splose", never "does not exist".
+ */
+function peekPatient(id) {
+  const list = _cacheGet('/patients');
+  const p = list && list.find((x) => String(x.id) === String(id));
+  return p ? toPatient(p) : null;
+}
+
+function toPatient(p) {
   const addr = extractPatientAddress(p);
   return {
     id:           p.id,
@@ -681,6 +712,7 @@ module.exports = {
   createBusyTime,
   getAvailabilities,
   getPatient,
+  peekPatient,
   getPatients,
   createPatient,
   getCase,

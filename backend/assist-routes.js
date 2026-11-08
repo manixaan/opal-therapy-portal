@@ -133,6 +133,8 @@ async function authoriseClient(req, res, clientRef) {
   let client;
   try { client = await caseload.loadOwnClient(req, m[1]); } catch (err) {
     if (err instanceof caseload.CaseloadError) { res.status(err.status).json({ error: err.message, code: err.code, answer: err.message }); return null; }
+    // Status code only — never the client or the payload.
+    console.warn(`[assist] client check failed (${err?.response?.status || err?.code || 'error'})`);
     res.status(502).json({ error: 'client_lookup_failed', answer: 'Could not reach Splose to confirm the client. Please try again.' });
     return null;
   }

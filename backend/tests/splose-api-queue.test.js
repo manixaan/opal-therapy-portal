@@ -70,4 +70,57 @@ describe('splose-api throttled queue', () => {
     expect((await api.fetchAllCases()).map(c => c.id)).toEqual([10, 11]);
     expect(mockGet).toHaveBeenCalledTimes(2);
   });
+
+  // Opal Assist "Could not reach Splose to confirm the client" (Nov 2026):
+  // getPatient bypassed the queue, so it collided with queued list reads and
+  // a 429 or blip went straight to the user.
+  test('getPatient waits its turn in the queue behind list reads', async () => {
+    const order = [];
+    mockGet.mockImplementation(async (path) => { order.push(path); return path === '/patients/7' ? { data: { id: 7, firstname: 'A', lastname: 'B' } } : page([]); });
+    await Promise.all([api.getServices(), api.getPatient(7)]);
+    expect(order).toEqual(['/services', '/patients/7']);
+  });
+
+  test('a transient Splose blip is retried once, quietly', async () => {
+    mockGet
+      .mockRejectedValueOnce(Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' }))
+      .mockResolvedValueOnce({ data: { id: 7, firstname: 'A', lastname: 'B' } });
+    expect((await api.getPatient(7)).fullName).toBe('A B');
+    expect(mockGet).toHaveBeenCalledTimes(2);
+  });
+
+  test('a 503 that persists still fails after one retry; a 404 is never retried', async () => {
+    const e503 = Object.assign(new Error('503'), { response: { status: 503 } });
+    mockGet.mockRejectedValueOnce(e503).mockRejectedValueOnce(e503);
+    await expect(api.getPatient(7)).rejects.toBe(e503);
+    expect(mockGet).toHaveBeenCalledTimes(2);
+    mockGet.mockReset();
+    const e404 = Object.assign(new Error('404'), { response: { status: 404 } });
+    mockGet.mockRejectedValueOnce(e404);
+    await expect(api.getPatient(8)).rejects.toBe(e404);
+    expect(mockGet).toHaveBeenCalledTimes(1);
+  });
+
+  test('peekPatient answers from the cached client list without a network call', async () => {
+    expect(api.peekPatient(3)).toBeNull(); // nothing cached yet
+    mockGet.mockResolvedValueOnce(page([{ id: 3, firstname: 'Cleo', lastname: 'Ray', archived: true }]));
+    await api.getPatients();
+    const p = api.peekPatient('3');
+    expect(p.fullName).toBe('Cleo Ray');
+    expect(p._raw.archived).toBe(true); // the caller still refuses archived clients
+    expect(api.peekPatient(4)).toBeNull();
+    expect(mockGet).toHaveBeenCalledTimes(1);
+  });
+
+  test('loadOwnClient uses the cached list, and asks Splose only when the client is not in it', async () => {
+    const caseload = require('../splose-caseload');
+    const req = { user: { role: 'owner' } };
+    mockGet.mockResolvedValueOnce(page([{ id: 3, firstname: 'Cleo', lastname: 'Ray' }]));
+    await api.getPatients();
+    expect((await caseload.loadOwnClient(req, '3')).fullName).toBe('Cleo Ray');
+    expect(mockGet).toHaveBeenCalledTimes(1);
+    mockGet.mockResolvedValueOnce({ data: { id: 9, firstname: 'New', lastname: 'Client' } });
+    expect((await caseload.loadOwnClient(req, '9')).fullName).toBe('New Client');
+    expect(mockGet).toHaveBeenLastCalledWith('/patients/9', {});
+  });
 });

@@ -137,14 +137,35 @@
   // presents a Microsoft 365 token instead, which the server maps to the
   // same portal account by email.
   var office = function () { return global.OpalAssistOffice || null; };
+  // Splose sometimes cannot answer for a moment (its rate limit, a blip).
+  // The server refuses those before anything is stored or sent to the model,
+  // so the same request is simply tried again, quietly, before the person
+  // ever sees "Could not reach Splose".
+  var SPLOSE_BLIPS = { client_lookup_failed: 1, client_unresolvable: 1 };
+  var RETRY_DELAYS = [1500, 4000];
   var api = function (path, opts) {
     opts = opts || {};
     var headers = opts.body ? { 'Content-Type': 'application/json' } : {};
-    var withToken = office() ? office().token() : Promise.resolve(null);
-    return withToken.then(function (tok) {
-      if (tok) headers.Authorization = 'Bearer ' + tok;
-      return fetch(path, { credentials: 'include', headers: headers, method: opts.method || (opts.body ? 'POST' : 'GET'), body: opts.body ? JSON.stringify(opts.body) : undefined, signal: opts.signal });
-    });
+    var once = function () {
+      var withToken = office() ? office().token() : Promise.resolve(null);
+      return withToken.then(function (tok) {
+        if (tok) headers.Authorization = 'Bearer ' + tok;
+        return fetch(path, { credentials: 'include', headers: headers, method: opts.method || (opts.body ? 'POST' : 'GET'), body: opts.body ? JSON.stringify(opts.body) : undefined, signal: opts.signal });
+      });
+    };
+    var attempt = function (n) {
+      return once().then(function (res) {
+        if ((res.status !== 502 && res.status !== 503) || n >= RETRY_DELAYS.length) return res;
+        return res.clone().json().catch(function () { return {}; }).then(function (j) {
+          if (!SPLOSE_BLIPS[j && (j.code || j.error)]) return res;
+          return new Promise(function (resolve, reject) {
+            var t = setTimeout(function () { resolve(attempt(n + 1)); }, RETRY_DELAYS[n]);
+            if (opts.signal) opts.signal.addEventListener('abort', function () { clearTimeout(t); reject(new DOMException('Aborted', 'AbortError')); }, { once: true });
+          });
+        });
+      });
+    };
+    return attempt(0);
   };
 
   // ── Per-conversation map, this browser only ───────────────────────────────

@@ -88,12 +88,16 @@ async function loadOwnClient(req, clientId) {
   if (!isSploseClientId(clientId)) return null;
   const allowed = await allowedPatientIds(req);
   if (allowed && !allowed.has(String(clientId))) return null;
-  let p;
-  try {
-    p = await sploseApi.getPatient(String(clientId));
-  } catch (err) {
-    if (err?.response?.status === 404) return null;
-    throw err;
+  // The client list the picker just loaded is usually cached: answer from it
+  // and spare Splose a call. Not cached, or a client added since → ask Splose.
+  let p = sploseApi.peekPatient ? sploseApi.peekPatient(String(clientId)) : null;
+  if (!p) {
+    try {
+      p = await sploseApi.getPatient(String(clientId));
+    } catch (err) {
+      if (err?.response?.status === 404) return null;
+      throw err;
+    }
   }
   if (!p || p._raw?.archived || p._raw?.deletedAt) return null;
   return toClient(p);
