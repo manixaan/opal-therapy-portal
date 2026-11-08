@@ -1,0 +1,466 @@
+{
+  "format": "opal-induction-pack/1",
+  "slug": "calendar-booking-fundamentals",
+  "workflow": {
+    "title": "Calendar Booking Fundamentals",
+    "category": "administration",
+    "sequential": true,
+    "description": "How to make every therapy, assessment and report-writing booking in the portal, what each booking must record, how travel is calculated, and who can see your calendar. Three interactive walkthroughs and a guided tour of the calendar and booking screens.",
+    "sections": [
+      {
+        "title": "Where bookings are made",
+        "items": [
+          {
+            "type": "task",
+            "title": "Walkthrough: Booking in the portal",
+            "body": "Where every booking is made, and what happens automatically once you save it.\n\nYour progress is saved if you stop part-way.",
+            "minutes": 4,
+            "required": true,
+            "walkthrough_key": "calendar-booking-where"
+          }
+        ]
+      },
+      {
+        "title": "What every booking must include",
+        "items": [
+          {
+            "type": "task",
+            "title": "Walkthrough: Recording a booking",
+            "body": "The four details every booking records, and the travel question the portal asks after each booking.",
+            "minutes": 5,
+            "required": true,
+            "walkthrough_key": "calendar-booking-record"
+          },
+          {
+            "type": "task",
+            "title": "Live tour: the calendar and booking screens",
+            "body": "A guided tour of the live screens. It highlights where bookings are made, where the sync status is shown and where your travel is listed.\n\nOn completion, you will be able to find the calendar, the booking panel and the travel logbook.",
+            "minutes": 5,
+            "required": true,
+            "walkthrough_key": "opal-calendar-booking-fundamentals"
+          },
+          {
+            "type": "content",
+            "title": "Reference: recording a booking",
+            "body": "**Every booking records:**\n- Service type\n- Face-to-face or non-face-to-face\n- Billable or non-billable\n- Location\n\nTravel is then calculated for you. The NDIS pricing guidelines determine what is billable. If you are unsure, ask your Senior Supervisor.\n\n**After each booking, answer the travel question:** going to your next session, travelling home, or going to another location. Travel is only correct if your answer is correct.",
+            "minutes": 2,
+            "required": true
+          }
+        ]
+      },
+      {
+        "title": "Travel for rural and remote visits",
+        "items": [
+          {
+            "type": "task",
+            "title": "Walkthrough: Travel for rural and remote visits",
+            "body": "When travel is blocked out in the calendar, and how travel limits apply on rural and remote trips.",
+            "minutes": 5,
+            "required": true,
+            "walkthrough_key": "calendar-booking-rural-travel"
+          }
+        ]
+      },
+      {
+        "title": "Who can see your calendar",
+        "items": [
+          {
+            "type": "content",
+            "title": "Calendar access",
+            "body": "Your calendar can be viewed and changed by:\n\n- you, the clinician\n- admin\n- your supervisor\n\nNo other team members have access.\n\nKeep this in mind when you add booking details, and include only what the booking needs.",
+            "minutes": 1,
+            "required": true
+          }
+        ]
+      },
+      {
+        "title": "Knowledge check and sign-off",
+        "items": [
+          {
+            "type": "quiz",
+            "title": "Knowledge check",
+            "body": "Seven questions across the whole induction. You need 80% to pass, and you may retry.",
+            "minutes": 4,
+            "required": true,
+            "quiz": {
+              "passThreshold": 80,
+              "questions": [
+                {
+                  "question": "Where do you make a report-writing booking?",
+                  "options": ["In Outlook", "In the portal", "In Splose only"],
+                  "correctIndex": 1
+                },
+                {
+                  "question": "You need to book an assessment session. What do you do?",
+                  "options": [
+                    "Book it in the portal, in the same way as a therapy session",
+                    "Book it in Splose first",
+                    "Ask admin to book it in Outlook",
+                    "Wait until after the session"
+                  ],
+                  "correctIndex": 0
+                },
+                {
+                  "question": "Which details must every booking record?",
+                  "options": [
+                    "Client age, funding and diagnosis",
+                    "Service type, face-to-face status, billable status and location",
+                    "Location and date only"
+                  ],
+                  "correctIndex": 1
+                },
+                {
+                  "question": "How does the portal calculate your travel?",
+                  "options": [
+                    "You enter the minutes yourself",
+                    "Admin adds it later",
+                    "From the location you enter and your answers to its prompts"
+                  ],
+                  "correctIndex": 2
+                },
+                {
+                  "question": "You are not sure whether a booking is billable. What do you do?",
+                  "options": ["Mark it billable to be safe", "Ask your Senior Supervisor", "Leave it blank"],
+                  "correctIndex": 1
+                },
+                {
+                  "question": "On a rural trip, how is the return travel handled?",
+                  "options": [
+                    "Each client is charged the full return",
+                    "It is not charged",
+                    "The 60 minutes of return travel is split between the clients",
+                    "Only the first client is charged"
+                  ],
+                  "correctIndex": 2
+                },
+                {
+                  "question": "Who can view and change your calendar?",
+                  "options": ["Everyone on the team", "You, admin and your supervisor", "Only you"],
+                  "correctIndex": 1
+                }
+              ]
+            }
+          },
+          {
+            "type": "acknowledgement",
+            "title": "Calendar booking sign-off",
+            "body": "Confirm that you understand how bookings are made at Opal.",
+            "minutes": 1,
+            "required": true,
+            "ack_statement": "I have read this induction. I will make all therapy, assessment and report-writing bookings in the portal, record the service type, face-to-face status, billable status and location on every booking, and answer the travel prompts correctly."
+          }
+        ]
+      }
+    ]
+  },
+  "walkthroughs": [
+    {
+      "key": "calendar-booking-where",
+      "title": "Booking in the portal",
+      "description": "Where every booking is made, and how it copies to Splose and Outlook.",
+      "group": "calendar-booking",
+      "minutes": 4,
+      "roles": ["owner", "admin", "therapist", "read_only"],
+      "thumb": "/assets/tutorials/calendar-booking-fundamentals/book-once.svg",
+      "steps": [
+        {
+          "type": "intro",
+          "title": "All bookings are made in the portal",
+          "body": "Make **all** bookings in the portal. This includes:\n• therapy sessions\n• assessment sessions\n• report writing\n\nAssessment sessions are booked in the same way as therapy sessions and report writing. There is no separate process."
+        },
+        {
+          "type": "screenshot",
+          "title": "What happens after you book",
+          "image": { "src": "/assets/tutorials/calendar-booking-fundamentals/book-once.svg", "alt": "A portal booking copies automatically to Splose and your Outlook calendar." },
+          "body": "Once you save a booking in the portal, it copies automatically to two places:\n• **Splose**, where you complete your case notes\n• **your Outlook calendar**\n\nYou do not need to enter the booking again in either place."
+        },
+        {
+          "type": "page",
+          "title": "The longer-term plan",
+          "body": "The long-term plan is for the portal to be the only system, covering case notes and invoices, with Outlook used for email.\n\nUntil then, Splose continues to be used for case notes."
+        },
+        {
+          "type": "quiz",
+          "title": "Knowledge check: where to book",
+          "quiz": {
+            "question": "You need to book a report-writing block. Where do you make the booking?",
+            "options": ["In Outlook", "In the portal", "In Splose"],
+            "correctIndex": 1,
+            "explain": "Therapy, assessment and report-writing bookings are all made in the portal."
+          }
+        },
+        {
+          "type": "quiz",
+          "title": "Knowledge check: after you book",
+          "quiz": {
+            "question": "You have saved a booking in the portal. What else do you need to do in Splose and Outlook?",
+            "options": [
+              "Enter the booking again in both",
+              "Nothing — it copies to both automatically",
+              "Enter it in Outlook only"
+            ],
+            "correctIndex": 1,
+            "explain": "A portal booking copies automatically to Splose and your Outlook calendar."
+          }
+        },
+        {
+          "type": "complete",
+          "title": "Summary: booking in the portal",
+          "body": "Every booking is made in the portal, and it copies automatically to Splose and Outlook.\n\nReturn to your induction to continue with the next module: recording a booking."
+        }
+      ]
+    },
+    {
+      "key": "calendar-booking-record",
+      "title": "Recording a booking",
+      "description": "The four details every booking records, and the travel question after each booking.",
+      "group": "calendar-booking",
+      "minutes": 5,
+      "roles": ["owner", "admin", "therapist", "read_only"],
+      "thumb": "/assets/tutorials/calendar-booking-fundamentals/four-things.svg",
+      "steps": [
+        {
+          "type": "screenshot",
+          "title": "The four details every booking records",
+          "image": { "src": "/assets/tutorials/calendar-booking-fundamentals/four-things.svg", "alt": "Service type, face-to-face status, billable status and location; travel is then calculated." },
+          "body": "Every booking records:\n• **Service type**\n• **Face-to-face or non-face-to-face**\n• **Billable or non-billable**\n• **Location**\n\nTravel is then calculated for you. Do not leave any of these out."
+        },
+        {
+          "type": "page",
+          "title": "What is billable",
+          "body": "The NDIS pricing guidelines determine what is billable.\n\nIf you are unsure, ask your **Senior Supervisor**, who will advise what is and is not billable."
+        },
+        {
+          "type": "quiz",
+          "title": "Knowledge check: unsure if billable",
+          "quiz": {
+            "question": "You are not sure whether a booking is billable. What do you do?",
+            "options": ["Mark it billable to be safe", "Ask your Senior Supervisor", "Leave the field blank"],
+            "correctIndex": 1,
+            "explain": "The NDIS pricing guidelines apply, and your Senior Supervisor advises what is billable."
+          }
+        },
+        {
+          "type": "screenshot",
+          "title": "How travel is calculated",
+          "image": { "src": "/assets/tutorials/calendar-booking-fundamentals/travel-prompt.svg", "alt": "After each booking: next session, travelling home or another location." },
+          "body": "Enter the location on each booking. The portal then calculates travel automatically from that location.\n\nThe portal also asks what comes next. Your answer is one of:\n• going to your **next session**\n• **travelling home**\n• going to **another location**\n\nAnswer it every time. Travel is only correct if your answer is correct."
+        },
+        {
+          "type": "quiz",
+          "title": "Knowledge check: the travel question",
+          "quiz": {
+            "question": "Your last session of the day has finished and you are driving home. How do you answer the portal's travel question?",
+            "options": ["Next session", "Travelling home", "Another location"],
+            "correctIndex": 1,
+            "explain": "Travel is only correct if your answer reflects where you are actually going."
+          }
+        },
+        {
+          "type": "complete",
+          "title": "Summary: recording a booking",
+          "body": "Record the service type, face-to-face status, billable status and location, and answer the travel question every time.\n\nReturn to your induction to continue with the live tour of the calendar and booking screens."
+        }
+      ]
+    },
+    {
+      "key": "opal-calendar-booking-fundamentals",
+      "title": "Calendar booking fundamentals tour",
+      "description": "A guided look at the calendar and booking screens: where bookings are made, how they sync and where travel appears.",
+      "group": "calendar-booking",
+      "minutes": 5,
+      "roles": ["therapist", "admin", "owner"],
+      "thumb": "/assets/tutorials/calendar-booking-fundamentals/book-once.svg",
+      "start": { "tab": "calendar" },
+      "steps": [
+        {
+          "type": "intro",
+          "title": "Welcome",
+          "body": "This tour shows you where to make bookings in the portal. Every therapy, assessment and report-writing booking starts here."
+        },
+        {
+          "type": "highlight",
+          "title": "Calendar tab",
+          "target": "tab-calendar",
+          "pad": 2,
+          "rounded": "8px",
+          "body": "Your calendar is here. Bookings made in the portal appear on it."
+        },
+        {
+          "type": "highlight",
+          "title": "Calendar grid",
+          "target": "calendar-grid",
+          "route": { "tab": "calendar" },
+          "pad": 4,
+          "rounded": "10px",
+          "body": "This is your calendar. Flights and main driving time for longer trips are blocked out here."
+        },
+        {
+          "type": "highlight",
+          "title": "Sync status",
+          "target": "cal-sync-strip",
+          "route": { "tab": "calendar" },
+          "pad": 4,
+          "rounded": "8px",
+          "body": "Portal bookings copy automatically to Splose and your Outlook calendar. The sync status is shown here."
+        },
+        {
+          "type": "highlight",
+          "title": "Add an event",
+          "target": "cal-add-event",
+          "route": { "tab": "calendar" },
+          "pad": 4,
+          "rounded": "8px",
+          "body": "Use this button to start a new booking. Do not book anywhere else."
+        },
+        {
+          "type": "highlight",
+          "title": "Booking tab",
+          "target": "tab-booking",
+          "pad": 2,
+          "rounded": "8px",
+          "body": "The booking area is where you choose the kind of booking you are making."
+        },
+        {
+          "type": "highlight",
+          "title": "Booking types",
+          "target": "booking-type-cards",
+          "route": { "tab": "book" },
+          "pad": 6,
+          "rounded": "10px",
+          "body": "Select the booking type here. Assessment sessions are booked in the same way as therapy sessions and report writing."
+        },
+        {
+          "type": "screenshot",
+          "title": "What every booking records",
+          "image": { "src": "/assets/tutorials/calendar-booking-fundamentals/four-things.svg", "alt": "Service type, face-to-face status, billable status and location." },
+          "body": "Record the service type, face-to-face or non-face-to-face, billable or non-billable, and the location. If you are unsure whether a booking is billable, ask your Senior Supervisor."
+        },
+        {
+          "type": "warning",
+          "title": "Answer the travel prompts",
+          "body": "The portal asks whether you are going to your next session, travelling home or going to another location. Travel is only correct if your answer is correct."
+        },
+        {
+          "type": "highlight",
+          "title": "Travel logbook",
+          "target": "travel-logbook",
+          "route": { "tab": "logbook" },
+          "pad": 6,
+          "rounded": "8px",
+          "body": "Your recorded journeys are listed here."
+        },
+        {
+          "type": "checkpoint",
+          "title": "Knowledge check: booking an assessment",
+          "quiz": {
+            "question": "Where do you make an assessment session booking?",
+            "options": ["In Outlook only", "In the portal", "In Splose only"],
+            "correctIndex": 1,
+            "explain": "All therapy, assessment and report-writing bookings are made in the portal."
+          }
+        },
+        {
+          "type": "complete",
+          "title": "Summary: calendar and booking screens",
+          "body": "You know where to book, what to record and how travel is worked out.\n\nReturn to your induction to continue with the next module."
+        }
+      ]
+    },
+    {
+      "key": "calendar-booking-rural-travel",
+      "title": "Travel for rural and remote visits",
+      "description": "When travel is blocked out, and how travel limits apply on rural and remote trips.",
+      "group": "calendar-booking",
+      "minutes": 5,
+      "roles": ["owner", "admin", "therapist", "read_only"],
+      "thumb": "/assets/tutorials/calendar-booking-fundamentals/rural-travel.svg",
+      "steps": [
+        {
+          "type": "screenshot",
+          "title": "Driving between sessions and flights",
+          "image": { "src": "/assets/tutorials/calendar-booking-fundamentals/drive-vs-block.svg", "alt": "Short drives are absorbed in session time; flights and main driving time are blocked out." },
+          "body": "Driving between sessions in the same area usually takes only a few minutes. This is absorbed in your session time, so you do not block it out separately.\n\nFor longer trips, flights and your main driving time are **blocked out in the calendar**."
+        },
+        {
+          "type": "quiz",
+          "title": "Knowledge check: blocking out travel",
+          "quiz": {
+            "question": "You are flying to a regional town for a day of sessions. What do you add to your calendar?",
+            "options": [
+              "Nothing — travel is absorbed in session time",
+              "Block out the flight and your main driving time",
+              "Only the first session"
+            ],
+            "correctIndex": 1,
+            "explain": "For longer trips, flights and main driving time are blocked out in the calendar."
+          }
+        },
+        {
+          "type": "screenshot",
+          "title": "Rural and remote travel limits",
+          "image": { "src": "/assets/tutorials/calendar-booking-fundamentals/rural-travel.svg", "alt": "Travel to each client is capped at 60 minutes one way; 60 minutes of return travel is split between the clients." },
+          "body": "For rural and remote visits within driving distance, such as Wheatbelt clients:\n• Travel **to each client** is capped at **60 minutes one way**.\n• There is also **60 minutes of return travel**, which is **split between the clients** you visit.\n\n**Example (made-up clients):** you visit Client A and Client B. Each client is charged 60 minutes for the trip there, and the 60 minutes of return travel is split between them. You may drive much longer than you charge."
+        },
+        {
+          "type": "quiz",
+          "title": "Knowledge check: return travel",
+          "quiz": {
+            "question": "You visit two rural clients in one trip. How is the 60 minutes of return travel handled?",
+            "options": [
+              "Each client is charged the full 60 minutes",
+              "It is split between the two clients",
+              "It is not charged"
+            ],
+            "correctIndex": 1,
+            "explain": "The 60 minutes of return travel is split between the clients you visit."
+          }
+        },
+        {
+          "type": "quiz",
+          "title": "Scenario: two clients out of town",
+          "quiz": {
+            "question": "You are booking a day with two made-up clients, Sam and Priya, who live in the same rural area a long drive from Perth. Which approach is correct?",
+            "options": [
+              "Book both sessions in the portal, enter each location, answer the prompts (next session after Sam, travelling home after Priya), block out any flights and main driving time, and check the sync",
+              "Book the sessions in Outlook and add the travel later",
+              "Book only the first session and record the rest of the day as travel"
+            ],
+            "correctIndex": 0,
+            "explain": "Each location drives the travel calculation, and the answers to the prompts tell the portal how the day connects."
+          }
+        },
+        {
+          "type": "complete",
+          "title": "Summary: rural and remote travel",
+          "body": "Block out flights and main driving time for longer trips. On rural trips, travel to each client is capped at 60 minutes one way, and the 60 minutes of return travel is split between the clients.\n\nReturn to your induction to continue with calendar access."
+        }
+      ]
+    }
+  ],
+  "meta": {
+    "source": "Opal Readiness Workshop",
+    "topic": "Calendar booking fundamentals",
+    "generatedAt": "2026-11-08T11:22:18.629Z",
+    "template": "walkthrough",
+    "features": ["spotlights", "task", "walkthroughs"],
+    "reuseTours": [],
+    "policy": {
+      "name": "Calendar and Booking Procedure",
+      "status": "to write",
+      "summary": "All bookings are made in the portal and must include service type, face-to-face or non-face-to-face status, billable or non-billable status, location and calculated travel."
+    },
+    "openQuestions": [
+      "Confirm the exact total each rural or remote client is charged for travel. The discussion gave two different figures (one hour there, and one hour 30 including the split return). The directors' clarification suggests one hour there plus a share of the return, but the share and total need confirming.",
+      "How should the 60-minute return be split when more than two clients are visited in one trip?",
+      "How do the 60-minute one-way cap and the 60-minute return relate to the NDIS limits for regional, remote and very remote areas (MMM 4 to 7)? Confirm which rule Opal applies to each area, and whether travel in remote and very remote areas is treated differently from the Wheatbelt example.",
+      "Which clients or locations count as 'within driving distance' for this travel rule?",
+      "Confirm the live portal address, current feature names and booking and sync behaviour (D04 not decided).",
+      "When will Splose stop receiving copies of bookings? The long-term plan is the portal only for case notes and invoices, with Outlook for email, but there is no date.",
+      "How are changes and cancellations handled in the portal, Splose and Outlook? The directors said cancellations are covered in the service agreement, but the steps in each system are not confirmed.",
+      "Should reminders to clients be sent 24 hours before sessions? Channel, wording, consent, follow-up limits and escalation are not decided (D14).",
+      "Does the training environment allow practice bookings? The onboarding pack mentions an approved training workflow, but none is confirmed.",
+      "Should the guided tour target a specific control for entering the location and answering the travel prompts? These are not in the list of named places, so the tour describes them without a spotlight."
+    ]
+  }
+}
