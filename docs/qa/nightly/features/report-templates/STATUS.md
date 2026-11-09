@@ -2,22 +2,22 @@
 
 Tracker stage: idea · Tracker environment: none
 Evidence label: **tab-unproven**
-Addressed in this change window: **yes** · Created: **yes**
+Addressed in this change window: **no** · Created: **yes**
 
 ## Located files
 
-`backend/templates-routes.js`, `backend/fca-routes.js`, `backend/letter-routes.js`. No standalone service-agreement route file — service agreements are a template inside this subsystem (`backend/templates/service-agreement-map.js` + `backend/service-agreements/templates/*.docx|*.pdf`). `backend/fca/` holds the docx engine + progress-report/support-letter templates. Frontend: not a separate shell tab — `frontend/current/templates.js` renders into `#templates-root` inside the Resource Hub's Library view, alongside sibling `#fca-hub-entry`/`#letter-hub-entry` (deliberately kept outside `#rh2-root`, per a comment, because `resourcehub.js` rebuilds that subtree wholesale and would erase live forms).
+`backend/templates-routes.js`, `backend/fca-routes.js`, `backend/letter-routes.js`. No standalone service-agreement route file — service agreements are a template inside this subsystem (`backend/templates/service-agreement-map.js` + `backend/service-agreements/templates/*.docx|*.pdf`). `backend/fca/` holds the docx engine + progress-report/support-letter templates. Frontend: not a separate shell tab — `frontend/current/templates.js` renders into `#templates-root` inside the Resource Hub's Library view.
 
-Guarded: all three route files use the same inline-role-guard pattern as Interactive Assessments — `router.use('/api/<x>', requireAuth)` then per-route `requireClinicalRead`/`requireClinicalWrite` against `CLINICAL_ROLES = {therapist, owner}` (admin explicitly excluded: "Admin is a non-clinical scheduling role here. NO ACCESS"). No bare unguarded route found. No TODO/FIXME.
+Guarded, re-confirmed by direct grep tonight: `templates-routes.js` applies `router.use('/api/templates', requireAuth)` then gates by `CLINICAL_ROLES = {therapist, owner}`; `letter-routes.js` applies `router.use('/api/letters', requireAuth)` then every individual route (drafts, generate, download, clients, contacts) carries `requireClinicalRead` or `requireClinicalWrite`, backed by the same role set (admin excluded by design). No unguarded route found.
 
 ## Tests
 
-- Unit (15 files): `fca-docx-engine`, `fca-frontend-helpers`, `fca-preview-lifecycle`, `fca-preview-pages`, `fca-resolve-scalars`, `fca-wizard-behaviour`, `letter-docx-engine`, `letter-frontend-helpers`, `letter-template-map`, `templates-appendices`, `templates-clinical-maps`, `templates-export-boundary`, `templates-frontend-guards`, `templates-routes`, `templates-service-agreement-map` — **369/369 pass** (ran templates/letters subset; FCA-specific files already counted under Interactive Assessments' 738)
-- Integration (3 files): `templates.itest.js`, `progress-note-letters.itest.js`, `fca-reports.itest.js` (shared with Interactive Assessments) — **88/88 pass** for templates+letters+snapshot combined run
+- Unit (9 files, templates/letters-specific; the FCA-specific files are verified under Interactive Assessments to avoid duplicate runs): `letter-docx-engine.test.js`, `letter-frontend-helpers.test.js`, `letter-template-map.test.js`, `templates-appendices.test.js`, `templates-clinical-maps.test.js`, `templates-export-boundary.test.js`, `templates-frontend-guards.test.js`, `templates-routes.test.js`, `templates-service-agreement-map.test.js` — **369/369 pass** (own run tonight).
+- Integration (2 files; `fca-reports.itest.js` verified under Interactive Assessments): `templates.itest.js`, `progress-note-letters.itest.js` — **82/82 pass** on isolated DB `therapy_scheduler_audit_g2_test`. Two expected WARN log lines ("splose client list unavailable") are fail-closed test fixtures, not failures.
 
 ## Browser / E2E proof
 
-**None found.** `e2e/tests/portal.spec.js` has one Resource Hub test (folder content + 403) that does not touch Templates. `tutorials.spec.js` has zero matches for "template". `docs/qa/BROWSER_QA_RESULTS.md` has zero matches for "template". No end-to-end flow proves a user can open Resource Hub → Templates and generate an FCA report, progress letter or service agreement.
+**None found** — re-confirmed tonight by a fresh grep. Zero matches for "template" (case-insensitive) in `e2e/tests/*.spec.js` or `docs/qa/BROWSER_QA_RESULTS.md`. No end-to-end flow proves a user can open Resource Hub → Templates and generate an FCA report, progress letter or service agreement.
 
 ## Open tasks from the tracker
 
@@ -25,7 +25,7 @@ Guarded: all three route files use the same inline-role-guard pattern as Interac
 
 ## Commits in the window touching this feature
 
-`24aee93` (Support Letter and Progress Report masters — new docx engine content, `templates-routes.js`, migration 087), `0561d91` (live side-by-side preview, no Splose round-trip per keystroke — `templates-routes.js`, `templates.js`, the `mockup_v3.html` `?v=` pin), `64e432f` (merge of `clinical-letter-templates`, union of both plus `templates.css`).
+None. Zero commits landed on `develop` between the 2026-11-08 audit and tonight — `develop` is at the same commit (`34cf881`) both nights.
 
 ## Disagreement
 

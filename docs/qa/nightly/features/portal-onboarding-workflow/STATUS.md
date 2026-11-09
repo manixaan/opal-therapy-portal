@@ -6,14 +6,14 @@ Addressed in this change window: **no** · Created: **yes**
 
 ## Located files
 
-`backend/onboarding-employee-routes.js`, `onboarding-workflow-routes.js`, `onboarding-journey-routes.js`, `onboarding-pack-routes.js`, `onboarding-returns-routes.js`, `onboarding-payroll-routes.js`, `onboarding-defaults-routes.js`, `onboarding-package-docs-routes.js`, `onboarding-assignment-routes.js`, `onboarding-library-routes.js`, `onboarding-routes.js` (mounted in `backend/server.js`). Frontend: `frontend/current/onboarding.js` and the `ONBOARDING TAB` / `EMPLOYEES TAB` banners in `mockup_v3.html` (lines 4297, 4306).
+`backend/onboarding-employee-routes.js`, `onboarding-workflow-routes.js`, `onboarding-journey-routes.js`, `onboarding-pack-routes.js`, `onboarding-returns-routes.js`, `onboarding-payroll-routes.js`, `onboarding-defaults-routes.js`, `onboarding-package-docs-routes.js`, `onboarding-assignment-routes.js`, `onboarding-library-routes.js`, `onboarding-routes.js` (11 files, all mounted in `backend/server.js`). Frontend: `frontend/current/onboarding.js` and the `ONBOARDING TAB` / `EMPLOYEES TAB` banners in `mockup_v3.html`.
 
-All route groups guarded: `requireAuth` plus `requirePermission('onboarding.*')` (a delegated permission set, not in any role's defaults except owner, per `permissions.js`). No bare unguarded route found. No TODO/FIXME.
+Guarded, re-confirmed by direct grep of all 11 files tonight: every route pairs `requireAuth` with a delegated `requirePermission('onboarding.*')` permission (`onboarding.view`, `onboarding.assign`, `onboarding.review`, `onboarding.payroll`, `onboarding.manage_packages`, `onboarding.manage_documents` — not in any role's defaults except owner, per `permissions.js`). No unguarded route found.
 
 ## Tests
 
-- Unit (glob `onboarding-*.test.js`, 27 files): **653/654 pass**. The one failure (`onboarding-document-reader.test.js`) is an **environment gap, not a code defect**: the OCR data package `@tesseract.js-data/eng` (declared in `backend/package.json` but absent from `backend/node_modules`) is missing, so the test can't resolve it. Confirmed by direct inspection — the package is a genuine dependency, not optional, and this agent could not run `npm install` to fix it (hard limit). Flagging for the environment setup script, not the onboarding code.
-- Integration (10 files, `tests/integration/onboarding*.itest.js`): **218/218 pass** (confirmed on a clean re-run; a first run that overlapped by a few seconds with another integration run this agent started produced 35 false failures from database truncation contention — discarded, see Technical detail in the daily brief).
+- Unit (27 files, `onboarding-*.test.js`): **653/654 pass**, run tonight. The one failure (`onboarding-document-reader.test.js`, "the OCR language data is shipped with the portal") is the same **environment gap, not a code defect**, as last night: `Cannot find module '@tesseract.js-data/eng/package.json'` — the package is declared in `backend/package.json` but absent from `backend/node_modules` in this sandbox. Did not attempt `npm install`/`npm ci` (forbidden in this sandbox).
+- Integration (10 files, `onboarding*.itest.js`): **218/218 pass**, run tonight on isolated DB `therapy_scheduler_audit_g3_test` (331.8s).
 
 ## Browser / E2E proof
 
@@ -25,7 +25,7 @@ All route groups guarded: `requireAuth` plus `requirePermission('onboarding.*')`
 
 ## Commits in the window touching this feature
 
-None — `backend/onboarding-*.js` did not change in the last 14 days. Stable, already-built code.
+None. Zero commits landed on `develop` between the 2026-11-08 audit and tonight — `develop` is at the same commit (`34cf881`) both nights.
 
 ## Disagreement
 

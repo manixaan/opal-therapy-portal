@@ -6,7 +6,7 @@ Addressed in this change window: **no** · Created: **no**
 
 ## Located files
 
-None. Task: "Update Excel Sheet to include all documentation required" (todo). Searched the whole repo for "docs register", "documentation register", "doc register" — zero matches. Checked `docs/` and `backend/docs/` directly for anything that might function as an in-repo documentation checklist standing in for the Excel sheet: none found that matches.
+None. Task: "Update Excel Sheet to include all documentation required" (todo). Re-confirmed tonight with a fresh case-insensitive search of `backend/`, `frontend/current/` and `docs/` for "docs register", "documentation register", "doc register" — zero matches.
 
 ## Tests
 

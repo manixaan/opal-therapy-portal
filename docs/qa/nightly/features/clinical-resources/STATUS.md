@@ -6,18 +6,18 @@ Addressed in this change window: **no** · Created: **yes**
 
 ## Located files
 
-This idea-stage card (no tasks, no detail text) maps onto the entire existing Resource Hub: `backend/resources-routes.js`, `backend/resource-hub-r2-routes.js`, `backend/resource-library-routes.js`, `backend/instrument-register-routes.js`, `backend/resource-ingestion-routes.js`. Frontend: `frontend/current/resourcehub.js`, the `RESOURCES TAB (Resource Hub R1)` banner (`mockup_v3.html` line 5120).
+This idea-stage card (no tasks, no detail text) maps onto the entire existing Resource Hub: `backend/resources-routes.js`, `backend/resource-hub-r2-routes.js`, `backend/resource-library-routes.js`, `backend/instrument-register-routes.js`, `backend/resource-ingestion-routes.js`. Frontend: `frontend/current/resourcehub.js`, the `RESOURCES TAB (Resource Hub R1)` banner.
 
-Guarded: `requireAuth` plus role checks on every route group — `resources-routes.js` and `resource-hub-r2-routes.js` use an inline per-request callback check; `resource-ingestion-routes.js`'s admin endpoints use an inline `requireAdmin()` helper (owner/admin only) rather than `requirePermission` middleware, functionally equivalent and consistent with the house pattern used elsewhere (`profile-routes.js`'s `canApprove`). No unguarded route found. No TODO/FIXME.
+Guarded, re-confirmed by direct grep tonight: `resources-routes.js` — `router.use('/api/resources', requireAuth, <inline role check>)`, denies admin by default, owner-only overrides on folder-create/approve/reject/archive/link-status. `resource-hub-r2-routes.js`/`resource-library-routes.js` — `requireAuth` plus `canAuthor`/`isOwner` helpers gating writes. `instrument-register-routes.js` — `router.use('/api/rh2', requireAuth)`. `resource-ingestion-routes.js` — every admin route is `requireAuth` plus inline `requireAdmin()` (owner/admin only). No unguarded route found.
 
 ## Tests
 
-- Unit (glob `resource-*` + `store-search.test.js`, 13 files): **408/420 pass, 12 skipped** (skips are pre-existing, not newly introduced).
-- Integration (7 files under `tests/integration/resource*.itest.js` + `resources.itest.js`): 6/7 suites passed cleanly; `resource-library.itest.js` hit an intermittent `deadlock detected` in its own shared `truncateAll()` helper on the first run. Re-run twice in isolation: failed once more, then passed clean (**53/53**) — a pre-existing flake in the test helper's truncation logic, not a regression from this window's code. **168/168 effective pass** across the two clean runs combined.
+- Unit (13 Resource Hub files + `store-search.test.js`): **454/466 pass across the combined run with Professional Development, 12 skipped** (the 12 skips are the same pre-existing ones from prior nights, not new). Isolating the Resource Hub's own share: 408 pass / 12 skip of 420.
+- Integration (7 files): first pass tonight — 6 suites passed, 1 failed: `resource-library.itest.js` hit `error: deadlock detected` in its own shared `truncateAll()` helper, the same pre-existing intermittent flake seen on prior nights. Retried that file alone: **53/53 pass, clean**. Combined effective result: **168/168 pass**.
 
 ## Browser / E2E proof
 
-`e2e/tests/portal.spec.js` ("Resource Hub shows approved starter content, no authoring, no public URLs") and `docs/qa/BROWSER_QA_RESULTS.md` entry G (16 approved resources across 14 folders, folder-create correctly 403).
+`e2e/tests/portal.spec.js` ("Resource Hub shows approved starter content, no authoring, no public URLs") and `docs/qa/BROWSER_QA_RESULTS.md` entry G (16 approved resources across 14 folders, folder-create correctly 403) — both re-confirmed tonight.
 
 ## Open tasks from the tracker
 
@@ -25,7 +25,7 @@ None.
 
 ## Commits in the window touching this feature
 
-None — the Resource Hub core routes did not change in the last 14 days.
+None. Zero commits landed on `develop` between the 2026-11-08 audit and tonight — `develop` is at the same commit (`34cf881`) both nights.
 
 ## Disagreement
 
@@ -33,4 +33,4 @@ None.
 
 ## Technical note
 
-`tests/integration/resource-library.itest.js`'s `truncateAll()` deadlock is worth a look independent of this audit — it reproduced once in isolation with no other process touching the database, then passed clean on immediate retry. Likely an unclosed connection/transaction left open by a prior test in that file.
+`tests/integration/resource-library.itest.js`'s `truncateAll()` deadlock reproduced again tonight, on the first run, in isolation. This is the second consecutive night it has shown this flake and is worth a look independent of this audit — a retry passes clean both times, so it reads as an unclosed connection/transaction left open by a prior test in that file rather than a real defect in the routes under test.
