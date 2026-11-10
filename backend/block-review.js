@@ -46,6 +46,7 @@ function eventTypeFor(kind) {
   const group = bookingGroup(kind);
   if (group === 'direct') return 'therapy';
   if (group === 'report' || group === 'nf2f') return 'report';
+  if (group === 'travel') return 'travel';
   if (kind === 'pd') return 'cpd';
   if (kind === 'lunch') return 'lunch';
   if (kind === 'supervision') return 'meeting';

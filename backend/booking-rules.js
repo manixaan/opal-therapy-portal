@@ -8,6 +8,8 @@
  *   direct  (Direct services)      client REQUIRED
  *   report  (Requested reports)    client REQUIRED
  *   nf2f    (Non-face-to-face)     client OPTIONAL
+ *   travel  (Travel block)         client OPTIONAL — billable travel, defined
+ *                                  by a start and an end address (both REQUIRED)
  *   other   (PD, supervision, lunch) no client
  *
  * Location is optional for every kind — an event without an address means the
@@ -20,6 +22,7 @@ const DIRECT_KINDS = ['assessment', 'assessment-ei', 'initial', 'initial-ei', 'm
   'telehealth', 'telehealth-ei', 'therapy', 'therapy-ei'];
 const REPORT_KINDS = ['fca', 'at-report', 'progress-report', 'support-letter'];
 const NF2F_KINDS   = ['case-noting', 'case-management', 'resource-prep', 'emails', 'phone-calls'];
+const TRAVEL_KINDS = ['travel-block'];
 const OTHER_KINDS  = ['pd', 'supervision', 'lunch', 'custom'];
 const MAX_NF2F_CLIENTS = 20;
 
@@ -27,9 +30,10 @@ const GROUP_BY_KIND = Object.freeze(Object.assign({},
   ...DIRECT_KINDS.map(k => ({ [k]: 'direct' })),
   ...REPORT_KINDS.map(k => ({ [k]: 'report' })),
   ...NF2F_KINDS.map(k => ({ [k]: 'nf2f' })),
+  ...TRAVEL_KINDS.map(k => ({ [k]: 'travel' })),
   ...OTHER_KINDS.map(k => ({ [k]: 'other' })),
 ));
-const CLIENT_RULE = Object.freeze({ direct: 'required', report: 'required', nf2f: 'optional', other: 'none' });
+const CLIENT_RULE = Object.freeze({ direct: 'required', report: 'required', nf2f: 'optional', travel: 'optional', other: 'none' });
 
 function bookingGroup(kind) {
   return Object.prototype.hasOwnProperty.call(GROUP_BY_KIND, kind) ? GROUP_BY_KIND[kind] : null;
@@ -80,7 +84,31 @@ function validateBooking(body) {
     if (!clients.length) return { ok: true, booking: { kind: b.kind, group, clientId: null, clientName: null } };
     return { ok: true, booking: { kind: b.kind, group, clientId: clients[0].clientId, clientName: clients[0].clientName, clients } };
   }
+  if (group === 'travel') {
+    // A travel block (10 Nov 2026) is its start and end address; the route
+    // minutes and distance are what Google gave the panel, kept for the record.
+    const route = cleanTravelRoute(b.route);
+    if (!route) return { ok: false, error: 'A travel block needs a start and an end location' };
+    return { ok: true, booking: { kind: b.kind, group, clientId, clientName, route } };
+  }
   return { ok: true, booking: { kind: b.kind, group, clientId, clientName } };
+}
+
+function cleanAddress(v) {
+  return typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, 300) || null : null;
+}
+
+/* PURE — { from, to, minutes?, distanceKm? } or null when either end is missing. */
+function cleanTravelRoute(r) {
+  if (!r || typeof r !== 'object') return null;
+  const from = cleanAddress(r.from), to = cleanAddress(r.to);
+  if (!from || !to) return null;
+  const out = { from, to };
+  const min = Number(r.minutes);
+  if (Number.isFinite(min) && min > 0 && min <= 24 * 60) out.minutes = Math.round(min);
+  const km = Number(r.distanceKm);
+  if (Number.isFinite(km) && km >= 0 && km <= 5000) out.distanceKm = Math.round(km * 10) / 10;
+  return out;
 }
 
 /**
@@ -124,6 +152,6 @@ function cleanRequestId(v) {
 }
 
 module.exports = {
-  DIRECT_KINDS, REPORT_KINDS, NF2F_KINDS, OTHER_KINDS, CLIENT_RULE, MAX_NF2F_CLIENTS,
+  DIRECT_KINDS, REPORT_KINDS, NF2F_KINDS, TRAVEL_KINDS, OTHER_KINDS, CLIENT_RULE, MAX_NF2F_CLIENTS,
   bookingGroup, validateBooking, createIdempotencyStore, cleanRequestId,
 };

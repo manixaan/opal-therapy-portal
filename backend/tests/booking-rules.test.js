@@ -85,6 +85,21 @@ describe('validateBooking — the client rule per group', () => {
     expect(rules.validateBooking({ booking: { kind: 'lunch', clientId: '9' } }).booking.clientId).toBeNull();
   });
 
+  test('travel block: a start and an end are required, the client is optional', () => {
+    expect(rules.bookingGroup('travel-block')).toBe('travel');
+    expect(rules.validateBooking({ booking: { kind: 'travel-block' } }).ok).toBe(false);
+    expect(rules.validateBooking({ booking: { kind: 'travel-block', route: { from: '1 A St, Willetton', to: ' ' } } }).ok).toBe(false);
+    const r = rules.validateBooking({ booking: { kind: 'travel-block',
+      route: { from: ' 1 A St,   Willetton ', to: '2 B Rd, Bull Creek', minutes: 17.4, distanceKm: 9.87, extra: 'x' } } });
+    expect(r).toEqual({ ok: true, booking: { kind: 'travel-block', group: 'travel', clientId: null, clientName: null,
+      route: { from: '1 A St, Willetton', to: '2 B Rd, Bull Creek', minutes: 17, distanceKm: 9.9 } } });
+    const withClient = rules.validateBooking({ booking: { kind: 'travel-block', clientId: '501', clientName: 'Bo B',
+      route: { from: 'A', to: 'B', minutes: -3, distanceKm: 'far' } } });
+    expect(withClient.booking).toMatchObject({ clientId: '501', clientName: 'Bo B', route: { from: 'A', to: 'B' } });
+    expect(withClient.booking.route).not.toHaveProperty('minutes');
+    expect(withClient.booking.route).not.toHaveProperty('distanceKm');
+  });
+
   test('unknown kinds and bad client ids are refused; legacy callers pass', () => {
     expect(rules.validateBooking({ booking: { kind: 'provider-travel' } }).ok).toBe(false);
     expect(rules.validateBooking({ booking: { kind: 'emails', clientId: 'x; DROP' } }).ok).toBe(false);
@@ -120,6 +135,34 @@ describe('POST /api/outlook/events', () => {
     expect(r.status).toBe(400);
     expect(r.body.error).toMatch(/client/i);
     expect(outlook.createOutlookEvent).not.toHaveBeenCalled();
+  });
+
+  test('a travel block without its route is refused before anything is written', async () => {
+    as('therapist');
+    const r = await request(app()).post('/api/outlook/events').send({ title: 'Travel', ...SLOT, categories: ['Travel'], booking: { kind: 'travel-block' } });
+    expect(r.status).toBe(400);
+    expect(r.body.error).toMatch(/start and an end/i);
+    expect(db.createEvent).not.toHaveBeenCalled();
+  });
+
+  test('a read-only account cannot book a travel block', async () => {
+    as('read_only');
+    const r = await request(app()).post('/api/outlook/events').send({ title: 'Travel', ...SLOT, categories: ['Travel'],
+      booking: { kind: 'travel-block', route: { from: 'A', to: 'B' } } });
+    expect(r.status).toBe(403);
+    expect(db.createEvent).not.toHaveBeenCalled();
+  });
+
+  test('a travel block is saved as travel with its route, and no Splose link', async () => {
+    as('therapist');
+    const r = await request(app()).post('/api/outlook/events').send({ title: 'Travel: A → B', ...SLOT, location: 'B', categories: ['Travel'],
+      booking: { kind: 'travel-block', clientId: '501', clientName: 'Bo B', route: { from: 'A', to: 'B', minutes: 20, distanceKm: 12 } } });
+    expect(r.status).toBe(201);
+    expect(db.createEvent.mock.calls[0][1].eventType).toBe('travel');
+    const store = db.pool.query.mock.calls.find(([t]) => /jsonb_build_object\('booking'/.test(t));
+    expect(JSON.parse(store[1][1])).toEqual({ kind: 'travel-block', group: 'travel', clientId: '501', clientName: 'Bo B',
+      route: { from: 'A', to: 'B', minutes: 20, distanceKm: 12 } });
+    expect(db.pool.query.mock.calls.some(([t]) => /SET client_id/.test(t))).toBe(false);
   });
 
   test('a direct service without a client is refused', async () => {

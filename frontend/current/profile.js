@@ -1695,6 +1695,11 @@ async function loadWorkSchedule() {
           if (!String(out.addr || '').trim() && /^riverton$/i.test(String(out.suburb || '').trim())) {
             out = Object.assign({}, out, { suburb: '', region: 'central', lat: undefined, lng: undefined }); resetSample = true;
           }
+          // Local/Remote is retired (10 Nov 2026): every home base is a place
+          // with an address. A saved 'remote' base becomes an ordinary one.
+          if (out.kind && out.kind !== 'local') {
+            out = Object.assign({}, out, { kind: 'local', color: '#9a5f0e' }); resetSample = true;
+          }
           return out;
         });
         if (resetSample && typeof debouncedSaveWorkSchedule === 'function') setTimeout(debouncedSaveWorkSchedule, 0);

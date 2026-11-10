@@ -717,7 +717,8 @@ describe('changed assets are cache-busted', () => {
       // 10: setup card guarded; an unsaved work-location edit survives a schedule reload.
       // 11: a GET sent while the work-schedule PUT is in flight is ignored.
       // 12: Credentials open on your own; "All staff" is a switch; openMyCredentials.
-      ['profile.js', 12],
+      // 13: a saved Local/Remote home base loads as an ordinary (local) base.
+      ['profile.js', 13],
       // 1: reports.js is new — the Daily & Weekly Snapshot domain lifted out
       // of the shell. Same reason as profile.js: a first pin is still a pin.
       ['reports.js', 9],
@@ -754,6 +755,9 @@ describe('changed assets are cache-busted', () => {
       // 4 (js): each client's share shows m:ss, not rounded minutes.
       // 5 (js) / 3 (css): Allocate billing takes any typed number; warns over 100%.
       ['nf2f.js', 5], ['nf2f.css', 3],
+      // 1: travel-block.js is new — the billable Travel block in Smart Booking
+      // (start + end location, length from Google Maps).
+      ['travel-block.js', 1],
       // 1: splose-sync.js/.css are new — the Splose draft-and-publish sync
       // (Sync Splose button, review panel, unsynced tiles, tab-leave prompt,
       // Splose-side change alerts). A first pin is still a pin.

@@ -178,6 +178,8 @@
 <script src="/booking-route.js?v=12" defer></script>
 <script src="/recurrence.js?v=1" defer></script>
 <script src="/nf2f.js?v=5" defer></script>
+<!-- Travel block: a billable start → end drive, priced by Google Maps. -->
+<script src="/travel-block.js?v=1" defer></script>
 <!-- Splose draft-and-publish sync: Sync Splose button, review panel, unsynced
      tiles, tab-leave prompt, and "changed inside Splose" alerts. Wraps
      switchTab and commitMove once the shell has defined them. -->
@@ -191,7 +193,7 @@
 <!-- My Profile: leave, CPD, professional-development documents, credentials,
      work schedule and notification preferences. Deferred, so it runs after
      the shell's inline scripts and keeps the same globals they expect. -->
-<script src="/profile.js?v=12" defer></script>
+<script src="/profile.js?v=13" defer></script>
 <!-- Daily & Weekly Snapshot: the report panel behind the header icon —
      the _rpt* data layer, the daily and weekly renderers, and the
      Snapshot Day V2 work list. Deferred, so it runs after the shell's
@@ -4650,8 +4652,10 @@ window.opIcon = function (name, size) {
             <button class="bk-item" data-leaf="phone-calls" onclick="selectBookingLeaf('phone-calls')">Phone Calls</button>
           </details>
 
-          <!-- Provider travel is not a booking type: travel is worked out from
-               the day's physical appointments and moved on the calendar. -->
+          <!-- Travel block (10 Nov 2026): a billable drive you book yourself — a
+               start and an end location, priced by Google Maps (travel-block.js).
+               The day's own legs are still worked out from its appointments. -->
+          <button class="bk-item bk-single" data-leaf="travel-block" onclick="selectBookingLeaf('travel-block')">Travel block</button>
 
           <div class="bk-section-label" style="margin-top:12px;">Non-billable</div>
           <button class="bk-item bk-single" data-leaf="pd" onclick="selectBookingLeaf('pd')">Professional development</button>
@@ -4758,6 +4762,22 @@ window.opIcon = function (name, size) {
             </div>
           </div>
           <p class="micro">Logged as Busy-Time block in Splose.</p>
+        </div>
+
+        <!-- TRAVEL BLOCK details (travel-block.js) -->
+        <div id="cat-travel-section" style="display:none;">
+          <div class="cat-form">
+            <div class="form-field full" style="margin-bottom:10px;">
+              <label for="travel-from">Start location <span class="req">*</span></label>
+              <input type="text" id="travel-from" placeholder="Start typing an address…" autocomplete="off" />
+            </div>
+            <div class="form-field full" style="margin-bottom:10px;">
+              <label for="travel-to">End location <span class="req">*</span></label>
+              <input type="text" id="travel-to" placeholder="Start typing an address…" autocomplete="off" />
+            </div>
+            <div class="bsp-route-status" id="travel-route-status" role="status" hidden></div>
+          </div>
+          <p class="micro">Billable travel. The drive time comes from Google Maps at the start time and sets the block's length.</p>
         </div>
 
         <!-- ── WHEN & WHERE (always visible at bottom of step 1) ── -->
@@ -12392,6 +12412,8 @@ var BOOKING_LEAVES = {
   'resource-prep':   { cat: 'custom', group: 'nf2f', client: 'optional', label: 'Resource Preparation', prefill: 'Resource Preparation' },
   'emails':          { cat: 'custom', group: 'nf2f', client: 'optional', label: 'Emails', prefill: 'Emails' },
   'phone-calls':     { cat: 'custom', group: 'nf2f', client: 'optional', label: 'Phone Calls', prefill: 'Phone Calls' },
+  // Travel block — client OPTIONAL; a start and an end location (travel-block.js).
+  'travel-block':    { cat: 'travel', group: 'travel', client: 'optional', label: 'Travel block' },
   // Non-billable — no client.
   'pd':              { cat: 'custom', group: 'other', client: 'none', label: 'Professional development', prefill: 'Professional development' },
   'supervision':     { cat: 'custom', group: 'other', client: 'none', label: 'Supervision', prefill: 'Supervision' },
@@ -12537,6 +12559,9 @@ function selectBookingCat(cat) {
   document.getElementById('cat-admin-section').style.display = 'none';
   document.getElementById('cat-bulk-noting-section').style.display = 'none';
   document.getElementById('cat-custom-section').style.display = 'none';
+  const _travelSec = document.getElementById('cat-travel-section');
+  if (_travelSec) _travelSec.style.display = 'none';
+  if (cat !== 'travel' && window.TravelBlock) TravelBlock.onLeave();
 
   // Show selected category
   const sectionMap = {
@@ -12544,11 +12569,13 @@ function selectBookingCat(cat) {
     'email': 'cat-email-section',
     'admin': 'cat-admin-section',
     'bulk-noting': 'cat-bulk-noting-section',
-    'custom': 'cat-custom-section'
+    'custom': 'cat-custom-section',
+    'travel': 'cat-travel-section'
   };
-  if (sectionMap[cat]) {
+  if (sectionMap[cat] && document.getElementById(sectionMap[cat])) {
     document.getElementById(sectionMap[cat]).style.display = 'block';
   }
+  if (cat === 'travel' && window.TravelBlock) TravelBlock.onSelect();
 
   // Reports and non-face-to-face activities pick a client too — required for
   // a report, optional for the rest. The client list sits above the form.
@@ -12671,6 +12698,10 @@ async function createBookingNow() {
     const name = document.getElementById('custom-name').value.trim();
     if (!name) { showToast('Name required', 'Please enter a name for this event.', 'warn'); return; }
     BOOKING_STATE.formData = { category: 'custom', name, notes: document.getElementById('custom-notes').value.trim(), timing };
+  } else if (cat === 'travel') {
+    const route = window.TravelBlock ? TravelBlock.route() : null;
+    if (!route) { showToast('Start and end needed', 'A travel block needs a start and an end location.', 'warn'); return; }
+    BOOKING_STATE.formData = { category: 'travel', title: TravelBlock.titleFor(route.from, route.to), route, timing };
   }
 
   // One surface, one action — create straight from the form.
@@ -12809,7 +12840,8 @@ async function confirmBooking() {
     }
     if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
 
-    const CAT_LABELS = { email: 'Emails', admin: 'Admin Work', 'bulk-noting': 'Bulk Case Noting', custom: 'Custom Event' };
+    const CAT_LABELS = { email: 'Emails', admin: 'Admin Work', 'bulk-noting': 'Bulk Case Noting', custom: 'Custom Event', travel: 'Travel block' };
+    const _travelRoute = cat === 'travel' ? (fd.route || null) : null;
     // Repeat chosen in the panel (recurrence.js) — read now: the wizard resets after the save.
     const _repeatRuleNow = (window.Recurrence && Recurrence.panelRule) ? Recurrence.panelRule() : null;
     // The client, by the type's rule (required for a report, optional for
@@ -12827,20 +12859,21 @@ async function confirmBooking() {
     // Address is optional for every event. One given moves the therapist
     // there for travel; none means they stay where they were (travel.js).
     const _unsureNc = !!document.getElementById('bsp-location-unsure')?.checked;
-    let _location = _unsureNc ? '' : (t.location || '');
+    // A travel block ends at its end location; it is not a stop of its own.
+    let _location = _travelRoute ? _travelRoute.to : (_unsureNc ? '' : (t.location || ''));
     // No address on a lunch, admin, PD… (18 Oct 2026): it happens where the
     // therapist already is — the end of the last drive, the last client, or
     // the day's base — and is saved with that address, so it shows on the
     // event and needs no travel. Own calendar only; typing one overrides it.
     const _ownCal = !_bspSelectedTherapist || !_bspSelectedTherapist.userId || String(_bspSelectedTherapist.userId) === String(window.APP_USER?.id);
-    if (!_location && !_unsureNc && _ownCal && typeof whereAtMin === 'function') {
+    if (!_travelRoute && !_location && !_unsureNc && _ownCal && typeof whereAtMin === 'function') {
       const _here = whereAtMin(t.day, t.startH * 60 + (t.startM || 0));
       if (_here && _here.address) _location = _here.address;
     }
     // With an address it is a stop: if it becomes the day's last, it inherits
     // where the day was going to end, as a client booking does — a lunch at
     // the place Go Somewhere Else went to must not add a drive home (18 Oct 2026).
-    const _chainNc = (_location && _ownCal && typeof travelInheritSpecFor === 'function')
+    const _chainNc = (!_travelRoute && _location && _ownCal && typeof travelInheritSpecFor === 'function')
       ? travelInheritSpecFor(t.day, t.startH * 60 + (t.startM || 0)) : null;
     // The Outlook category is what the backend classifies the saved row by
     // (sync-utils classifyEventType), so the tile's type follows the booking
@@ -12853,6 +12886,7 @@ async function confirmBooking() {
       'resource-prep': ['Report Writing', 'report'],
       pd: ['PD', 'cpd'], supervision: ['PD', 'cpd'], lunch: ['Lunch', 'lunch'],
       'case-management': ['Case Management', 'report'],
+      'travel-block': ['Travel', 'travel'],
     };
     const [outlookCategory, tileType] = LEAF_KIND[BOOKING_STATE.serviceType] || ['Admin', 'admin'];
 
@@ -12871,9 +12905,13 @@ async function confirmBooking() {
           body: JSON.stringify({
             title: outlookTitle, startTime: t.startISO, endTime: t.endISO, categories: [outlookCategory],
             ...(_location ? { location: _location } : {}),
+            // A travel block goes on the calendar it is booked for (the
+            // Scheduling Assistant's handoff), like a client booking does.
+            ...(_travelRoute && _bspSelectedTherapist && _bspSelectedTherapist.userId ? { targetTherapistUserId: _bspSelectedTherapist.userId } : {}),
             ...(_leaf ? { booking: _nfClients
               ? { kind: BOOKING_STATE.serviceType, clients: _nfClients }
-              : { kind: BOOKING_STATE.serviceType, clientId: _client ? String(_client.id) : null, clientName: _clientName || null } } : {}),
+              : { kind: BOOKING_STATE.serviceType, clientId: _client ? String(_client.id) : null, clientName: _clientName || null,
+                  ...(_travelRoute ? { route: _travelRoute } : {}) } } : {}),
             ...(BOOKING_STATE.requestId ? { requestId: BOOKING_STATE.requestId } : {}),
           }),
         });
@@ -12908,6 +12946,7 @@ async function confirmBooking() {
           categories: [outlookCategory], dbId: newDbId, outlookId,
           address: _location || null, location: _location || null,
           ...(_client ? { patient: _clientName, patientId: _client.id } : {}),
+          ...(_travelRoute ? { booking: { kind: 'travel-block', group: 'travel', route: _travelRoute } } : {}),
           startTimeIso: new Date(t.startISO).toISOString(), endTimeIso: new Date(t.endISO).toISOString(),
         });
         if (_optId && SESSIONS[_optId]) {
@@ -13202,6 +13241,7 @@ function resetWizard() {
   ['custom-name', 'custom-notes', 'email-title', 'email-notes', 'admin-notes', 'bulk-noting-notes'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
+  if (window.TravelBlock) TravelBlock.reset();
   // A new booking remembers nothing (5 Oct 2026): no client (the stored one
   // used to come back through getSelectedPatient's fallback), no case, no
   // travel chain, no location, and no booking type picked — the therapist
@@ -14649,7 +14689,9 @@ function openBlockDetail(id) {
   const swatch = document.getElementById('bd-swatch');
   swatch.style.background = s.element.style.background;
 
-  document.getElementById('bd-title').textContent = (s.patient ? `${TYPE_LABEL[s.type]||'Session'} · ${s.patient}` : (TYPE_LABEL[s.type] || s.title));
+  const _titleClients = bdClientNames(s);
+  const _titleWho = _titleClients.length > 1 ? `${_titleClients.length} clients` : (_titleClients[0] || '');
+  document.getElementById('bd-title').textContent = (_titleWho ? `${TYPE_LABEL[s.type]||'Session'} · ${_titleWho}` : (TYPE_LABEL[s.type] || s.title));
   document.getElementById('bd-subtitle').textContent =
     `${DAY_FULL[s.day] || s.day} · ${fmtTime(s.startH, s.startM)} – ${fmtTime(s.endH, s.endM)} AWST · ${durMin(s)} min`;
 
@@ -14689,12 +14731,15 @@ function openBlockDetail(id) {
   } else {
     rows.push(row('Time',  `${fmtTime(s.startH, s.startM)} – ${fmtTime(s.endH, s.endM)}  (${durMin(s)} min)`));
   }
-  if (s.patient) {
-    rows.push(row('<span class="section-head" style="margin:0;">Patient</span>', '', true));
-    rows.push(row('Name',      s.patient));
+  const _clientNames = bdClientNames(s);
+  if (_clientNames.length) {
+    rows.push(row('<span class="section-head" style="margin:0;">Client</span>', '', true));
+    rows.push(row(_clientNames.length > 1 ? 'Names' : 'Name', _clientNames.map(escapeAttr).join('<br>')));
     if (s.patientId) rows.push(row('Patient ID', `<span class="v mono">${s.patientId}</span>`, true));
     if (s.plan) rows.push(row('Plan', s.plan));
   }
+
+  if (window.TravelBlock) rows.push(...TravelBlock.detailRows(s, row));
 
   // ── Location section — shown for ALL event types ──────────────────────
   rows.push(row('<span class="section-head" style="margin:0;">Location</span>', '', true));
@@ -14770,6 +14815,18 @@ function openBlockDetail(id) {
 
   document.getElementById('detail-backdrop').classList.add('show');
   document.getElementById('detail-drawer').classList.add('show');
+}
+// The event's client name(s), wherever the event carries them: a fresh
+// booking (patient), the events row (client_name from Splose or a booking),
+// or the portal booking metadata (one client, or several for non-face-to-face).
+function bdClientNames(s) {
+  if (!s) return [];
+  if (s.patient) return [s.patient];
+  if (s.clientName) return [s.clientName];
+  const b = s.booking || {};
+  if (Array.isArray(b.clients) && b.clients.length) return b.clients.map(c => c && c.clientName).filter(Boolean);
+  if (b.clientName) return [b.clientName];
+  return [];
 }
 function row(k, v, rawKey) {
   return `<div class="row"><div class="k">${rawKey ? k : k}</div><div class="v">${v}</div></div>`;
@@ -16057,8 +16114,8 @@ function titleBase(s) {
 
 /* ---------- Work bases (Perth metro office + N home bases) ----------
    - Exactly one `office` base (Perth metro). Cannot be removed — clinic is retired.
-   - Any number of `home` bases. Each has kind: 'local' (physical address) or
-     'remote' (no commute — used for Teams/online-only days and idle-gap logic).
+   - Any number of `home` bases, each a physical address (the Local/Remote
+     kind was retired 10 Nov 2026 — every base is kind 'local').
    - `id` is a stable string used as the key in the Mon–Fri work-location
      dropdown (`LOCATIONS`) and in WORK_LOCATION[weekKey][day].
 */
@@ -16150,15 +16207,8 @@ function setHomeBase(id, field, value, lat, lng) {
     if (row) row.textContent = h.addr ? ((h.suburb || 'Suburb unknown') + (h.lat ? ' · pinned' : ' · used as travel anchor')) : 'Set address to enable travel routing';
   }
   if (field === 'suburb') { h.suburb = (value || '').trim(); h.region = suburbRegion(h.suburb) || h.region; }
-  if (field === 'kind')   {
-    h.kind = value === 'remote' ? 'remote' : 'local';
-    h.icon = '';
-    h.color = h.kind === 'remote' ? '#575046' : '#9a5f0e';
-    // Re-render the row to flip background colour + icon
-    renderHomeBases();
-  }
   // Drop any cached route touching either the previous OR the new address.
-  if (field === 'addr' || field === 'suburb' || field === 'kind') {
+  if (field === 'addr' || field === 'suburb') {
     invalidateRouteCacheFor(oldAddr);
     invalidateRouteCacheFor(oldSub);
     invalidateRouteCacheFor(h.addr);
@@ -16174,20 +16224,12 @@ function renderHomeBases() {
   const host = document.getElementById('wb-homes');
   if (!host) return;
   const rows = (WORK_BASES.homes || []).map(h => {
-    const addrPlaceholder = h.kind === 'remote'
-      ? 'Remote — no physical address required'
-      : 'Start typing your home address…';
-    const hint = h.kind === 'remote'
-      ? 'Remote · no travel cost'
-      : (h.addr ? ((h.suburb || 'Suburb unknown') + (h.lat ? ' · pinned' : ' · used as travel anchor')) : 'Set address to enable travel routing');
+    const addrPlaceholder = 'Start typing the address…';
+    const hint = h.addr ? ((h.suburb || 'Suburb unknown') + (h.lat ? ' · pinned' : ' · used as travel anchor')) : 'Set address to enable travel routing';
     return `
-      <div class="wb-field base-${h.kind}" data-base="${h.id}">
+      <div class="wb-field base-local" data-base="${h.id}">
         <input type="text" value="${escapeAttr(h.label)}" onchange="setHomeBase('${h.id}','label',this.value)" style="max-width:160px;font-weight:600;" title="Label shown in the Mon–Fri dropdown">
-        <select onchange="setHomeBase('${h.id}','kind',this.value)" title="Remote = online-only, no commute. Local = physical address, counts for travel.">
-          <option value="local"${h.kind === 'local' ? ' selected' : ''}>Local</option>
-          <option value="remote"${h.kind === 'remote' ? ' selected' : ''}>Remote</option>
-        </select>
-        <input type="text" class="wb-addr" data-base-id="${h.id}" value="${escapeAttr(h.addr)}" placeholder="${addrPlaceholder}" autocomplete="off" oninput="setHomeBase('${h.id}','addr',this.value)" ${h.kind === 'remote' ? 'disabled style="opacity:0.55;"' : ''}>
+        <input type="text" class="wb-addr" data-base-id="${h.id}" value="${escapeAttr(h.addr)}" placeholder="${addrPlaceholder}" autocomplete="off" oninput="setHomeBase('${h.id}','addr',this.value)">
         <span class="wb-hint">${hint}</span>
         <button class="wb-remove" onclick="removeHomeBase('${h.id}')" title="Remove this base">
           <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -18543,6 +18585,10 @@ function groupEventsByDay(events) {
           travel: (event.custom_metadata && event.custom_metadata.travel) || null,
           // Booked in the portal: its type and client (booking-rules.js).
           booking: (event.custom_metadata && event.custom_metadata.booking) || null,
+          // The event's client (Splose sync or a portal booking) — shown in
+          // the detail panel; the tile already names them in its title.
+          clientName: event.client_name || null,
+          clientId: event.client_id != null ? String(event.client_id) : null,
           // A repeating appointment's series (recurrence.js, migration 075).
           seriesId: event.series_id || null, seriesIndex: event.series_index != null ? event.series_index : null,
         });
@@ -18851,6 +18897,8 @@ function mergeEventsIntoDayData(eventsByDay) {
             endTimeIso: session.endTimeIso,
             travel: session.travel || null,
             booking: session.booking || null,
+            clientName: session.clientName || null,
+            clientId: session.clientId || null,
           });
           if (SESSIONS[id]) {
             SESSIONS[id].outlookSynced = true;
