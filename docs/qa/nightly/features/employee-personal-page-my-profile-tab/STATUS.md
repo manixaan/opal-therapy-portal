@@ -2,7 +2,7 @@
 
 Tracker stage: idea · Tracker environment: none
 Evidence label: **built-untested**
-Addressed in this change window: **no** · Created: **yes**
+Addressed in this change window: **partially** · Created: **yes**
 
 ## Located files
 
@@ -24,7 +24,7 @@ All routes carry `requireAuth`. Re-confirmed tonight by direct grep: approval/ve
 
 ## Commits in the window touching this feature
 
-None. Zero commits landed on `develop` between the 2026-11-08 audit and tonight.
+**1 commit** — `40669e7` (2026-11-10) touched `frontend/current/profile.js`'s Work schedule section only: the Local/Remote home-base picker is retired, and a saved `remote` base now loads as an ordinary (`local`) one. This is a source-level change covered by a source-string assertion in the new `backend/tests/travel-block-frontend.test.js` ("home bases have no Local/Remote picker; a saved remote base loads as local"), not by a dedicated `profile-routes` test — the backend API itself (`backend/profile-routes.js`) is untouched tonight and still has zero automated test coverage. Evidence label is unchanged: still `built-untested`.
 
 ## Disagreement
 

@@ -31,7 +31,7 @@ Guarded, re-confirmed by direct grep tonight: `learning-routes.js`, `walkthrough
 
 ## Commits in the window touching this feature
 
-None. Zero commits landed on `develop` between the 2026-11-08 audit and tonight — `develop` is at the same commit (`34cf881`) both nights. (Last night's run, auditing the same commit, listed the six induction packs and related fixes that landed in the days before 2026-11-08; none of that is new tonight.)
+None for this feature. `develop` moved from `34cf881` (last night's audit commit) to `40669e7` between the 2026-11-09 audit and tonight — one commit, "feat(booking): Travel block booking type …" — but it touches only the Smart Booking/calendar/profile surface (see `portal-splose-outlook-integration-works/STATUS.md` and `employee-personal-page-my-profile-tab/STATUS.md`), nothing located under this feature.
 
 ## Disagreement
 

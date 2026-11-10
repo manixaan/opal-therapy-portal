@@ -27,7 +27,7 @@ Re-confirmed tonight: `docs/qa/BROWSER_QA_RESULTS.md` entry G covers the Resourc
 
 ## Commits in the window touching this feature
 
-None for either reading. Zero commits landed on `develop` between the 2026-11-08 audit and tonight.
+None for either reading. `develop` moved from `34cf881` to `40669e7` between the 2026-11-09 audit and tonight — one commit, the Travel block booking type (see `portal-splose-outlook-integration-works/STATUS.md`) — which touches neither the Resource Hub PD catalogue nor the Profile tab's CPD section.
 
 ## Disagreement
 

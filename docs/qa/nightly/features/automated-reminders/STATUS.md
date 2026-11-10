@@ -25,7 +25,7 @@ The tracker's own idea text is the client-facing reminder, and that remains enti
 
 ## Commits in the window touching this feature
 
-None. Zero commits landed on `develop` between the 2026-11-08 audit and tonight, and no client-reminder code was added.
+None for this feature. `develop` moved from `34cf881` to `40669e7` between the 2026-11-09 audit and tonight — one commit, the Travel block booking type (see `portal-splose-outlook-integration-works/STATUS.md`) — which does not touch `snapshot-routes.js` or add any client-reminder code.
 
 ## Disagreement
 
