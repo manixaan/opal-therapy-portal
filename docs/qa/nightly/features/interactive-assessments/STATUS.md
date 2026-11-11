@@ -13,11 +13,11 @@ Guarded, re-confirmed by direct grep tonight: `fca-routes.js` — 16 routes, all
 ## Tests
 
 - Unit (12 files): `assessment-catalogue.test.js`, `assessment-surface-guards.test.js`, `fca-wizard-behaviour.test.js`, `fca-frontend-helpers.test.js`, `fca-preview-lifecycle.test.js`, `fca-preview-pages.test.js`, `fca-resolve-scalars.test.js`, `fca-docx-engine.test.js`, `whodas-scoring.test.js`, `whodas-templates.test.js`, `whodas-frontend-guards.test.js`, `whodas-external-completion.test.js` — **738/738 pass**, run tonight.
-- Integration (3 files): `assessments.itest.js`, `fca-reports.itest.js`, `whodas.itest.js` — **122/122 pass**, run tonight on isolated DB `therapy_scheduler_audit_g1_test`. One expected WARN ("splose client list unavailable") during the FCA run is a fail-closed test fixture, not a failure.
+- Integration (3 files): `assessments.itest.js`, `fca-reports.itest.js`, `whodas.itest.js` — run tonight on isolated DB `therapy_scheduler_audit_g3_test` as part of a combined 6-file batch with Opa Mobile Companion's case-note integration tests; all 6 files passed (132/132). One expected `WARN fca: splose client list unavailable` is a fail-closed test fixture, not a failure.
 
 ## Browser / E2E proof
 
-**None found.** `e2e/tests/portal.spec.js` and `tutorials.spec.js` have zero matches for assessment/fca/whodas. `docs/qa/BROWSER_QA_RESULTS.md` has no relevant entry. Nothing proves a user can open a client's Assessment Review overlay and complete an instrument in a real browser.
+**None found.** Re-confirmed tonight by a fresh grep: `e2e/tests/portal.spec.js` and `tutorials.spec.js` have zero matches for assessment/fca/whodas. `docs/qa/BROWSER_QA_RESULTS.md` has no relevant entry. Nothing proves a user can open a client's Assessment Review overlay and complete an instrument in a real browser.
 
 ## Open tasks from the tracker
 
@@ -25,7 +25,7 @@ Guarded, re-confirmed by direct grep tonight: `fca-routes.js` — 16 routes, all
 
 ## Commits in the window touching this feature
 
-None for this feature. `develop` moved from `34cf881` (last night's audit commit) to `40669e7` between the 2026-11-09 audit and tonight — one commit, "feat(booking): Travel block booking type …" — but it touches only the Smart Booking/calendar/profile surface (see `portal-splose-outlook-integration-works/STATUS.md` and `employee-personal-page-my-profile-tab/STATUS.md`), nothing located under this feature.
+None. No commits landed on `develop` since last night's audit — `develop` is still at `40669e7`, the exact commit audited last night and re-verified again tonight.
 
 ## Disagreement
 

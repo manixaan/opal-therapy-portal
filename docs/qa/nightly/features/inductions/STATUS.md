@@ -18,12 +18,12 @@ Guarded, re-confirmed by direct grep tonight: `learning-routes.js`, `walkthrough
 
 ## Tests
 
-- Unit (8 files): `assign-learning-guards.test.js`, `induction-assistant.test.js`, `induction-packs.test.js`, `induction-registry.test.js`, `learning-admin-routes.test.js`, `learning-content.test.js`, `learning-routes.test.js`, `walkthrough-content.test.js` — ran tonight as part of a combined 17-file run with Xero and Opa Mobile Companion; **all 8 files passed** within that run's **539/539** total.
-- Integration (8 files): `induction-assistant.itest.js`, `learning-admin.itest.js`, `learning.itest.js`, `onboarding-induction.itest.js`, `tutorial-progress.itest.js`, `walkthrough-authoring.itest.js`, `walkthrough-catalogue.itest.js`, `walkthrough-evidence.itest.js` — ran tonight on isolated DB `therapy_scheduler_audit_g6_test`; **all 8 files passed** within that run's **212/212** total.
+- Unit (8 files): `assign-learning-guards.test.js`, `induction-assistant.test.js`, `induction-packs.test.js`, `induction-registry.test.js`, `learning-admin-routes.test.js`, `learning-content.test.js`, `learning-routes.test.js`, `walkthrough-content.test.js` — run tonight as part of a combined 17-file batch with Xero and Opa Mobile Companion; **all 17 files passed, 539/539 tests**.
+- Integration (8 files): `induction-assistant.itest.js`, `learning-admin.itest.js`, `learning.itest.js`, `onboarding-induction.itest.js`, `tutorial-progress.itest.js`, `walkthrough-authoring.itest.js`, `walkthrough-catalogue.itest.js`, `walkthrough-evidence.itest.js` — run tonight on isolated DB `therapy_scheduler_audit_g2_test`; **all 8 files passed, 133/133 tests**.
 
 ## Browser / E2E proof
 
-`e2e/tests/tutorials.spec.js` exercises a full flow: login, open Resource Hub learning view, start → highlight → advance → pause (Escape) → resume after reload and after full logout/re-login; a second test completes a module and asserts server state plus the UI badge.
+`e2e/tests/tutorials.spec.js` exercises a full flow: login, open Resource Hub learning view, start → highlight → advance → pause (Escape) → resume after reload and after full logout/re-login; a second test completes a module and asserts server state plus the UI badge. Unchanged since no commits landed in this window; re-confirmed present tonight.
 
 ## Open tasks from the tracker
 
@@ -31,7 +31,7 @@ Guarded, re-confirmed by direct grep tonight: `learning-routes.js`, `walkthrough
 
 ## Commits in the window touching this feature
 
-None for this feature. `develop` moved from `34cf881` (last night's audit commit) to `40669e7` between the 2026-11-09 audit and tonight — one commit, "feat(booking): Travel block booking type …" — but it touches only the Smart Booking/calendar/profile surface (see `portal-splose-outlook-integration-works/STATUS.md` and `employee-personal-page-my-profile-tab/STATUS.md`), nothing located under this feature.
+None. No commits landed on `develop` since last night's audit — `develop` is still at `40669e7`, the exact commit audited last night and re-verified again tonight.
 
 ## Disagreement
 

@@ -12,12 +12,12 @@ Guarded, re-confirmed by direct grep tonight: `resources-routes.js` — `router.
 
 ## Tests
 
-- Unit (13 Resource Hub files + `store-search.test.js`): **454/466 pass across the combined run with Professional Development, 12 skipped** (the 12 skips are the same pre-existing ones from prior nights, not new). Isolating the Resource Hub's own share: 408 pass / 12 skip of 420.
-- Integration (7 files): first pass tonight — 6 suites passed, 1 failed: `resource-library.itest.js` hit `error: deadlock detected` in its own shared `truncateAll()` helper, the same pre-existing intermittent flake seen on prior nights. Retried that file alone: **53/53 pass, clean**. Combined effective result: **168/168 pass**.
+- Unit (14 files — 13 Resource Hub files + `store-search.test.js`, run together with Professional Development's `pd-catalogue-guards.test.js`): **454/466 pass, 12 skipped** (the same pre-existing skips as prior nights, not new).
+- Integration (7 files): run tonight on isolated DB `therapy_scheduler_audit_g1_test` — **168/168 pass, clean on the first try**. The `resource-library.itest.js` `truncateAll()` deadlock seen on the two prior nights logged one `WARN ... deferred preview generation failed {"reason":"deadlock detected"}` from a background derivative job, but the test itself did not fail and no retry was needed tonight.
 
 ## Browser / E2E proof
 
-`e2e/tests/portal.spec.js` ("Resource Hub shows approved starter content, no authoring, no public URLs") and `docs/qa/BROWSER_QA_RESULTS.md` entry G (16 approved resources across 14 folders, folder-create correctly 403) — both re-confirmed tonight.
+`e2e/tests/portal.spec.js` ("Resource Hub shows approved starter content, no authoring, no public URLs") and `docs/qa/BROWSER_QA_RESULTS.md` entry G (16 approved resources across 14 folders, folder-create correctly 403) — unchanged since no commits landed in this window; re-confirmed present tonight.
 
 ## Open tasks from the tracker
 
@@ -25,7 +25,7 @@ None.
 
 ## Commits in the window touching this feature
 
-None for this feature. `develop` moved from `34cf881` (last night's audit commit) to `40669e7` between the 2026-11-09 audit and tonight — one commit, "feat(booking): Travel block booking type …" — but it touches only the Smart Booking/calendar/profile surface (see `portal-splose-outlook-integration-works/STATUS.md` and `employee-personal-page-my-profile-tab/STATUS.md`), nothing located under this feature.
+None. No commits landed on `develop` since last night's audit — `develop` is still at `40669e7`, the exact commit audited last night and re-verified again tonight.
 
 ## Disagreement
 
@@ -33,4 +33,4 @@ None.
 
 ## Technical note
 
-`tests/integration/resource-library.itest.js`'s `truncateAll()` deadlock reproduced again tonight, on the first run, in isolation. This is the second consecutive night it has shown this flake and is worth a look independent of this audit — a retry passes clean both times, so it reads as an unclosed connection/transaction left open by a prior test in that file rather than a real defect in the routes under test.
+The intermittent `resource-library.itest.js` deadlock (seen two nights running as a full test failure) did not reproduce as a test failure tonight — only as a harmless background-job WARN log. Likely an unclosed connection/transaction timing issue in a prior test within that file rather than a defect in the routes under test; still worth a look independent of this audit if it recurs.

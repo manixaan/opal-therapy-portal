@@ -12,8 +12,8 @@ Guarded, re-confirmed by direct grep tonight: `templates-routes.js` applies `rou
 
 ## Tests
 
-- Unit (9 files, templates/letters-specific; the FCA-specific files are verified under Interactive Assessments to avoid duplicate runs): `letter-docx-engine.test.js`, `letter-frontend-helpers.test.js`, `letter-template-map.test.js`, `templates-appendices.test.js`, `templates-clinical-maps.test.js`, `templates-export-boundary.test.js`, `templates-frontend-guards.test.js`, `templates-routes.test.js`, `templates-service-agreement-map.test.js` — **369/369 pass** (own run tonight).
-- Integration (2 files; `fca-reports.itest.js` verified under Interactive Assessments): `templates.itest.js`, `progress-note-letters.itest.js` — **82/82 pass** on isolated DB `therapy_scheduler_audit_g2_test`. Two expected WARN log lines ("splose client list unavailable") are fail-closed test fixtures, not failures.
+- Unit (9 files, templates/letters-specific; the FCA-specific files are verified under Interactive Assessments to avoid duplicate runs): `letter-docx-engine.test.js`, `letter-frontend-helpers.test.js`, `letter-template-map.test.js`, `templates-appendices.test.js`, `templates-clinical-maps.test.js`, `templates-export-boundary.test.js`, `templates-frontend-guards.test.js`, `templates-routes.test.js`, `templates-service-agreement-map.test.js` — **434/434 pass** tonight (run in a batch of 10 alongside `interview-templates.test.js`, which belongs to a different, untracked subsystem).
+- Integration (2 files; `fca-reports.itest.js` verified under Interactive Assessments): `templates.itest.js`, `progress-note-letters.itest.js` — **82/82 pass** on isolated DB `therapy_scheduler_audit_g6_test`. Two expected WARN log lines ("splose client list unavailable") are fail-closed test fixtures, not failures.
 
 ## Browser / E2E proof
 
@@ -25,7 +25,7 @@ Guarded, re-confirmed by direct grep tonight: `templates-routes.js` applies `rou
 
 ## Commits in the window touching this feature
 
-None for this feature. `develop` moved from `34cf881` (last night's audit commit) to `40669e7` between the 2026-11-09 audit and tonight — one commit, "feat(booking): Travel block booking type …" — but it touches only the Smart Booking/calendar/profile surface (see `portal-splose-outlook-integration-works/STATUS.md` and `employee-personal-page-my-profile-tab/STATUS.md`), nothing located under this feature.
+None. No commits landed on `develop` since last night's audit — `develop` is still at `40669e7`, the exact commit audited last night and re-verified again tonight.
 
 ## Disagreement
 

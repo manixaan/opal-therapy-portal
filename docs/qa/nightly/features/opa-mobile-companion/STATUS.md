@@ -12,8 +12,8 @@ Both carry only `requireAuth` — correctly so, per the self-scoped exception in
 
 ## Tests
 
-- Unit (4 files): `mobile-routes.test.js`, `case-note-routes.test.js`, `casenotes-compose.test.js`, `casenotes-helpers.test.js` — ran tonight as part of a combined 17-file run with Xero and Inductions; **all 4 files passed** within that run's **539/539** total.
-- Integration (3 files): `case-note-approval-edit.itest.js`, `case-note-client-link.itest.js`, `case-note-deidentification.itest.js` — ran tonight as part of a combined 17-file run on isolated DB `therapy_scheduler_audit_g6_test`; **all 3 files passed** within that run's **212/212** total. No `*mobile*.itest.js` exists.
+- Unit (4 files): `mobile-routes.test.js`, `case-note-routes.test.js`, `casenotes-compose.test.js`, `casenotes-helpers.test.js` — run tonight as part of a combined 17-file batch with Xero and Inductions; **all 17 files passed, 539/539 tests**.
+- Integration (3 files): `case-note-approval-edit.itest.js`, `case-note-client-link.itest.js`, `case-note-deidentification.itest.js` — run tonight on isolated DB `therapy_scheduler_audit_g3_test` as part of a combined 6-file batch with Interactive Assessments; all 6 files passed (132/132). No `*mobile*.itest.js` exists.
 
 ## Browser / E2E proof
 
@@ -25,7 +25,7 @@ None, and none expected: the mobile app's own UI lives outside this repository. 
 
 ## Commits in the window touching this feature
 
-None for this feature. `develop` moved from `34cf881` (last night's audit commit) to `40669e7` between the 2026-11-09 audit and tonight — one commit, "feat(booking): Travel block booking type …" — but it touches only the Smart Booking/calendar/profile surface (see `portal-splose-outlook-integration-works/STATUS.md` and `employee-personal-page-my-profile-tab/STATUS.md`), nothing located under this feature.
+None. No commits landed on `develop` since last night's audit — `develop` is still at `40669e7`, the exact commit audited last night and re-verified again tonight.
 
 ## Disagreement
 

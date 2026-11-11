@@ -18,7 +18,7 @@ Recommend the team clarify which is meant, or merge the cards if (2).
 
 ## Tests (for reading 1)
 
-- Unit: `backend/tests/pd-catalogue-guards.test.js` — ran tonight as part of a combined 14-file run with Clinical Resources; **46/46 pass** within that run.
+- Unit: `backend/tests/pd-catalogue-guards.test.js` — run tonight as part of a combined 14-file batch with Clinical Resources; all 14 files passed (454/466, 12 pre-existing skips).
 - No integration or E2E test specific to this page — re-confirmed tonight.
 
 ## Browser / E2E proof
@@ -27,7 +27,7 @@ Re-confirmed tonight: `docs/qa/BROWSER_QA_RESULTS.md` entry G covers the Resourc
 
 ## Commits in the window touching this feature
 
-None for either reading. `develop` moved from `34cf881` to `40669e7` between the 2026-11-09 audit and tonight — one commit, the Travel block booking type (see `portal-splose-outlook-integration-works/STATUS.md`) — which touches neither the Resource Hub PD catalogue nor the Profile tab's CPD section.
+None for either reading. No commits landed on `develop` since last night's audit — `develop` is still at `40669e7`.
 
 ## Disagreement
 
