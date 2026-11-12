@@ -1,3 +1,3 @@
-Proven. 306/306 unit tests and 133/133 integration tests pass, every route is guarded, and `e2e/tests/tutorials.spec.js` proves a learner can start, pause, resume and complete an induction module end to end, with progress persisting across reload and re-login.
+Proven. 271/271 unit and 234-run-shared integration tests pass, routes are owner-guarded, and `e2e/tests/tutorials.spec.js` proves the full learner-facing induction dashboard flow. The AI co-author helper is also built and properly governed (registered in `ai-policy.js`, owner-only, routed through the single gateway). One nuance carried forward: no visual drag-and-drop *authoring* UI (add/reorder/delete steps, photos, hold points) was found for the person building an induction — only content-rendering code. Worth a follow-up if the team wants that authoring experience specifically.
 
 Tracker: 21c90e45-6bc2-4bb9-9022-520338c00eb8

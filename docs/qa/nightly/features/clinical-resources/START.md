@@ -1,3 +1,5 @@
-Proven. 408/420 unit tests (12 pre-existing skips) and 168/168 integration tests pass (one file is intermittently flaky on its own truncate helper — passes clean on retry), routes are guarded, and `e2e/tests/portal.spec.js` plus `docs/qa/BROWSER_QA_RESULTS.md` entry G prove the tab renders correctly in a real browser.
+This feature is proven. It is the Resource Hub (`backend/resources-routes.js`, `resource-hub-r2-routes.js`, `resource-library-routes.js`, `resource-ingestion-routes.js`; `RESOURCES TAB` in `mockup_v3.html:5140`).
+
+Proven by: 12 unit test suites (398 tests) + 7 integration test files (part of a 234-test run) all passing, plus `e2e/tests/portal.spec.js:116` ("Resource Hub shows approved starter content, no authoring, no public URLs").
 
 Tracker: af1cdfa3-7519-401a-8549-0fd812ae62e7

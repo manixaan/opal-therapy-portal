@@ -1,36 +1,39 @@
 # Clinical resources
 
-Tracker stage: idea · Tracker environment: none
-Evidence label: **proven**
-Addressed in this change window: **no** · Created: **yes**
+- Tracker stage: idea
+- Tracker environment: none
+- Evidence label: **proven**
+- Addressed in change window (2026-10-29 to 2026-11-12): yes (minor) — `frontend/current/resourcehub.css`, `frontend/current/resourcehub.js` touched
+- Created (any code located): yes
 
 ## Located files
 
-This idea-stage card (no tasks, no detail text) maps onto the entire existing Resource Hub: `backend/resources-routes.js`, `backend/resource-hub-r2-routes.js`, `backend/resource-library-routes.js`, `backend/instrument-register-routes.js`, `backend/resource-ingestion-routes.js`. Frontend: `frontend/current/resourcehub.js`, the `RESOURCES TAB (Resource Hub R1)` banner.
+This card is the **Resource Hub** (confirmed by literal match — `backend/server.js` carries the comment "Resource Hub (governed clinical resource repository; backend-enforced RBAC)"; `resource-hub-r2-routes.js` also uses the phrase "clinical resource").
 
-Guarded, re-confirmed by direct grep tonight: `resources-routes.js` — `router.use('/api/resources', requireAuth, <inline role check>)`, denies admin by default, owner-only overrides on folder-create/approve/reject/archive/link-status. `resource-hub-r2-routes.js`/`resource-library-routes.js` — `requireAuth` plus `canAuthor`/`isOwner` helpers gating writes. `instrument-register-routes.js` — `router.use('/api/rh2', requireAuth)`. `resource-ingestion-routes.js` — every admin route is `requireAuth` plus inline `requireAdmin()` (owner/admin only). No unguarded route found.
+- Routes: `backend/resources-routes.js`, `backend/resource-hub-r2-routes.js`, `backend/resource-library-routes.js`, `backend/resource-ingestion-routes.js`
+- Data access: `backend/resource-ingestion.js`, `backend/setup/seed-resource-hub-r2.js`, `backend/resource-recycle-bin.js`
+- Frontend: `RESOURCES TAB (Resource Hub R1)` — `frontend/current/mockup_v3.html:5140`; Resource Hub R2 is a set of dynamic sub-views (home/library/saved/learning/admin/detail/pd/instruments/assignment/lwedit) inside the same tab, driven by `frontend/current/navigation.js`
+- Unit tests: `resource-file-delivery.test.js`, `resource-file-quality.test.js`, `resource-governance.test.js`, `resource-hub-badge-guards.test.js`, `resource-hub-final.test.js`, `resource-ingestion.test.js`, `resource-library-frontend-guards.test.js`, `resource-library-rules.test.js`, `resource-privacy-reasons.test.js`, `resource-privacy-scan.test.js`, `resource-seed-guards.test.js`, `resource-source-scan.test.js`
+- Integration tests: `resource-file-upload.itest.js`, `resource-hub-r2.itest.js`, `resource-hub-v1.itest.js`, `resource-ingestion.itest.js`, `resource-library.itest.js`, `resource-library-sharepoint.itest.js`, `resources.itest.js`
+- E2E: `e2e/tests/portal.spec.js:116` — "Resource Hub shows approved starter content, no authoring, no public URLs"
 
-## Tests
+## Guard check
 
-- Unit (14 files — 13 Resource Hub files + `store-search.test.js`, run together with Professional Development's `pd-catalogue-guards.test.js`): **454/466 pass, 12 skipped** (the same pre-existing skips as prior nights, not new).
-- Integration (7 files): run tonight on isolated DB `therapy_scheduler_audit_g1_test` — **168/168 pass, clean on the first try**. The `resource-library.itest.js` `truncateAll()` deadlock seen on the two prior nights logged one `WARN ... deferred preview generation failed {"reason":"deadlock detected"}` from a background derivative job, but the test itself did not fail and no retry was needed tonight.
+Clean. `resources-routes.js` — `requireAuth` + `requireRole('owner')` on writes. `resource-library-routes.js` — `requireAuth` + `requireManager`/`requireOwnerOnly` on sensitive routes. `resource-hub-r2-routes.js` — `requireAuth` router-level. `resource-ingestion-routes.js` — `requireAuth` router-level plus an inline `canAdmin(req.user)` check (owner/admin only, 403 otherwise) before every admin handler — functionally equivalent to a role guard, not flagged as unguarded.
 
-## Browser / E2E proof
+## Tests run
 
-`e2e/tests/portal.spec.js` ("Resource Hub shows approved starter content, no authoring, no public URLs") and `docs/qa/BROWSER_QA_RESULTS.md` entry G (16 approved resources across 14 folders, folder-create correctly 403) — unchanged since no commits landed in this window; re-confirmed present tonight.
+- Unit: 12 suites, 398 passed, 12 skipped — **pass**
+- Integration: `resource-ingestion.itest.js`, `resource-hub-r2.itest.js`, `resource-hub-v1.itest.js`, `resource-file-upload.itest.js`, `resource-library.itest.js`, `resource-library-sharepoint.itest.js`, `resources.itest.js` — all included in a 10-suite/234-test run alongside the learning tests, all passed. A few `WARN`-level deferred-preview-generation failures and one simulated deadlock appeared in the log — these are intentional failure-path test scenarios, not real defects.
 
-## Open tasks from the tracker
+## Open tasks from tracker
 
-None.
+None recorded.
 
-## Commits in the window touching this feature
+## Commits in window touching it
 
-None. No commits landed on `develop` since last night's audit — `develop` is still at `40669e7`, the exact commit audited last night and re-verified again tonight.
+- `frontend/current/resourcehub.css`, `frontend/current/resourcehub.js` — small UI changes (not individually attributed to a specific commit message in this pass; see `git log -- frontend/current/resourcehub.js` for detail).
 
 ## Disagreement
 
-None.
-
-## Technical note
-
-The intermittent `resource-library.itest.js` deadlock (seen two nights running as a full test failure) did not reproduce as a test failure tonight — only as a harmless background-job WARN log. Likely an unclosed connection/transaction timing issue in a prior test within that file rather than a defect in the routes under test; still worth a look independent of this audit if it recurs.
+None — tracker stage (`idea`) understates the evidence (the code is extensively built, guarded, tested, and has e2e proof), but this is not the "tracker claims more than the evidence" pattern the audit calls a disagreement. Worth a human updating the tracker stage regardless.

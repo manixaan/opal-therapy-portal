@@ -1,32 +1,47 @@
 # Opa Mobile Companion
 
-Tracker stage: idea · Tracker environment: none
-Evidence label: **proven**
-Addressed in this change window: **no** · Created: **yes**
+- Tracker stage: idea
+- Tracker environment: none
+- Evidence label: **proven**
+- Addressed in change window (2026-10-29 to 2026-11-12): yes — `backend/case-note-pdf.js` (new), `backend/case-note-routes.js`, `backend/mobile-routes.js`; commits include `a56173c fix(case-notes): editing an approved note sends it back for approval`, `feat(case-notes): one editable note, Copy note, Download PDF on Opal letterhead`, `dc5dbc4 revert(casenotes): no approval notice on the laptop Case Notes tab`, `e1af24e fix(mobile): the phone diary matches the portal calendar`
+- Created (any code located): yes — API surface only; the mobile app itself is not in this repository
 
 ## Located files
 
-`backend/mobile-routes.js` (707 lines) — diary/travel/voice-notes aggregate API for a separate mobile app whose UI lives outside this repo. `backend/case-note-routes.js` — voice-to-case-note drafting API.
+- Routes: `backend/mobile-routes.js`, `backend/case-note-routes.js`
+- AI layer: `backend/clinical-note-provider.js` — the only caller of `backend/ai/ai-gateway.js` for this feature; boundary respected
+- Data access: inline SQL (`voice_notes`, `events`, `snapshot_*` tables); `backend/case-note-pdf.js`, `backend/case-note-style.js`
+- Frontend: **none found in this repository**. The mobile app (native or PWA) that would actually render case noting and the calendar view is not checked in here — only its backend API surface exists in this repo. (`frontend/current/opa.js`/`opa.css` is the unrelated "Opal Assist" chat widget, not the mobile companion app.)
+- Unit tests: `mobile-routes.test.js`, `case-note-routes.test.js`, `casenotes-compose.test.js`, `casenotes-helpers.test.js`
+- Integration tests: `case-note-approval-edit.itest.js`, `case-note-client-link.itest.js`, `case-note-deidentification.itest.js`
+- E2E: none (no app to drive from this repo).
 
-Both carry only `requireAuth` — correctly so, per the self-scoped exception in CLAUDE.md. Re-confirmed tonight by grepping the queries directly, not just the header comment: `mobile-routes.js` scopes `voice_notes WHERE id=$1 AND user_id=$2`, `events WHERE id=$1 AND (user_id=$2 OR therapist_profile_id=$3)`, `snapshot_tasks`/`snapshot_reminders WHERE id=$1 AND user_id=$2`. `case-note-routes.js` scopes `case_note_drafts WHERE user_id = $1 AND status = 'draft'` via a `loadOwnDraft` helper used throughout. No unguarded route found.
+## Guard check
 
-## Tests
+Clean, self-scoped by design. `mobile-routes.js:41` — `requireAuth` only, but the file header (lines 1-29) documents every endpoint as scoped to the caller's own `user_id`/`therapist_profile_id`, 404 on anything not owned — matches the `snapshot-routes.js` exception. `case-note-routes.js:52,56` — same pattern; header explicitly states no role, owner included, may read another user's drafts.
 
-- Unit (4 files): `mobile-routes.test.js`, `case-note-routes.test.js`, `casenotes-compose.test.js`, `casenotes-helpers.test.js` — run tonight as part of a combined 17-file batch with Xero and Inductions; **all 17 files passed, 539/539 tests**.
-- Integration (3 files): `case-note-approval-edit.itest.js`, `case-note-client-link.itest.js`, `case-note-deidentification.itest.js` — run tonight on isolated DB `therapy_scheduler_audit_g3_test` as part of a combined 6-file batch with Interactive Assessments; all 6 files passed (132/132). No `*mobile*.itest.js` exists.
+## AI governance — verified
 
-## Browser / E2E proof
+`clinical-note-provider.js` is properly walled off and documented in `docs/mobile/CASE_NOTE_AI_PRIVACY.md`: fails closed without `CLINICAL_NOTE_AI_ENABLED` plus a key, and is restricted to an Australian Bedrock region — consistent with `.claude/rules/ai-gateway.md`'s clinical-data region requirement.
 
-None, and none expected: the mobile app's own UI lives outside this repository. This evidence is for the backend API surface only.
+## Tests run
 
-## Open tasks from the tracker
+- Unit: 4 suites, 163 tests — **all pass** (deliberate `ERROR`-level log lines for simulated `ECONNREFUSED`/disk-failure/`ECONNRESET` scenarios are intentional failure-path tests, not real errors)
+- Integration: 3 files, included in a 41-test run — **all pass**
 
-"Case Noting" (todo), "Calendar View" (todo) — no further detail text.
+## Open tasks from tracker
 
-## Commits in the window touching this feature
+- "Case Noting" — `todo`. An explicitly testing-only task (no manual listing, "it's just testing") — walk the dictation flow, test the AI summary against the clinical pathway, agree a quality bar, confirm notes save correctly, fix and re-test, get Ann's sign-off. This is a human-on-the-device task; the backend side is tested, but nothing here proves the device-side pilot works.
+- "Calendar View" — `todo`, no further detail recorded.
 
-None. No commits landed on `develop` since last night's audit — `develop` is still at `40669e7`, the exact commit audited last night and re-verified again tonight.
+## Why proven, not tab-unproven
+
+This matches the classification held for four consecutive nights. The usual "needs a browser/E2E proof of the tab" rule doesn't apply the same way here: there is no in-repo tab or page to drive with Playwright — the mobile app itself lives outside this repository. Given that, the standard applied consistently across these audits is: self-scoped guards re-verified by direct grep + passing unit/integration tests = `proven` for the backend surface that this repo actually contains, with a clear note (not a demotion) that the on-device pilot experience the tracker describes cannot be verified from here.
 
 ## Disagreement
 
-None.
+None in the formal sense. The practical issue, carried forward unchanged: this card describes a mobile-app pilot that is "currently built" per the tracker notes, but **this repository holds only its backend API** — the actual pilot app isn't here to verify. The backend side is well tested; the end-to-end mobile experience described in the tracker cannot be confirmed from this repository alone.
+
+## Commits in window touching it
+
+See header.

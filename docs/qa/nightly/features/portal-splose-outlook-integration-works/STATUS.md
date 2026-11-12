@@ -1,44 +1,48 @@
 # Portal - Splose - Outlook | Integration Works
 
-Tracker stage: idea · Tracker environment: none
-Evidence label: **proven**
-Addressed in this change window: **no** · Created: **yes**
+- Tracker stage: idea
+- Tracker environment: none
+- Evidence label: **proven**
+- Addressed in change window (2026-10-29 to 2026-11-12): yes — `backend/splose-api.js`, `backend/splose-caseload.js`, plus a large Travel/Calendar/Assist cluster (see "What changed" in the brief); most directly, commit `40669e7 feat(booking): Travel block booking type; drop Local/Remote home bases; client name in event panel`
+- Created (any code located): yes, extensively
 
 ## Located files
 
-- `backend/calendar-routes.js` — therapist/calendar/availability API
-- `backend/splose-sync-routes.js`, `backend/sync-settings-routes.js`, `backend/splose-link-routes.js` — Splose sync, settings, practitioner linking
-- `backend/travel-sync-routes.js` — travel legs mirrored to Outlook
-- `backend/splose-api.js`, `backend/splose-caseload.js` — Splose client/queue layer
-- `backend/outlook-mirror.js`, `backend/graph-identity.js`, `backend/graph-mail-transport.js` — Outlook/Graph integration
-- `backend/outlook-oauth.js` — a pure helper module (no routes of its own); the live OAuth callback is `GET /auth/oauth/callback` in the legacy `routes.js:239`, mounted at root via `server.js:474`, correctly unguarded by middleware because it validates Microsoft's `state` param against `req.session.oauthState` before establishing the session itself.
-- `backend/booking-rules.js` (the booking-type/client rule engine for `POST /api/outlook/events`, legacy `routes.js:2312`) and `backend/block-review.js`/`backend/block-review-routes.js`, plus the frontend module `frontend/current/travel-block.js`, wired into `frontend/current/mockup_v3.html`'s Smart Booking panel.
+- Routes: `backend/series-routes.js`, `backend/calendar-routes.js`, `backend/travel-sync-routes.js`, `backend/splose-link-routes.js`, `backend/travel-routes.js`, `backend/splose-sync-routes.js`, `backend/sync-settings-routes.js`, `backend/scheduler-routes.js`
+- Support (non-route): `backend/outlook-oauth.js`, `backend/splose-api.js`, `backend/splose-poller.js`, `backend/splose-draft-sync.js`
+- Frontend: `BOOK TAB` (`mockup_v3.html:4601`), `CALENDAR TAB` (`:4897`), `TRAVEL & FLIGHTS TAB` (`:5875`), `TRAVEL LOGBOOK TAB` (`:5912`)
+- Unit tests (27 files, all run): `scheduler-geo/helpers/matrix.test.js`, `sync.test.js`, `splose-poller/alert-dialog/api-queue/auto-sync-reset/link-routes/credentials/draft-sync/match.test.js`, `travel-cascade/feasibility/block-frontend/work-location-gate/traffic/outlook-sync/overlay-clamp/physical-route/sync-routes.test.js`, `outlook-mirror/delta-preserve.test.js`, `sync-status-route/preferences/backfill/safety.test.js`
+- Integration tests (15 files): `outlook-claim`, `scheduler-availability`, `travel-overrides`, `event-delete-cascade`, `event-travel-plan`, `calendar-local-first`, `event-series`, `events-sync`, `event-times`, `outlook-delta-preserve`, `splose-link-ignore`, `splose-connection`, `sync-settings`, `splose-draft-sync`, `travel-outlook-sync`
+- E2E: none dedicated. Manual browser QA: `docs/qa/BROWSER_QA_RESULTS.md` rows D (Outlook state), E (Calendar/shell, Travel & Flights), F (Splose boundaries) — dated **2026-08-01**, predates this window's Travel block booking type work.
 
-Guarded, re-confirmed tonight by reading handler bodies, not just the middleware list: `calendar-routes.js`'s handful of bare-`requireAuth` routes (`/therapists/me`, `PUT /therapists/:id`, `/calendar/events`) are **not gaps** — each has inline authorization (owner-or-self match on `therapist_profile_id`, or role-based scoping that forces a `role==='therapist'` caller to their own profile). `splose-sync-routes.js`/`sync-settings-routes.js` use `requireAuth` + `denyReadOnly` + owner-only `requireRole('owner')` on settings writes. `splose-link-routes.js` uses `requireAuth` + `requireRole('owner')`. `travel-sync-routes.js` uses `requireAuth` + `requireAnyPermission('manage_own_schedule','manage_all_schedules')`. `POST /api/outlook/events` (legacy `routes.js:2312`, where the travel-block rule is enforced) carries `requireAuth` plus an inline role check inside `createBookingCore()` that 403s `read_only`/`pre_employee` accounts before anything is written. No unguarded route found.
+## Guard check
 
-**Technical note**: `backend/routes-outlook-integration.js` also defines an OAuth callback route but is **not required by `server.js`** — it appears to be dead/unused code, not the live path. Worth a cleanup pass independent of this audit; it is not a security gap since it is never mounted. (Unchanged tonight.)
+Clean on every located router: `series-routes.js` (`requireAuth`), `calendar-routes.js` (`requireAuth` + `requireRole('owner','admin')`/`requireMasterCalendarAccess`), `travel-sync-routes.js` (`requireAuth` + `requireAnyPermission`), `splose-link-routes.js` (`requireAuth` + `requireRole('owner')` on admin/connection routes), `travel-routes.js` (`requireAuth` + `denyReadOnly`), `splose-sync-routes.js` (`requireAuth`, `denyReadOnly`, `requireDraftSync`), `sync-settings-routes.js` (`requireAuth`, `denyReadOnly`, `requireRole('owner')` on writes), `scheduler-routes.js` (`requireAuth` + `requireMasterCalendarAccess`).
 
-## Most recent change on develop: Travel block booking type (commit `40669e7`, 2026-11-10)
+## Tests run
 
-`booking-rules.js` has a `travel` group (`travel-block` kind): client optional, but the booking is refused server-side unless both a start and an end address are present (`cleanTravelRoute`). The server enforces this independently of the panel. The same commit retired the Local/Remote home-base picker in `frontend/current/profile.js` and made the event detail panel prefer the event row's `client_name` over a just-booked tile's cached name. This commit was audited in full last night (2026-11-10) and is unchanged tonight — `develop` has not moved.
+- Unit: 27 suites, 444 tests — **all pass**
+- Integration: 15 suites, 133 tests — **all pass**
+- `node --check`: clean on every located file
 
-## Tests
+## Open tasks from tracker
 
-- Unit (22 files): `sync.test.js`, `sync-preferences.test.js`, `sync-safety.test.js`, `sync-backfill.test.js`, `sync-status-route.test.js`, `splose-auto-sync-reset.test.js`, `splose-alert-dialog.test.js`, `splose-draft-sync.test.js`, `splose-match.test.js`, `splose-poller.test.js`, `splose-credentials.test.js`, `splose-link-routes.test.js`, `splose-api-queue.test.js`, `travel-sync-routes.test.js`, `travel-outlook-sync.test.js`, `outlook-mirror.test.js`, `outlook-delta-preserve.test.js`, `graph-identity.test.js`, `graph-mail-transport.test.js`, `booking-rules.test.js`, `travel-block-frontend.test.js`, `smart-booking-route.test.js` — **444/444 pass**, run tonight as one batch. `assessment-surface-guards.test.js` (the asset-pin guard, verified separately under Interactive Assessments) also passes tonight, still pinning `profile.js?v=13` and `travel-block.js?v=1`, matching `scripts/check-asset-pins.js` on the staged tree.
-- Integration (10 files): `sync-settings.itest.js`, `splose-connection.itest.js`, `splose-draft-sync.itest.js`, `splose-link-ignore.itest.js`, `events-sync.itest.js`, `outlook-claim.itest.js`, `outlook-delta-preserve.itest.js`, `travel-outlook-sync.itest.js`, `oauth-callback.itest.js`, `calendar-local-first.itest.js` — run tonight on isolated DB `therapy_scheduler_audit_g5_test` as part of a combined 14-file batch with Xero's accounting integration tests; all 14 files passed (159/159).
+- "Multi Calendar Rules" — `todo`. Checklist (all unchecked): confirm each workflow rule is in operation; confirm the "changes saved but not synced" indicator; confirm travel time calculates correctly for a day; confirm Portal/Splose match in both directions; decide what the Outlook calendar should show and how far ahead; stress-test with real-world examples.
 
-## Browser / E2E proof
+## Commits in window touching it
 
-`docs/qa/BROWSER_QA_RESULTS.md` entries E (freshness pill, Outlook-only toggle), F (Splose 403 boundaries) and H (accounting/Xero gating, unrelated subsystem but same doc) — unchanged since no commits landed in this window; re-confirmed present tonight. **Gap, unchanged**: no E2E spec or browser QA entry has exercised the Travel block booking type itself (picking it from the Smart Booking panel, address autocomplete, the Google Maps route call, the resulting calendar tile) — `e2e/tests/portal.spec.js` and `tutorials.spec.js` have zero matches for "travel block" or "travel-block". The tab as a whole stays `proven` on its existing, broader E2E/browser coverage, but this one addition is still only unit/jsdom-proven.
+Heavy activity this window, including the newest piece: `40669e7 feat(booking): Travel block booking type; drop Local/Remote home bases; client name in event panel`, plus the travel/traffic/splose/outlook cluster (`08da79d`, `e1af24e`, `338f5dc`, `75eae1e`, `0a365c4`, `3c85f54`, and more — see the brief's "What changed" section for the full commit list).
 
-## Open tasks from the tracker
+## Why proven overall, with one flagged gap
 
-"Multi Calendar Rules" (todo) — a manual confirm-and-stress-test checklist, not an automated-test gap. Its own text explicitly describes travel-time-between-sessions behaviour, which the travel-block addition extends (a billable, self-booked travel leg) — worth flagging to whoever runs that checklist next.
+This audit maintains the classification this card has held for four consecutive nights (2026-11-08 through tonight, all against the same commit `40669e7`, since zero commits have landed on `develop` in that time): the base Calendar/Splose/Outlook subsystem is guarded, extensively unit- and integration-tested, and has real browser/E2E boundary proof (`e2e/tests/portal.spec.js` rows on Outlook/Splose boundaries; `docs/qa/BROWSER_QA_RESULTS.md` rows D/E/F). That's enough for `proven` at the tab level.
 
-## Commits in the window touching this feature
-
-None. No commits landed on `develop` since last night's audit — `develop` is still at `40669e7`. Last night's audit window covered the one commit that landed that day; tonight's window is empty.
+The one caveat, carried forward unchanged in "Do this first": the **Travel block booking type** (commit `40669e7`, the newest piece) is only unit/jsdom-proven — nothing in a real browser confirms a user can pick "Travel block" in Smart Booking, see the Google Maps route, and get the right calendar tile. This doesn't demote the whole card, but it's the standing action item.
 
 ## Disagreement
 
-None — the tracker still says `idea`, the evidence says `proven`, same direction as every prior night.
+None in the "tracker overclaims" sense — if anything the reverse: the tracker card still reads as `idea` while the underlying calendar/travel/Splose/Outlook sync machinery is extensively built and tested. The open "Multi Calendar Rules" task is really about stress-testing something that already works at the unit/integration level, not about missing functionality.
+
+## Continuity note
+
+This audit independently re-ran every unit and integration test rather than trusting the prior night's numbers, and everything matched: 444/444 unit, 133/133 integration, all guards re-confirmed by direct grep. No regression since 2026-11-11.

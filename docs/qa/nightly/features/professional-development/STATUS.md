@@ -1,34 +1,39 @@
 # Professional Development
 
-Tracker stage: idea · Tracker environment: none
-Evidence label: **tab-unproven** (ambiguous card — see note)
-Addressed in this change window: **no** · Created: **yes, but which code it means is genuinely ambiguous**
+- Tracker stage: idea
+- Tracker environment: none
+- Evidence label: **tab-unproven**
+- Addressed in change window (2026-10-29 to 2026-11-12): marginal — `frontend/current/profile.js` touched (5 lines)
+- Created (any code located): yes, but the card is ambiguous about which of two subsystems it means
 
-## The ambiguity
+## Located files
 
-This card has no tasks and no idea/why/who-uses-it text beyond the title. There are two separate, unrelated "professional development" subsystems:
+Two candidate subsystems, both real and both tested:
 
-1. **Resource Hub's "Professional development" catalogue page** — `frontend/current/resourcehub.js`, served through `backend/resources-routes.js`'s guards, with its own test file `backend/tests/pd-catalogue-guards.test.js`.
-2. **The Profile tab's CPD section** — `backend/profile-routes.js` lines 204-320 (`/api/profile/cpd`), already covered in detail by the "Employee Personal Page (My Profile Tab)" card.
+1. **Admin PD-events catalogue + org CPD tracking** — `backend/resource-hub-r2-routes.js` (`/api/rh2/pd`, `/api/rh2/cpd`), UI in `frontend/current/resourcehub.js`.
+2. **Employee's own CPD/credentials/documents** (part of "Employee Personal Page") — `backend/profile-routes.js` (`/api/profile/cpd`, `/api/profile/documents`, `/api/profile/credentials`), UI in `frontend/current/profile.js` (~lines 290-650, inside the `PROFILE TAB`).
 
-**If (1)**: evidence is **tab-unproven** — built, guarded, tests pass, but no browser/E2E proof the catalogue page itself renders.
-**If (2)**: duplicate of "Employee Personal Page (My Profile Tab)" — evidence is **built-untested** there (zero test coverage).
+- Unit tests: `pd-catalogue-guards.test.js`, `credential-surface-guards.test.js`
+- Integration tests: `resource-hub-r2.itest.js`, `documents.itest.js`, `credential-scans.itest.js`
+- E2E: none for either interpretation.
 
-Recommend the team clarify which is meant, or merge the cards if (2).
+## Guard check
 
-## Tests (for reading 1)
+Clean for both. `resource-hub-r2-routes.js:254` — `requireAuth` + a `hubEnabled()` gate; writes (`POST`/`PATCH`/`DELETE` on `/pd`, `/cpd`) use an inline `canAuthor(req.user)` check (owner/admin only) rather than `requirePermission` middleware — functions as a role guard, not flagged as unguarded, but a style inconsistency worth a note. `profile-routes.js:24` — `requireAuth` on every route; approve-type actions use inline `canApprove()`.
 
-- Unit: `backend/tests/pd-catalogue-guards.test.js` — run tonight as part of a combined 14-file batch with Clinical Resources; all 14 files passed (454/466, 12 pre-existing skips).
-- No integration or E2E test specific to this page — re-confirmed tonight.
+## Tests run
 
-## Browser / E2E proof
+- Unit: 3 suites, 87 tests — **all pass**
+- Integration: `resource-hub-r2.itest.js` (part of the 234-test Resource Hub/Learning run — pass), `documents.itest.js` + `credential-scans.itest.js` (part of the 245-test run, 244 passed / 1 failed — the one failure is `readonly-and-hardening.itest.js`'s root-bypasses-chmod artifact, unrelated to PD/CPD specifically; see the brief's Technical detail)
 
-Re-confirmed tonight: `docs/qa/BROWSER_QA_RESULTS.md` entry G covers the Resource Hub library/folders view generally, not the Professional Development catalogue page specifically. No browser QA entry or E2E test anywhere mentions "Professional Development" by name.
+## Open tasks from tracker
 
-## Commits in the window touching this feature
+None recorded — the card has no `tasks`. But its own `next_action` (pre-filled from an earlier audit run) reads: "Clarify in the tracker which subsystem this card means, or merge it with 'Employee Personal Page' if it means the CPD section." This audit independently reached the same conclusion from the code alone.
 
-None for either reading. No commits landed on `develop` since last night's audit — `develop` is still at `40669e7`.
+## Commits in window touching it
+
+Minimal — a 5-line change to `frontend/current/profile.js`.
 
 ## Disagreement
 
-None (tracker stage is "idea" either way; evidence under reading 1 exceeds that, under reading 2 it does not).
+None in the formal sense — the problem isn't that the tracker overclaims, it's that the card's title doesn't specify which of two real, built, tested subsystems it refers to. This matches the classification held for four consecutive nights: under either reading, no browser proof exists that the relevant page actually opens and renders — hence `tab-unproven` rather than `needs-refinement`. The scope ambiguity is a separate, standing note for the team, not what drives tonight's label.

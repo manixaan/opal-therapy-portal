@@ -1,27 +1,32 @@
 # Password Master Document
 
-Tracker stage: idea · Tracker environment: none
-Evidence label: **untouched**
-Addressed in this change window: **no** · Created: **no**
+- Tracker stage: idea
+- Tracker environment: none
+- Evidence label: **untouched**
+- Addressed in change window (2026-10-29 to 2026-11-12): no
+- Created (any code located): no
 
 ## Located files
 
-None. Idea: "A master doc that exists on onedrive with all accounts login details for all portals in use." Why: "Forgetting passwords, confusion surrounding login details." Who uses it: "Owner/Admin." Outcome: "All login details will be contained in one area accessed by relevant parties."
-
-Re-confirmed tonight with a fresh case-insensitive search of `backend/`, `frontend/current/` and `docs/` for "password master", "master document", "docs register", "documentation register", "doc register" — zero matches anywhere. The existing "Credentials" section in `profile-routes.js` is employee certifications (WWCC, first aid, etc.), not a password vault, and remains unrelated.
+None. This tracker card describes a master login-details document that
+would live on OneDrive, outside the portal. A targeted search of
+`backend/` and `frontend/current/` for password-register / master-doc /
+credentials-register language found no real match (two initial grep hits
+were false positives from an OR-pattern and did not survive a tighter
+check).
 
 ## Tests
 
-None — nothing to test.
+Not applicable — no code exists to test.
 
-## Open tasks from the tracker
+## Open tasks from tracker
 
-None.
+None recorded.
 
-## Commits in the window touching this feature
+## Commits in window touching it
 
-None.
+None (nothing to touch).
 
 ## Disagreement
 
-None.
+None. Tracker stage (`idea`) and evidence (`untouched`) agree.

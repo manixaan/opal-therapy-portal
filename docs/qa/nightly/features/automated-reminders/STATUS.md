@@ -1,32 +1,40 @@
 # Automated Reminders
 
-Tracker stage: idea · Tracker environment: none
-Evidence label: **needs-refinement**
-Addressed in this change window: **no** · Created: **partially**
+- Tracker stage: idea
+- Tracker environment: none
+- Evidence label: **needs-refinement** (the card bundles one `untouched` idea with one already-`proven` existing feature — see below)
+- Addressed in change window (2026-10-29 to 2026-11-12): no
+- Created (any code located): yes, but only for the bundled-in "Therapist Snapshot" task, not for the card's own named idea
 
 ## Located files
 
-- **Therapist Snapshot** (built): `backend/snapshot-routes.js` — strictly `req.user.id`-scoped personal daily task/reminder list. Re-confirmed tonight by direct grep: `router.use('/api/snapshot', requireAuth)` is the only guard (correctly so — self-scoped exception), every query filters `WHERE user_id = $1`.
-- **"24Hr Automatic Client Appt Reminders"** (the card's own headline idea): **nothing found**, re-confirmed tonight with a fresh repo-wide search for reminder/24-hour/appointment-reminder terms — zero relevant matches. No cron package, no email/SMS send path to a client exists anywhere in the backend.
-- `backend/credential-reminder.js` exists (confirmed present tonight) as a reference pattern (staff-facing credential nudges), not the client reminder itself.
+The tracker's `idea` field for this card is **"24Hr Automatic Client Appt Reminders"** — an automated pre-appointment confirmation message to clients. That idea has **nothing located**: no route, no data access, no frontend, no test. The only reminder-shaped file in the codebase is `backend/credential-reminder.js`, which reminds *staff* about *credential expiry* — unrelated to client appointment reminders.
 
-## Tests
+The card also carries a second, unrelated task, **"Therapist Snapshot"**, which **is** a real, already-built feature:
 
-- Snapshot: `tests/integration/snapshot.itest.js` run tonight on its own isolated DB — **6/6 pass**. No dedicated unit test file for `snapshot-routes.js` (re-confirmed: no `snapshot*.test.js` exists).
-- Client reminders: no tests, because no code exists to test.
+- Routes: `backend/snapshot-routes.js` (`/api/snapshot/reminders`, `/api/snapshot/tasks`), mounted `server.js:589`
+- Frontend: `frontend/current/reports.js` ("Daily & Weekly Snapshot" panel), referenced `mockup_v3.html:4179`
+- Integration tests: `snapshot.itest.js`
+- Unit tests: none dedicated
 
-## Classification reasoning
+## Guard check
 
-The tracker's own idea text is the client-facing reminder, and that remains entirely unbuilt — the task "Automated Client Appt Reminders" is still `todo`, which is exactly the trigger for `needs-refinement`. "Therapist Snapshot" is a different, already-built feature bundled onto the same card.
+`snapshot-routes.js:31` — `requireAuth` only, but the file header explicitly documents every read/write as strictly scoped to `WHERE user_id = req.user.id`, "no cross-user access for ANY role" — matches the self-scoped-by-design exception in `.claude/rules/backend-api.md`. Not a finding.
 
-## Open tasks from the tracker
+## Tests run
 
-"Automated Client Appt Reminders" (todo, unbuilt), "Therapist Snapshot" (todo in the tracker, but the code itself is complete and tested).
+- Integration: `snapshot.itest.js` — included in the 245-test run (244 passed / 1 unrelated failure — see brief's Technical detail) — **pass**.
+- No unit test exists for `snapshot-routes.js` specifically.
 
-## Commits in the window touching this feature
+## Open tasks from tracker
 
-None. No commits landed on `develop` since last night's audit — `develop` is still at `40669e7`, the exact commit audited last night and re-verified again tonight.
+- "Automated Client Appt Reminders" — `todo`. Entirely unbuilt; checklist covers reviewing existing appointment/client data, choosing SMS/email, choosing the confirm mechanism, making the lead time configurable, building the scheduler, sending and logging, and testing safely. None of this exists in code.
+- "Therapist Snapshot" — `todo`. Checklist: review existing snapshot (partially ticked — "find where it lives" ✅), confirm two key metrics (weekly utilisation index, today's sessions), decide how to calculate/show utilisation, sketch and build an improved layout, test with real data. **Evidence check**: the snapshot panel exists and is tested at the integration level, but a direct search of `snapshot-routes.js` found no metric literally named "utilisation index" — the tracker's specific ask isn't confirmed built, only the general snapshot panel.
+
+## Commits in window touching it
+
+None for either sub-item.
 
 ## Disagreement
 
-None.
+None in the formal sense. The real issue is that this card conflates two unrelated things under one idea/title. Recommend the team split "Therapist Snapshot" into its own card (where it would likely classify as `proven` or `needs-refinement` on its own specific utilisation-index ask) so the genuinely `untouched` client-reminder idea isn't obscured by unrelated, already-built work.

@@ -1,32 +1,41 @@
 # Interactive Assessments
 
-Tracker stage: idea · Tracker environment: none
-Evidence label: **tab-unproven**
-Addressed in this change window: **no** · Created: **yes**
+- Tracker stage: idea
+- Tracker environment: none
+- Evidence label: **tab-unproven**
+- Addressed in change window (2026-10-29 to 2026-11-12): yes — `backend/fca/docx-engine.js`, `backend/fca/templates/progress-report-v1.docx`, `support-letter-v1.docx`, `backend/templates-routes.js`, `backend/templates/catalogue.js`, `compose.js`, `progress-report-map.js`, `support-letter-map.js`, `frontend/current/templates.css/.js` — the `clinical-letter-templates` merge (`64e432f`) and `24aee93 feat(templates): Support Letter and Progress Report masters`
+- Created (any code located): yes, extensively
 
 ## Located files
 
-Routes: `backend/fca-routes.js`, `backend/whodas-routes.js`, `backend/assessments-routes.js`, `backend/letter-routes.js`. Directories: `backend/fca/`, `backend/whodas/`, `backend/assessments/`. Frontend: not a shell tab — a standalone full-page overlay (`frontend/current/assessment.js/.css`), plus `fca.js/.css` and `whodas.js/.css`.
+- Routes: `backend/fca-routes.js` (`/api/fca`), `backend/whodas-routes.js` (`/api/whodas`), `backend/assessments-routes.js` (`/api/assessments`), `backend/letter-routes.js` (`/api/letters`)
+- Data access: `backend/fca/`, `backend/whodas/` directories, plus inline SQL
+- Frontend: `frontend/current/assessment.js`, `fca.js`, `whodas.js`, `letter.js` — no standalone `ASSESSMENT TAB` banner; these render as builder entry points (`#fca-hub-entry`, `#letter-hub-entry`) inside the `RESOURCES TAB`'s Library → Templates collection (confirmed directly: `mockup_v3.html:5331-5339`)
+- Unit tests (15 files): `assessment-catalogue.test.js`, `assessment-surface-guards.test.js`, `fca-docx-engine/frontend-helpers/preview-lifecycle/preview-pages/resolve-scalars/wizard-behaviour.test.js`, `letter-docx-engine/frontend-helpers/template-map.test.js`, `whodas-external-completion/frontend-guards/scoring/templates.test.js`
+- Integration tests: `assessments.itest.js`, `fca-reports.itest.js`, `progress-note-letters.itest.js`, `whodas.itest.js`
+- E2E: none.
 
-Guarded, re-confirmed by direct grep tonight: `fca-routes.js` — 16 routes, all behind `router.use('/api/fca', requireAuth)` plus per-route `requireClinicalRead`/`requireClinicalWrite`. `assessments-routes.js` — 5 routes, all behind `router.use('/api/assessments', requireAuth)` plus `requireCatalogue`/`requireClinicalRead`/`requireClinicalWrite`. `letter-routes.js` — 11 routes, same pattern. `whodas-routes.js` — 16 routes, same pattern, plus a feature flag (`isWhodasAssessmentEnabled()`) gating ahead of auth. No unguarded route found anywhere in this subsystem.
+## Guard check
 
-## Tests
+Clean. All four routers carry `requireAuth` at the router level (`fca-routes.js:161`, `whodas-routes.js:99` plus a feature-flag gate at `:85`, `assessments-routes.js:62`, `letter-routes.js:166`). `fca-routes.js` and `letter-routes.js` document own-drafts-only scoping (even the owner is excluded) in their file headers — self-scoped by design, not flagged.
 
-- Unit (12 files): `assessment-catalogue.test.js`, `assessment-surface-guards.test.js`, `fca-wizard-behaviour.test.js`, `fca-frontend-helpers.test.js`, `fca-preview-lifecycle.test.js`, `fca-preview-pages.test.js`, `fca-resolve-scalars.test.js`, `fca-docx-engine.test.js`, `whodas-scoring.test.js`, `whodas-templates.test.js`, `whodas-frontend-guards.test.js`, `whodas-external-completion.test.js` — **738/738 pass**, run tonight.
-- Integration (3 files): `assessments.itest.js`, `fca-reports.itest.js`, `whodas.itest.js` — run tonight on isolated DB `therapy_scheduler_audit_g3_test` as part of a combined 6-file batch with Opa Mobile Companion's case-note integration tests; all 6 files passed (132/132). One expected `WARN fca: splose client list unavailable` is a fail-closed test fixture, not a failure.
+## Tests run
 
-## Browser / E2E proof
+- Unit: 21 suites, 1107 tests — **all pass**
+- Integration: `assessments.itest.js`, `fca-reports.itest.js`, `progress-note-letters.itest.js`, `whodas.itest.js` — all 4 included in the 245-test run (244 pass / 1 unrelated root-sandbox artifact failure — see brief Technical detail) — **pass**
 
-**None found.** Re-confirmed tonight by a fresh grep: `e2e/tests/portal.spec.js` and `tutorials.spec.js` have zero matches for assessment/fca/whodas. `docs/qa/BROWSER_QA_RESULTS.md` has no relevant entry. Nothing proves a user can open a client's Assessment Review overlay and complete an instrument in a real browser.
+## Open tasks from tracker
 
-## Open tasks from the tracker
+- "Assessment Review" — `todo`. A manual review/triage task for Ann (sort existing assessments into keep/remove, find originals, hand to Anthony/Pauli) — not a coding task.
 
-"Assessment Review" (todo, no further detail).
+## Disagreement — tracker is behind the evidence
 
-## Commits in the window touching this feature
+The tracker's notes say: **"hudas 2.0 [WHODAS 2.0] is the only one that has actually been currently configured... there are heaps and heaps of other assessments that are pending or to be confirmed."** The code says otherwise: FCA (`fca-routes.js` + 6 unit test files + `fca-reports.itest.js`) and the Progress Report / Support Letter templates (`letter-routes.js`, `templates/progress-report-map.js`, `support-letter-map.js`, all added this window) are **just as built and tested** as WHODAS. This is a genuine disagreement — the tracker stage/notes understate what exists; flagging it so the "keep or remove" review in "Assessment Review" doesn't accidentally discard something that already works.
 
-None. No commits landed on `develop` since last night's audit — `develop` is still at `40669e7`, the exact commit audited last night and re-verified again tonight.
+## Why tab-unproven, not proven
 
-## Disagreement
+Despite the strongest unit/integration coverage of any feature in this audit, there is no E2E spec and no `docs/qa/BROWSER_QA_RESULTS.md` entry for opening an assessment/FCA/letter builder and completing an instrument in a real browser. The tracker's own `next_action` (pre-filled) already asks for exactly this.
 
-None.
+## Commits in window touching it
+
+Heavy — the entire `clinical-letter-templates` merge plus several induction packs for "Writing an FCA report" / "Writing a Progress Report" / "Writing a Case Note" (content, not code, but shows active team attention to this area).

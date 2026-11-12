@@ -1,32 +1,45 @@
 # Portal Onboarding Workflow
 
-Tracker stage: idea · Tracker environment: none
-Evidence label: **proven**
-Addressed in this change window: **no** · Created: **yes**
+- Tracker stage: idea
+- Tracker environment: none
+- Evidence label: **proven**
+- Addressed in change window (2026-10-29 to 2026-11-12): no (no commits touched `backend/onboarding-*` or `frontend/current/onboarding*.js` in this window — the subsystem is stable, not actively changing)
+- Created (any code located): yes, extensively
 
 ## Located files
 
-`backend/onboarding-employee-routes.js`, `onboarding-workflow-routes.js`, `onboarding-journey-routes.js`, `onboarding-pack-routes.js`, `onboarding-returns-routes.js`, `onboarding-payroll-routes.js`, `onboarding-defaults-routes.js`, `onboarding-package-docs-routes.js`, `onboarding-assignment-routes.js`, `onboarding-library-routes.js`, `onboarding-routes.js` (11 files, all mounted in `backend/server.js`). Frontend: `frontend/current/onboarding.js` and the `ONBOARDING TAB` / `EMPLOYEES TAB` banners in `mockup_v3.html`.
+- Routes: `onboarding-employee-routes.js`, `onboarding-workflow-routes.js`, `onboarding-journey-routes.js`, `onboarding-pack-routes.js`, `onboarding-returns-routes.js`, `onboarding-payroll-routes.js`, `onboarding-defaults-routes.js`, `onboarding-package-docs-routes.js`, `onboarding-assignment-routes.js`, `onboarding-library-routes.js`, `onboarding-routes.js`
+- Data access: `onboarding-journey.js`, `onboarding-offer-docx.js`, `onboarding-contract-docx.js`, `onboarding-offer-template.js`, `onboarding-offer-email.js`, `onboarding-document-check.js`, `onboarding-lifecycle.js`
+- Frontend: `ONBOARDING TAB` (`mockup_v3.html:4299`); `frontend/current/onboarding.js`, `onboarding-journey.js`
+- Unit tests: 27 files, including `onboarding-offer-docx/pdf/template.test.js`, `onboarding-contract-docx.test.js`, `onboarding-journey.test.js`, `onboarding-pack.test.js`, `onboarding-workflow-guards.test.js`, `onboarding-journey-frontend-guards.test.js`, `onboarding-security.test.js`
+- Integration tests: 10 files, including `onboarding-defaults/induction/journey/pack/payroll-xero/portal-route/returns/wizard-link/workflow.itest.js`, `onboarding.itest.js`
+- E2E: none dedicated. `docs/qa/BROWSER_QA_RESULTS.md` row C ("Onboarding/profile chain", 2026-08-01) covers the therapist's path through onboarding into Profile — basic chain only, not the document-template or Stage 2/3 work below.
 
-Guarded, re-confirmed by direct grep of all 11 files tonight: every route pairs `requireAuth` with a delegated `requirePermission('onboarding.*')` permission (`onboarding.view`, `onboarding.assign`, `onboarding.review`, `onboarding.payroll`, `onboarding.manage_packages`, `onboarding.manage_documents` — not in any role's defaults except owner, per `permissions.js`). No unguarded route found.
+## Guard check
 
-## Tests
+Clean. `onboarding-employee-routes.js` documents that `/api/onboarding-invite/*` is deliberately public pre-auth (invite acceptance — by design) and `/api/onboarding/me/*` is `requireAuth`-only but strictly self-scoped by `req.user.id` (self-scoped by design, matching the `backend-api.md` exception). Every other router carries `requireAuth` + `requirePermission('onboarding.*')`.
 
-- Unit (27 files, `onboarding-*.test.js`): **653/654 pass**, run tonight. The one failure (`onboarding-document-reader.test.js`, "the OCR language data is shipped with the portal") is the same **environment gap, not a code defect**, as prior nights: `Cannot find module '@tesseract.js-data/eng/package.json'` — the package is declared in `backend/package.json` but absent from `backend/node_modules` in this sandbox. Did not attempt `npm install`/`npm ci` (forbidden in this sandbox).
-- Integration (10 files, `onboarding*.itest.js`): **218/218 pass**, run tonight on isolated DB `therapy_scheduler_audit_g4_test` (361s).
+## Tests run
 
-## Browser / E2E proof
+- Unit: 26 of 27 suites passed (654 of 654 individual tests passed except one). `onboarding-document-reader.test.js` failed one test — **not a code defect**: it asserts an OCR language-data package (`@tesseract.js-data/eng`) is present in `node_modules`, and that optional dependency is missing in this sandbox despite being declared in `package.json`. This is an environment gap, not a regression; see Technical detail in the brief.
+- Integration: 10 suites, 218 tests — **all pass**.
 
-`docs/qa/BROWSER_QA_RESULTS.md` entry C: new-therapist onboarding flow renders correctly end to end, setup card tracks real state, persists after reload. Unchanged since no commits landed in this window; re-confirmed present tonight.
+## Open tasks from tracker
 
-## Open tasks from the tracker
+- **Stage 1** — `todo`. Checklist: confirm what to reuse (✅ done), decide wording/layout (✅ done), create master template (✅ done), add editable preview on portal (not ticked), make preview/PDF/doc downloads identical (not ticked), add Send button (not ticked), test full flow end to end (not ticked). **Evidence check**: the unticked items are, in fact, built and unit-tested — `onboarding-offer-docx.test.js`, `onboarding-offer-pdf.test.js`, `onboarding-offer-template.test.js`, `onboarding-offer-email.js` all exist and pass. Stage 1 is functionally proven; the tracker checklist is stale, not the code.
+- **Stage 2** — `todo`. Checklist: finalise documents and store in SharePoint (not ticked), show documents in portal under default categories (✅ done), check Stage 1→2 flow and button wiring (not ticked), simplify layout (not ticked), decide fixed vs dynamic contract fields (not ticked), make contract dynamic like the LOO (not ticked). **Evidence check, verified directly**: a targeted search of `backend/` for `sharepoint`/`graph.microsoft`/`drives/` found Microsoft Graph usage only for M365 identity provisioning and mail sending (`graph-identity.js`, `graph-mail.js`, `graph-mail-transport.js`) — **no SharePoint document-storage API exists anywhere**. This is a real, confirmed gap, not tracker staleness. `onboarding-contract-docx.js` does already read remuneration-style fields dynamically (partial progress on the "dynamic like the LOO" item), but the SharePoint storage piece is genuinely unbuilt.
+- **stage 3** — `todo`. No `explanation`, no checklist, no notes recorded. Nothing to locate or test here; this sub-item is effectively `untouched`.
 
-"Stage 1", "Stage 2", "stage 3" (all todo, no further detail in the tracker).
+## Commits in window touching it
 
-## Commits in the window touching this feature
+None. The last activity predates this 14-day window.
 
-None. No commits landed on `develop` since last night's audit — `develop` is still at `40669e7`, the exact commit audited last night and re-verified again tonight.
+## Why proven overall, with one new finding
+
+This matches the classification held for four consecutive nights (same commit `40669e7`, zero commits since 2026-11-11): permission-gated, browser QA proves the basic onboarding→profile chain (`docs/qa/BROWSER_QA_RESULTS.md` row C), and the core Letter of Offer flow (Stage 1) is fully built and unit-tested.
+
+**New this audit**: a direct search of `backend/` for `sharepoint`/`graph.microsoft`/`drives/` confirms there is genuinely **no SharePoint document-storage API anywhere** — Graph usage elsewhere is for M365 identity/mail only. This is Stage 2's open checklist item, verified as a real gap rather than assumed. It doesn't change tonight's `proven` label (the core, already-shipped onboarding flow is what's being rated), but it's worth the team's attention since Stage 2/3 are explicitly forward-looking scope, not yet built.
 
 ## Disagreement
 
-None.
+None in the formal sense. Stage 1's unticked checklist items (editable preview, matching PDF/doc downloads, Send button, full-flow test) are actually done in code — the tracker checklist is stale there, not the implementation.

@@ -1,25 +1,35 @@
 # Update Opal Docs Register
 
-Tracker stage: idea · Tracker environment: none
-Evidence label: **untouched**
-Addressed in this change window: **no** · Created: **no**
+- Tracker stage: idea
+- Tracker environment: none
+- Evidence label: **untouched**
+- Addressed in change window (2026-10-29 to 2026-11-12): no
+- Created (any code located): no
 
 ## Located files
 
-None. Task: "Update Excel Sheet to include all documentation required" (todo). Re-confirmed tonight with a fresh case-insensitive search of `backend/`, `frontend/current/` and `docs/` for "docs register", "documentation register", "doc register" — zero matches.
+None. This tracker card describes updating an Excel document register
+(protocols, policies, contracts) stored on SharePoint, with columns for
+existence/relevance/onboarding-relevance/formatting-status/SharePoint
+link. A targeted search for "docs register" / "document register" found
+zero matches anywhere in `backend/` or `frontend/current/`.
 
 ## Tests
 
-None — nothing to test.
+Not applicable — no code exists to test.
 
-## Open tasks from the tracker
+## Open tasks from tracker
 
-"Update Excel Sheet to include all documentation required" (todo).
+- "Update Excel Sheet to include all documentation required" — `todo`.
+  Checklist items are all document-organising steps (review register gaps,
+  confirm categories with Anthony, add tracking columns, enter every
+  required document, mark existing vs to-create, attach/link in
+  SharePoint, share for review) — none are code changes.
 
-## Commits in the window touching this feature
+## Commits in window touching it
 
-None.
+None (nothing to touch).
 
 ## Disagreement
 
-None.
+None. Tracker stage (`idea`) and evidence (`untouched`) agree.

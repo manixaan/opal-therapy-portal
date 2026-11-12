@@ -1,32 +1,39 @@
 # Report Templates
 
-Tracker stage: idea · Tracker environment: none
-Evidence label: **tab-unproven**
-Addressed in this change window: **no** · Created: **yes**
+- Tracker stage: idea
+- Tracker environment: none
+- Evidence label: **tab-unproven**
+- Addressed in change window (2026-10-29 to 2026-11-12): yes — see "Interactive Assessments" STATUS.md; same underlying `clinical-letter-templates` work covers both cards
+- Created (any code located): yes, all three sub-tasks
 
 ## Located files
 
-`backend/templates-routes.js`, `backend/fca-routes.js`, `backend/letter-routes.js`. No standalone service-agreement route file — service agreements are a template inside this subsystem (`backend/templates/service-agreement-map.js` + `backend/service-agreements/templates/*.docx|*.pdf`). `backend/fca/` holds the docx engine + progress-report/support-letter templates. Frontend: not a separate shell tab — `frontend/current/templates.js` renders into `#templates-root` inside the Resource Hub's Library view.
+- "FCA" → `backend/fca-routes.js` (`/api/fca`)
+- "Progress Letter" → `backend/letter-routes.js` (`/api/letters`)
+- "Client Agreement Form" → **not** a standalone route file (CLAUDE.md's repo map entry for `backend/service-agreement-routes.js` is stale — confirmed directly, that file does not exist). It is folded into the generic templates system: `backend/templates-routes.js` + `backend/templates/service-agreement-map.js`, backed by real document assets in `backend/service-agreements/templates/` (`service-agreement-v2.2.docx`, `-fillable-v2.2.pdf`, etc.)
+- Data access: `backend/templates/{catalogue,compose,document-model,export-boundary,pdf-export,appendices,progress-report-map,support-letter-map,service-agreement-map}.js`
+- Frontend: no dedicated tab — embedded inside the Resource Hub's Library → Templates collection (same entry points as Interactive Assessments)
+- Unit tests: `templates-appendices/clinical-maps/export-boundary/frontend-guards/routes/service-agreement-map.test.js` (6 files), plus the FCA/letter test files shared with Interactive Assessments
+- Integration tests: `templates.itest.js`, `fca-reports.itest.js`, `progress-note-letters.itest.js`
+- E2E: none.
 
-Guarded, re-confirmed by direct grep tonight: `templates-routes.js` applies `router.use('/api/templates', requireAuth)` then gates by `CLINICAL_ROLES = {therapist, owner}`; `letter-routes.js` applies `router.use('/api/letters', requireAuth)` then every individual route (drafts, generate, download, clients, contacts) carries `requireClinicalRead` or `requireClinicalWrite`, backed by the same role set (admin excluded by design). No unguarded route found.
+## Guard check
 
-## Tests
+Clean. `templates-routes.js:113` — `requireAuth` router-level; header documents organisation-scoped **and** own-only — self-scoped by design. `fca-routes.js` and `letter-routes.js` as described in Interactive Assessments' STATUS.md.
 
-- Unit (9 files, templates/letters-specific; the FCA-specific files are verified under Interactive Assessments to avoid duplicate runs): `letter-docx-engine.test.js`, `letter-frontend-helpers.test.js`, `letter-template-map.test.js`, `templates-appendices.test.js`, `templates-clinical-maps.test.js`, `templates-export-boundary.test.js`, `templates-frontend-guards.test.js`, `templates-routes.test.js`, `templates-service-agreement-map.test.js` — **434/434 pass** tonight (run in a batch of 10 alongside `interview-templates.test.js`, which belongs to a different, untracked subsystem).
-- Integration (2 files; `fca-reports.itest.js` verified under Interactive Assessments): `templates.itest.js`, `progress-note-letters.itest.js` — **82/82 pass** on isolated DB `therapy_scheduler_audit_g6_test`. Two expected WARN log lines ("splose client list unavailable") are fail-closed test fixtures, not failures.
+## Tests run
 
-## Browser / E2E proof
+- Unit: included in the 21-suite/1107-test run shared with Interactive Assessments — **all pass**
+- Integration: `templates.itest.js`, `fca-reports.itest.js`, `progress-note-letters.itest.js` — included in the 245-test run (244 pass / 1 unrelated failure) — **pass**
 
-**None found** — re-confirmed tonight by a fresh grep. Zero matches for "template" (case-insensitive) in `e2e/tests/*.spec.js` or `docs/qa/BROWSER_QA_RESULTS.md`. No end-to-end flow proves a user can open Resource Hub → Templates and generate an FCA report, progress letter or service agreement.
+## Open tasks from tracker
 
-## Open tasks from the tracker
-
-"FCA" (todo), "Progress Letter" (todo), "Client Agreement Form" (todo) — no further detail text.
-
-## Commits in the window touching this feature
-
-None. No commits landed on `develop` since last night's audit — `develop` is still at `40669e7`, the exact commit audited last night and re-verified again tonight.
+- "FCA", "Progress Letter", "Client Agreement Form" — all `todo`, no `explanation` or checklist recorded on any of the three.
 
 ## Disagreement
 
-None.
+CLAUDE.md's repository map (§2) lists `backend/service-agreement-routes.js` and `backend/service-agreements/` as the home of service agreements. The routes file **does not exist**; only the `service-agreements/templates/` document assets do, and the actual route logic lives in `templates-routes.js`. This is a stale repo-map entry worth a human fixing in CLAUDE.md (report-only from this audit — not changed here).
+
+## Commits in window touching it
+
+Shared with Interactive Assessments — the `clinical-letter-templates` merge and related template-engine commits.

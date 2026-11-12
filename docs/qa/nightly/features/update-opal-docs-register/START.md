@@ -1,23 +1,41 @@
-/opal-feature
+/opal-fast-change
 
-**Idea:** Update Opal Docs Register
-**Why:** (not yet written in the tracker)
-**Who uses it:** (not yet written in the tracker)
-**What they see:** (not yet written in the tracker)
-**What should happen:** (not yet written in the tracker)
-**Outcome:** (not yet written in the tracker)
-(No recorded decisions.)
+## Idea
+Update Opal Docs Register
+
+## Why
+(not yet written in the tracker)
+
+## Who uses it
+(not yet written in the tracker)
+
+## What they see
+(not yet written in the tracker)
+
+## What should happen
+(not yet written in the tracker)
+
+## Outcome
+(not yet written in the tracker)
+
+## Decisions
+(none recorded)
 
 ## Where it lives today
-
-Nothing yet. This describes an Excel sheet kept outside the codebase (an internal documentation register), not a portal feature.
+Nothing yet — this is not a portal feature. It describes an Excel
+document register on SharePoint, outside this repository.
 
 ## Start here
-
-This is not a coding task. Update the Excel sheet directly, or decide whether the documentation register should move into the portal (e.g. as a page under `docs/` or a small admin screen) — if so, scope that as its own feature before writing code.
+This is not a coding task. The checklist (review the existing Excel
+register, agree categories with Anthony, add tracking columns, enter
+every required document, flag what exists vs what's missing, attach and
+link files in SharePoint) is entirely document-organising work outside
+the codebase. There is nothing for a Claude Code session to open or run
+here.
 
 ## Done means
-
-A team decision: keep updating the external sheet, or bring the register into the portal as a scoped feature.
+No test applies. "Done" here is the Excel register itself being complete
+and shared — no evidence label beyond `untouched` is possible from this
+repository.
 
 Tracker: 45c66127-e21b-47c5-be70-6c9c61952126
