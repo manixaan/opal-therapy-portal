@@ -1,0 +1,3 @@
+Proven, for the backend this repository actually contains. 163/163 unit and 41-run-shared integration tests pass, every route is self-scoped by design (re-verified by direct grep of the handler bodies) and the AI path is properly walled off (`clinical-note-provider.js` → `ai-gateway.js`, Australian region only, documented in `docs/mobile/CASE_NOTE_AI_PRIVACY.md`). Standing note, not a blocker: the mobile app itself — the thing on "the testing device" the tracker describes — is not in this repository, so its on-device pilot experience can't be verified from here.
+
+Tracker: e786d774-43bf-4a8b-826d-94bcb97a9613
