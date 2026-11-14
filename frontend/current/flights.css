@@ -1,0 +1,70 @@
+/* Add a flight + live flight status (flights.js). The dialog reuses the
+   themed pd-* dialog (dialog.css); only what is specific to flights is here. */
+
+/* Calendar sidebar: the button sits at the bottom of the column. */
+.cal-flight-slot { margin-top: auto; padding-top: 8px; border-top: 1px solid var(--border-soft, #f0ece6); }
+.cal-flight-btn {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 7px 8px; border-radius: 8px; border: 1px solid var(--border, #d9d4cc);
+  background: var(--panel, #fff); color: var(--ink, #241f1a);
+  font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; text-align: left;
+}
+.cal-flight-btn:hover { background: var(--accent-soft, #e6f2f1); border-color: var(--accent, #0f766e); }
+.cal-flight-btn:focus-visible { outline: 2px solid var(--accent, #0f766e); outline-offset: 1px; }
+.cal-flight-btn svg { width: 15px; height: 15px; flex-shrink: 0; color: var(--accent-deep, #0b5f59); }
+
+.flt-dialog { max-width: 580px; }
+.flt-dialog .pd-body { max-height: 70vh; overflow-y: auto; }
+.flt-row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+.flt-field { flex: 1 1 140px; min-width: 0; display: block; }
+.flt-addr { display: block; }
+.flt-find { flex: 0 0 auto; margin-bottom: 1px; }
+.flt-dim { color: var(--muted, #8a837b); font-weight: 400; }
+.flt-warn { color: var(--warn-ink, #8a5a00); }
+.flt-status { margin-top: 8px; font-size: 13px; min-height: 0; }
+.flt-status:empty { display: none; }
+.flt-status.ok { color: var(--accent-deep, #0b5f59); }
+.flt-status.warn { color: var(--warn-ink, #8a5a00); }
+.flt-status.info { color: var(--ink-soft, #5c5650); }
+.flt-link {
+  background: none; border: none; padding: 4px 0; margin-top: 6px; cursor: pointer;
+  font: inherit; font-size: 12.5px; font-weight: 600; color: var(--accent-deep, #0b5f59);
+}
+.flt-link:hover { text-decoration: underline; }
+.flt-link:focus-visible { outline: 2px solid var(--accent, #0f766e); outline-offset: 2px; border-radius: 4px; }
+.flt-results { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.flt-results:empty { display: none; }
+.flt-card {
+  display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; font-size: 13px;
+  border: 1px solid var(--border, #d9d4cc); border-radius: 9px; cursor: pointer;
+}
+.flt-card:has(input:checked) { border-color: var(--accent, #0f766e); background: var(--accent-soft, #e6f2f1); }
+.flt-card input { margin-top: 3px; accent-color: var(--accent, #0f766e); }
+.flt-manual { border: 1px solid var(--border, #d9d4cc); border-radius: 9px; padding: 4px 12px 12px; margin: 10px 0 0; }
+.flt-manual legend { font-size: 12.5px; font-weight: 700; padding: 0 4px; }
+.flt-trip { margin-top: 12px; border-top: 1px solid var(--border-soft, #f0ece6); padding-top: 4px; }
+.flt-plan-head { margin: 14px 0 6px; font-size: 12.5px; font-weight: 700; }
+.flt-plan { margin: 0; padding-left: 20px; font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
+.flt-when { font-variant-numeric: tabular-nums; font-weight: 600; margin-right: 4px; }
+
+/* Live status badge on a flight tile and in the event panel. */
+.session .flt-badge { position: absolute; right: 4px; bottom: 3px; z-index: 2; }
+.flt-badge {
+  display: inline-block; padding: 1px 6px; border-radius: 999px; font-size: 10px; font-weight: 700;
+  line-height: 1.5; white-space: nowrap; background: var(--panel, #fff); border: 1px solid currentColor;
+}
+.flt-badge.ok { color: var(--accent-deep, #0b5f59); }
+.flt-badge.info { color: var(--info-ink, #2f5d8a); }
+.flt-badge.warn { color: var(--warn-ink, #8a5a00); background: var(--warn-soft, #fff4dc); }
+.flt-badge.bad { color: var(--danger-ink, #a63525); background: var(--danger-soft, #fde8e4); }
+
+.flt-detail { margin-top: 12px; padding: 10px 12px; border-radius: 8px; background: var(--panel-soft, #faf8f5); font-size: 12.5px; }
+.flt-kv { display: flex; gap: 10px; padding: 3px 0; }
+.flt-kv > span:first-child { flex: 0 0 104px; color: var(--muted, #8a837b); }
+.flt-note { margin-top: 6px; }
+.flt-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.flt-actions .pd-btn { min-height: 32px; padding: 5px 12px; font-size: 12.5px; }
+
+@media (max-width: 640px) {
+  .flt-find { flex: 1 1 100%; }
+}

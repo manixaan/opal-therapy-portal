@@ -67,6 +67,17 @@ const OPTIONAL = [
     why: 'the practice name given to the organisation created by the first-owner bootstrap (default "Opal Therapy")',
     validate: v => String(v).trim().length > 0 && String(v).trim().length <= 255,
   },
+  {
+    key: 'AERODATABOX_API_KEY',
+    why: 'Calendar → Add a flight looks flights up and tracks their status with it (AeroDataBox via RapidAPI); '
+      + 'unset, the dialog takes the flight times by hand and no live status is shown',
+    validate: v => /^\S{10,200}$/.test(String(v).trim()),
+  },
+  {
+    key: 'AERODATABOX_API_HOST',
+    why: 'the RapidAPI host for the flight lookup (default aerodatabox.p.rapidapi.com)',
+    validate: v => /^[a-z0-9.-]{3,253}$/i.test(String(v).trim()),
+  },
 ];
 
 const WEAK_SECRETS = new Set([

@@ -10,6 +10,8 @@
  *   nf2f    (Non-face-to-face)     client OPTIONAL
  *   travel  (Travel block)         client OPTIONAL — billable travel, defined
  *                                  by a start and an end address (both REQUIRED)
+ *           (flight, flight-checkin) no client — Calendar → Add a flight
+ *                                  (flights.js); the flight's details REQUIRED
  *   other   (PD, supervision, lunch) no client
  *
  * Location is optional for every kind — an event without an address means the
@@ -22,7 +24,8 @@ const DIRECT_KINDS = ['assessment', 'assessment-ei', 'initial', 'initial-ei', 'm
   'telehealth', 'telehealth-ei', 'therapy', 'therapy-ei'];
 const REPORT_KINDS = ['fca', 'at-report', 'progress-report', 'support-letter'];
 const NF2F_KINDS   = ['case-noting', 'case-management', 'resource-prep', 'emails', 'phone-calls'];
-const TRAVEL_KINDS = ['travel-block'];
+const TRAVEL_KINDS = ['travel-block', 'flight', 'flight-checkin'];
+const FLIGHT_KINDS = ['flight', 'flight-checkin'];
 const OTHER_KINDS  = ['pd', 'supervision', 'lunch', 'custom'];
 const MAX_NF2F_CLIENTS = 20;
 
@@ -84,6 +87,13 @@ function validateBooking(body) {
     if (!clients.length) return { ok: true, booking: { kind: b.kind, group, clientId: null, clientName: null } };
     return { ok: true, booking: { kind: b.kind, group, clientId: clients[0].clientId, clientName: clients[0].clientName, clients } };
   }
+  if (FLIGHT_KINDS.includes(b.kind)) {
+    // A flight and its check-in buffer (14 Nov 2026) carry the flight they
+    // belong to — what the lookup or the therapist gave — never a client.
+    const flight = cleanFlight(b.flight);
+    if (!flight) return { ok: false, error: 'A flight needs its number and departure time' };
+    return { ok: true, booking: { kind: b.kind, group, clientId: null, clientName: null, flight } };
+  }
   if (group === 'travel') {
     // A travel block (10 Nov 2026) is its start and end address; the route
     // minutes and distance are what Google gave the panel, kept for the record.
@@ -108,6 +118,52 @@ function cleanTravelRoute(r) {
   if (Number.isFinite(min) && min > 0 && min <= 24 * 60) out.minutes = Math.round(min);
   const km = Number(r.distanceKm);
   if (Number.isFinite(km) && km >= 0 && km <= 5000) out.distanceKm = Math.round(km * 10) / 10;
+  return out;
+}
+
+function cleanText(v, max) {
+  if (typeof v !== 'string' && typeof v !== 'number') return null;
+  return String(v).replace(/[\u0000-\u001f]/g, '').replace(/\s+/g, ' ').trim().slice(0, max) || null;
+}
+function cleanIso(v) {
+  if (typeof v !== 'string' || v.length > 40) return null;
+  const t = Date.parse(v);
+  return Number.isFinite(t) ? new Date(t).toISOString() : null;
+}
+function cleanAirport(a) {
+  if (!a || typeof a !== 'object') return null;
+  const iata = typeof a.iata === 'string' && /^[A-Za-z0-9]{3}$/.test(a.iata.trim()) ? a.iata.trim().toUpperCase() : null;
+  const name = cleanText(a.name, 120);
+  if (!iata && !name) return null;
+  return { iata, name };
+}
+
+/* PURE — the flight a flight / check-in block belongs to: a fixed set of
+   short fields (no free-form blobs), or null without a number and a
+   departure time. */
+function cleanFlight(f) {
+  if (!f || typeof f !== 'object') return null;
+  const number = typeof f.number === 'string' ? f.number.replace(/\s+/g, '').toUpperCase() : '';
+  if (!/^[A-Z0-9]{2,3}\d{1,4}[A-Z]?$/.test(number)) return null;
+  const depUtc = cleanIso(f.depUtc);
+  if (!depUtc) return null;
+  const out = { number, depUtc };
+  const arrUtc = cleanIso(f.arrUtc);
+  if (arrUtc && Date.parse(arrUtc) > Date.parse(depUtc)) out.arrUtc = arrUtc;
+  for (const k of ['revisedDepUtc', 'revisedArrUtc']) { const v = cleanIso(f[k]); if (v) out[k] = v; }
+  const airline = cleanText(f.airline, 80); if (airline) out.airline = airline;
+  const from = cleanAirport(f.from); if (from) out.from = from;
+  const to = cleanAirport(f.to); if (to) out.to = to;
+  for (const k of ['terminal', 'gate', 'arrTerminal']) { const v = cleanText(f[k], 20); if (v) out[k] = v; }
+  const status = cleanText(f.status, 40); if (status) out.status = status;
+  if (f.source === 'lookup' || f.source === 'manual') out.source = f.source;
+  // The lookup date (the flight's local departure date) lets live status find it again.
+  if (typeof f.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(f.date)) out.date = f.date;
+  // The therapist's own buffers, so "Update times to revised" finds the drives.
+  for (const k of ['bufferMin', 'afterLandingMin']) {
+    const n = Number(f[k]);
+    if (f[k] !== null && f[k] !== '' && Number.isInteger(n) && n >= 0 && n <= 600) out[k] = n;
+  }
   return out;
 }
 
@@ -152,6 +208,6 @@ function cleanRequestId(v) {
 }
 
 module.exports = {
-  DIRECT_KINDS, REPORT_KINDS, NF2F_KINDS, TRAVEL_KINDS, OTHER_KINDS, CLIENT_RULE, MAX_NF2F_CLIENTS,
-  bookingGroup, validateBooking, createIdempotencyStore, cleanRequestId,
+  DIRECT_KINDS, REPORT_KINDS, NF2F_KINDS, TRAVEL_KINDS, FLIGHT_KINDS, OTHER_KINDS, CLIENT_RULE, MAX_NF2F_CLIENTS,
+  bookingGroup, validateBooking, cleanFlight, createIdempotencyStore, cleanRequestId,
 };
