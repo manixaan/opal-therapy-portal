@@ -9,8 +9,8 @@
        stops it from anywhere. A timer left running stops itself once it has
        run for the block's length (worked out by the server).
      • The block's detail panel: the timed time, each client's share and
-       "Allocate billing" — equal by default; change one client's % and the
-       rest is shared by the clients you have not set; a greyed-out
+       "Allocate billing" — equal by default; change one client's % or time
+       and the rest is shared by the clients you have not set; a greyed-out
        Non-billable share (0%) can be switched on for unrelated work.
      • Invoicing bills each client's share at their MMM zone and the session
        rate (backend/billing/nf2f-timer.js, invoice-generation.js).
@@ -309,6 +309,16 @@
     var n = parseFloat(t);
     return Number.isFinite(n) ? round2(n) : 0;
   }
+  /* A typed time → seconds: "12" is 12 minutes, "12:30" is m:ss, "1:05:00"
+     is h:mm:ss (the same form the Time column shows). */
+  function parseTime(text) {
+    var parts = String(text == null ? '' : text).trim().replace(',', '.').split(':')
+      .map(function (p) { var n = parseFloat(p.replace(/[^0-9.]/g, '')); return Number.isFinite(n) ? n : 0; });
+    if (parts.length === 1) return parts[0] * 60;
+    if (parts.length === 2) return parts[0] * 60 + parts[1];
+    return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  }
+  NF._parseTime = parseTime;
   async function openAllocate(dbId) {
     var v;
     try { v = await api('/api/events/' + encodeURIComponent(dbId) + '/nf2f'); }
@@ -317,20 +327,28 @@
     var nb = Number(v.allocation.nonBillablePercent) || 0;
     var nbOn = nb > 0;
     var timed = v.timer.elapsedSeconds;
+    // Times are shares of the timed total; before the timer has run they are
+    // shares of the block's length, so a split can be set up in advance.
+    var base = timed > 0 ? timed : (Number(v.timer.limitSeconds) || 0);
+    var timeBox = function (attr, label, disabled) {
+      return '<input type="text" inputmode="numeric" autocomplete="off" class="pd-input nf2f-min" ' + attr +
+        ' aria-label="' + esc(label) + '" title="Minutes, or m:ss"' + (disabled ? ' disabled' : '') + '>';
+    };
     var el = document.createElement('div');
     el.className = 'pd-backdrop nf2f-backdrop';
     el.innerHTML = '<section class="pd-dialog nf2f-alloc" role="dialog" aria-modal="true" aria-labelledby="nf2f-alloc-title">' +
       '<div class="pd-head"><h2 class="pd-title" id="nf2f-alloc-title">Allocate billing</h2></div>' +
-      '<div class="pd-body"><p class="nf2f-dim">' + esc(v.title || 'This block') + ' · ' + clock(timed) + ' timed. Change a client’s share and the rest is divided between the clients you have not changed.</p>' +
+      '<div class="pd-body"><p class="nf2f-dim">' + esc(v.title || 'This block') + ' · ' + (timed > 0 ? clock(timed) + ' timed' : 'not timed yet — times are of the ' + mins(base) + ' block') +
+        '. Change a client’s share or time and the rest is divided between the clients you have not changed.</p>' +
       '<table class="nf2f-alloc-table"><thead><tr><th>Client</th><th>Share</th><th>Time</th></tr></thead><tbody>' +
       rows.map(function (r, i) {
         return '<tr data-tr="' + i + '"><td>' + esc(r.clientName || ('Client ' + r.clientId)) + '</td>' +
           '<td><input type="text" inputmode="decimal" autocomplete="off" class="pd-input nf2f-pct" data-row="' + i + '" value="' + r.percent + '" aria-label="Share for ' + esc(r.clientName || r.clientId) + '"> %</td>' +
-          '<td class="nf2f-time"></td></tr>';
+          '<td class="nf2f-time">' + timeBox('data-time-row="' + i + '"', 'Time for ' + (r.clientName || r.clientId), !base) + '</td></tr>';
       }).join('') +
       '<tr class="nf2f-nb" data-tr="nb"><td><label><input type="checkbox" data-nb-on' + (nbOn ? ' checked' : '') + '> Non-billable</label></td>' +
         '<td><input type="text" inputmode="decimal" autocomplete="off" class="pd-input nf2f-pct" data-nb value="' + nb + '"' + (nbOn ? '' : ' disabled') + ' aria-label="Non-billable share"> %</td>' +
-        '<td class="nf2f-time"></td></tr>' +
+        '<td class="nf2f-time">' + timeBox('data-time-nb', 'Non-billable time', !nbOn || !base) + '</td></tr>' +
       '</tbody></table>' +
       '<div class="nf2f-total" aria-live="polite"></div></div>' +
       '<div class="pd-foot"><button type="button" class="pd-btn" data-act="equal">Equal split</button>' +
@@ -346,14 +364,17 @@
         var tr = el.querySelector('[data-tr="' + i + '"]');
         tr.classList.toggle('set', r.locked);
         tr.classList.toggle('over', r.percent > 100);
-        tr.querySelector('.nf2f-time').textContent = share(timed * Math.min(100, r.percent) / 100);
+        var tIn = el.querySelector('[data-time-row="' + i + '"]');
+        if (tIn !== typing) tIn.value = share(base * Math.min(100, r.percent) / 100);
       });
       var nbRow = el.querySelector('[data-tr="nb"]'), nbInp = el.querySelector('[data-nb]');
       nbRow.classList.toggle('on', nbOn);
       nbRow.classList.toggle('over', nb > 100);
       nbInp.disabled = !nbOn;
       if (nbInp !== typing) nbInp.value = nb;
-      nbRow.querySelector('.nf2f-time').textContent = share(timed * Math.min(100, nb) / 100);
+      var nbTime = el.querySelector('[data-time-nb]');
+      nbTime.disabled = !nbOn || !base;
+      if (nbTime !== typing) nbTime.value = share(base * Math.min(100, nb) / 100);
       var total = round2(rows.reduce(function (a, r) { return a + r.percent; }, 0) + nb);
       var over = rows.some(function (r) { return r.percent > 100; }) || nb > 100;
       var ok = !over && Math.abs(total - 100) <= 0.05;
@@ -366,17 +387,21 @@
 
     el.addEventListener('input', function (e) {
       var t = e.target;
+      // A typed time becomes that client's share of the total: 15:00 of a
+      // 60-minute block is 25%, and the rest re-divides exactly as for a %.
+      var pctOfTime = function () { return base ? round2(parseTime(t.value) / base * 100) : 0; };
       if (t.hasAttribute('data-nb')) nb = parsePct(t.value);
-      else if (t.hasAttribute('data-row')) {
-        var r = rows[Number(t.getAttribute('data-row'))];
-        r.percent = parsePct(t.value);
+      else if (t.hasAttribute('data-time-nb')) nb = pctOfTime();
+      else if (t.hasAttribute('data-row') || t.hasAttribute('data-time-row')) {
+        var r = rows[Number(t.getAttribute('data-row') || t.getAttribute('data-time-row'))];
+        r.percent = t.hasAttribute('data-row') ? parsePct(t.value) : pctOfTime();
         r.locked = true;
       } else return;
       update(t);
     });
     // Leaving a box tidies what was typed (e.g. "40." → 40).
     el.addEventListener('focusout', function (e) {
-      if (e.target.classList && e.target.classList.contains('nf2f-pct')) paint(null);
+      if (e.target.classList && (e.target.classList.contains('nf2f-pct') || e.target.classList.contains('nf2f-min'))) paint(null);
     });
     el.addEventListener('change', function (e) {
       if (!e.target.hasAttribute('data-nb-on')) return;

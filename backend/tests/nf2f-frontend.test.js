@@ -181,6 +181,44 @@ describe('Allocate billing — typing', () => {
     expect(w.document.querySelector('.nf2f-total').textContent).toBe('Total 100%');
   });
 
+  test('a time can be typed instead of a %: it becomes that share and the rest re-divide', async () => {
+    const { w, flush } = dialogEnv();   // 600 s (10:00) timed, 4 clients at 25%
+    w.Nf2f.openAllocate('db-1'); await flush();
+    const time0 = w.document.querySelector('[data-time-row="0"]');
+    expect(time0.value).toBe('2:30');
+    type(w, time0, '4:00');
+    expect(time0.value).toBe('4:00');
+    const pcts = () => Array.from(w.document.querySelectorAll('.nf2f-pct[data-row]')).map((i) => i.value);
+    expect(pcts()).toEqual(['40', '20', '20', '20']);
+    expect(Array.from(w.document.querySelectorAll('[data-time-row]')).slice(1).map((i) => i.value)).toEqual(['2:00', '2:00', '2:00']);
+    expect(w.document.querySelector('.nf2f-total').textContent).toBe('Total 100%');
+    // plain minutes work too, and changing the % afterwards updates the time
+    type(w, w.document.querySelector('[data-time-row="1"]'), '3');
+    expect(pcts()).toEqual(['40', '30', '15', '15']);
+    type(w, w.document.querySelector('[data-row="0"]'), '50');
+    expect(w.document.querySelector('[data-time-row="0"]').value).toBe('5:00');
+  });
+
+  test('before the timer runs, times are shares of the block length', async () => {
+    const e = env();
+    e.w.fetch = async () => ({ ok: true, status: 200, json: async () => ({
+      title: 'Case Management', timer: { status: 'NOT_STARTED', elapsedSeconds: 0, limitSeconds: 3600 },
+      allocation: { nonBillablePercent: 0, clients: ['1', '2'].map((id) => ({ clientId: id, clientName: 'C' + id, percent: 50 })) },
+      split: [] }) });
+    e.w.Nf2f.openAllocate('db-1'); await e.flush();
+    const t0 = e.w.document.querySelector('[data-time-row="0"]');
+    expect(t0.value).toBe('30:00');
+    type(e.w, t0, '45');
+    expect(Array.from(e.w.document.querySelectorAll('.nf2f-pct[data-row]')).map((i) => i.value)).toEqual(['75', '25']);
+  });
+
+  test('parseTime reads minutes, m:ss and h:mm:ss', () => {
+    const { w } = env();
+    expect(w.Nf2f._parseTime('12')).toBe(720);
+    expect(w.Nf2f._parseTime('12:30')).toBe(750);
+    expect(w.Nf2f._parseTime('1:05:00')).toBe(3900);
+  });
+
   test('non-billable is greyed until ticked, then takes its share off the clients not changed', async () => {
     const { w, flush } = dialogEnv();
     w.Nf2f.openAllocate('db-1'); await flush();

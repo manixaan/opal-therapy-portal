@@ -204,6 +204,18 @@ describe('compact calendar week view', () => {
     expect(tile).toContain('overflow: hidden;');
   });
 
+  test('the event detail panel is decluttered (14 Nov 2026)', () => {
+    const fn = HTML.slice(HTML.indexOf('function openBlockDetail(id)'), HTML.indexOf('function bdClientNames(s)'));
+    expect(fn).not.toContain('Billable · full rate');
+    expect(fn).not.toContain('No fixed location required');
+    expect(fn).not.toContain("'Splose resource'");
+    expect(fn).not.toContain("'Patient ID'");
+    expect(fn).not.toContain('class="section-head" style="margin:0;">Client<');
+    expect(fn).not.toContain('class="section-head" style="margin:0;">Location<');
+    expect(fn).not.toContain('invoicingDecorateDetail(s)');
+    expect(fn).toContain('__bdLocationRows(rows, s, id);'); // the location itself stays
+  });
+
   test('tile titles read name-first so a clipped tile still names the client', () => {
     expect(HTML).toContain('function nameFirstTitle(title)');
     expect(HTML).toContain(': nameFirstTitle(opts.title);');

@@ -754,7 +754,8 @@ describe('changed assets are cache-busted', () => {
       // 3 (js) / 2 (css): a running timer is a blinking dot on the block, not a clock.
       // 4 (js): each client's share shows m:ss, not rounded minutes.
       // 5 (js) / 3 (css): Allocate billing takes any typed number; warns over 100%.
-      ['nf2f.js', 5], ['nf2f.css', 3],
+      // js 6 / css 4: Allocate billing takes a time as well as a % (14 Nov 2026).
+      ['nf2f.js', 6], ['nf2f.css', 4],
       // 1: travel-block.js is new — the billable Travel block in Smart Booking
       // (start + end location, length from Google Maps).
       ['travel-block.js', 1],

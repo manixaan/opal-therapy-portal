@@ -59,11 +59,13 @@
 .nf2f-alloc-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .nf2f-alloc-table th { text-align: left; font-size: 12px; color: var(--muted, #8a837b); font-weight: 600; padding: 0 0 6px; }
 .nf2f-alloc-table td { padding: 5px 0; border-bottom: 1px solid var(--border-soft, #f0ece6); }
-.nf2f-alloc-table td:nth-child(3) { text-align: right; width: 70px; font-variant-numeric: tabular-nums; }
+.nf2f-alloc-table td:nth-child(3) { text-align: right; width: 90px; font-variant-numeric: tabular-nums; }
+.nf2f-alloc-table .nf2f-min { width: 76px; padding: 6px 8px; text-align: right; font-variant-numeric: tabular-nums; }
+.nf2f-alloc-table tr.nf2f-nb:not(.on) .nf2f-min { background: var(--border-soft, #f0ece6); }
 .nf2f-alloc-table .nf2f-pct { width: 86px; padding: 6px 8px; display: inline-block; }
 .nf2f-alloc-table tr.set td:first-child { font-weight: 700; }
 .nf2f-alloc-table tr.nf2f-nb td { color: var(--muted, #8a837b); }
 .nf2f-alloc-table tr.nf2f-nb:not(.on) .nf2f-pct { background: var(--border-soft, #f0ece6); }
 .nf2f-total { margin-top: 10px; font-weight: 700; font-size: 13.5px; }
 .nf2f-total.bad { color: var(--danger, #c2412e); }
-.nf2f-alloc-table tr.over .nf2f-pct { border-color: var(--danger, #c2412e); color: var(--danger, #c2412e); }
+.nf2f-alloc-table tr.over :is(.nf2f-pct, .nf2f-min) { border-color: var(--danger, #c2412e); color: var(--danger, #c2412e); }

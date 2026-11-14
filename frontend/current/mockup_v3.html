@@ -108,7 +108,7 @@
 <link rel="stylesheet" href="/block-review.css?v=1" />
 <link rel="stylesheet" href="/booking-route.css?v=6" />
 <link rel="stylesheet" href="/recurrence.css?v=1" />
-<link rel="stylesheet" href="/nf2f.css?v=3" />
+<link rel="stylesheet" href="/nf2f.css?v=4" />
 <!-- Last stylesheet: night-mode token overrides must win over every feature sheet. -->
 <link rel="stylesheet" href="/theme.css?v=5" />
 <!-- The Library's document library (folders, list/tiles, bin, versions). Before
@@ -177,7 +177,7 @@
      booking panel; the route maths live in travel.js, loaded just above. -->
 <script src="/booking-route.js?v=12" defer></script>
 <script src="/recurrence.js?v=1" defer></script>
-<script src="/nf2f.js?v=5" defer></script>
+<script src="/nf2f.js?v=6" defer></script>
 <!-- Travel block: a billable start → end drive, priced by Google Maps. -->
 <script src="/travel-block.js?v=1" defer></script>
 <!-- Splose draft-and-publish sync: Sync Splose button, review panel, unsynced
@@ -14886,18 +14886,13 @@ function openBlockDetail(id) {
   document.getElementById('bd-subtitle').textContent =
     `${DAY_FULL[s.day] || s.day} · ${fmtTime(s.startH, s.startM)} – ${fmtTime(s.endH, s.endM)} AWST · ${durMin(s)} min`;
 
+  // Decluttered 14 Nov 2026: no billing / location tags, Splose resource,
+  // client section, Location heading or invoicing block — only Cancelled.
   const tags = [];
-  const _billing = getBillingTier(s);
-  if (_billing === 'full')  tags.push('<span class="detail-tag" style="background:var(--ok-soft);color:var(--ok-ink);">$ Billable · full rate</span>');
-  if (_billing === 'half')  tags.push('<span class="detail-tag" style="background:var(--warn-soft);color:#854d0e;">½$ Billable · travel rate</span>');
-  if (_billing === 'none')  tags.push('<span class="detail-tag" style="background:var(--danger-soft);color:var(--danger);">Non-billable</span>');
   if (s.cancelled) tags.push('<span class="detail-tag" style="background:var(--danger-soft);color:var(--danger-ink);">Cancelled</span>');
-  const _needsLoc = sessionNeedsFullAddress(s);
-  if (!_needsLoc) tags.push('<span class="detail-tag" style="background:#eef3fa;color:#315a91;">No fixed location required</span>');
 
   const rows = [];
   rows.push(row('Session type', TYPE_LABEL[s.type] || s.type));
-  rows.push(row('Splose resource', RESOURCE_LABEL[s.type] || '—'));
   rows.push(row('Day',   DAY_FULL[s.day] + ' · ' + DAY_LABEL[s.day]));
   // Editable time row for movable sessions — change duration or shift start in place
   const _movableTime = MOVABLE_TYPES.has(s.type) && !s.cancelled;
@@ -14922,18 +14917,9 @@ function openBlockDetail(id) {
   } else {
     rows.push(row('Time',  `${fmtTime(s.startH, s.startM)} – ${fmtTime(s.endH, s.endM)}  (${durMin(s)} min)`));
   }
-  const _clientNames = bdClientNames(s);
-  if (_clientNames.length) {
-    rows.push(row('<span class="section-head" style="margin:0;">Client</span>', '', true));
-    rows.push(row(_clientNames.length > 1 ? 'Names' : 'Name', _clientNames.map(escapeAttr).join('<br>')));
-    if (s.patientId) rows.push(row('Patient ID', `<span class="v mono">${s.patientId}</span>`, true));
-    if (s.plan) rows.push(row('Plan', s.plan));
-  }
-
   if (window.TravelBlock) rows.push(...TravelBlock.detailRows(s, row));
 
-  // ── Location section — shown for ALL event types ──────────────────────
-  rows.push(row('<span class="section-head" style="margin:0;">Location</span>', '', true));
+  // ── Location rows — shown for ALL event types (no section heading) ────
   __bdLocationRows(rows, s, id);
 
   if (s.note) {
@@ -14999,8 +14985,8 @@ function openBlockDetail(id) {
   // Load any saved notes into the inline box
   notesLoadForSession(id);
 
-  // Owner: the event's invoice number(s) and billing mark (invoicing.js).
-  if (typeof window.invoicingDecorateDetail === 'function') window.invoicingDecorateDetail(s);
+  // The invoicing block (invoice numbers, billing mark) is left out of the
+  // panel for now (14 Nov 2026); invoicingDecorateDetail stays in invoicing.js.
   if (typeof window.recurrenceDecorateDetail === 'function') window.recurrenceDecorateDetail(s);
   if (typeof window.nf2fDecorateDetail === 'function') window.nf2fDecorateDetail(s);
 
