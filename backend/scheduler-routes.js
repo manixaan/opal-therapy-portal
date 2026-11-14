@@ -30,11 +30,11 @@ const travelFeas = require('./travel-feasibility');
 const PERTH_TZ_OFFSET_MIN = 480; // AWST — no DST; parameterised in the engine
 
 // Org-level scheduling defaults. Read from org_settings.settings.schedulingDefaults
-// when present; these in-code values are the documented fallback. No silent
-// operational assumptions beyond a standard 08:00–17:00 practice day.
+// when present; these in-code values are the documented fallback. There are no
+// preset working hours: the whole day is bookable (14 Nov 2026; was 08:00–17:00).
 const DEFAULTS = {
-  workStartMin: 8 * 60,
-  workEndMin: 17 * 60,
+  workStartMin: 0,
+  workEndMin: 24 * 60,
   bufferBeforeMin: 0,
   bufferAfterMin: 0,
   minDurationMin: 30,

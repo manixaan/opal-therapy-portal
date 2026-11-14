@@ -204,6 +204,22 @@ describe('compact calendar week view', () => {
     expect(tile).toContain('overflow: hidden;');
   });
 
+  test('every day is bookable at any hour (14 Nov 2026)', () => {
+    expect(HTML).toContain(`data-day="sat" onclick="bspSelectDay('sat')"`);
+    expect(HTML).toContain(`data-day="sun" onclick="bspSelectDay('sun')"`);
+    expect(HTML).toContain("const days = ['mon','tue','wed','thu','fri','sat','sun'];"); // drag onto a weekend column
+    expect(HTML).not.toContain("ttl: 'Outside working hours'");
+    expect(HTML).toContain('min="1" max="720" step="1" value="60"');
+    // A booking that runs past midnight ends on the next day's date.
+    const src = HTML.slice(HTML.indexOf('function _getBspTiming()'));
+    const body = src.slice(0, src.indexOf('\n}\n') + 2);
+    const field = { 'bsp-start': { value: '23:00' }, 'bsp-dur-slider': { value: '90' }, 'bsp-location': { value: '' } };
+    const doc = { querySelector: () => ({ dataset: { day: 'sat' } }), getElementById: (id) => field[id] };
+    const timing = new Function('document', 'DAY_DATES', body + '; return _getBspTiming();')(doc, { sat: '2026-11-14' });
+    expect(timing.startISO).toBe('2026-11-14T23:00:00+08:00');
+    expect(timing.endISO).toBe('2026-11-15T00:30:00+08:00');
+  });
+
   test('the event detail panel is decluttered (14 Nov 2026)', () => {
     const fn = HTML.slice(HTML.indexOf('function openBlockDetail(id)'), HTML.indexOf('function bdClientNames(s)'));
     expect(fn).not.toContain('Billable · full rate');

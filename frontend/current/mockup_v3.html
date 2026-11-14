@@ -179,7 +179,7 @@
 <script src="/recurrence.js?v=1" defer></script>
 <script src="/nf2f.js?v=6" defer></script>
 <!-- Travel block: a billable start → end drive, priced by Google Maps. -->
-<script src="/travel-block.js?v=1" defer></script>
+<script src="/travel-block.js?v=2" defer></script>
 <!-- Splose draft-and-publish sync: Sync Splose button, review panel, unsynced
      tiles, tab-leave prompt, and "changed inside Splose" alerts. Wraps
      switchTab and commitMove once the shell has defined them. -->
@@ -4815,6 +4815,8 @@ window.opIcon = function (name, size) {
               <button class="bsp-day-chip" data-day="wed" onclick="bspSelectDay('wed')">Wed</button>
               <button class="bsp-day-chip" data-day="thu" onclick="bspSelectDay('thu')">Thu</button>
               <button class="bsp-day-chip" data-day="fri" onclick="bspSelectDay('fri')">Fri</button>
+              <button class="bsp-day-chip" data-day="sat" onclick="bspSelectDay('sat')">Sat</button>
+              <button class="bsp-day-chip" data-day="sun" onclick="bspSelectDay('sun')">Sun</button>
             </div>
           </div>
 
@@ -4840,7 +4842,7 @@ window.opIcon = function (name, size) {
               <span class="bsp-dur-value" id="bsp-dur-label">1 hr</span>
             </div>
             <input type="range" id="bsp-dur-slider" class="bsp-dur-slider"
-                   min="1" max="240" step="1" value="60"
+                   min="1" max="720" step="1" value="60"
                    oninput="bspOnDurChange()">
             <div class="bsp-dur-presets">
               <button class="bsp-dur-preset" data-dur="15"  onclick="bspSetDur(15)">15m</button>
@@ -6350,44 +6352,8 @@ window.opIcon = function (name, size) {
           </div>
         </div>
 
-        <div class="settings-group">
-          <div class="settings-group-header">Working Hours</div>
-          <div class="settings-row">
-            <div class="settings-row-label">
-              <strong>Day starts at</strong>
-            </div>
-            <div class="settings-row-control">
-              <select class="settings-select" id="stg-cal-start">
-                <option value="5">5:00 AM</option>
-                <option value="6">6:00 AM</option>
-                <option value="7" selected>7:00 AM</option>
-                <option value="8">8:00 AM</option>
-                <option value="9">9:00 AM</option>
-                <option value="10">10:00 AM</option>
-              </select>
-            </div>
-          </div>
-          <div class="settings-row">
-            <div class="settings-row-label">
-              <strong>Day ends at</strong>
-            </div>
-            <div class="settings-row-control">
-              <select class="settings-select" id="stg-cal-end">
-                <option value="15">3:00 PM</option>
-                <option value="16">4:00 PM</option>
-                <option value="17">5:00 PM</option>
-                <option value="18">6:00 PM</option>
-                <option value="19">7:00 PM</option>
-                <option value="20" selected>8:00 PM</option>
-                <option value="21">9:00 PM</option>
-                <option value="22">10:00 PM</option>
-                <option value="23">11:00 PM</option>
-                <option value="24">Midnight</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
+        <!-- "Working Hours" removed 14 Nov 2026: there are no preset hours — the
+             grid shows the whole day and any time is bookable. -->
         <div class="settings-group">
           <div class="settings-group-header">Event Visibility</div>
           <div class="settings-row">
@@ -9837,8 +9803,8 @@ function buildCurrentWeekMaps() {
   const dow = perth.getDay(); // 0=Sun
   const mondayPerth = new Date(perthMs - ((dow === 0 ? 6 : dow - 1) * 86400000));
   const labels = {}, dates = {};
-  const dayNames = ['mon','tue','wed','thu','fri'];
-  const shortDay = ['Mon','Tue','Wed','Thu','Fri'];
+  const dayNames = ['mon','tue','wed','thu','fri','sat','sun'];
+  const shortDay = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   dayNames.forEach((key, i) => {
     const d = new Date(mondayPerth.getTime() + i * 86400000);
@@ -12819,11 +12785,19 @@ function _getBspTiming() {
   const endM   = endTot % 60;
   const pad    = n => String(n).padStart(2, '0');
   const dateStr  = DAY_DATES[day] || null;
+  // No working hours: a booking may run past midnight, and then it ends on
+  // the next day's date (it used to save an end before its start).
+  let endDateStr = dateStr;
+  if (dateStr && endTot >= 1440) {
+    const d = new Date(dateStr + 'T00:00:00Z');
+    d.setUTCDate(d.getUTCDate() + Math.floor(endTot / 1440));
+    endDateStr = d.toISOString().slice(0, 10);
+  }
   return {
     day, startH, startM, startMin: startH * 60 + startM,
     endH, endM, endMin: endTot, durationMin: dur, location: loc,
     startISO: dateStr ? `${dateStr}T${pad(startH)}:${pad(startM)}:00+08:00` : null,
-    endISO:   dateStr ? `${dateStr}T${pad(endH)}:${pad(endM)}:00+08:00`     : null,
+    endISO:   endDateStr ? `${endDateStr}T${pad(endH)}:${pad(endM)}:00+08:00` : null,
     dateStr,
   };
 }
@@ -13616,11 +13590,11 @@ const DAY_LABEL = (function () {
 (function setBookingWeekSub() {
   const el = document.getElementById('book-week-sub'); if (!el) return;
   const mon = new Date(); mon.setDate(mon.getDate() - ((mon.getDay() + 6) % 7));
-  const fri = new Date(mon); fri.setDate(mon.getDate() + 4);
+  const fri = new Date(mon); fri.setDate(mon.getDate() + 6); // through Sunday
   const f = d => d.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });
   el.textContent = f(mon) + ' – ' + f(fri) + ' ' + fri.getFullYear();
 })();
-const DAY_FULL  = { mon:'Monday', tue:'Tuesday', wed:'Wednesday', thu:'Thursday', fri:'Friday' };
+const DAY_FULL  = { mon:'Monday', tue:'Tuesday', wed:'Wednesday', thu:'Thursday', fri:'Friday', sat:'Saturday', sun:'Sunday' };
 
 // Movable categories — only cancellations are locked from moves; lunch is movable too
 const MOVABLE_TYPES = new Set(['therapy','assessment','initial','mdt','travel','report','admin','cpd','lunch']);
@@ -15724,7 +15698,8 @@ function _dragRevertGroup(d) {
 }
 
 function pointerOverColumn(x) {
-  const days = ['mon','tue','wed','thu','fri'];
+  // Every day is bookable — weekends included (14 Nov 2026).
+  const days = ['mon','tue','wed','thu','fri','sat','sun'];
   for (const d of days) {
     const col = document.getElementById('day-' + d);
     if (!col) continue;
@@ -15913,15 +15888,7 @@ function evaluateMove(id, newDay, newStartMin, durationMin) {
   const impacts = [];
   let verdict = 'ok';  // ok | warn | blocker
 
-  // 1. Outside working hours?
-  if (newStartMin < WORK_S * 60 || newEndMin > WORK_E * 60) {
-    impacts.push({
-      sev: 'warn',
-      ttl: 'Outside working hours',
-      sub: `New time ${fmtMin(newStartMin)}–${fmtMin(newEndMin)} falls outside the working window 09:00–17:00 AWST. Splose will accept this but it's flagged as out-of-hours.`
-    });
-    if (verdict === 'ok') verdict = 'warn';
-  }
+  // No working-hours check: any time of day is bookable (14 Nov 2026).
 
   // 2. Overlap with existing sessions
   const overlaps = others.filter(o => Math.max(sessionStartMin(o), newStartMin) < Math.min(sessionEndMin(o), newEndMin));
@@ -22418,8 +22385,10 @@ function bspOnEndChange() {
   if (!sv || !ev) return;
   const [sh, sm] = sv.split(':').map(Number);
   const [eh, em] = ev.split(':').map(Number);
-  const dur = (eh * 60 + em) - (sh * 60 + sm);
-  if (dur > 0 && dur <= 240) {
+  // An end at or before the start runs past midnight into the next day.
+  let dur = (eh * 60 + em) - (sh * 60 + sm);
+  if (dur <= 0) dur += 1440;
+  if (dur > 0 && dur <= 720) {
     _bspDurManual = true;
     const slider = document.getElementById('bsp-dur-slider');
     if (slider) slider.value = dur;
@@ -22500,7 +22469,7 @@ function _bspApplyTimingPrefill(opts) {
   // Duration or end time
   if (opts.endH !== undefined && opts.startH !== undefined) {
     const durMin = (opts.endH * 60 + (opts.endM || 0)) - (opts.startH * 60 + (opts.startM || 0));
-    if (durMin > 0 && durMin <= 240) {
+    if (durMin > 0 && durMin <= 720) {
       // A dragged range is the clinician's own timing: picking a booking type
       // afterwards must not shrink it to the type's default (11 Oct 2026).
       // A plain slot click (an hour by default) still takes the type default.
@@ -23841,12 +23810,10 @@ async function loadUserSettings() {
 // ── Save user settings ────────────────────────────────────────
 async function saveUserSettings(section) {
   // Validate before saving
+  // Working-hours fields are gone (no preset hours); the stored start/end keep
+  // their defaults so older readers of calendarStartHour/EndHour still work.
   var startH = _si('stg-cal-start', 7);
-  var endH   = _si('stg-cal-end', 20); // match END_H default of 20
-  if (startH >= endH) {
-    showSettingsSaveMsg('stg-cal-save-msg', false, 'Day start must be before day end');
-    return;
-  }
+  var endH   = _si('stg-cal-end', 20);
   var dailyT  = _sn('stg-rpt-daily-target', 5);
   var weeklyT = _sn('stg-rpt-weekly-target', 25);
   if (dailyT < 0 || weeklyT < 0) {

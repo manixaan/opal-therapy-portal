@@ -307,17 +307,17 @@ describe('working hours and schedule', () => {
     expect(spans(res, 'available')).toEqual([[480, 1020]]);
   });
 
-  test('scheduleKnown=false → assumed Mon–Fri and confidence default', () => {
+  test('scheduleKnown=false → every day assumed working (weekends bookable, 14 Nov 2026), confidence default', () => {
     const monday = compute({ weekSchedule: null, scheduleKnown: false });
     expect(monday.working).toBe(true);
     expect(monday.availabilityConfidence).toBe('default');
 
     const saturday = compute({ date: SAT, weekSchedule: null, scheduleKnown: false });
-    expect(saturday.working).toBe(false);
+    expect(saturday.working).toBe(true);
     expect(saturday.availabilityConfidence).toBe('default');
 
     const sunday = compute({ date: SUN, weekSchedule: null, scheduleKnown: false });
-    expect(sunday.working).toBe(false);
+    expect(sunday.working).toBe(true);
   });
 
   test('scheduleKnown=true → confidence configured', () => {
@@ -325,7 +325,7 @@ describe('working hours and schedule', () => {
     expect(res.availabilityConfidence).toBe('configured');
   });
 
-  test('empty weekSchedule falls back to Mon–Fri regardless of scheduleKnown', () => {
+  test('empty weekSchedule falls back to every day working regardless of scheduleKnown', () => {
     const res = compute({ weekSchedule: {}, scheduleKnown: true });
     expect(res.working).toBe(true);
     expect(res.availabilityConfidence).toBe('configured');
@@ -525,11 +525,11 @@ describe('leave', () => {
     expect(res.capacity.busyMin).toBe(120);
   });
 
-  test('a weekend inside a leave range still reports not_working', () => {
+  test('a non-working day inside a leave range still reports not_working', () => {
     const res = compute({
       date: SAT,
-      weekSchedule: null,
-      scheduleKnown: false,
+      weekSchedule: { mon: 'office' },   // a schedule that leaves Saturday off
+      scheduleKnown: true,
       leaveRanges: [{ startDate: '2026-08-10', endDate: '2026-08-21' }],
     });
     expect(res.working).toBe(false);

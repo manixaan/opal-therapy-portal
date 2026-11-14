@@ -567,12 +567,12 @@ describe('integration: computeDayAvailability → classifyCandidate → scoreCan
     });
     expect(c.status).toBe('candidate');
     expect(c.geographyState).toBe('near');
-    expect(c.window).toEqual({ startMin: 600, endMin: 1020 });   // 10:00 → 5:00pm
+    expect(c.window).toEqual({ startMin: 600, endMin: 1440 });   // 10:00 → midnight: no preset working hours
     expect(c.suggestedSlot).toEqual({ startMin: 600, endMin: 660 });
     // near 25 + comfort 10 + capacity capped 12 + continuity 30 = 77 → best
     expect(c.internalScore).toBe(W.near + W.comfort + W.maxCapacity + W.continuity);
     expect(c.fitTier).toBe('best');
-    expect(labelOf(c, 'capacity')).toBe('8h available capacity remains');   // 60 + 420 min free
+    expect(labelOf(c, 'capacity')).toBe('23h available capacity remains');  // the whole day less the 9–10 appointment
     expect(c.availabilityConfidence).toBe('configured');
     expect(codes(c)).not.toContain('default_hours');
   });

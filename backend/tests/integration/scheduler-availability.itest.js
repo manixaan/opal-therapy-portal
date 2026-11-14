@@ -194,11 +194,11 @@ describe('common availability', () => {
     const a = await seedTherapist(org, 'Ann X', { schedule: week });
     const b = await seedTherapist(org, 'Sarah X', { schedule: week });
 
-    // Org default window 08:00–17:00.
-    // Ann busy 8-10 and 12-17  → free 10:00–12:00
+    // No preset working hours (14 Nov 2026): the whole day counts.
+    // Ann busy 8-10 and 12-17  → free 0–8, 10:00–12:00, 17–24
     await seedEvent(a.profileId, a.userId, org, 8, 10);
     await seedEvent(a.profileId, a.userId, org, 12, 17);
-    // Sarah busy 8-10:30 and 14-17 → free 10:30–14:00
+    // Sarah busy 8-10:30 and 14-17 → free 0–8, 10:30–14:00, 17–24
     await seedEvent(b.profileId, b.userId, org, 8, 10.5);
     await seedEvent(b.profileId, b.userId, org, 14, 17);
 
@@ -206,13 +206,15 @@ describe('common availability', () => {
       .send({ date: DATE, therapistIds: [a.profileId, b.profileId], minDurationMin: 30 });
     expect(r.status).toBe(200);
     expect(r.body.slots).toEqual([
+      { startMin: 0, endMin: 8 * 60, durationMin: 480 },
       { startMin: 10.5 * 60, endMin: 12 * 60, durationMin: 90 },
+      { startMin: 17 * 60, endMin: 24 * 60, durationMin: 420 },
     ]);
 
-    // Raise the bar beyond the window → no slots
+    // Raise the bar past the midday gap → only the long early/late gaps remain
     const r2 = await agent.post('/api/scheduler/common-availability')
       .send({ date: DATE, therapistIds: [a.profileId, b.profileId], minDurationMin: 120 });
-    expect(r2.body.slots).toEqual([]);
+    expect(r2.body.slots.map((x) => x.startMin)).toEqual([0, 17 * 60]);
   });
 
   test('requires at least two known therapists', async () => {

@@ -33,7 +33,9 @@
 
 const DAY_MIN = 1440;
 const WEEKDAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
-const DEFAULT_WORKDAYS = ['mon', 'tue', 'wed', 'thu', 'fri'];
+// Every day is a working day unless a schedule says otherwise — weekends are
+// bookable by default (14 Nov 2026; was Mon–Fri).
+const DEFAULT_WORKDAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 // ── Event normalisation ──────────────────────────────────────────────────────
@@ -218,7 +220,9 @@ function computeDayAvailability(opts) {
   const tzOffsetMin = o.tzOffsetMin === undefined ? 480 : o.tzOffsetMin;
   const events = Array.isArray(o.events) ? o.events : [];
   const weekSchedule = (o.weekSchedule && typeof o.weekSchedule === 'object') ? o.weekSchedule : null;
-  const workingHours = o.workingHours || { startMin: 480, endMin: 1020 };
+  // No preset working hours: the whole day is bookable unless the organisation
+  // sets schedulingDefaults (14 Nov 2026; was 08:00–17:00).
+  const workingHours = o.workingHours || { startMin: 0, endMin: DAY_MIN };
   const leaveRanges = Array.isArray(o.leaveRanges) ? o.leaveRanges : [];
   const buffers = o.buffers || {};
   const beforeMin = Math.max(0, buffers.beforeMin || 0);

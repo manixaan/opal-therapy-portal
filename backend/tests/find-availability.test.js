@@ -298,7 +298,7 @@ describe('classifyCandidate: provenance passthrough', () => {
   });
 
   test('confidence flags pass through on an unavailable day too', () => {
-    const t = day({ date: SAT, weekSchedule: null, scheduleKnown: false });
+    const t = day({ date: SAT, weekSchedule: { mon: 'office' }, scheduleKnown: false });
     const c = A.classifyCandidate(t, { startMin: 600, durationMin: 60 });
     expect(c.reason).toBe('not_working');
     expect(c.availabilityConfidence).toBe('default');

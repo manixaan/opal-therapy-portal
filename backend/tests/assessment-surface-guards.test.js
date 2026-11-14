@@ -758,7 +758,8 @@ describe('changed assets are cache-busted', () => {
       ['nf2f.js', 6], ['nf2f.css', 4],
       // 1: travel-block.js is new — the billable Travel block in Smart Booking
       // (start + end location, length from Google Maps).
-      ['travel-block.js', 1],
+      // 2: no 4-hour cap — a priced drive may fill up to 12 h (14 Nov 2026).
+      ['travel-block.js', 2],
       // 1: splose-sync.js/.css are new — the Splose draft-and-publish sync
       // (Sync Splose button, review panel, unsynced tiles, tab-leave prompt,
       // Splose-side change alerts). A first pin is still a pin.

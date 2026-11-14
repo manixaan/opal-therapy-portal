@@ -20,7 +20,7 @@
 
   var TB = global.TravelBlock = global.TravelBlock || {};
   var ST = { from: '', to: '', route: null, seq: 0 };
-  var MAX_MIN = 240; // the booking panel's duration slider tops out at 4 h
+  var MAX_MIN = 720; // the booking panel's duration slider tops out at 12 h
 
   function $(id) { return document.getElementById(id); }
   function fn(name) { return typeof global[name] === 'function'; }
@@ -76,7 +76,7 @@
     status(est ? 'warn' : 'ok',
       '<strong>' + r.durationMin + ' min</strong>' + (km != null ? ' · ' + km + ' km' : '') +
       (est ? ' · estimate (Google Maps unavailable)' : ' · Google Maps, at the start time') +
-      (r.durationMin > MAX_MIN ? ' · block capped at 4 h' : '') +
+      (r.durationMin > MAX_MIN ? ' · block capped at 12 h' : '') +
       ' — block set to ' + len + ' min');
   };
 
