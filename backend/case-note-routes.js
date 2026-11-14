@@ -46,6 +46,7 @@ const { requireAuth } = require('./permissions');
 const provider = require('./clinical-note-provider');
 const { CURRENT_STYLE_VERSION, INSTRUCTION_MODIFIERS } = require('./case-note-style');
 const caseload = require('./splose-caseload');
+const nf2fTimer = require('./billing/nf2f-timer');
 const { renderCaseNotePdf, caseNotePdfFilename } = require('./case-note-pdf');
 const log = require('./logger').createLogger('case-note');
 
@@ -288,6 +289,20 @@ function buildHeader(ev) {
  * generic label — nothing about duration or travel exists to be derived.
  */
 const CLIENT_SERVICE_LABEL = 'Therapy Session';
+/**
+ * The case-noting block a client-linked note is written from (Case Notes
+ * workspace, migration 088). Null unless the block is the caller's own
+ * non-face-to-face block AND names this client — a note can never be filed
+ * against a block it does not belong to.
+ */
+async function loadOwnBlockForClient(req, blockId, clientId) {
+  const ev = await loadOwnEvent(req, blockId);
+  const booking = ev && ev.custom_metadata && ev.custom_metadata.booking;
+  if (!booking || booking.group !== 'nf2f') return null;
+  const onBlock = nf2fTimer.blockClients(ev).some((c) => String(c.clientId) === String(clientId));
+  return onBlock ? ev : null;
+}
+
 function buildClientHeader(client, now = new Date()) {
   const iso = now.toISOString();
   return {
@@ -395,6 +410,7 @@ function formatDraft(row) {
     voiceNoteId: row.voice_note_id,
     linkedEventId: row.linked_event_id || null,
     linkedClientId: row.splose_patient_id || null,
+    nf2fEventId: row.nf2f_event_id || null,
     transcript: row.transcript,
     header: row.header || {},
     identify: row.identify,
@@ -502,7 +518,7 @@ function deidentificationRecord(identity, summary) {
   };
 }
 
-async function generateGovernedDraft(req, { ev, client, transcript, instruction, voiceNoteId, nameDecisions }) {
+async function generateGovernedDraft(req, { ev, client, block, transcript, instruction, voiceNoteId, nameDecisions }) {
   if (!ev && !client) throw new Error('generate_requires_link');
   // Fail closed BEFORE anything leaves the server. Routed through the same
   // helper as the mid-flight case so both produce one indistinguishable
@@ -513,7 +529,9 @@ async function generateGovernedDraft(req, { ev, client, transcript, instruction,
     return { ok: false, ...generationFailure(new Error('generation_disabled'), req) };
   }
 
-  const header = ev ? buildHeader(ev) : buildClientHeader(client);
+  // A note written from a case-noting block is dated by the block, not by
+  // when the therapist got round to writing it.
+  const header = ev ? buildHeader(ev) : buildClientHeader(client, block ? new Date(block.start_time) : undefined);
   // A client link has no event title to strip a name from — the generic
   // label is already name-free.
   const serviceLabel = ev ? providerServiceLabel(ev) : CLIENT_SERVICE_LABEL;
@@ -559,14 +577,14 @@ async function generateGovernedDraft(req, { ev, client, transcript, instruction,
          (user_id, organisation_id, voice_note_id, linked_event_id, transcript, header,
           identify, session_details, plan, warnings, note_body,
           style_version, provider_id, model_id, generated_at,
-          ai_interaction_id, generation_source, review_status, splose_patient_id, deidentification)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,NOW(),$15,'ai_assisted','review_required',$16,$17) RETURNING *`,
+          ai_interaction_id, generation_source, review_status, splose_patient_id, deidentification, nf2f_event_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,NOW(),$15,'ai_assisted','review_required',$16,$17,$18) RETURNING *`,
       [req.user.id, orgOf(req), voiceNoteId || null, ev ? ev.id : null, transcript, JSON.stringify(header),
        sections.identify, sections.sessionDetails, JSON.stringify(sections.plan),
        JSON.stringify(sections.warnings), noteBody,
        CURRENT_STYLE_VERSION, providerIdent.providerId, providerIdent.modelId,
        raw.metadata?.interactionId || null, client ? client.id : null,
-       JSON.stringify(deidentificationRecord(identity, raw.deidentification))]);
+       JSON.stringify(deidentificationRecord(identity, raw.deidentification)), block ? block.id : null]);
     draft = rows[0];
     if (!draft) throw new Error('insert_returned_no_row');
   } catch (err) {
@@ -598,6 +616,7 @@ async function generateGovernedDraft(req, { ev, client, transcript, instruction,
   await audit(req, 'mobile.case_note_generated', draft.id, {
     linkedEventId: ev ? ev.id : null,
     linkedClientId: client ? client.id : null,
+    nf2fEventId: block ? block.id : null,
     styleVersion: CURRENT_STYLE_VERSION,
     modelId: providerIdent.modelId,
     aiInteractionId: draft.ai_interaction_id || null,
@@ -648,6 +667,11 @@ router.post('/api/mobile/case-note-drafts/names-check', safe(async (req, res) =>
     }
     if (!client) return res.status(400).json({ error: 'linkedClientId does not reference a client on your caseload', code: 'invalid_link' });
     clientName = client.fullName || null;
+  }
+  if (b.nf2fEventId !== undefined && b.nf2fEventId !== null) {
+    if (!hasClient || !(await loadOwnBlockForClient(req, b.nf2fEventId, b.linkedClientId))) {
+      return res.status(400).json({ error: 'nf2fEventId does not reference your case-noting block for this client', code: 'invalid_link' });
+    }
   }
   const identity = identityFor(await identityPeople(req, { clientName }), b);
   const preview = provider.previewNames({ transcript: b.transcript.trim(), identity });
@@ -726,9 +750,23 @@ router.post('/api/mobile/case-note-drafts/generate', aiRateLimit, safe(async (re
     }
   }
 
+  // Optional: the case-noting block this client note is written from. Only
+  // with a client link, and only a block of mine that names this client.
+  let block = null;
+  if (b.nf2fEventId !== undefined && b.nf2fEventId !== null) {
+    block = hasClient ? await loadOwnBlockForClient(req, b.nf2fEventId, b.linkedClientId) : null;
+    if (!block) {
+      return res.status(400).json({
+        error: 'nf2fEventId does not reference your case-noting block for this client',
+        code: 'invalid_link',
+      });
+    }
+  }
+
   const result = await generateGovernedDraft(req, {
     ev,
     client,
+    block,
     transcript: b.transcript.trim(),
     instruction: b.instruction,
     voiceNoteId: b.voiceNoteId,
@@ -834,6 +872,14 @@ router.post('/api/mobile/ai/case-note', aiRateLimit, safe(async (req, res) => {
 // ═══ Read ════════════════════════════════════════════════════════════════════
 
 router.get('/api/mobile/case-note-drafts', safe(async (req, res) => {
+  // ?nf2fEventId= — the notes written from one case-noting block (workspace).
+  if (req.query.nf2fEventId !== undefined) {
+    if (!isUuid(req.query.nf2fEventId)) return res.status(400).json({ error: 'nf2fEventId must be a UUID' });
+    const { rows } = await pool.query(
+      `SELECT * FROM case_note_drafts WHERE user_id = $1 AND status = 'draft' AND nf2f_event_id = $2
+        ORDER BY created_at DESC LIMIT 100`, [req.user.id, req.query.nf2fEventId]);
+    return res.json({ caseNoteDrafts: rows.map(formatDraft) });
+  }
   const { rows } = await pool.query(
     `SELECT * FROM case_note_drafts WHERE user_id = $1 AND status = 'draft'
       ORDER BY created_at DESC LIMIT 20`, [req.user.id]);

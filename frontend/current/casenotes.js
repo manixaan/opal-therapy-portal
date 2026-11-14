@@ -575,11 +575,15 @@
   function listPane() {
     var head = '<div class="cn-list-head">' +
       '<h2 id="cn-list-h">Your drafts</h2>' +
-      // The composer lives in casenotes-compose.js (data-cnc); this surface
-      // only offers the way in, and only when that module is loaded.
-      (global.CaseNotesCompose
-        ? '<button type="button" class="btn primary cn-new" data-cnc="open">' + icn('plus', 13) + ' New case note</button>'
-        : '') +
+      // The composer lives in casenotes-compose.js (data-cnc) and the week's
+      // case-noting workspace in casenotes-workspace.js (data-cnw); this
+      // surface only offers the way in, and only when the module is loaded.
+      // New case note opens the workspace, which also leads to the composer.
+      (global.CaseNotesWorkspace
+        ? '<button type="button" class="btn primary cn-new" data-cnw="open">' + icn('plus', 13) + ' New case note</button>'
+        : global.CaseNotesCompose
+          ? '<button type="button" class="btn primary cn-new" data-cnc="open">' + icn('plus', 13) + ' New case note</button>'
+          : '') +
       '<button type="button" class="cn-icon-btn" data-cn="reload" title="Refresh list" aria-label="Refresh list">' +
         icn('refresh', 14) + '</button>' +
       '</div>';

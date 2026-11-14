@@ -4,6 +4,7 @@
  * NON-FACE-TO-FACE BILLABLE TIME — the block's timer and its allocation.
  *
  *   GET  /api/nf2f/running                   my running timer(s) — the calendar's timer chip
+ *   GET  /api/nf2f/blocks?from=&to=          my blocks in a date range — the Case Notes workspace
  *   GET  /api/events/:dbId/nf2f              a block's clients, timer and allocation
  *   POST /api/events/:dbId/nf2f/start        start (or resume); any other running timer of mine stops
  *   POST /api/events/:dbId/nf2f/stop
@@ -143,6 +144,51 @@ router.put('/api/events/:dbId/nf2f/allocation', requireAuth, safe(async (req, re
     [ev.id, ev.organisation_id || ev.owner_org || null, ev.user_id, T.blockSeconds(ev), JSON.stringify(v.allocation), v.nonBillablePercent]);
   await flagDrafts(db.pool, ev.id, 'billing allocation changed');
   res.json(view(ev, await timerRow(db.pool, ev.id)));
+}));
+
+// ── The Case Notes workspace: my case-noting blocks in a date range ─────────
+// GET /api/nf2f/blocks?from=YYYY-MM-DD&to=YYYY-MM-DD (Perth days, inclusive,
+// at most 31). Each block carries its clients, its timer and which clients
+// already have a note written from it (case_note_drafts.nf2f_event_id). Only
+// my own blocks: a manager's wider timer access does not extend to listing.
+const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
+router.get('/api/nf2f/blocks', safe(async (req, res) => {
+  const { from, to } = req.query;
+  if (!YMD_RE.test(String(from)) || !YMD_RE.test(String(to))) return res.status(400).json({ error: 'from and to must be YYYY-MM-DD' });
+  const fromMs = Date.parse(`${from}T00:00:00+08:00`);
+  const toMs = Date.parse(`${to}T00:00:00+08:00`) + 86400000;
+  if (!Number.isFinite(fromMs) || !Number.isFinite(toMs) || toMs <= fromMs || toMs - fromMs > 31 * 86400000) {
+    return res.status(400).json({ error: 'Choose a range of up to 31 days' });
+  }
+  const { rows } = await db.pool.query(
+    `SELECT e.id, e.user_id, e.title, e.start_time, e.end_time, e.custom_metadata, e.organisation_id
+       FROM events e
+      WHERE e.user_id = $1 AND COALESCE(e.is_deleted, FALSE) = FALSE
+        AND e.custom_metadata->'booking'->>'group' = 'nf2f'
+        AND e.start_time >= $2 AND e.start_time < $3
+      ORDER BY e.start_time`, [req.session.userId, new Date(fromMs), new Date(toMs)]);
+  const ids = rows.map((r) => r.id);
+  const notes = {};
+  if (ids.length) {
+    const { rows: drafts } = await db.pool.query(
+      `SELECT nf2f_event_id, splose_patient_id, id, review_status FROM case_note_drafts
+        WHERE user_id = $1 AND status = 'draft' AND nf2f_event_id = ANY($2::uuid[])
+        ORDER BY created_at`, [req.session.userId, ids]);
+    for (const d of drafts) {
+      const k = String(d.nf2f_event_id);
+      (notes[k] = notes[k] || {})[String(d.splose_patient_id)] = { draftId: d.id, reviewStatus: d.review_status };
+    }
+  }
+  const blocks = [];
+  for (const ev of rows) {
+    const v = view(ev, await timerRow(db.pool, ev.id));
+    const booking = (ev.custom_metadata && ev.custom_metadata.booking) || {};
+    blocks.push({
+      eventId: v.eventId, title: v.title, kind: booking.kind || null, start: v.start, end: v.end,
+      clients: v.clients, timer: v.timer, notes: notes[String(ev.id)] || {},
+    });
+  }
+  res.json({ blocks });
 }));
 
 router.get('/api/nf2f/running', safe(async (req, res) => {

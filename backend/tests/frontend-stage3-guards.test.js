@@ -1570,7 +1570,7 @@ describe('case notes review surface', () => {
 
   test('assets are linked next to the other extracted asset pairs', () => {
     expect(HTML).toContain('<link rel="stylesheet" href="/casenotes.css?v=3" />');
-    expect(HTML).toContain('<script src="/casenotes.js?v=5" defer></script>');
+    expect(HTML).toContain('<script src="/casenotes.js?v=6" defer></script>');
   });
 
   test('nav tab + view mount exist and are wired the same way as other tabs', () => {
@@ -1684,8 +1684,11 @@ describe('case notes review surface', () => {
   });
 
   test('the review surface only offers the way INTO the composer — it grows no capture field of its own', () => {
+    // New case note opens the week's workspace (14 Nov 2026), else the composer.
+    expect(CN_JS).toContain('data-cnw="open"');
+    expect(CN_JS).toContain('(global.CaseNotesWorkspace');
     expect(CN_JS).toContain('data-cnc="open"');
-    expect(CN_JS).toContain('(global.CaseNotesCompose');
+    expect(CN_JS).toContain(': global.CaseNotesCompose');
     expect(CN_CODE).not.toMatch(/SpeechRecognition|names-check|\/generate'/);
   });
 
