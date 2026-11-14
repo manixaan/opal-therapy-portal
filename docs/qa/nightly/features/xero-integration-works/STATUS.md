@@ -3,35 +3,79 @@
 - Tracker stage: idea
 - Tracker environment: none
 - Evidence label: **tab-unproven**
-- Addressed in change window (2026-11-12 to 2026-11-13): no — no commits touched `backend/finance-*`, `accounting-*`, `xero-*`, or `onboarding-payroll-*` in this window
-- Created (any code located): yes, both sub-tasks
+- Addressed in change window (2026-11-13 to 2026-11-14): no (no commits to
+  the located files)
+- Created at all: yes
 
 ## Located files
 
-- "Financial Dashboard" → `backend/finance-routes.js`, `backend/finance-db.js`, `backend/finance-flags.js`, `backend/xero-api.js`, `backend/xero-sync.js`; `FINANCE TAB (owner-only)` `mockup_v3.html:5528`. (`backend/accounting-routes.js`/`accounting-db.js`/`accounting-exceptions.js`, `ACCOUNTING TAB (owner-only)` `mockup_v3.html:5442`, is a related/earlier owner-only finance surface.)
-- "Payroll Automation" → `backend/onboarding-payroll-routes.js`, `backend/xero-payroll-api.js`, `backend/xero-payroll-connection.js`, `backend/xero-payroll-db.js`, `backend/xero-payroll-mapping.js`, `backend/xero-payroll-sync.js`
-- Unit tests: `finance-flags.test.js`, `finance-routes.test.js`, `onboarding-payroll.test.js`, `xero-payroll-api/mapping/sync.test.js`
-- Integration tests: `accounting-phase2.itest.js`, `accounting-routes.itest.js`, `finance-routes.itest.js`, `onboarding-payroll-xero.itest.js`
-- E2E: `e2e/tests/portal.spec.js:70` — "Accounting is invisible and inaccessible" (re-confirmed at this line tonight). Manual QA: `docs/qa/BROWSER_QA_RESULTS.md` row H (unchanged since 2026-08-01) — no real Xero connection was ever exercised.
+- Routes: `backend/finance-routes.js` (owner-only Finance dashboard),
+  `backend/accounting-routes.js` (owner-only Accounting/Xero extraction),
+  `backend/onboarding-payroll-routes.js` (payroll setup under onboarding
+  journey, `requirePermission('onboarding.payroll')`)
+- Xero clients: `backend/xero-api.js`, `backend/xero-sync.js`,
+  `backend/xero-payroll-api.js`, `backend/xero-payroll-connection.js`,
+  `backend/xero-payroll-db.js`, `backend/xero-payroll-mapping.js`,
+  `backend/xero-payroll-sync.js`
+- Frontend: `frontend/current/finance.js`, `frontend/current/invoicing.js`;
+  tabs `data-tab="finance"` and `data-tab="accounting"` in `mockup_v3.html`
+  (both `data-owner-only="1"`, hidden by default)
+- Unit tests: `tests/finance-flags.test.js`, `tests/finance-routes.test.js`,
+  `tests/invoicing-billing-mark.test.js`, `tests/onboarding-payroll.test.js`,
+  `tests/xero-payroll-api.test.js`, `tests/xero-payroll-mapping.test.js`,
+  `tests/xero-payroll-sync.test.js`
+- Integration tests: `tests/integration/accounting-phase2.itest.js`,
+  `tests/integration/accounting-routes.itest.js`,
+  `tests/integration/finance-routes.itest.js`,
+  `tests/integration/invoicing.itest.js`,
+  `tests/integration/onboarding-payroll-xero.itest.js`
 
 ## Guard check
 
-Re-confirmed tonight, unchanged. `finance-routes.js:44` and `accounting-routes.js:62` both declare `const ownerOnly = [requireAuth, requireRole('owner')]`, applied to every route checked.
+`finance-routes.js`: every route `requireAuth` + `requireRole('owner')`.
+`accounting-routes.js`: same pattern, `ownerOnly = [requireAuth,
+requireRole('owner')]`. `onboarding-payroll-routes.js`:
+`requirePermission('onboarding.payroll')` on every payroll-setup route. All
+guarded correctly — no finding.
 
 ## Tests run
 
-- Unit: re-run tonight — 6 suites, 77 tests — **all pass**
-- Integration: re-run tonight — `accounting-phase2.itest.js`, `accounting-routes.itest.js`, `finance-routes.itest.js` — part of a 7-suite/47-test run, **all pass** (two `WARN`-level "xero offline in test" log lines are an intentional simulated-unavailability test path, not a failure). `onboarding-payroll-xero.itest.js` re-run tonight as part of the 10-suite/218-test onboarding batch — **pass**.
+- Unit: 81/81 passed (7 suites).
+- Integration: 63/63 passed (5 suites), against `therapy_scheduler_audit_test`
+  with 85 migrations applied cleanly. Xero itself is correctly reported
+  offline in test (`WARN finance: recurring invoices unavailable {"error":
+  "xero offline in test"}`) — expected, not a failure.
 
-## Open tasks from tracker
+## Recency
 
-- "Financial Dashboard" — `todo`. Per the tracker's own `next_action`: connect a real Xero sandbox and confirm the Finance tab's dashboard populates, then add an integration test for that payload — unchanged, still not done.
-- "Payroll Automation" — `todo`. Unticked, unchanged.
+Not touched in the change window (since the 2026-11-13 audit). Built
+earlier; no regression risk surfaced by recent commits.
+
+## Why tab-unproven, not proven
+
+Both the Financial Dashboard and Payroll Automation pass every test against
+mocked/offline Xero responses, but nothing in this repository proves either
+one against a real Xero sandbox or in a real browser: `e2e/tests/` has no
+Finance or Accounting spec, and `docs/qa/BROWSER_QA_RESULTS.md` (2026-08-01)
+only covers the older Accounting tab's visibility/403 boundaries — not the
+Finance dashboard's figures rendering correctly, and not a live Xero
+connection.
+
+## Open tasks (from tracker)
+
+- Financial Dashboard — todo. Checklist still has "Decide: confirm the exact
+  metrics for the dashboard" and "Check the connection to Xero is working"
+  as open items — these are product decisions, not just missing tests.
+- Payroll Automation — todo.
+
+## Commits in the window touching this
+
+None.
 
 ## Disagreement
 
-None in the formal sense. CRITICAL-level territory (accounting/Xero per CLAUDE.md §6) — this audit made no destructive or live-Xero calls, consistent with the hard limits. The gap is genuine and unchanged: code is built and passes tests against mocked Xero responses, but nobody has verified it against a real Xero sandbox.
-
-## Commits in window touching it
-
-None.
+Tracker stage is `idea` (lowest). Evidence is: fully built, fully covered by
+passing unit and integration tests, against two owner-only routes with
+correct RBAC. The gap is real but narrow — a live Xero sandbox connection
+and a browser check, not missing code. Unchanged from the prior nightly
+audit (2026-11-13).

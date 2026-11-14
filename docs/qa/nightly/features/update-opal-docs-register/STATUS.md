@@ -3,34 +3,38 @@
 - Tracker stage: idea
 - Tracker environment: none
 - Evidence label: **untouched**
-- Addressed in change window (2026-11-12 to 2026-11-13): no
-- Created (any code located): no
+- Addressed in change window (2026-11-13 to 2026-11-14): no
+- Created at all: no
+
+## What this is
+
+Tracker idea: "Update Opal Docs Register." One task, "Update Excel Sheet to
+include all documentation required," whose own explanation says plainly:
+"This is an organising job, not a coding job. We will build out your existing
+document register so it lists every type of document the business needs. We
+reuse the Excel register and your existing SharePoint, rather than starting
+fresh."
 
 ## Located files
 
-None. This tracker card describes updating an Excel document register
-(protocols, policies, contracts) stored on SharePoint, with columns for
-existence/relevance/onboarding-relevance/formatting-status/SharePoint
-link. Re-checked tonight: a targeted search for "docs register" /
-"document register" found zero matches anywhere in `backend/` or
-`frontend/current/`.
+None. This is an organisational task against an external Excel register on
+SharePoint, not a codebase change. Searched the repository for
+"docs register", "document register" and similar — no matches outside the
+tracker's own wording.
 
 ## Tests
 
-Not applicable — no code exists to test.
+Not applicable — no code to test.
 
-## Open tasks from tracker
+## Open tasks (from tracker)
 
-- "Update Excel Sheet to include all documentation required" — `todo`.
-  Checklist items are all document-organising steps (review register gaps,
-  confirm categories with Anthony, add tracking columns, enter every
-  required document, mark existing vs to-create, attach/link in
-  SharePoint, share for review) — none are code changes.
+- Update Excel Sheet to include all documentation required — todo.
 
-## Commits in window touching it
+## Commits in the window touching this
 
 None (nothing to touch).
 
 ## Disagreement
 
-None. Tracker stage (`idea`) and evidence (`untouched`) agree.
+None. Tracker stage (idea) matches the evidence (nothing built, and nothing
+should be — this is not a coding task).

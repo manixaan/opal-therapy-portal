@@ -3,45 +3,85 @@
 - Tracker stage: idea
 - Tracker environment: none
 - Evidence label: **proven**
-- Addressed in change window (2026-11-12 to 2026-11-13): no — zero commits since the 2026-11-12 audit
-- Created (any code located): yes — API surface only; the mobile app itself is not in this repository
+- Addressed in change window (2026-11-13 to 2026-11-14): yes (case-note-routes.js, shared with the
+  desktop Case Notes workspace — see below)
+- Created at all: yes
 
 ## Located files
 
-- Routes: `backend/mobile-routes.js`, `backend/case-note-routes.js`
-- AI layer: `backend/clinical-note-provider.js` — the only caller of `backend/ai/ai-gateway.js` for this feature; boundary re-confirmed respected tonight
-- Data access: inline SQL (`voice_notes`, `events`, `snapshot_*` tables); `backend/case-note-pdf.js`, `backend/case-note-style.js`
-- Frontend: **none found in this repository**, re-confirmed tonight.
-- Unit tests: `mobile-routes.test.js`, `case-note-routes.test.js`, `casenotes-compose.test.js`, `casenotes-helpers.test.js`
-- Integration tests: `case-note-approval-edit.itest.js`, `case-note-client-link.itest.js`, `case-note-deidentification.itest.js`
-- E2E: none (no app to drive from this repo).
+- Routes: `backend/mobile-routes.js` (today/calendar/travel/voice-notes,
+  explicitly "the Opa Mobile Companion app" per its own header comment),
+  `backend/case-note-routes.js` (the governed AI case-note drafting the
+  mobile app calls into: `POST /api/mobile/case-note-drafts/generate`,
+  deprecated alias `POST /api/mobile/ai/case-note`)
+- AI: `backend/clinical-note-provider.js` (Bedrock, Australian regions only,
+  de-identified transcript, documented in `docs/mobile/
+  CASE_NOTE_AI_PRIVACY.md` and `CLINICAL_AI_PROVIDER_DECISION.md`)
+- Frontend/standalone app: none in this repository — the mobile app itself
+  is a separate client that consumes this API; there is no tab or page
+  here to prove in a browser.
+- Unit tests: `tests/mobile-routes.test.js`, `tests/case-note-routes.test.js`,
+  `tests/clinical-note-provider.test.js`
+- Integration tests: `tests/integration/case-note-approval-edit.itest.js`,
+  `tests/integration/case-note-client-link.itest.js`,
+  `tests/integration/case-note-deidentification.itest.js`,
+  `tests/integration/case-note-workspace.itest.js`
 
 ## Guard check
 
-Re-confirmed tonight by direct grep, unchanged. `mobile-routes.js:41` — `requireAuth` only, file header documents every endpoint as scoped to the caller's own `user_id`/`therapist_profile_id` — self-scoped by design. `case-note-routes.js:52,56` — same pattern.
-
-## AI governance — re-verified
-
-`clinical-note-provider.js` still fails closed without `CLINICAL_NOTE_AI_ENABLED` plus a key, restricted to an Australian Bedrock region — `docs/mobile/CASE_NOTE_AI_PRIVACY.md` unchanged.
+`mobile-routes.js`: `router.use('/api/mobile', requireAuth)` only, no
+`requireRole`/`requirePermission` — but its header comment explicitly
+documents every query as `user_id`-scoped ("Tasks/reminders/voice notes are
+user_id-scoped exactly like snapshot-routes.js. Anything not owned by the
+caller answers 404"), which is the exact exception named for this file in
+the audit rules. **Self-scoped by design, not broken.**
+`case-note-routes.js`: `router.use('/api/mobile/case-note-drafts',
+requireAuth)` and `router.use('/api/mobile/ai/case-note', requireAuth)`,
+plus client/event ownership checks inside the generation handler. No
+finding.
 
 ## Tests run
 
-- Unit: re-run tonight as part of a 37-suite/684-test group — **all pass** (deliberate `ERROR`-level log lines for simulated `ECONNREFUSED`/disk-failure/`ECONNRESET` scenarios are intentional failure-path tests)
-- Integration: re-run tonight — 3 files, included in a 7-suite/47-test run — **all pass**
+- Unit: 123/123 passed (`case-note-routes.test.js` + `mobile-routes.test.js`).
+- Unit (AI path): `clinical-note-provider.test.js` 10/10 passed.
+- AI gateway boundary (touched by this feature): `ai-gateway-boundary.test.js`
+  + `ai-single-gateway-guards.test.js` 30/30 passed — the clinical-note
+  provider still goes through the single governed gateway.
+- Integration: 13/13 passed (4 suites), against
+  `therapy_scheduler_audit_test`.
 
-## Open tasks from tracker
+## Recency
 
-- "Case Noting" — `todo`. Explicitly a human-on-the-device testing task.
-- "Calendar View" — `todo`, no further detail recorded.
+`e222a77` (this window) added the case-noting workspace used from the
+desktop Case Notes tab; it extends `case-note-routes.js`, the same file the
+mobile companion's AI drafting shares, without changing the mobile contract
+(migration 088 only adds an optional `nf2f_event_id` column).
 
-## Why proven, not tab-unproven
+## Classify
 
-Unchanged for a fifth consecutive night: there is no in-repo tab to drive with Playwright — the mobile app lives outside this repository. Self-scoped guards re-verified + passing unit/integration tests = `proven` for the backend surface this repo actually contains.
+`proven`. Code located, guarded (self-scoped by design), every targeted
+unit/integration test passes, including the AI-gateway boundary tests for
+the clinical-note generation path. There is no portal tab or page for this
+feature — the mobile app is an external client — so the tab/E2E condition
+in the `proven` definition does not apply.
+
+## Open tasks (from tracker)
+
+- Case Noting — todo. The task's own text says this is a review/verification
+  task ("This task is about testing and verifying that pilot works") rather
+  than a build task — tonight's test run is exactly that verification, and
+  it passed.
+- Calendar View — todo. `GET /api/mobile/calendar` and `GET
+  /api/mobile/today` are built, guarded and tested.
+
+## Commits in the window touching this
+
+`e222a77` (above). `e77102f` merge also touched `case-note-routes.js`
+indirectly (release merge).
 
 ## Disagreement
 
-None in the formal sense. Standing note, unchanged: this repository holds only the backend API for a mobile-app pilot the tracker describes as "currently built" — the actual pilot app isn't here to verify.
-
-## Commits in window touching it
-
-None this window.
+Tracker stage `idea`, both tasks `todo`, but the pilot both tasks describe
+is already built, governed (AI de-identification, Australian-region
+Bedrock, fail-closed) and passing every targeted test. Recommend closing
+both tasks in the tracker rather than treating this as unstarted work.

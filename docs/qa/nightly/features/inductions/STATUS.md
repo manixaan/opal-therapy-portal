@@ -3,44 +3,96 @@
 - Tracker stage: idea
 - Tracker environment: none
 - Evidence label: **proven**
-- Addressed in change window (2026-11-12 to 2026-11-13): no — zero commits landed on `develop` since the 2026-11-12 audit. The heavy induction-pack activity (`feat(inductions): ...` commits) all predates this window (2026-11-08 through 2026-11-10).
-- Created (any code located): yes
+- Addressed in change window (2026-11-13 to 2026-11-14): no — the 5
+  induction-pack commits below are from 2026-11-07/08, predating this
+  window
+- Created at all: yes
 
 ## Located files
 
 - Routes: `backend/learning-routes.js`, `backend/induction-assistant-routes.js`
-- Data access: `backend/learning-content.js`
-- Frontend: no static `TAB` banner — reached as a dynamic sub-view inside the `RESOURCES TAB` (`#resources/learning` via `OpalNav.go({tab:'resources', view:'learning'})`); scripts `frontend/current/induction.js`, `induction-modules.js`, `induction-assistant.js`
-- Unit tests: `assign-learning-guards.test.js`, `induction-assistant.test.js`, `induction-packs.test.js`, `induction-registry.test.js`, `learning-admin-routes.test.js`, `learning-content.test.js`, `learning-routes.test.js`
-- Integration tests: `induction-assistant.itest.js`, `learning-admin.itest.js`, `learning.itest.js`, `onboarding-induction.itest.js`
-- E2E: `e2e/tests/tutorials.spec.js` — `describe('induction dashboard')`, navigates via `OpalNav.go({tab:'resources', view:'learning'})`, asserts the Owner's learning view is the Assign Learning catalogue, not a learner dashboard.
+  (owner-only AI authoring helper, routed through `backend/ai/ai-gateway.js`
+  — confirmed, no raw SDK import)
+- Content/registry: `backend/learning-content.js` (includes Splose-specific
+  induction content), induction-pack registry
+- Frontend: `frontend/current/induction.js`, `induction-modules.js`,
+  `induction-pack*.js`
+- Unit tests: `tests/assign-learning-guards.test.js`,
+  `tests/induction-assistant.test.js`, `tests/induction-packs.test.js`,
+  `tests/induction-registry.test.js`, `tests/learning-admin-routes.test.js`,
+  `tests/learning-content.test.js`, `tests/learning-routes.test.js`
+- Integration tests: `tests/integration/induction-assistant.itest.js`,
+  `tests/integration/learning-admin.itest.js`,
+  `tests/integration/learning.itest.js`,
+  `tests/integration/onboarding-induction.itest.js`
+- **E2E**: `e2e/tests/tutorials.spec.js` — `induction dashboard` describe
+  block proves (a) the owner's learning view renders "Assign Learning" /
+  "All learning" (not a learner dashboard), and (b) the learner's induction
+  dashboard renders real content with real thumbnails, including the
+  Splose induction group card (`#ind-dash-h-splose`, "Splose at Opal: The
+  Big Picture"). This spec exists but is RELEASE-level only — this audit
+  confirmed it exists and what it asserts; it did not run it.
 
 ## Guard check
 
-Re-confirmed tonight by direct grep, unchanged. `induction-assistant-routes.js:69` — `requireAuth` + `requireRole('owner')`. `learning-routes.js:56` — `requireAuth` router-level, `ownerOnly = requireRole('owner')` applied per-route.
-
-## AI integration — verified again
-
-`backend/ai/ai-policy.js` still registers `induction_assistant` as an Owner-only course-builder scoped to staff names only ("never client data"), calling only `backend/ai/ai-gateway.js` — the single-gateway boundary is respected, unchanged.
+`learning-routes.js`: `router.use('/api/learning', requireAuth)` +
+`ownerOnly = requireRole('owner')` on admin routes.
+`induction-assistant-routes.js`: `router.use('/api/learning/assistant',
+requireAuth, requireRole('owner'))`. No finding.
 
 ## Tests run
 
-- Unit: re-run tonight — 7 suites, 271 tests — **all pass** (identical to prior nights; one intentional `WARN`-level simulated AI-provider-error log line, not a failure)
-- Integration: re-run tonight — 4 files, included in a 10-suite/234-test run alongside the Resource Hub tests — **all pass** (the run's one failure is `resource-library.itest.js`'s unrelated simulated-deadlock scenario — see `clinical-resources/STATUS.md`)
+- Unit: 271/271 passed (7 suites).
+- Integration: 68/68 passed (4 suites), against
+  `therapy_scheduler_audit_test`.
+- AI boundary (touched by the Induction Playground's AI help): confirmed
+  `induction-assistant-routes.js` imports `./ai/ai-gateway` only; the
+  shared `ai-gateway-boundary.test.js` + `ai-single-gateway-guards.test.js`
+  (30/30) pass.
 
-## Open tasks from tracker
+## Recency
 
-- "Induction Playground" — `todo`. Checklist (all unchecked): review existing builder; decide step types (photos, directions, quiz, hold points); decide AI service; decide how AI helps; make the builder feel visual/simple; add the engaging step types; connect the AI service safely; add the AI helper; test the full flow. **Evidence check, unchanged**: `backend/learning-content.js` defines item types `content | resource | acknowledgement | quiz | task` — a full quiz engine exists, but there is no step type literally named "photo", "direction", or "hold point", and `frontend/current/induction.js`/`induction-modules.js` show no drag/reorder/add-step builder interaction code. The AI-connection half of this task is done; the visual-builder half is not.
-- "Portal Inductions" / "Splose Inductions" — `todo`, no detail recorded. No separately locatable code beyond the above; likely the same subsystem viewed from two angles.
+Not touched in the change window (since the 2026-11-13 audit). The
+induction-pack activity below predates the window:
+- `5b7f901` (2026-11-08) place packs automatically; Progress Report tour
+  uses the new template
+- `df677e4` (2026-11-08) fix(walkthroughs): template tour steps open their
+  own screen
+- `d503061` (2026-11-07) sections that unlock in order, whole-tile launch,
+  large walkthrough card
+- `cb08ca8` (2026-11-07) place induction packs without the Import button
+- `c19a488` (2026-11-07) add "Writing a Case Note" induction pack
 
-## Commits in window touching it
+## Classify
 
-None this window. See the 2026-11-12 brief for the prior window's heavy induction-pack activity (calendar booking, cancellation policy, FCA/progress-report/case-note packs).
+`proven`. Code located, guarded, every targeted unit/integration test
+passes, and an existing E2E spec proves the induction dashboard renders for
+both roles, including the Splose-specific content. One caveat: the
+Induction Playground's AI-assisted authoring step specifically has no
+direct browser-level assertion in `tutorials.spec.js` (which tests
+consumption, not the owner's AI-assisted creation flow) — minor, noted
+rather than downgrading the whole feature.
 
-## Why proven overall, with a builder-UI nuance
+## Open tasks (from tracker)
 
-This matches the classification held for five consecutive nights now (same commit `40669e7`, zero changes since 2026-11-11): guarded, heavily tested, and `e2e/tests/tutorials.spec.js` proves the full **learner-facing** flow. The nuance, not a demotion: the tracker's "Induction Playground" also asks for a visual, drag-and-drop **authoring** experience, which this audit again did not find in `induction.js`/`induction-modules.js`. The AI-assistant half of that same ask is built and governed, ahead of the tracker's tone.
+- Induction Playground — todo. "A basic induction builder already exists
+  in the owner's portal... adding engaging step types like photos,
+  directions, quizzes and hold points, and weaving in AI help." The
+  builder and AI help both exist (`induction-assistant-routes.js`); richer
+  step types are the open scope.
+- Portal Inductions — todo. Matches the evidence; E2E proves it renders.
+- Splose Inductions — todo. Matches the evidence; E2E proves the Splose
+  group card renders.
+
+## Commits in the window touching this
+
+None (see Recency for predating induction-pack work).
 
 ## Disagreement
 
-None in the formal sense — unchanged assessment from prior nights (see above nuance).
+Tracker stage `idea`, all three tasks `todo`. Evidence: this is one of the
+most mature features in the tracker — built, guarded, extensively tested,
+and the only feature in this snapshot with real E2E proof. Recommend
+moving this card's stage up and closing Portal Inductions / Splose
+Inductions; Induction Playground's richer step types remain genuine open
+scope.

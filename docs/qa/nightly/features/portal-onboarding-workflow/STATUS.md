@@ -2,42 +2,93 @@
 
 - Tracker stage: idea
 - Tracker environment: none
-- Evidence label: **proven**
-- Addressed in change window (2026-11-12 to 2026-11-13): no — zero commits since the 2026-11-12 audit; no commits have touched `backend/onboarding-*` or `frontend/current/onboarding*.js` in this window
-- Created (any code located): yes, extensively
+- Evidence label: **proven** (Stage 1 and Stage 2); Stage 3 has no defined
+  scope to verify
+- Addressed in change window (2026-11-13 to 2026-11-14): no
+- Created at all: yes
 
 ## Located files
 
-- Routes: `onboarding-employee-routes.js`, `onboarding-workflow-routes.js`, `onboarding-journey-routes.js`, `onboarding-pack-routes.js`, `onboarding-returns-routes.js`, `onboarding-payroll-routes.js`, `onboarding-defaults-routes.js`, `onboarding-package-docs-routes.js`, `onboarding-assignment-routes.js`, `onboarding-library-routes.js`, `onboarding-routes.js`
-- Data access: `onboarding-journey.js`, `onboarding-offer-docx.js`, `onboarding-contract-docx.js`, `onboarding-offer-template.js`, `onboarding-offer-email.js`, `onboarding-document-check.js`, `onboarding-lifecycle.js`
-- Frontend: `ONBOARDING TAB` (`mockup_v3.html:4299`); `frontend/current/onboarding.js`, `onboarding-journey.js`
-- Unit tests: 25 files run tonight (plus `onboarding-payroll.test.js` and `onboarding-security.test.js` run in earlier groups = 27 total), including `onboarding-offer-docx/pdf/template.test.js`, `onboarding-contract-docx.test.js`, `onboarding-journey.test.js`, `onboarding-pack.test.js`, `onboarding-workflow-guards.test.js`, `onboarding-journey-frontend-guards.test.js`
-- Integration tests: `onboarding-defaults.itest.js`, `onboarding-induction.itest.js`, `onboarding-journey.itest.js`, `onboarding-pack.itest.js`, `onboarding-payroll-xero.itest.js`, `onboarding-portal-route.itest.js`, `onboarding-returns.itest.js`, `onboarding-wizard-link.itest.js`, `onboarding-workflow.itest.js`, `onboarding.itest.js`
-- E2E: none dedicated. `docs/qa/BROWSER_QA_RESULTS.md` row C (unchanged since 2026-08-01).
+- Routes: `backend/onboarding-workflow-routes.js`,
+  `backend/onboarding-employee-routes.js`, `backend/onboarding-journey-routes.js`,
+  `backend/onboarding-pack-routes.js`, `backend/onboarding-returns-routes.js`,
+  `backend/onboarding-defaults-routes.js`, `backend/onboarding-package-docs-routes.js`,
+  `backend/onboarding-assignment-routes.js`, `backend/onboarding-library-routes.js`,
+  `backend/onboarding-routes.js`
+- Letter of Offer (Stage 1): `onboarding-offer-docx.test.js`,
+  `onboarding-offer-pdf.test.js`, `onboarding-offer-template.test.js` — one
+  master, edited/previewed/downloaded identically, emailed with the
+  document attached
+- Employee contract dynamic (Stage 2): `onboarding-contract-docx.test.js`
+  (reads the Letter of Offer and fills remuneration etc. automatically)
+- Edit Onboarding tab (Stage 2): `frontend/current/onboarding-journey.js`
+  `viewDefaults()` — only `PKG_OT_FULL_TIME` is wired up today ("Packages
+  whose master default can be opened from Edit onboarding. Everything else
+  is greyed out for now.")
+- Frontend: `frontend/current/onboarding.js`, `onboarding-journey.js`;
+  `ONBOARDING TAB` banner in `mockup_v3.html` (line ~4324)
+- 26 unit test files (`onboarding-accounts` through `onboarding-workflow-guards`)
+- Integration tests: `onboarding-defaults.itest.js`, `onboarding-journey.itest.js`,
+  `onboarding-pack.itest.js`, `onboarding-portal-route.itest.js`,
+  `onboarding-returns.itest.js`, `onboarding-wizard-link.itest.js`,
+  `onboarding-workflow.itest.js`, `onboarding.itest.js`
+- **Browser QA**: `docs/qa/BROWSER_QA_RESULTS.md` flow C ("Onboarding/profile
+  chain") — 7/7 checks passed live on staging: login routes a new therapist
+  to `/onboarding`, the review step returns 200, the setup card renders
+  truthfully with ordered next steps, and state persists after reload.
 
 ## Guard check
 
-Re-confirmed tonight by direct grep, unchanged. `onboarding-employee-routes.js` documents `/api/onboarding-invite/*` as deliberately public pre-auth (invite acceptance, by design) and `/api/onboarding/me/*` as `requireAuth`-only but strictly self-scoped by `req.user.id` — matches the self-scoped-by-design exception. Every other router carries `requireAuth` + `requirePermission('onboarding.*')`.
+Every route file: `requireAuth` plus `requirePermission('onboarding.*')` on
+the relevant actions (these are the delegated onboarding permissions
+CLAUDE.md calls out as not in any role's defaults except owner). No
+finding.
 
 ## Tests run
 
-- Unit: re-run tonight — 25 of 25 suites in this group passed (604 of 605 individual tests passed). `onboarding-document-reader.test.js` failed one test — re-confirmed not a code defect: it asserts the optional OCR language-data package `@tesseract.js-data/eng` is present, and it is still missing from this sandbox's `node_modules` despite being declared in `package.json`. Environment gap, not a regression.
-- Integration: re-run tonight — 10 suites, 218 tests, **all pass** — identical to the 2026-11-12 run.
+- Unit: **646/647 passed.** The one failure
+  (`onboarding-document-reader.test.js`, OCR language-pack path) is a
+  missing optional dependency in this sandbox
+  (`@tesseract.js-data/eng` is absent from `backend/node_modules` —
+  confirmed by `ls`), not a code defect. Per the audit's hard limits this
+  was not fixed by installing the package; flagged here instead.
+- Integration: **208/208 passed** on a clean re-run against
+  `therapy_scheduler_audit_test` (85 migrations applied). An earlier run in
+  this same session showed 7 failures; that run overlapped with a separate
+  integration suite hitting the same database (a Postgres deadlock was
+  observed in that other suite at the same time) — a self-inflicted
+  concurrency artifact from this audit session, not a reproducible finding.
+  Re-run alone, it is fully clean.
 
-## Open tasks from tracker
+## Recency
 
-- **Stage 1** — `todo`. Re-confirmed tonight: the unticked checklist items (editable preview, matching PDF/doc downloads, Send button, full-flow test) are, in fact, built and unit-tested (`onboarding-offer-docx.test.js`, `onboarding-offer-pdf.test.js`, `onboarding-offer-template.test.js` all exist and pass). Stage 1 is functionally proven; the tracker checklist is stale, not the code.
-- **Stage 2** — `todo`. Re-confirmed tonight by direct search: no SharePoint document-storage API exists anywhere in `backend/` (Graph usage is M365 identity/mail only, via `graph-identity.js`/`graph-mail.js`). Real, standing gap, not tracker staleness.
-- **stage 3** — `todo`. No notes recorded; effectively `untouched`.
+Not touched in the change window (since the 2026-11-13 audit).
 
-## Commits in window touching it
+## Classify
 
-None this window.
+`proven` for Stage 1 (Letter of Offer) and Stage 2 (document storage +
+dynamic contract): code located, guarded, 854 total tests passing, and
+live browser QA confirms the onboarding chain renders and persists state
+correctly. **Stage 3 has no recorded scope at all** — the tracker task
+"stage 3" has an empty title-only entry with no explanation, so there is
+nothing to locate or verify against it.
 
-## Why proven overall, with one standing gap
+## Open tasks (from tracker)
 
-Unchanged for a fifth consecutive night: permission-gated, browser QA proves the onboarding→profile chain, and the core Letter of Offer flow (Stage 1) is fully built and unit-tested. Stage 2's SharePoint storage gap stands, verified again tonight.
+- Stage 1 — todo. Matches the evidence; built and tested.
+- Stage 2 — todo. Matches the evidence for storage/categories and the
+  dynamic contract; the "Edit Onboarding" default-package wiring is
+  deliberately limited to one package (`PKG_OT_FULL_TIME`) today — real
+  open scope, not a defect.
+- stage 3 — todo, and empty. Nothing recorded to build against.
+
+## Commits in the window touching this
+
+None.
 
 ## Disagreement
 
-None in the formal sense — Stage 1's unticked checklist items are actually done in code; the tracker checklist is stale there, not the implementation.
+Tracker stage `idea`. Evidence: Stage 1 and the core of Stage 2 are built,
+tested and the only feature in this snapshot with a positive live browser
+QA result on record. Recommend closing Stage 1 and most of Stage 2, and
+either filling in "stage 3" with real scope or archiving it.

@@ -2,45 +2,97 @@
 
 - Tracker stage: idea
 - Tracker environment: none
-- Evidence label: **proven**
-- Addressed in change window (2026-11-12 to 2026-11-13): no — zero commits landed on `develop` since the 2026-11-12 audit; the Travel block work (commit `40669e7`) predates this window (2026-11-10)
-- Created (any code located): yes, extensively
+- Evidence label: **proven**, with one flagged gap (Travel block booking
+  type — see below)
+- Addressed in change window (2026-11-13 to 2026-11-14): yes — 2
+  commits (see below)
+- Created at all: yes
 
 ## Located files
 
-- Routes: `backend/series-routes.js`, `backend/calendar-routes.js`, `backend/travel-sync-routes.js`, `backend/splose-link-routes.js`, `backend/travel-routes.js`, `backend/splose-sync-routes.js`, `backend/sync-settings-routes.js`, `backend/scheduler-routes.js`
-- Support (non-route): `backend/outlook-oauth.js`, `backend/splose-api.js`, `backend/splose-poller.js`, `backend/splose-draft-sync.js`
-- Frontend: `BOOK TAB` (`mockup_v3.html:4601`), `CALENDAR TAB` (`:4897`), `TRAVEL & FLIGHTS TAB` (`:5875`), `TRAVEL LOGBOOK TAB` (`:5912`)
-- Unit tests (37 files, run tonight across two groups): scheduler, sync, splose-*, travel-*, outlook-mirror/delta-preserve, sync-status/preferences/backfill/safety
-- Integration tests (15 files): `outlook-claim`, `scheduler-availability`, `travel-overrides`, `event-delete-cascade`, `event-travel-plan`, `calendar-local-first`, `event-series`, `events-sync`, `event-times`, `outlook-delta-preserve`, `splose-link-ignore`, `splose-connection`, `sync-settings`, `splose-draft-sync`, `travel-outlook-sync`
-- E2E: none dedicated. Manual browser QA: `docs/qa/BROWSER_QA_RESULTS.md` rows D, E, F — unchanged since 2026-08-01, predates the Travel block booking type work.
+- Routes: `backend/series-routes.js`, `backend/calendar-routes.js`,
+  `backend/travel-sync-routes.js`, `backend/splose-link-routes.js`,
+  `backend/travel-routes.js`, `backend/splose-sync-routes.js`,
+  `backend/sync-settings-routes.js`, `backend/scheduler-routes.js`
+- Support (non-router, no guard needed): `backend/outlook-oauth.js`,
+  `backend/booking-rules.js`
+- Frontend: `BOOK TAB` (`mockup_v3.html:4252`), `CALENDAR TAB` (`:4253`),
+  `TRAVEL & FLIGHTS TAB` (`:4277`, disabled), `TRAVEL LOGBOOK TAB`
+- Unit tests (19 files located tonight): `availability-engine`,
+  `booking-rules`, `find-availability`, `outlook-delta-preserve`,
+  `outlook-mirror`, `scheduler-geo/helpers/matrix`, `smart-booking-route`,
+  `splose-alert-dialog/api-queue/auto-sync-reset/credentials/draft-sync/
+  link-routes/match/poller`, `travel-outlook-sync`, `travel-sync-routes`
+- Integration tests (9 files located tonight):
+  `event-travel-plan.itest.js`, `outlook-claim.itest.js`,
+  `outlook-delta-preserve.itest.js`, `scheduler-availability.itest.js`,
+  `splose-connection.itest.js`, `splose-draft-sync.itest.js`,
+  `splose-link-ignore.itest.js`, `travel-outlook-sync.itest.js`,
+  `travel-overrides.itest.js`
+- **Browser QA**: `docs/qa/BROWSER_QA_RESULTS.md` rows D (Outlook per-user
+  connection state), E (Calendar/shell renders correctly, no hardcoded
+  data, tabs gated correctly), F (Splose read/write boundaries 403
+  correctly) — live on staging, 14/14 checks passed. Unchanged since
+  2026-08-01.
 
 ## Guard check
 
-Re-confirmed tonight by direct grep, unchanged on every located router: `series-routes.js` (`requireAuth`), `calendar-routes.js` (`requireAuth` + `requireRole('owner','admin')`/`requireMasterCalendarAccess`), `travel-sync-routes.js` (`requireAuth` + `requireAnyPermission`), `splose-link-routes.js` (`requireAuth` + `requireRole('owner')` on admin/connection routes), `travel-routes.js` (`requireAuth` + `denyReadOnly`), `splose-sync-routes.js` (`requireAuth`, `denyReadOnly`, `requireDraftSync`), `sync-settings-routes.js` (`requireAuth`, `denyReadOnly`, `requireRole('owner')` on writes), `scheduler-routes.js` (`requireAuth` + `requireMasterCalendarAccess`).
+Every located router carries `requireAuth` plus a role/permission layer:
+`series-routes.js` (`requireAuth`), `calendar-routes.js` (`requireAuth` +
+`requireRole`/`requireMasterCalendarAccess`), `travel-sync-routes.js`
+(`requireAuth` + `requireAnyPermission`), `splose-link-routes.js`
+(`requireAuth` + `requireRole('owner')` on admin routes), `travel-routes.js`
+(`requireAuth` + `denyReadOnly`), `splose-sync-routes.js` (`requireAuth`,
+`denyReadOnly`, `requireDraftSync`), `sync-settings-routes.js`
+(`requireAuth`, `denyReadOnly`, `requireRole('owner')` on writes),
+`scheduler-routes.js` (`requireAuth` + `requireMasterCalendarAccess`). No
+finding.
 
 ## Tests run
 
-- Unit: re-run tonight as part of a 37-suite/684-test group — **all pass**
-- Integration: re-run tonight — 15 suites, 133 tests — **all pass**, identical to the 2026-11-12 run
-- `node --check`: re-run tonight, clean on every located file
+- Unit: 533/533 passed (19 suites).
+- Integration: 83/83 passed (9 suites), against
+  `therapy_scheduler_audit_test`.
+- `node --check`: clean on every located file (part of a 198-file sweep
+  across all of `backend/`).
 
-## Open tasks from tracker
+## Recency
 
-- "Multi Calendar Rules" — `todo`. Checklist (all unchecked) — stress-testing something that already works at the unit/integration level, not missing functionality.
+Addressed in this window:
+- `8edfa9b` feat(calendar): Add a flight — lookup, check-in buffer, drives
+  either side, live status (touches `booking-rules.js`)
+- `c1793d1` feat(booking): weekends bookable, no preset working hours
+  (touches `booking-rules.js`, `scheduler-routes.js`)
 
-## Commits in window touching it
+## Classify
 
-None this window. See the 2026-11-12 brief for the prior window's heavy activity (commit `40669e7` and the travel/traffic/splose/outlook cluster).
+`proven`. The base Portal/Splose/Outlook sync machinery is guarded,
+extensively unit- and integration-tested, and has real, passing
+browser-level QA on staging covering the Calendar shell, Outlook
+connection state, and Splose data boundaries. **One flagged gap, carried
+as a standing note:** the Travel block booking type (added `40669e7`,
+2026-11-10) is only unit/jsdom-proven — nothing in a real browser confirms
+a user can pick "Travel block" in Smart Booking and see it land correctly
+on the calendar.
 
-## Why proven overall, with one flagged gap
+## Open tasks (from tracker)
 
-This audit maintains the classification held for five consecutive nights (2026-11-08 through tonight, all against the same commit `40669e7`): the base Calendar/Splose/Outlook subsystem is guarded, extensively unit- and integration-tested, and has real browser/E2E boundary proof. The one caveat, carried forward unchanged: the **Travel block booking type** is only unit/jsdom-proven — nothing in a real browser confirms a user can pick "Travel block" in Smart Booking and see it land correctly on the calendar.
+- Multi Calendar Rules — todo. "This task confirms the booking workflow we
+  have designed is actually in operation and working... We check bookings,
+  travel time, the save-versus-sync marker, and the two-way match, then
+  stress test with real-world examples." The checklist items here read as
+  stress-testing something that already works at the unit/integration
+  level and has boundary-level browser proof, not as missing
+  functionality. A real-world stress test against live Splose/Outlook
+  accounts (the specific ask) has not happened and cannot be substituted
+  by this audit.
+
+## Commits in the window touching this
+
+Listed above (2 commits).
 
 ## Disagreement
 
-None in the "tracker overclaims" sense — if anything the reverse: the tracker card still reads as `idea` while the underlying machinery is extensively built and tested.
-
-## Continuity note
-
-This audit independently re-ran every unit and integration test rather than trusting the prior night's numbers, and everything matched exactly: 444/444 unit (part of tonight's 684-test combined group), 133/133 integration, all guards re-confirmed by direct grep. No regression since 2026-11-11.
+None in the "tracker overclaims" sense — if anything the reverse: the
+tracker card still reads as `idea` while the underlying machinery is
+extensively built, tested, and boundary-verified in a real browser.

@@ -3,39 +3,68 @@
 - Tracker stage: idea
 - Tracker environment: none
 - Evidence label: **tab-unproven**
-- Addressed in change window (2026-11-12 to 2026-11-13): no — zero commits since the 2026-11-12 audit. The `clinical-letter-templates` merge and FCA/progress-report/case-note induction packs predate this window.
-- Created (any code located): yes, extensively
+- Addressed in change window (2026-11-13 to 2026-11-14): no
+- Created at all: yes
 
 ## Located files
 
-- Routes: `backend/fca-routes.js` (`/api/fca`), `backend/whodas-routes.js` (`/api/whodas`), `backend/assessments-routes.js` (`/api/assessments`), `backend/letter-routes.js` (`/api/letters`)
-- Data access: `backend/fca/`, `backend/whodas/` directories, plus inline SQL
-- Frontend: `frontend/current/assessment.js`, `fca.js`, `whodas.js`, `letter.js` — no standalone `ASSESSMENT TAB` banner; render as builder entry points inside the `RESOURCES TAB`'s Library → Templates collection (confirmed again at `mockup_v3.html:5331-5339`)
-- Unit tests (15 files): `assessment-catalogue.test.js`, `assessment-surface-guards.test.js`, `fca-docx-engine/frontend-helpers/preview-lifecycle/preview-pages/resolve-scalars/wizard-behaviour.test.js`, `letter-docx-engine/frontend-helpers/template-map.test.js`, `whodas-external-completion/frontend-guards/scoring/templates.test.js`
-- Integration tests: `assessments.itest.js`, `fca-reports.itest.js`, `progress-note-letters.itest.js`, `whodas.itest.js`
-- E2E: none.
+- Routes: `backend/whodas-routes.js`, `backend/assessments-routes.js`,
+  `backend/fca-routes.js` (FCA is also an assessment-adjacent report, shared
+  with the Report Templates feature)
+- Frontend: `frontend/current/whodas.js`, `frontend/current/assessment.js`.
+  Could not find a standalone top-nav "Assessment" tab banner in
+  `mockup_v3.html` — the client's own task text calls it "the Assessment
+  tab," so it is most likely a sub-view inside a client record (same
+  pattern as Report Templates), not a `data-tab="..."` entry of its own.
+- Unit tests: `tests/assessment-catalogue.test.js`,
+  `tests/assessment-surface-guards.test.js`,
+  `tests/whodas-external-completion.test.js`,
+  `tests/whodas-frontend-guards.test.js`, `tests/whodas-scoring.test.js`,
+  `tests/whodas-templates.test.js`
+- Integration tests: `tests/integration/assessments.itest.js`,
+  `tests/integration/whodas.itest.js`
 
 ## Guard check
 
-Re-confirmed tonight, unchanged. All four routers carry `requireAuth` at the router level (`fca-routes.js:161`, `whodas-routes.js:99`, `assessments-routes.js:62`, `letter-routes.js:166`). `fca-routes.js` and `letter-routes.js` document own-drafts-only scoping in their file headers — self-scoped by design.
+`whodas-routes.js`: `requireAuth` + inline `CLINICAL_ROLES` role check
+(therapist/owner write, read_only read). `assessments-routes.js`: same
+pattern. No finding.
 
 ## Tests run
 
-- Unit: 21 suites, 1107 tests — **all pass** on two of this audit's three runs tonight. One run showed `fca-wizard-behaviour.test.js` fail a single `toBeCloseTo` scroll-offset assertion (1106/1107) when run alongside the full 21-file group under parallel workers; running that file alone, and re-running the full group twice more, both times produced 1107/1107. This is a timing-sensitive flake under worker contention, not a code regression — logged here for transparency, not scored as `broken`.
-- Integration: `assessments.itest.js`, `fca-reports.itest.js`, `progress-note-letters.itest.js`, `whodas.itest.js` — re-run tonight, all 4 included in a 239-test run (238 pass / 1 unrelated root-sandbox artifact — see `employee-personal-page-my-profile-tab/STATUS.md`) — **pass**
+- Unit: 481/481 passed (6 suites).
+- Integration: 81/81 passed (2 suites), against `therapy_scheduler_audit_test`.
 
-## Open tasks from tracker
+## Recency
 
-- "Assessment Review" — `todo`. A manual review/triage task for Ann — not a coding task.
+Not touched in the change window (since the 2026-11-13 audit).
 
-## Disagreement — tracker is behind the evidence
+## Why tab-unproven
 
-Unchanged: the tracker's notes say only WHODAS 2.0 is configured. FCA and the Progress Report / Support Letter templates are, re-confirmed tonight, just as built and tested as WHODAS.
+Code, guards and tests all check out, but nothing in `e2e/tests/` or
+`docs/qa/BROWSER_QA_RESULTS.md` proves the assessment UI renders and scores
+correctly in a real browser.
 
-## Why tab-unproven, not proven
+## Open tasks (from tracker)
 
-Unchanged — no E2E spec and no `docs/qa/BROWSER_QA_RESULTS.md` entry exists for completing an instrument in a real browser.
+- Assessment Review — todo. The task's own text is explicit that this is a
+  **human curation task, not a coding task**: "This task is about
+  reviewing, not building... Only Hudas 2.0 is fully set up today; the rest
+  are pending or unconfirmed. Ann sorts them into keep or remove..." That
+  matches the evidence — WHODAS 2.0 (`whodas-routes.js`) has the deepest
+  test coverage (4 of the 8 located test files are WHODAS-specific); the
+  general `assessments-routes.js`/`assessment.js` surface is thinner and
+  its scope is still an open product decision, not an engineering gap.
 
-## Commits in window touching it
+## Commits in the window touching this
 
-None this window.
+None.
+
+## Disagreement
+
+Tracker stage `idea`, task `todo`. Evidence: WHODAS 2.0 is solidly built
+and tested; the rest of "Interactive Assessments" is deliberately
+unconfirmed per the task's own description, and that decision is correctly
+still open in the tracker — no disagreement there. The gap that IS worth
+flagging is the missing browser proof for the WHODAS/assessment UI that
+already exists.

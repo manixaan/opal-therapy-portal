@@ -1,39 +1,54 @@
 /opal-critical
 
-## Idea
-Xero Integration Works
+**Idea:** Xero Integration Works
 
-## Why
-(not yet written in the tracker)
+**Why:** (not yet written in the tracker)
 
-## Who uses it
-(not yet written in the tracker)
+**Who uses it:** (not yet written in the tracker)
 
-## What they see
-(not yet written in the tracker)
+**What they see:** (not yet written in the tracker)
 
-## What should happen
-(not yet written in the tracker)
+**What should happen:** (not yet written in the tracker)
 
-## Outcome
-(not yet written in the tracker)
+**Outcome:** (not yet written in the tracker)
 
-## Decisions
-(none recorded)
+No decisions recorded yet.
 
-### Task notes — "Financial Dashboard" (verbatim from tracker)
-"Want to create a finance dashboard on the owner portal that has all the expenses, income, revenue, oustanding invoices, late invoices, accumulated tax and any other USEFUL metrics. Combination of xero API and internal invoicing that will form this dashboard. This will only be accessible on the owner portal"
+**Task — Financial Dashboard:** We will add a new Finance page inside the
+owner portal only. It will pull live figures from Xero and combine them with
+your own invoicing data already in Opal. We show the figures as clear cards
+and lists: income, expenses, revenue, outstanding and late invoices, tax
+owed, and a few more. First we confirm the Xero connection works, then we
+gather the numbers, then we display them.
 
-### Task notes — "Payroll Automation" (verbatim from tracker)
-"From stage 2 - we should have all the necessary info to trigger the payroll automation which includes gathering the data from the documents, collating it in the format that the xero API requires and then transferring it to XERO via API. Need to intergate the company secure connection to the portal so that XERO can work. Be worth understanding the requirements and what can be automated and what needs to be manually done. FInd the API handbook or dictionary from xero and then upload that to claude and ask the limiations and features we could have"
+**Task — Payroll Automation:** We will let Opal Portal send payroll
+information straight into Xero, so Anthony stops typing it in by hand. First
+we learn exactly what Xero allows and needs, using Xero's own official
+connection guide. Then we set up a secure link between the portal and the
+company's Xero account. Finally we take the...(truncated in the tracker).
 
 ## Where it lives today
-`backend/finance-routes.js` + `xero-api.js`/`xero-sync.js` (Financial Dashboard); `backend/onboarding-payroll-routes.js` + `xero-payroll-*.js` (Payroll Automation). Both are owner-only guarded and pass their tests against mocked Xero responses.
+
+`backend/finance-routes.js`, `backend/accounting-routes.js`,
+`backend/onboarding-payroll-routes.js`, the `xero-*.js` family, and
+`frontend/current/finance.js` / `invoicing.js`. All guarded correctly. 81
+unit tests and 63 integration tests pass against mocked/offline Xero.
 
 ## Start here
-This is marked `/opal-critical` — it's accounting/Xero, CRITICAL level per CLAUDE.md §6. Do not connect a real Xero account without the team's sign-off first (CLAUDE.md §7 also forbids any deploy/staging action from a normal task). The concrete next step the tracker itself asks for: connect a Xero sandbox (not production) account, confirm the Finance tab's dashboard populates with real figures, and add an integration test for that specific payload shape, following the existing mocked-response pattern in `finance-routes.itest.js`.
+
+This is CRITICAL level (Xero/accounting). The code and tests already prove
+the mechanics work; what is missing is a real Xero sandbox connection and a
+browser check of the Finance tab's numbers. Start by connecting a Xero
+developer sandbox (`xero-payroll-connection.js` has the OAuth flow already),
+then sign in as an owner and open the Finance tab to confirm the dashboard
+populates with real figures, not mocks. Follow the pattern in
+`tests/integration/finance-routes.itest.js` for what "populated correctly"
+means in code.
 
 ## Done means
-An integration test that exercises a real (sandbox) Xero response shape end to end, plus a browser check that the owner's Finance tab renders real income/expense/invoice figures — recorded in `docs/qa/BROWSER_QA_RESULTS.md`. That moves this from `tab-unproven` to `proven`.
+
+An owner session against a connected Xero sandbox shows real income,
+expenses, outstanding/late invoices and tax figures on the Finance tab, with
+a browser check or new E2E spec recorded for it. Target label: `proven`.
 
 Tracker: 3d5da727-ee76-4195-8954-2a6486844d77

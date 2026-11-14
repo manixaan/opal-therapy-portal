@@ -1,35 +1,44 @@
 /opal-feature
 
-## Idea
-Report Templates
+**Idea:** Report Templates
 
-## Why
-(not yet written in the tracker)
+**Why:** (not yet written in the tracker)
 
-## Who uses it
-(not yet written in the tracker)
+**Who uses it:** (not yet written in the tracker)
 
-## What they see
-(not yet written in the tracker)
+**What they see:** (not yet written in the tracker)
 
-## What should happen
-(not yet written in the tracker)
+**What should happen:** (not yet written in the tracker)
 
-## Outcome
-(not yet written in the tracker)
+**Outcome:** (not yet written in the tracker)
 
-## Decisions
-(none recorded)
+No decisions recorded yet.
 
-(No idea/why/who/what-they-see/outcome text or decisions are recorded on the parent card or on any of its three sub-tasks — "FCA", "Progress Letter", "Client Agreement Form" — beyond their bare titles.)
+**Tasks:** FCA, Progress Letter, Client Agreement Form — no task-level
+explanation recorded in the tracker for any of the three.
 
 ## Where it lives today
-`backend/fca-routes.js` (FCA), `backend/letter-routes.js` (Progress Letter), `backend/templates-routes.js` + `backend/templates/service-agreement-map.js` (Client Agreement Form — folded into the generic templates system, not a standalone route file). All three are built, guarded and heavily tested.
+
+`backend/fca-routes.js`, `backend/letter-routes.js`,
+`backend/templates-routes.js`, `backend/templates/catalogue.js` (maps all
+three document kinds to their masters), `frontend/current/fca.js` /
+`letter.js` / `templates.js`. 626 unit + 123 integration tests pass.
 
 ## Start here
-Add a Playwright spec that opens the Resource Hub's Library → Templates collection, generates one document per sub-task (an FCA report, a Progress Letter, and a Client Agreement Form), and asserts each download/preview renders — then record it in `docs/qa/BROWSER_QA_RESULTS.md`. This is the single gap across all three sub-tasks; the backend for each is already solid.
+
+The engine is built and tested; nobody has proven it in a browser. Sign in
+as a therapist, open a client's record, and run all three flows by hand:
+complete an FCA, complete a Progress Letter, complete a Service Agreement —
+each through to a downloaded `.docx`/`.pdf`. Follow the pattern in
+`tests/integration/templates.itest.js` for what each flow's API calls look
+like, then write one Playwright spec per flow (or one that covers all
+three) under `e2e/tests/`, following `e2e/tests/tutorials.spec.js` as the
+house style.
 
 ## Done means
-The Playwright spec above passes for all three document types and is recorded in `docs/qa/BROWSER_QA_RESULTS.md`. That moves this from `tab-unproven` to `proven`.
+
+A new E2E spec (or a recorded `docs/qa/BROWSER_QA_RESULTS.md` entry) proves
+each of the three document types renders and exports correctly in a real
+browser. Target label: `proven`.
 
 Tracker: 91ae30e7-9cda-4198-956f-8b9cdf043003

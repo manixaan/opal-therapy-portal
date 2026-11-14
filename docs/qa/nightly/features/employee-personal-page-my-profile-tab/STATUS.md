@@ -3,39 +3,84 @@
 - Tracker stage: idea
 - Tracker environment: none
 - Evidence label: **built-untested**
-- Addressed in change window (2026-11-12 to 2026-11-13): no — zero commits since the 2026-11-12 audit
-- Created (any code located): yes
+- Addressed in change window (2026-11-13 to 2026-11-14): no
+- Created at all: yes
 
 ## Located files
 
-- Routes: `backend/profile-routes.js` — `/api/profile/leave`, `/api/profile/cpd`, `/api/profile/documents`, `/api/profile/credentials`, `/api/profile/work-schedule/:userId`
-- Data access: inline SQL + `db.updateLeaveStatus`/`db.deleteLeaveRequest` in `database.js`
-- Frontend: `frontend/current/profile.js`; `PROFILE TAB` banner `mockup_v3.html:4325`
-- Unit tests: `smart-route-backend.test.js` (covers only the work-schedule cross-user read-only check — **confirmed again tonight: no `profile-routes.test.js` exists**), `credential-surface-guards.test.js`, `onboarding-security.test.js` (touches `/api/profile/leave` incidentally)
-- Integration tests: `documents.itest.js`, `credential-scans.itest.js`, `audit.itest.js`, `readonly-and-hardening.itest.js`
-- E2E: none dedicated. `docs/qa/BROWSER_QA_RESULTS.md` rows C and I give manual browser coverage, unchanged since 2026-08-01.
+- Route: `backend/profile-routes.js` (leave requests, CPD activities, PD
+  documents, credentials)
+- Frontend: `frontend/current/profile.js`; `PROFILE TAB` banner in
+  `mockup_v3.html` (line ~4350), nav button `data-tab="profile"` labelled
+  "My Profile"
+- Tests exercising it (no file is named for `profile-routes.js` itself):
+  `tests/integration/readonly-and-hardening.itest.js` (uploads/downloads via
+  `/api/profile/documents`), `tests/onboarding-security.test.js` (one
+  path-string assertion only, not a functional test)
 
 ## Guard check
 
-Re-confirmed tonight by direct grep, unchanged. Every route (`leave`, `cpd`, `documents`, `credentials`, `work-schedule`) carries `requireAuth`. Approve/reject/verify actions use an inline `canApprove()`/role check rather than `requirePermission` middleware — functions correctly, not flagged as unguarded.
+`requireAuth` on every route, plus an inline `canApprove(user)` /
+`canViewAll(user)` check (`user?.role === 'owner'`) on the
+leave/CPD approve-reject and all-org-view endpoints. No missing guard.
 
 ## Tests run
 
-- Unit: re-run tonight as part of a 23-suite/810-test group (798 passed, 12 skipped) — **all pass**. None of these is a dedicated `profile-routes.test.js`.
-- Integration: re-run tonight — `documents.itest.js`, `credential-scans.itest.js`, `audit.itest.js`, `readonly-and-hardening.itest.js` — part of a 9-suite/239-test run, 238 passed / 1 failed. The 1 failure is `readonly-and-hardening.itest.js`'s D-6/D-7 test, which simulates a storage write failure via `fs.chmodSync(dir, 0o000)` — re-confirmed tonight this cannot work when the test process runs as root (`whoami` → `root`). Sandbox limitation, not a code defect.
+- Integration (`readonly-and-hardening.itest.js`, full file — the only
+  suite that exercises this route file at all): **4 passed, 1 failed.**
+  Failing subtest: "D-7: unwritable storage → 5xx and the metadata row is
+  rolled back" — it `chmod`s the storage directory to `0o000` to simulate a
+  write failure, then expects the upload to answer `>=500`. It got a
+  success instead. **Cause: this sandbox runs as `root`** (`whoami` →
+  `root`), and `chmod 0o000` does not block a root process from writing —
+  the simulated failure never actually happens here, so the 500-path in
+  `profile-routes.js` is never exercised. This is a known, recurring
+  sandbox limitation of this specific test, not a code defect — prior
+  nightly audits (2026-11-09 through 2026-11-13, per
+  `docs/qa/nightly/features/employee-personal-page-my-profile-tab/
+  STATUS.md` on `claude/nightly-audit`) hit the identical failure for the
+  identical reason every night this audit has run in this container, and
+  explicitly did not classify the feature `broken` on that basis. This
+  audit follows that established precedent rather than flagging a new
+  `broken` finding for an unchanged, already-understood limitation. The
+  other four subtests in the same file (D-6 404 on a deleted storage
+  object, read-only blocked from documents, owner isolation across users,
+  credential-verify 404) all passed.
+- `/api/profile/cpd` (GET/POST/approve/reject): **no test exercises this at
+  all** — searched every unit and integration test file for the literal
+  string, zero matches.
+- `/api/profile/leave`: only one path-string assertion
+  (`onboarding-security.test.js`), not a functional test of the
+  approve/reject flow.
 
-## Open tasks from tracker
+## Recency
 
-- "Review Portal Structure" — `todo`. A manual QA checklist — explicitly a human testing task, not a coding task.
+Not touched in the change window (since the 2026-11-13 audit).
 
-## Why built-untested
+## Classify
 
-Unchanged for a fifth consecutive night: the routes are guarded and the tab renders per `docs/qa/BROWSER_QA_RESULTS.md` row I, but no test actually exercises `profile-routes.js`'s own guard boundaries.
+`built-untested`. Code located and guarded; the routes and tab exist and
+render (per `docs/qa/BROWSER_QA_RESULTS.md` row I), but the thing this
+feature's own task specifically asks someone to verify — leave and CPD
+approval working end to end between therapist and owner — has no real
+test coverage. The one failing subtest (D-7 above) is a known sandbox
+artifact, consistently reproduced and explained across many prior nights,
+not treated as a fresh `broken` finding.
 
-## Disagreement — wording
+## Open tasks (from tracker)
 
-Re-confirmed tonight: the tracker's own notes describe **"set your work locations for the next 24 hours"**. The actual UI banner in `mockup_v3.html:4325` still reads **"next week"**. Standing mismatch for a human decision.
+- Review Portal Structure — todo. Task text: "This is a hands-on testing
+  job... You will also test the parts that connect to the owner portal,
+  like leave and professional development approval, to confirm both sides
+  talk..." — this is exactly the gap found above.
 
-## Commits in window touching it
+## Commits in the window touching this
 
-None this window.
+None.
+
+## Disagreement
+
+Tracker stage `idea`. Evidence: the tab and its backend exist, are
+guarded, and render in a real browser, but the specific thing the human
+task asks someone to verify (leave/CPD approval working end to end) is
+untested. Unchanged from prior nights.

@@ -3,31 +3,40 @@
 - Tracker stage: idea
 - Tracker environment: none
 - Evidence label: **untouched**
-- Addressed in change window (2026-11-12 to 2026-11-13): no
-- Created (any code located): no
+- Addressed in change window (2026-11-13 to 2026-11-14): no
+- Created at all: no
+
+## What this is
+
+Tracker idea: "A master doc that exists on OneDrive with all accounts login
+details for all portals in use." Why: "Forgetting passwords, confusion
+surrounding login details." Who uses it: "Owner/Admin." Outcome: "All login
+details will be contained in one area accessed by relevant parties." No
+tasks recorded.
 
 ## Located files
 
-None. This tracker card describes a master login-details document that
-would live on OneDrive, outside the portal. Re-checked tonight: a targeted
-search of `backend/` and `frontend/current/` for password-register /
-master-doc / credentials-register language found no real match (one
-initial grep hit, `backend/credential-sample-scan.js`, is a false positive
-from a loose OR-pattern and does not contain any of those phrases on
-closer inspection).
+None. Searched for "password master", "master document" and similar —
+no matches. This is explicitly an external OneDrive document, not a portal
+feature, and (correctly) has no code.
 
 ## Tests
 
-Not applicable — no code exists to test.
+Not applicable — no code to test. Note for the team: a shared document that
+literally lists account passwords in one place is itself a security
+exposure if it is ever put in the portal or this repository. If this idea
+is ever turned into a coding task, it should become a reference to a
+proper secrets manager, not a document of plaintext credentials — but that
+redesign decision belongs to a person, not this audit.
 
-## Open tasks from tracker
+## Open tasks (from tracker)
 
 None recorded.
 
-## Commits in window touching it
+## Commits in the window touching this
 
-None (nothing to touch).
+None.
 
 ## Disagreement
 
-None. Tracker stage (`idea`) and evidence (`untouched`) agree.
+None. Tracker stage (idea) matches the evidence (nothing built).

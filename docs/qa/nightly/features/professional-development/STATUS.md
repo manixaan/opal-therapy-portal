@@ -3,37 +3,67 @@
 - Tracker stage: idea
 - Tracker environment: none
 - Evidence label: **tab-unproven**
-- Addressed in change window (2026-11-12 to 2026-11-13): no — zero commits since the 2026-11-12 audit
-- Created (any code located): yes, but the card is ambiguous about which of two subsystems it means
+- Addressed in change window (2026-11-13 to 2026-11-14): no
+- Created at all: yes, but the card is ambiguous about which of two real
+  subsystems it means
 
 ## Located files
 
-Two candidate subsystems, both real and both tested, unchanged:
+Two candidate subsystems, both real and both built:
 
-1. **Admin PD-events catalogue + org CPD tracking** — `backend/resource-hub-r2-routes.js` (`/api/rh2/pd`, `/api/rh2/cpd`), UI in `frontend/current/resourcehub.js`.
-2. **Employee's own CPD/credentials/documents** (part of "Employee Personal Page") — `backend/profile-routes.js` (`/api/profile/cpd`, `/api/profile/documents`, `/api/profile/credentials`), UI in `frontend/current/profile.js`.
-
-- Unit tests: `pd-catalogue-guards.test.js`, `credential-surface-guards.test.js`
-- Integration tests: `resource-hub-r2.itest.js`, `documents.itest.js`, `credential-scans.itest.js`
-- E2E: none for either interpretation.
+1. **Admin PD-events catalogue + org CPD tracking** —
+   `backend/resource-hub-r2-routes.js` (`/api/rh2/pd`, `/api/rh2/pd/catalogue`,
+   `/api/rh2/cpd` and their `:id` variants), UI in
+   `frontend/current/resourcehub.js`. Unit test:
+   `tests/pd-catalogue-guards.test.js` (46 tests). Integration:
+   `tests/integration/resource-hub-r2.itest.js`.
+2. **Employee's own CPD/documents** (also the subject of the "Employee
+   Personal Page" feature) — `backend/profile-routes.js`
+   (`GET/POST /api/profile/cpd`, approve/reject, plus the
+   professional-development side of `/api/profile/documents`), UI in
+   `frontend/current/profile.js`. No test exercises `/api/profile/cpd` at
+   all (confirmed — zero matches for the literal string across every test
+   file).
 
 ## Guard check
 
-Re-confirmed tonight, unchanged. `resource-hub-r2-routes.js:254` — `requireAuth` + a `hubEnabled()` gate; writes use an inline `canAuthor(req.user)` check (owner/admin only). `profile-routes.js:24` — `requireAuth` on every route; approve-type actions use inline `canApprove()`.
+`resource-hub-r2-routes.js`: `router.use('/api/rh2', requireAuth, ...)`
+plus inline `canAuthor`/role checks on writes. `profile-routes.js`:
+`requireAuth` + inline `canApprove(user)` (`role === 'owner'`) on
+approve/reject. No missing guard on either reading.
 
 ## Tests run
 
-- Unit: re-run tonight as part of the 23-suite/810-test group — **all pass**
-- Integration: re-run tonight — `resource-hub-r2.itest.js` (part of the 234-test Resource Hub/Learning run — pass), `documents.itest.js` + `credential-scans.itest.js` (part of tonight's 239-test run, 238 passed / 1 failed — the one failure is `readonly-and-hardening.itest.js`'s root-bypasses-chmod artifact, unrelated to PD/CPD specifically)
+- Subsystem 1 (rh2 PD/CPD catalogue): `tests/pd-catalogue-guards.test.js`
+  — 46/46 passed. `tests/integration/resource-hub-r2.itest.js` — passed
+  as part of the Clinical resources run tonight (168/168).
+- Subsystem 2 (`/api/profile/cpd`): zero tests found, either direction.
 
-## Open tasks from tracker
+## Recency
 
-None recorded — the card has no `tasks`. Its own `next_action` still reads: "Clarify in the tracker which subsystem this card means, or merge it with 'Employee Personal Page' if it means the CPD section."
+Not touched in the change window (since the 2026-11-13 audit).
 
-## Commits in window touching it
+## Classify
 
-None this window.
+`tab-unproven`. Under the first reading (the admin PD catalogue), code is
+built, guarded and unit-tested — but no browser/E2E proof exists either
+way. Under the second reading (`/api/profile/cpd`), there is zero test
+coverage at all. Either way, nothing proves the relevant page renders
+correctly for a user.
+
+## Open tasks (from tracker)
+
+None recorded — the card has no tasks.
+
+## Commits in the window touching this
+
+None.
 
 ## Disagreement
 
-None in the formal sense — unchanged for a fifth consecutive night. The scope ambiguity between the two real subsystems remains a standing note for the team; under either reading, no browser proof exists that the relevant page renders.
+The ambiguity itself is worth raising with the team: this card could mean
+either the admin-side PD-events catalogue (built, unit-tested, no browser
+proof) or the employee's own CPD section of My Profile (built, zero test
+coverage). Recommend clarifying in the tracker, or splitting/merging the
+card with "Employee Personal Page" if it means the CPD section
+specifically.

@@ -1,36 +1,47 @@
 /opal-feature
 
-## Idea
-Interactive Assessments
+**Idea:** Interactive Assessments
 
-## Why
-(not yet written in the tracker)
+**Why:** (not yet written in the tracker)
 
-## Who uses it
-(not yet written in the tracker)
+**Who uses it:** (not yet written in the tracker)
 
-## What they see
-(not yet written in the tracker)
+**What they see:** (not yet written in the tracker)
 
-## What should happen
-(not yet written in the tracker)
+**What should happen:** (not yet written in the tracker)
 
-## Outcome
-(not yet written in the tracker)
+**Outcome:** (not yet written in the tracker)
 
-## Decisions
-(none recorded)
+No decisions recorded yet.
 
-### Task notes — "Assessment Review" (verbatim from tracker)
-"we've created a series of assessments inside the assessment TAB of which hudas 2.0 is the only one that has actually been currently configured there are heaps and heaps and heaps of other assessments that are pending or to be confirmed it is Anne's job to analyze and understand which ones to remove and to find the originals for the ones that we need to include and to try and provide those Originals intuition point for then Anthony or Pauly to then added into the portal as an interactive workflow"
+**Task — Assessment Review:** This task is about reviewing, not building.
+Ann will go through every assessment already listed in the Assessment tab.
+Only Hudas 2.0 is fully set up today; the rest are pending or unconfirmed.
+Ann sorts them into keep or remove, tracks down the original source
+material for the keepers, and hands th...(truncated in the tracker).
 
 ## Where it lives today
-`backend/fca-routes.js`, `whodas-routes.js`, `assessments-routes.js`, `letter-routes.js`; builder UIs render inside the Resource Hub's Library → Templates collection. FCA and the Progress Report/Support Letter templates are already built and heavily tested — **this is ahead of what the tracker notes above assume**, so Ann's "keep or remove" review should be told that FCA and the letter templates are not merely "pending", they're built and passing 1107+ tests between them.
+
+`backend/whodas-routes.js`, `backend/assessments-routes.js`,
+`frontend/current/whodas.js`, `frontend/current/assessment.js`. 481 unit +
+81 integration tests pass. WHODAS 2.0 is the most complete; the rest of the
+catalogue is where Ann's review task above is still deciding what to keep.
 
 ## Start here
-Add a Playwright spec (follow `e2e/tests/tutorials.spec.js` for the login/navigation pattern) that opens a client's Assessment Review overlay, picks an instrument (start with WHODAS, since the tracker already considers it done), completes it, and asserts the result saves — then record it in `docs/qa/BROWSER_QA_RESULTS.md`. This is the one gap on an otherwise very well-tested feature.
+
+This is primarily a product-decision task (which assessments to keep), not
+a coding task — do not build new assessments before that review lands. The
+engineering gap worth closing without waiting on the decision: there is no
+browser/E2E proof that WHODAS 2.0 (the one assessment already confirmed)
+renders and scores correctly. Open `frontend/current/whodas.js` and the
+client-record view that hosts it, and follow
+`tests/integration/whodas.itest.js` for the scoring contract to verify by
+hand or in a new Playwright spec.
 
 ## Done means
-The Playwright spec above passes and is recorded in `docs/qa/BROWSER_QA_RESULTS.md`. That moves this from `tab-unproven` to `proven`.
+
+A browser check or E2E spec proves WHODAS 2.0 renders and scores correctly
+for a real client. Target label: `proven` for WHODAS 2.0 specifically; the
+rest of the catalogue stays pending the human review.
 
 Tracker: f0210ee7-ed35-4228-a28c-d5d4c83da371
