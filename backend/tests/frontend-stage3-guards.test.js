@@ -195,16 +195,26 @@ describe('compact calendar week view', () => {
     expect(HTML).not.toMatch(/const HOUR_PX = (48|60)/);
   });
 
-  test('event tiles truncate with ellipsis instead of growing', () => {
+  test('event tiles wrap their title inside the tile instead of truncating or growing', () => {
+    // 14 Nov 2026: Outlook-style — the whole name wraps; the tile clips, never grows.
     const sTitle = HTML.slice(HTML.indexOf('.session .s-title {'), HTML.indexOf('.session .s-title {') + 300);
-    expect(sTitle).toContain('white-space: nowrap');
-    expect(sTitle).toContain('text-overflow: ellipsis');
+    expect(sTitle).toContain('white-space: normal');
+    expect(sTitle).not.toContain('text-overflow: ellipsis');
+    const tile = HTML.slice(HTML.indexOf('  .session {'), HTML.indexOf('  .session {') + 1200);
+    expect(tile).toContain('overflow: hidden;');
   });
 
-  test('tiles render a time range line and duration-aware density classes', () => {
+  test('tile titles read name-first so a clipped tile still names the client', () => {
+    expect(HTML).toContain('function nameFirstTitle(title)');
+    expect(HTML).toContain(': nameFirstTitle(opts.title);');
+  });
+
+  test('tiles keep a hidden time span and duration-aware density classes', () => {
+    // The time is not shown on tiles (14 Nov 2026) — tooltip + detail panel
+    // carry it; the span stays so move/resize keep the tooltip current.
     expect(HTML).toContain('class="s-time"');
+    expect(HTML).toContain('.session .s-time { display: none; }');
     expect(HTML).toContain('function applySessionDensity(el, durationMin)');
-    expect(HTML).toContain(".session.s-compact .s-time { display: block; order: -1;"); // short events: time first
     // resize paths refresh density so a stretched tile regains its time line
     expect(HTML.match(/applySessionDensity\(/g).length).toBeGreaterThanOrEqual(4);
   });
@@ -650,7 +660,7 @@ describe('calendar clean status indicators', () => {
 
   test('short events keep a minimum height and never spill', () => {
     expect(HTML).toContain('min-height: 8px;'); // floors lowered so short tiles never eat the 4px gap
-    expect(HTML).toContain('.session.s-compact .s-title { flex: 1; min-width: 0; }');
+    expect(HTML).toContain('.session.s-compact { padding: 0 6px 0 5px; font-size: 10.5px; line-height: 1.2; min-height: 8px; }');
   });
 
   test('booking-panel preview state survives the legacy-handler removal', () => {

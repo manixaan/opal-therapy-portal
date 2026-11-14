@@ -803,6 +803,22 @@ router.get('/api/settings', requireAuth, async (req, res) => {
 // ─────────────────────────────────────────────────────────────
 //  SETTINGS — PATCH (user)
 // ─────────────────────────────────────────────────────────────
+// Calendar legend colour choices: lower-cased category name → Outlook preset
+// id (preset0–preset24). The whole map is replaced on each save; entries with
+// an unknown preset or an oversized name are dropped, a non-object is refused.
+const CATEGORY_PRESET_RE = /^preset(?:[0-9]|1[0-9]|2[0-4])$/;
+function sanitizeCategoryColours(input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
+  const out = {};
+  Object.keys(input).slice(0, 60).forEach(name => {
+    const key = String(name).trim().toLowerCase();
+    const preset = input[name];
+    if (!key || key.length > 80 || typeof preset !== 'string' || !CATEGORY_PRESET_RE.test(preset)) return;
+    out[key] = preset;
+  });
+  return out;
+}
+
 router.patch('/api/settings', requireAuth, async (req, res) => {
   const userId  = req.user?.id || req.session.userId;
   const allowed = [
@@ -812,11 +828,16 @@ router.patch('/api/settings', requireAuth, async (req, res) => {
     'showSploseEvents','showOutlookEvents','showTravelBlocks','showIdleGaps',
     'enableTravelCalculation','travelWarnThresholdMin','travelFromBase','travelReturnBase',
     'defaultAppointmentDurationMinutes','defaultBookingType',
-    'reportPreferences','notificationPreferences',
+    'reportPreferences','notificationPreferences','calendarCategoryColours',
   ];
 
   const payload = {};
   allowed.forEach(k => { if (req.body[k] !== undefined) payload[k] = req.body[k]; });
+  if (payload.calendarCategoryColours !== undefined) {
+    const colours = sanitizeCategoryColours(payload.calendarCategoryColours);
+    if (!colours) return res.status(400).json({ error: 'Invalid calendar colours' });
+    payload.calendarCategoryColours = colours;
+  }
 
   try {
     // Merge with existing settings (don't blow away keys not in this request)

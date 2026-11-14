@@ -58,7 +58,7 @@
   --c-sick-bg: #6a2d40;
   --c-annual-bg: #3a5a22;
   --c-teams-bg: #443d80;
-  --c-outlook-bg: #5c4b14;
+  --c-outlook-bg: #1f4d70;
   --c-leave-bg: #1f5c3b;
   --c-therapy: #eabf45;  --c-initial: #eabf45;  --c-assessment: #eabf45;
   --c-mdt: #5fd0dc;
@@ -119,7 +119,7 @@ html:root[data-theme="dark"] select:not([multiple]) {
 /* Outlook-category calendar tiles. By day each carries a pastel wash from the
    category palette; by night the wash is rebuilt from the category's own
    border hue over the panel, and the text goes light. */
-:root[data-theme="dark"] .session.has-cat {
+:root[data-theme="dark"] :is(.session, .month-event).has-cat {
   background: color-mix(in srgb, var(--cat-border) 42%, var(--panel)) !important;
   color: var(--tile-fg) !important;
 }

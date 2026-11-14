@@ -110,7 +110,7 @@
 <link rel="stylesheet" href="/recurrence.css?v=1" />
 <link rel="stylesheet" href="/nf2f.css?v=3" />
 <!-- Last stylesheet: night-mode token overrides must win over every feature sheet. -->
-<link rel="stylesheet" href="/theme.css?v=4" />
+<link rel="stylesheet" href="/theme.css?v=5" />
 <!-- The Library's document library (folders, list/tiles, bin, versions). Before
      resourcehub.js, which mounts it into #rhl-root inside the Library view. -->
 <script src="/resourcelibrary.js?v=3" defer></script>
@@ -292,82 +292,74 @@ window.opIcon = function (name, size) {
     --info: #3d6cae;
     --info-soft: #e8eff9;
 
-    /* ── Event type colours — vivid border + readable bg ──────────────────
-       Each category has a clearly distinct hue so blocks are identifiable
-       at a glance without reading the title.
-       Client Appointments  → teal/blue  (face-to-face, primary clinical work)
-       Case Management      → indigo     (billable admin, no location)
-       Report Writing       → amber      (billable, no location)
-       Travel               → purple     (half-rate billable)
-       Admin                → orange     (non-billable)
-       Meetings             → green      (non-billable)
-       PD                   → slate-blue (non-billable professional dev)
-       Business Related     → rose/pink  (non-billable)
-       Do Not Book          → dark red   (block-out)
-       Cancellations        → warm gray  (de-emphasised)
+    /* ── Event type colours — Outlook category defaults ──────────────────
+       Client Appointments → Yellow · Case Management → Dark Steel ·
+       Report Writing → Orange · Travel → Purple · Admin → Blue ·
+       Meetings → Green · PD → Dark Orange · Business Related → Cranberry ·
+       Do Not Book → Dark Cranberry · Cancellations → Gray.
+       Each user can recolour any of these from the Calendar legend.
     ────────────────────────────────────────────────────────────────────── */
 
-    /* ── Pastel palette — soft, light, clearly distinct ──────────────
-       Border colour = mid-tone accent strip (left edge of block).
-       Background    = very light wash of the same hue.
-       Text          = dark slate (readable on all backgrounds).
-       ──────────────────────────────────────────────────────────────── */
+    /* Outlook's own category colours (sampled from Outlook on the web):
+       solid tinted fill, strong bar, near-black text. Category-tagged events
+       use OUTLOOK_PRESET_COLOURS instead; these paint portal-booked blocks
+       that carry no category, and are overridden per type from the legend. */
 
-    /* Client Appointments — warm yellow/cream (most prominent type) */
-    --c-therapy:       #b8860b;
-    --c-therapy-bg:    #fdf6d8;
-    --c-initial:       #b8860b;
-    --c-initial-bg:    #fdf6d8;
-    --c-assessment:    #b8860b;
-    --c-assessment-bg: #fdf6d8;
+    /* Client Appointments — Outlook Yellow */
+    --c-therapy:       #eca924;
+    --c-therapy-bg:    #f9e5b6;
+    --c-initial:       #eca924;
+    --c-initial-bg:    #f9e5b6;
+    --c-assessment:    #eca924;
+    --c-assessment-bg: #f9e5b6;
 
-    /* Case Management / MDT — soft teal */
-    --c-mdt:           #4a9da8;
-    --c-mdt-bg:        #d6f0f3;
+    /* Case Management / MDT — Outlook Dark Steel */
+    --c-mdt:           #17677a;
+    --c-mdt-bg:        #9ecdd9;
 
-    /* Report Writing — soft rose/salmon */
-    --c-report:        #c07070;
-    --c-report-bg:     #fce8e8;
+    /* Report Writing — Outlook Orange */
+    --c-report:        #ae4d1f;
+    --c-report-bg:     #e7c2ad;
 
-    /* Travel — soft lavender/purple */
-    --c-travel:        #8b80c8;
-    --c-travel-bg:     #e8e5f7;
+    /* Travel — Outlook Purple */
+    --c-travel:        #7b6aea;
+    --c-travel-bg:     #d7d1f9;
 
-    /* Admin — soft sky blue */
-    --c-admin:         #5a9ec4;
-    --c-admin-bg:      #dceef8;
+    /* Admin — Outlook Blue */
+    --c-admin:         #2676c2;
+    --c-admin-bg:      #b2d2ed;
 
-    /* Meetings — soft green */
-    --c-meeting:       #5aaa7a;
-    --c-meeting-bg:    #d8f2e4;
+    /* Meetings — Outlook Green */
+    --c-meeting:       #498205;
+    --c-meeting-bg:    #c9e3b1;
 
-    /* CPD / PD — soft blue-indigo */
-    --c-cpd:           #6a80c0;
-    --c-cpd-bg:        #dde3f5;
+    /* CPD / PD — Outlook Dark Orange */
+    --c-cpd:           #a74109;
+    --c-cpd-bg:        #e6c0a7;
 
-    /* Lunch — soft mint */
-    --c-lunch:         #5aaa96;
-    --c-lunch-bg:      #d6f0eb;
+    /* Lunch — Outlook Teal */
+    --c-lunch:         #038387;
+    --c-lunch-bg:      #a8dfe0;
 
     /* Leave */
-    --c-personal:      #70a8c0;
-    --c-personal-bg:   #d8eef8;
-    --c-sick:          #c07888;
-    --c-sick-bg:       #fce8ec;
-    --c-annual:        #7aaa60;
-    --c-annual-bg:     #ddf0d4;
-    --c-holiday:       #6090c0;
+    --c-personal:      #4f7a8c;
+    --c-personal-bg:   #c3d6de;
+    --c-sick:          #d13438;
+    --c-sick-bg:       #f1bbbc;
+    --c-annual:        #498205;
+    --c-annual-bg:     #c9e3b1;
+    --c-holiday:       #2676c2;
 
-    /* Teams / Outlook default */
-    --c-teams-bg:      #e8e5f7;
-    --c-outlook-bg:    #fdf6d8;
+    /* Teams / uncategorised Outlook events — Outlook's default calendar blue */
+    --c-teams-bg:      #d7d1f9;
+    --c-outlook-bg:    #b2d2ed;
 
     /* Leave generic */
-    --c-leave-bg:      #d8f2e4;
+    --c-leave-bg:      #c9e3b1;
 
-    /* Tile text colour — dark slate, readable on all pastels */
-    --tile-fg:         #2d3748;
-    --tile-fg-soft:    #4a5568;
+    /* Tile text — Outlook's near-black, readable on every fill */
+    --tile-fg:         #242424;
+    --tile-fg-soft:    #424242;
   }
   * { box-sizing: border-box; }
   html, body { height: 100%; }
@@ -2258,7 +2250,7 @@ window.opIcon = function (name, size) {
     border-radius: 4px;
     background: var(--c-outlook-bg);
     color: var(--tile-fg);
-    border-left: 3px solid var(--c-therapy);
+    border-left: 4px solid var(--c-admin);
     cursor: pointer;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
@@ -2273,6 +2265,11 @@ window.opIcon = function (name, size) {
   .month-event[data-type="lunch"]      { background: var(--c-lunch-bg);      border-left-color: var(--c-lunch); }
   .month-event[data-type="leave"]      { background: var(--c-leave-bg);      border-left-color: var(--c-personal); }
   .month-event[data-type="teams_meeting"] { background: var(--c-teams-bg);   border-left-color: #3d6cae; }
+  .month-event.has-cat {
+    background: var(--cat-bg) !important;
+    border-left-color: var(--cat-border) !important;
+    color: var(--cat-text) !important;
+  }
   .month-cell .more-link {
     font-size: 11px; color: var(--accent-deep);
     cursor: pointer; margin-top: 2px;
@@ -2313,7 +2310,33 @@ window.opIcon = function (name, size) {
     letter-spacing: 0.6px; color: var(--muted); margin-bottom: 10px; }
   .cl-grid { display: flex; flex-direction: column; gap: 6px; }
   .cl-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ink); }
-  .cl-dot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+  .cl-dot { width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0; box-sizing: border-box; }
+  .cal-legend-popover { min-width: 260px; max-height: 70vh; overflow-y: auto; }
+  .cl-grid { gap: 2px; }
+  .cl-row-btn {
+    width: 100%; border: none; background: none; font: inherit; text-align: left;
+    padding: 5px 6px; border-radius: 6px; cursor: pointer;
+  }
+  .cl-row-btn:hover, .cl-row-btn.open { background: var(--panel-sunk); }
+  .cl-row-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .cl-label { flex: 1; }
+  .cl-colour-name { font-size: 10.5px; color: var(--muted); }
+  .cl-swatches {
+    display: grid; grid-template-columns: repeat(5, 28px); gap: 6px;
+    padding: 6px 6px 10px 28px;
+  }
+  .cl-swatch {
+    width: 28px; height: 22px; border-radius: 4px; cursor: pointer; padding: 0;
+    border: 1px solid rgba(0,0,0,0.08); border-left: 5px solid transparent;
+  }
+  .cl-swatch:hover { transform: scale(1.08); }
+  .cl-swatch.selected { box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--ink); }
+  .cl-swatch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .cl-reset {
+    grid-column: 1 / -1; justify-self: start; margin-top: 2px;
+    border: none; background: none; padding: 0; cursor: pointer;
+    font-size: 11px; color: var(--accent-deep); text-decoration: underline;
+  }
   /* Primary add-event button in toolbar */
   .btn-add-event {
     display: inline-flex; align-items: center; gap: 6px;
@@ -2660,8 +2683,7 @@ window.opIcon = function (name, size) {
     line-height: 1.25;
     cursor: pointer;
     box-shadow: none;
-    border-left: 3px solid var(--c-therapy);
-    outline: 1px solid rgba(15, 23, 42, 0.05); outline-offset: -1px;
+    border-left: 4px solid var(--c-therapy);
     /* Back-to-back separation: every tile is drawn 4px shorter than its
        time slot, so a real gap of column background shows between an event
        that ends exactly when the next begins. Tops stay time-accurate. */
@@ -2678,29 +2700,26 @@ window.opIcon = function (name, size) {
     color: var(--cat-text) !important;
   }
   .session:hover { box-shadow: 0 2px 8px rgba(15, 23, 42, 0.18); z-index: 3; }
-  /* One line each, ellipsis instead of wrapping — the tile never grows to fit text */
+  /* Outlook-style text: the title wraps onto as many lines as the tile has room
+     for (the tile clips, it never grows). Titles read name-first
+     (nameFirstTitle) so a clipped tile still says who it is. */
   .session .s-title {
     font-weight: 600; display: block; color: var(--tile-fg);
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    white-space: normal; overflow-wrap: anywhere;
   }
-  .session .s-time {
-    font-size: 10px; display: block; color: var(--tile-fg-soft);
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  }
+  /* The time is not shown on the tile — it is in the hover tooltip and the
+     detail panel. The span stays in the DOM so move/resize keep it current. */
+  .session .s-time { display: none; }
   .session .s-sub {
     font-size: 10px; display: block; color: var(--tile-fg-soft);
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    white-space: normal; overflow-wrap: anywhere;
   }
-  /* Duration-aware density: ≤65 min drops the location line; <40 min drops the
-     time line too and tightens to a single centred title row. Full details stay
-     one click away in the detail panel (and in the hover tooltip). */
+  /* Duration-aware density: ≤65 min drops the location line; <40 min also
+     tightens the padding. Full details stay one click away in the detail
+     panel (and in the hover tooltip). */
   .session.s-med .s-sub { display: none; }
-  /* Short events: time first, concise title if space allows, one line, no spill */
   .session.s-compact .s-sub { display: none; }
-  .session.s-compact { padding: 0 6px 0 5px; font-size: 10.5px; display: flex; align-items: center; gap: 5px; min-height: 8px; }
-  .session.s-compact .s-time { display: block; order: -1; flex-shrink: 0; font-size: 10px; }
-  .session.s-compact .s-title { flex: 1; min-width: 0; }
+  .session.s-compact { padding: 0 6px 0 5px; font-size: 10.5px; line-height: 1.2; min-height: 8px; }
   /* External-calendar-only tiles: tiny non-colour glyph so they're identifiable
      even without the blue tint (colour-blind safe). */
   .session[data-type="outlook"]::before {
@@ -2721,7 +2740,7 @@ window.opIcon = function (name, size) {
   .session[data-type="lunch"]      { background: var(--c-lunch-bg);      border-left-color: var(--c-lunch); }
   .session[data-type="leave"]      { background: var(--c-leave-bg);      border-left-color: var(--c-personal); }
   .session[data-type="teams_meeting"] { background: var(--c-teams-bg);   border-left-color: #3d6cae; }
-  .session[data-type="outlook"]    { background: var(--c-outlook-bg);    border-left-color: var(--c-therapy); }
+  .session[data-type="outlook"]    { background: var(--c-outlook-bg);    border-left-color: var(--c-admin); }
   /* Keep legacy .support class working */
   .session.cancelled {
     opacity: 0.6;
@@ -4937,19 +4956,8 @@ window.opIcon = function (name, size) {
           Legend
         </button>
         <div class="cal-legend-popover" id="cal-legend-popover" style="display:none;">
-          <div class="cl-title">Outlook Categories</div>
-          <div class="cl-grid">
-            <div class="cl-row"><span class="cl-dot" style="background:#3d6cae;"></span><span class="cl-label">Client Appointments</span></div>
-            <div class="cl-row"><span class="cl-dot" style="background:#3d6cae;"></span><span class="cl-label">Case Management</span></div>
-            <div class="cl-row"><span class="cl-dot" style="background:#b06e12;"></span><span class="cl-label">Report Writing</span></div>
-            <div class="cl-row"><span class="cl-dot" style="background:#8b80c8;"></span><span class="cl-label">Travel</span></div>
-            <div class="cl-row"><span class="cl-dot" style="background:#c2611e;"></span><span class="cl-label">Admin</span></div>
-            <div class="cl-row"><span class="cl-dot" style="background:#2f7d4f;"></span><span class="cl-label">Meetings</span></div>
-            <div class="cl-row"><span class="cl-dot" style="background:#3d6cae;"></span><span class="cl-label">PD / CPD</span></div>
-            <div class="cl-row"><span class="cl-dot" style="background:#a13d47;"></span><span class="cl-label">Business Related</span></div>
-            <div class="cl-row"><span class="cl-dot" style="background:#c2412e;"></span><span class="cl-label">Do Not Book</span></div>
-            <div class="cl-row"><span class="cl-dot" style="background:#7a736a;"></span><span class="cl-label">Cancellations</span></div>
-          </div>
+          <div class="cl-title">Categories · click one to change its colour</div>
+          <div class="cl-grid" id="cal-legend-grid"></div>
         </div>
       </div>
 
@@ -9937,81 +9945,143 @@ async function bootstrapSploseConfig() {
 // Run on load after auth is established
 window.addEventListener('DOMContentLoaded', () => setTimeout(bootstrapSploseConfig, 1500));
 
-// ─── Outlook category → hex colour map ───────────────────────────────────────
-// Microsoft Graph preset colour IDs mapped to their actual hex values.
-// Source: Microsoft Graph categoryColor enum (official docs).
-// Outlook preset → richer, clearly distinct colours tuned for Ann's categories.
-// Each has a strong saturated border, a light but clearly tinted background,
-// and dark readable text.
+// ─── Outlook category → colour map ───────────────────────────────────────────
+// Microsoft Graph categoryColor presets, painted the way Outlook on the web
+// paints them: a solid tinted fill, a strong bar down the left edge and
+// near-black text. Fill/bar pairs for Yellow, Orange, Blue, Purple, Cranberry
+// and Dark Steel were sampled from Outlook itself (14 Nov 2026); the rest
+// follow the same fill-to-bar relationship.
 const OUTLOOK_PRESET_COLOURS = {
-  // Ann's categories:
-  preset3:  { bg: '#e8eff9', border: '#3d6cae', text: '#2c4d78' }, // Client Appointments → bright blue
-  preset11: { bg: '#eef2ff', border: '#3d6cae', text: '#3f3a66' }, // Case Management    → indigo
-  preset1:  { bg: '#faf0da', border: '#b06e12', text: '#6b450a' }, // Report Writing     → amber
-  preset8:  { bg: '#e8e5f7', border: '#8b80c8', text: '#3f3a66' }, // Travel             → purple
-  preset7:  { bg: '#fcf3e8', border: '#c2611e', text: '#7c2d12' }, // Admin              → orange
-  preset4:  { bg: '#dcefe3', border: '#2f7d4f', text: '#14532d' }, // Meetings           → green
-  preset24: { bg: '#fbe9e5', border: '#c2412e', text: '#7f1d1d' }, // Do Not Book        → red
-  preset16: { bg: '#dbe6f5', border: '#3d6cae', text: '#2c4d78' }, // PD                 → blue
-  preset9:  { bg: '#f9e7e0', border: '#a13d47', text: '#8a333c' }, // Business Related   → pink
-  preset0:  { bg: '#f1ece4', border: '#7a736a', text: '#332c25' }, // Cancellations      → gray
-  // Generic presets for other users' categories
-  preset2:  { bg: '#faf0da', border: '#b06e12', text: '#713f12' }, // Yellow
-  preset5:  { bg: '#e4f2ec', border: '#0f7c6c', text: '#0a5d51' }, // Teal
-  preset6:  { bg: '#ecfccb', border: '#557a2e', text: '#365314' }, // Lime
-  preset10: { bg: '#e5f2e8', border: '#3d8f5f', text: '#14532d' }, // Light green
-  preset12: { bg: '#f1ece4', border: '#6e675e', text: '#241f1a' }, // Slate
-  preset13: { bg: '#e5dfd4', border: '#575046', text: '#241f1a' }, // Dark slate
-  preset14: { bg: '#d5cec2', border: '#46403a', text: '#241f1a' }, // Charcoal
-  preset15: { bg: '#fbe9e5', border: '#9c3322', text: '#7f1d1d' }, // Dark red
-  preset17: { bg: '#ffedd5', border: '#a8511a', text: '#7c2d12' }, // Dark orange
-  preset18: { bg: '#fcf6e8', border: '#9a5f0e', text: '#713f12' }, // Dark yellow
-  preset19: { bg: '#dcefe3', border: '#2f7d4f', text: '#064e3b' }, // Dark green
-  preset20: { bg: '#cffafe', border: '#0f7c6c', text: '#2c4d78' }, // Dark teal
-  preset21: { bg: '#d9f99d', border: '#48682a', text: '#365314' }, // Dark olive
-  preset22: { bg: '#dbe6f5', border: '#3d6cae', text: '#2c4d78' }, // Dark blue
-  preset23: { bg: '#e8e5f7', border: '#6d63a8', text: '#3f3a66' }, // Dark purple
+  preset0:  { name: 'Red',            bg: '#f1bbbc', border: '#d13438', text: '#242424' },
+  preset1:  { name: 'Orange',         bg: '#e7c2ad', border: '#ae4d1f', text: '#242424' },
+  preset2:  { name: 'Brown',          bg: '#e0cdbb', border: '#8e562e', text: '#242424' },
+  preset3:  { name: 'Yellow',         bg: '#f9e5b6', border: '#eca924', text: '#242424' },
+  preset4:  { name: 'Green',          bg: '#c9e3b1', border: '#498205', text: '#242424' },
+  preset5:  { name: 'Teal',           bg: '#a8dfe0', border: '#038387', text: '#242424' },
+  preset6:  { name: 'Olive',          bg: '#d6e2b4', border: '#5c7e10', text: '#242424' },
+  preset7:  { name: 'Blue',           bg: '#b2d2ed', border: '#2676c2', text: '#242424' },
+  preset8:  { name: 'Purple',         bg: '#d7d1f9', border: '#7b6aea', text: '#242424' },
+  preset9:  { name: 'Cranberry',      bg: '#f8c5e5', border: '#e64aad', text: '#242424' },
+  preset10: { name: 'Steel',          bg: '#c3d6de', border: '#4f7a8c', text: '#242424' },
+  preset11: { name: 'Dark steel',     bg: '#9ecdd9', border: '#17677a', text: '#242424' },
+  preset12: { name: 'Gray',           bg: '#dddbda', border: '#7a7574', text: '#242424' },
+  preset13: { name: 'Dark gray',      bg: '#c8c6c4', border: '#5d5a58', text: '#242424' },
+  preset14: { name: 'Black',          bg: '#b3b0ad', border: '#323130', text: '#242424' },
+  preset15: { name: 'Dark red',       bg: '#e2b6b8', border: '#a4262c', text: '#242424' },
+  preset16: { name: 'Dark orange',    bg: '#e6c0a7', border: '#a74109', text: '#242424' },
+  preset17: { name: 'Dark brown',     bg: '#d1c3b8', border: '#6b4127', text: '#242424' },
+  preset18: { name: 'Dark yellow',    bg: '#ede1a8', border: '#c19c00', text: '#242424' },
+  preset19: { name: 'Dark green',     bg: '#b4d6b4', border: '#0b6a0b', text: '#242424' },
+  preset20: { name: 'Dark teal',      bg: '#a6cdd6', border: '#005b70', text: '#242424' },
+  preset21: { name: 'Dark olive',     bg: '#c9cfb1', border: '#4b5a20', text: '#242424' },
+  preset22: { name: 'Dark blue',      bg: '#a8c5e0', border: '#004e8c', text: '#242424' },
+  preset23: { name: 'Dark purple',    bg: '#c9b6e0', border: '#5c2e91', text: '#242424' },
+  preset24: { name: 'Dark cranberry', bg: '#e0a8cc', border: '#9b0062', text: '#242424' },
 };
 
-// Category name → colour map (populated by loadOutlookCategories on boot)
+// The practice's categories and the Outlook preset each starts on. `types`
+// links a category to the portal booking types it colours when a block has no
+// Outlook category of its own; `aliases` match near-variants of the name.
+const CALENDAR_LEGEND_DEFAULTS = [
+  { name: 'Client Appointments', preset: 'preset3',  types: ['therapy', 'initial', 'assessment'], aliases: ['client appointment'] },
+  { name: 'Case Management',     preset: 'preset11', types: ['mdt'] },
+  { name: 'Report Writing',      preset: 'preset1',  types: ['report'] },
+  { name: 'Travel',              preset: 'preset8',  types: ['travel'] },
+  { name: 'Admin',               preset: 'preset7',  types: ['admin'] },
+  { name: 'Meetings',            preset: 'preset4',  types: ['meeting', 'teams_meeting'], aliases: ['meeting'] },
+  { name: 'PD / CPD',            preset: 'preset16', types: ['cpd'], aliases: ['pd', 'cpd', 'pd/cpd'] },
+  { name: 'Business Related',    preset: 'preset9',  types: [] },
+  { name: 'Do Not Book',         preset: 'preset24', types: [] },
+  { name: 'Cancellations',       preset: 'preset12', types: [] },
+];
+
+// Categories exactly as Outlook reports them: [{ name, preset }].
+window.OUTLOOK_CATEGORIES = [];
+// Lower-cased category name → effective colour (Outlook's choice, or the
+// user's legend override). Rebuilt by rebuildCategoryColours().
 window.OUTLOOK_CATEGORY_COLOURS = {};
+
+function calColourOverrides() {
+  const s = window.APP_SETTINGS || {};
+  return (s.calendarCategoryColours && typeof s.calendarCategoryColours === 'object') ? s.calendarCategoryColours : {};
+}
+
+function legendDefaultFor(key) {
+  return CALENDAR_LEGEND_DEFAULTS.find(d => d.name.toLowerCase() === key || (d.aliases || []).includes(key)) || null;
+}
+
+function rebuildCategoryColours() {
+  const ov = calColourOverrides();
+  const map = {};
+  (window.OUTLOOK_CATEGORIES || []).forEach(c => {
+    const key = c.name.toLowerCase();
+    const preset = ov[key] || c.preset;
+    const colours = OUTLOOK_PRESET_COLOURS[preset];
+    if (colours) map[key] = { ...colours, name: c.name, preset };
+  });
+  window.OUTLOOK_CATEGORY_COLOURS = map;
+}
 
 async function loadOutlookCategories() {
   try {
     const resp = await fetch('/api/outlook/categories', { credentials: 'include' });
     if (!resp.ok) return;
     const { data } = await resp.json();
-    data.forEach(cat => {
-      const colours = OUTLOOK_PRESET_COLOURS[cat.color];
-      if (colours) {
-        window.OUTLOOK_CATEGORY_COLOURS[cat.displayName.toLowerCase()] = {
-          name: cat.displayName,
-          preset: cat.color,
-          ...colours,
-        };
-      }
-    });
+    window.OUTLOOK_CATEGORIES = (data || [])
+      .filter(cat => cat && cat.displayName && OUTLOOK_PRESET_COLOURS[cat.color])
+      .map(cat => ({ name: cat.displayName, preset: cat.color }));
+    rebuildCategoryColours();
     console.log(`✅ Loaded ${data.length} Outlook category colours:`, Object.keys(window.OUTLOOK_CATEGORY_COLOURS));
     // Re-render any already-loaded calendar events with correct colours
     if (typeof recolourOutlookEvents === 'function') recolourOutlookEvents();
+    if (typeof renderCalLegend === 'function') renderCalLegend();
   } catch (err) {
     console.warn('Could not load Outlook categories:', err.message);
   }
 }
 
+// Colour for one category name: the user's override, else Outlook's own
+// colour, else the practice default for that name. null when unknown.
+function colourForCategoryName(name) {
+  if (!name) return null;
+  const key = String(name).toLowerCase();
+  const ov = calColourOverrides();
+  const fromOutlook = window.OUTLOOK_CATEGORY_COLOURS[key];
+  const def = legendDefaultFor(key);
+  const preset = ov[key] || (fromOutlook && fromOutlook.preset) || (def && def.preset);
+  const colours = preset && OUTLOOK_PRESET_COLOURS[preset];
+  return colours ? { ...colours, preset } : null;
+}
+
 // Resolve the colour for a calendar event based on its categories array.
-// Returns { bg, border } or null if no match.
+// Returns { bg, border, text } or null if no match.
 function resolveEventColour(categories) {
   if (!categories || !categories.length) return null;
   for (const cat of categories) {
-    const colour = window.OUTLOOK_CATEGORY_COLOURS[cat.toLowerCase()];
+    const colour = colourForCategoryName(cat);
     if (colour) return colour;
   }
   return null;
 }
 
+// The Outlook category (by its real name when Outlook has one matching the
+// default) that a portal booking type belongs to.
+function legendCategoryNameForType(type) {
+  const def = CALENDAR_LEGEND_DEFAULTS.find(d => d.types.includes(type));
+  if (!def) return null;
+  const names = [def.name.toLowerCase()].concat(def.aliases || []);
+  const loaded = (window.OUTLOOK_CATEGORIES || []).find(c => names.includes(c.name.toLowerCase()));
+  return loaded ? loaded.name : def.name;
+}
+
+// Colour for a block with no category: the legend entry for its booking type.
+function colourForType(type) {
+  const name = legendCategoryNameForType(type);
+  return name ? colourForCategoryName(name) : null;
+}
+
 // Category colours ride custom properties rather than inline background/color,
-// so the stylesheet decides how they paint: the pastel wash by day, a deep wash
+// so the stylesheet decides how they paint: the Outlook fill by day, a deep wash
 // of the same hue by night (theme.css). Switching theme re-paints live tiles.
 function applyCategoryColour(el, colour) {
   el.classList.add('has-cat');
@@ -10020,15 +10090,133 @@ function applyCategoryColour(el, colour) {
   el.style.setProperty('--cat-text', colour.text);
 }
 
-// Re-colour already-rendered Outlook event tiles after categories load.
+function clearCategoryColour(el) {
+  el.classList.remove('has-cat');
+  el.style.removeProperty('--cat-bg');
+  el.style.removeProperty('--cat-border');
+  el.style.removeProperty('--cat-text');
+}
+
+// Colour every rendered tile from its category, else its booking type. Runs
+// after categories load and whenever a legend colour changes.
 function recolourOutlookEvents() {
   Object.values(SESSIONS || {}).forEach(s => {
-    if (!s.categories || !s.element) return;
-    const colour = resolveEventColour(s.categories);
-    if (!colour) return;
-    applyCategoryColour(s.element, colour);
+    if (!s || !s.element) return;
+    const colour = resolveEventColour(s.categories) || (s.color ? null : colourForType(s.type));
+    if (colour) applyCategoryColour(s.element, colour);
+    else if (!s.color) clearCategoryColour(s.element);
   });
+  document.querySelectorAll('.month-event').forEach(paintMonthEvent);
 }
+
+// Month chips carry their first category (data-cat) and type (data-type).
+function paintMonthEvent(el) {
+  const colour = colourForCategoryName(el.dataset.cat) || colourForType(el.dataset.type);
+  if (colour) applyCategoryColour(el, colour);
+  else clearCategoryColour(el);
+}
+
+// "Client Appointment - Stephen Brown" → "Stephen Brown - Client Appointment",
+// so a narrow or clipped tile still says who it is. Only flips when the first
+// part names an activity and the second reads as a person's name; anything
+// else ("Travel Perth to Cunderdin", "Catch up with Hui Hui") is untouched.
+const _ACTIVITY_WORD_RE = /\b(appointment|appt|session|report|plan|assessment|review|meeting|notes?|letter|visit|call|consult(?:ation)?|therapy|fca|whodas|intake|supervision|case|conference|telehealth|check[- ]?in|catch[- ]?up)\b/i;
+const _PERSON_NAME_RE = /^[A-Z][A-Za-z'’.\-]*(?:\s+[A-Z(][A-Za-z'’.()\-]*){1,3}$/;
+function nameFirstTitle(title) {
+  if (typeof title !== 'string' || title.indexOf('<') !== -1) return title;
+  const parts = title.split(/\s+[-–—]\s+/);
+  if (parts.length < 2) return title;
+  const kind = parts[0].trim();
+  const who = parts[1].trim();
+  if (!_ACTIVITY_WORD_RE.test(kind) || kind.split(/\s+/).length > 5) return title;
+  if (!_PERSON_NAME_RE.test(who) || _ACTIVITY_WORD_RE.test(who)) return title;
+  return [who, kind].concat(parts.slice(2).map(p => p.trim())).join(' - ');
+}
+
+// ─── Calendar legend: one row per category; click a row to recolour it ────
+function legendEntries() {
+  const ov = calColourOverrides();
+  const rows = [];
+  const seen = new Set();
+  (window.OUTLOOK_CATEGORIES || []).forEach(c => {
+    const key = c.name.toLowerCase();
+    seen.add(key);
+    const def = legendDefaultFor(key);
+    if (def) { seen.add(def.name.toLowerCase()); (def.aliases || []).forEach(a => seen.add(a)); }
+    rows.push({ name: c.name, key, preset: ov[key] || c.preset, overridden: !!ov[key] });
+  });
+  CALENDAR_LEGEND_DEFAULTS.forEach(d => {
+    const key = d.name.toLowerCase();
+    if (seen.has(key)) return;
+    rows.push({ name: d.name, key, preset: ov[key] || d.preset, overridden: !!ov[key] });
+  });
+  return rows;
+}
+
+let _calLegendOpenKey = null;
+function renderCalLegend() {
+  const grid = document.getElementById('cal-legend-grid');
+  if (!grid) return;
+  const esc = v => String(v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+  grid.innerHTML = legendEntries().map(r => {
+    const c = OUTLOOK_PRESET_COLOURS[r.preset] || OUTLOOK_PRESET_COLOURS.preset12;
+    const open = _calLegendOpenKey === r.key;
+    let html = `<button type="button" class="cl-row cl-row-btn${open ? ' open' : ''}" data-key="${esc(r.key)}" aria-expanded="${open}" title="Change the colour of ${esc(r.name)}">` +
+      `<span class="cl-dot" style="background:${c.bg};border-left:3px solid ${c.border};"></span>` +
+      `<span class="cl-label">${esc(r.name)}</span><span class="cl-colour-name">${esc(c.name)}</span></button>`;
+    if (open) {
+      html += '<div class="cl-swatches" role="group" aria-label="Colours for ' + esc(r.name) + '">' +
+        Object.keys(OUTLOOK_PRESET_COLOURS).map(p => {
+          const pc = OUTLOOK_PRESET_COLOURS[p];
+          const sel = p === r.preset;
+          return `<button type="button" class="cl-swatch${sel ? ' selected' : ''}" data-key="${esc(r.key)}" data-preset="${p}" ` +
+            `style="background:${pc.bg};border-left-color:${pc.border};" title="${pc.name}" aria-label="${pc.name}" aria-pressed="${sel}"></button>`;
+        }).join('') +
+        (r.overridden ? `<button type="button" class="cl-reset" data-key="${esc(r.key)}">Reset to Outlook colour</button>` : '') +
+        '</div>';
+    }
+    return html;
+  }).join('');
+}
+
+async function setCalendarCategoryColour(key, preset) {
+  const next = { ...calColourOverrides() };
+  if (preset) next[key] = preset; else delete next[key];
+  window.APP_SETTINGS = { ...(window.APP_SETTINGS || {}), calendarCategoryColours: next };
+  rebuildCategoryColours();
+  recolourOutlookEvents();
+  renderCalLegend();
+  try {
+    const res = await fetch('/api/settings', {
+      method: 'PATCH', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ calendarCategoryColours: next }),
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+  } catch (_) {
+    if (typeof showToast === 'function') showToast('Colour not saved', 'The new colour shows now but could not be saved. Try again.', 'warn');
+  }
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  const grid = document.getElementById('cal-legend-grid');
+  if (!grid) return;
+  renderCalLegend();
+  grid.addEventListener('click', ev => {
+    // Re-rendering detaches the clicked node, which the outside-click closer
+    // would read as a click outside the popover.
+    ev.stopPropagation();
+    const sw = ev.target.closest('.cl-swatch');
+    if (sw) { setCalendarCategoryColour(sw.dataset.key, sw.dataset.preset); return; }
+    const reset = ev.target.closest('.cl-reset');
+    if (reset) { setCalendarCategoryColour(reset.dataset.key, null); return; }
+    const row = ev.target.closest('.cl-row-btn');
+    if (row) {
+      _calLegendOpenKey = _calLegendOpenKey === row.dataset.key ? null : row.dataset.key;
+      renderCalLegend();
+    }
+  });
+});
 
 window.addEventListener('DOMContentLoaded', () => setTimeout(loadOutlookCategories, 2000));
 
@@ -13619,12 +13807,16 @@ function addSession(col, opts) {
   // background. Inline colour still wins for legacy callers that pass opts.color
   // explicitly so day-view and other paths keep working.
   el.dataset.type = opts.type || 'outlook';
-  // Apply Outlook category colour if available, otherwise fall back to CSS type colours
+  // Outlook category colour first, then a legacy explicit colour, then the
+  // legend colour for the booking type (all user-recolourable from the legend).
   const catColour = resolveEventColour(opts.categories);
   if (catColour) {
     applyCategoryColour(el, catColour);
   } else if (opts.color) {
     el.style.background = opts.color;
+  } else {
+    const typeColour = colourForType(el.dataset.type);
+    if (typeColour) applyCategoryColour(el, typeColour);
   }
   el.style.top    = tToY(opts.startH, opts.startM || 0) + 'px';
   el.style.height = (durMin(opts) / 60 * HOUR_PX - 4) + 'px';
@@ -13648,11 +13840,10 @@ function addSession(col, opts) {
             : (window.__titleRecoveryDone
                 ? '<em style="opacity:0.5">Untitled event</em>'
                 : '<em style="opacity:0.55">Syncing title…</em>'))
-    : opts.title;
-  // Compact tile content: title first, time range second, location last.
-  // Duration-aware density classes let CSS drop the lower lines on short
-  // tiles — the full details stay in the tooltip and the click-through
-  // detail panel, so nothing is lost, only hidden by default.
+    : nameFirstTitle(opts.title);
+  // Tile content: wrapping title, then location. The time span is kept for
+  // move/resize bookkeeping but hidden by CSS — the time lives in the tooltip
+  // and the detail panel.
   applySessionDensity(el, durMin(opts));
   const timeStr = (typeof fmtTime === 'function' && typeof opts.startH === 'number')
     ? fmtTime(opts.startH, opts.startM || 0) + '–' + fmtTime(opts.endH, opts.endM || 0)
@@ -17942,8 +18133,13 @@ function __buildMonthSectionHTML(anchor, eventsByDate, todayKey, selectedKey) {
       const time = new Date(e.start_time).toLocaleTimeString('en-AU', {
         hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Australia/Perth'
       });
-      const title = (e.title || 'Untitled').replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'})[c]);
-      parts.push(`<div class="month-event" data-type="${e.event_type || 'outlook'}">${time} ${title}</div>`);
+      const _esc = v => String(v).replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'})[c]);
+      const title = _esc(nameFirstTitle(e.title || 'Untitled'));
+      const _cats = Array.isArray(e.categories) ? e.categories : [];
+      const _cat = _cats.find(c => colourForCategoryName(c)) || '';
+      const _col = colourForCategoryName(_cat) || colourForType(e.event_type || 'outlook');
+      const _paint = _col ? ` has-cat" style="--cat-bg:${_col.bg};--cat-border:${_col.border};--cat-text:${_col.text};` : '';
+      parts.push(`<div class="month-event${_paint}" data-type="${_esc(e.event_type || 'outlook')}" data-cat="${_esc(_cat)}" title="${time} ${title}">${title}</div>`);
     });
     if (events.length > shown.length)
       parts.push(`<div class="more-link">+${events.length - shown.length} more</div>`);
@@ -23580,6 +23776,9 @@ async function loadUserSettings() {
     var os = data.orgSettings || {};
     window.APP_SETTINGS     = s;
     window.APP_ORG_SETTINGS = os;
+    if (typeof rebuildCategoryColours === 'function') {
+      rebuildCategoryColours(); recolourOutlookEvents(); renderCalLegend();
+    }
 
     // ── My Settings ───────────────────────────────────────────
     _setv('stg-display-name',   s.displayName);
