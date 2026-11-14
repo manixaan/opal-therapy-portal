@@ -100,6 +100,26 @@ describe('validateBooking — the client rule per group', () => {
     expect(withClient.booking.route).not.toHaveProperty('distanceKm');
   });
 
+  test('flight and check-in: travel group, no client, the flight is required and cleaned', () => {
+    expect(rules.bookingGroup('flight')).toBe('travel');
+    expect(rules.bookingGroup('flight-checkin')).toBe('travel');
+    expect(rules.validateBooking({ booking: { kind: 'flight' } }).ok).toBe(false);
+    expect(rules.validateBooking({ booking: { kind: 'flight', flight: { number: 'QF643' } } }).ok).toBe(false);
+    expect(rules.validateBooking({ booking: { kind: 'flight', flight: { number: 'QF/643', depUtc: '2026-11-20T01:35:00Z' } } }).ok).toBe(false);
+    const r = rules.validateBooking({ booking: { kind: 'flight', clientId: '501', clientName: 'Bo B', flight: {
+      number: 'qf 643', depUtc: '2026-11-20T01:35:00Z', arrUtc: '2026-11-20T05:45:00Z', revisedDepUtc: '2026-11-20T02:00:00Z',
+      airline: 'Qantas', status: 'Expected', from: { iata: 'per', name: 'Perth' }, to: { iata: 'SYDX', name: 'Sydney' },
+      terminal: '3', gate: 'x'.repeat(50), source: 'lookup', date: '2026-11-20', bufferMin: 90, afterLandingMin: 0,
+      blob: { raw: 'anything' }, notes: 'free text' } } });
+    expect(r).toEqual({ ok: true, booking: { kind: 'flight', group: 'travel', clientId: null, clientName: null, flight: {
+      number: 'QF643', depUtc: '2026-11-20T01:35:00.000Z', arrUtc: '2026-11-20T05:45:00.000Z', revisedDepUtc: '2026-11-20T02:00:00.000Z',
+      airline: 'Qantas', status: 'Expected', from: { iata: 'PER', name: 'Perth' }, to: { iata: null, name: 'Sydney' },
+      terminal: '3', gate: 'x'.repeat(20), source: 'lookup', date: '2026-11-20', bufferMin: 90, afterLandingMin: 0 } } });
+    const odd = rules.cleanFlight({ number: 'VA1', depUtc: '2026-11-20T05:00:00Z', arrUtc: '2026-11-20T04:00:00Z', bufferMin: 9999, source: 'scraped', date: '20/11/2026' });
+    expect(odd).toEqual({ number: 'VA1', depUtc: '2026-11-20T05:00:00.000Z' });
+    expect(rules.validateBooking({ booking: { kind: 'flight-checkin', flight: { number: 'VA1', depUtc: '2026-11-20T05:00:00Z' } } }).booking.kind).toBe('flight-checkin');
+  });
+
   test('unknown kinds and bad client ids are refused; legacy callers pass', () => {
     expect(rules.validateBooking({ booking: { kind: 'provider-travel' } }).ok).toBe(false);
     expect(rules.validateBooking({ booking: { kind: 'emails', clientId: 'x; DROP' } }).ok).toBe(false);
@@ -163,6 +183,24 @@ describe('POST /api/outlook/events', () => {
     expect(JSON.parse(store[1][1])).toEqual({ kind: 'travel-block', group: 'travel', clientId: '501', clientName: 'Bo B',
       route: { from: 'A', to: 'B', minutes: 20, distanceKm: 12 } });
     expect(db.pool.query.mock.calls.some(([t]) => /SET client_id/.test(t))).toBe(false);
+  });
+
+  test('a flight is saved as travel with its cleaned flight details', async () => {
+    as('therapist');
+    const r = await request(app()).post('/api/outlook/events').send({ title: 'Flight QF643 PER→SYD', ...SLOT, location: 'Perth Airport', categories: ['Travel'],
+      booking: { kind: 'flight', flight: { number: 'QF643', depUtc: '2026-11-20T01:35:00Z', arrUtc: '2026-11-20T05:45:00Z', junk: 1 } } });
+    expect(r.status).toBe(201);
+    expect(db.createEvent.mock.calls[0][1].eventType).toBe('travel');
+    const store = db.pool.query.mock.calls.find(([t]) => /jsonb_build_object\('booking'/.test(t));
+    expect(JSON.parse(store[1][1])).toEqual({ kind: 'flight', group: 'travel', clientId: null, clientName: null,
+      flight: { number: 'QF643', depUtc: '2026-11-20T01:35:00.000Z', arrUtc: '2026-11-20T05:45:00.000Z' } });
+  });
+
+  test('a flight without its details is refused before anything is written', async () => {
+    as('therapist');
+    const r = await request(app()).post('/api/outlook/events').send({ title: 'Flight', ...SLOT, categories: ['Travel'], booking: { kind: 'flight' } });
+    expect(r.status).toBe(400);
+    expect(db.createEvent).not.toHaveBeenCalled();
   });
 
   test('a direct service without a client is refused', async () => {

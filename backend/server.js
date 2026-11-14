@@ -505,6 +505,10 @@ app.use('/', appRoutes);
 const mapsRoutes = require('./maps-routes');
 app.use('/', mapsRoutes);
 
+// Flight lookup (AeroDataBox via RapidAPI) for Calendar → Add a flight —
+// key server-side only; 503 without it and the dialog takes manual entry.
+app.use('/', require('./flight-routes'));
+
 // Smart Booking locations — a client's known service locations and a
 // clinician's remembered non-client destinations (migration 072)
 app.use('/', require('./client-location-routes'));
