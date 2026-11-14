@@ -74,6 +74,11 @@ function applyBodyLimits(app) {
   // save before the route could validate a single field.
   app.use('/api/templates', bodyParser.json({ limit: '4mb' }));
 
+  // Opal Assist: a message (up to 30k chars by default, 200k by env), its
+  // attachments and the known-names list. Multi-byte text can triple the bytes,
+  // so the 100kb default would 413 a long draft before the route's own check.
+  app.use('/api/assist', bodyParser.json({ limit: '2mb' }));
+
   // Trip-cost receipts (PDF / photo, ≤ 8 MB decoded) travel as base64 JSON.
   app.use('/api/invoicing/trips', bodyParser.json({ limit: '12mb' }));
 

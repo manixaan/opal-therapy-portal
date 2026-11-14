@@ -49,8 +49,17 @@ const { toPlainText, plainTextStream } = require('./assist/plain-text');
 const router = express.Router();
 const pool = db.pool;
 
-const MAX_MESSAGE_CHARS = 12000;
-const MAX_SELECTION_CHARS = 20000;
+// Message and attachment caps. Raised from 12k / 20k (14 Nov 2026) so long
+// drafts and pasted notes fit; OPAL_ASSIST_MAX_MESSAGE_CHARS can raise them
+// further (clamped to 200k). The real ceiling is the Bedrock guardrail, which
+// checks the whole current message — check its text-unit quota before going
+// much higher. The model's 200k-token context is not the constraint.
+const _envChars = parseInt(process.env.OPAL_ASSIST_MAX_MESSAGE_CHARS, 10);
+const MAX_MESSAGE_CHARS = Number.isFinite(_envChars) ? Math.min(200000, Math.max(1000, _envChars)) : 30000;
+const MAX_SELECTION_CHARS = Math.max(20000, MAX_MESSAGE_CHARS);
+// Long turns repeat in the history sent with every message; keep the newest
+// turns within this budget (~100k tokens) so a long chat stays in context.
+const HISTORY_CHAR_BUDGET = 400000;
 const MAX_ANSWER_CHARS = 16000;
 const HISTORY_TURNS = 16;
 const RETENTION_DAYS = 30;
@@ -180,6 +189,20 @@ router.post('/api/assist/check', safe(async (req, res) => {
   res.json(r);
 }));
 
+// Newest turns first until the budget is spent; the oldest drop off. The
+// result still starts on a user turn so the conversation stays well-formed.
+function trimHistory(history, budget = HISTORY_CHAR_BUDGET) {
+  const kept = [];
+  let used = 0;
+  for (let i = history.length - 1; i >= 0; i--) {
+    used += String(history[i].content || '').length;
+    if (used > budget) break;
+    kept.unshift(history[i]);
+  }
+  while (kept.length && kept[0].role !== 'user') kept.shift();
+  return kept;
+}
+
 // ── Shared chat preparation ──────────────────────────────────────────────────
 async function prepare(req, res) {
   const body = req.body || {};
@@ -225,7 +248,7 @@ async function prepare(req, res) {
   let history = [];
   if (conversation) {
     const { rows } = await pool.query(`SELECT role, content, kind FROM assist_messages WHERE conversation_id = $1 ORDER BY id DESC LIMIT ${HISTORY_TURNS}`, [conversation.id]);
-    history = await cleanHistory(rows.reverse().map((r) => ({ role: r.role, content: historyText(r) })), known);
+    history = trimHistory(await cleanHistory(rows.reverse().map((r) => ({ role: r.role, content: historyText(r) })), known));
   }
   const surface = conversation ? conversation.surface : surfaceOf(body);
   // On the web page the model chooses the shape of each reply (chat, document,
@@ -617,3 +640,5 @@ module.exports.purgeExpired = purgeExpired;
 module.exports.ACTIONS = ACTIONS;
 module.exports.RETENTION_DAYS = RETENTION_DAYS;
 module.exports._resetRateLimitForTests = _resetRateLimitForTests;
+module.exports.MAX_MESSAGE_CHARS = MAX_MESSAGE_CHARS;
+module.exports._trimHistory = trimHistory;

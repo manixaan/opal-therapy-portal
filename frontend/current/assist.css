@@ -265,3 +265,7 @@ select:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 :root[data-theme="dark"] .oa-msg.user .oa-bubble { color: #f4fbf9; }
 :root[data-theme="dark"] .oa-client-chip { color: var(--accent-ink); }
 :root[data-theme="dark"] .oa-doc-kind { color: var(--accent-ink); }
+
+/* Message length — appears near the cap (assist.js updateCount). */
+.oa-count { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; padding: 0 4px; }
+.oa-count.over { color: var(--danger, #c2412e); font-weight: 600; }

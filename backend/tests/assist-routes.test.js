@@ -89,6 +89,33 @@ test('check hides known people and contact details without calling the provider'
   expect(spy).not.toHaveBeenCalled();
 });
 
+describe('message length (raised 14 Nov 2026 from 12,000 characters)', () => {
+  test('a 30,000-character message is accepted; one character more is refused before the model', async () => {
+    expect(routes.MAX_MESSAGE_CHARS).toBe(30000);
+    const spy = jest.fn(async () => ({ text: 'ok' })); provider._setProviderForTests(spy);
+    const agent = await login(buildApp(), user());
+    const config = await agent.get('/api/assist/config');
+    expect(config.body.maxMessageChars).toBe(30000);
+    expect(config.body.maxAttachmentChars).toBe(30000);
+    const ok = await agent.post('/api/assist/chat').send({ message: 'word '.repeat(6000).trim() });
+    expect(ok.status).toBe(200);
+    expect(spy).toHaveBeenCalledTimes(1);
+    const tooLong = await agent.post('/api/assist/chat').send({ message: 'x'.repeat(30001) });
+    expect(tooLong.status).toBe(400);
+    expect(tooLong.body.error).toBe('invalid_message');
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  test('history keeps the newest turns within its budget and starts on a user turn', () => {
+    const turn = (role, n) => ({ role, content: 'x'.repeat(n) });
+    const h = [turn('user', 10), turn('assistant', 10), turn('user', 200), turn('assistant', 50), turn('user', 30)];
+    expect(routes._trimHistory(h, 1000)).toEqual(h);
+    // 30 + 50 fit, the 200-char user turn would not → the orphaned assistant turn is dropped too
+    expect(routes._trimHistory(h, 100)).toEqual([turn('user', 30)]);
+    expect(routes._trimHistory(h, 285)).toEqual(h.slice(2));
+  });
+});
+
 test('chat refuses a message that still carries a name — the provider is never called', async () => {
   const spy = jest.fn(); provider._setProviderForTests(spy);
   const agent = await login(buildApp(), user());

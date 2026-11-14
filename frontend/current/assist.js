@@ -609,7 +609,19 @@
     var bar = $('oa-selection');
     if (S.selection) { bar.classList.add('show'); $('oa-selection-info').textContent = S.selection.length + ' characters'; } else bar.classList.remove('show');
   }
-  function setSelection(text) { S.selection = String(text || '').slice(0, 20000); updateSelectionBar(); }
+  function setSelection(text) { S.selection = String(text || '').slice(0, S.maxAttachmentChars || 20000); updateSelectionBar(); }
+
+  /** Characters left in the message: shown once the draft passes 80% of the
+      server's cap, red when over — the limit is visible before sending. */
+  function updateCount() {
+    var el = $('oa-count'); if (!el) return;
+    var max = S.maxMessageChars || 0, n = ($('oa-input').value || '').trim().length;
+    if (!max || n < max * 0.8) { el.hidden = true; el.classList.remove('over'); return; }
+    el.hidden = false;
+    el.classList.toggle('over', n > max);
+    el.textContent = n.toLocaleString() + ' / ' + max.toLocaleString();
+    el.title = n > max ? 'Too long to send — shorten it or attach it as a file.' : 'Characters used of this message\'s limit';
+  }
 
   // ── Events ────────────────────────────────────────────────────────────────
   var COMPOSER = function () { return global.OpalAssistComposer; };
@@ -623,6 +635,11 @@
     var raw = $('oa-input').value.trim();
     if (!raw && S.selection) raw = 'Please help with the attached file.';
     if (!raw) return;
+    if (S.maxMessageChars && raw.length > S.maxMessageChars) {
+      updateCount();
+      setStatus('Message is ' + (raw.length - S.maxMessageChars).toLocaleString() + ' characters over the limit — shorten it or attach it as a file.', 'warn');
+      return;
+    }
     COMPOSER().stopDictation();
     runCheck(raw);
   }
@@ -634,6 +651,7 @@
     var recent = S.messages.slice(-turns).map(function (m) { return m.text || ''; }).join('\n');
     var draft = ($('oa-input').value || '') + (S.surface === 'web' ? COMPOSER().attachmentsText() : S.selection);
     COMPOSER().renderContext(1500 + COMPOSER().estimateTokens(recent) + COMPOSER().estimateTokens(draft)); // ~1,500 for the instructions themselves
+    updateCount();
   }
   document.addEventListener('click', function (e) {
     var t = e.target.closest('button, a'); if (!t) return;
@@ -713,6 +731,9 @@
         if (!c) return;
         S.enabled = !!c.enabled;
         S.historyTurns = c.historyTurns || 16;
+        S.maxMessageChars = c.maxMessageChars || 0;
+        S.maxAttachmentChars = c.maxAttachmentChars || 0;
+        if (COMPOSER().setMaxAttachmentChars) COMPOSER().setMaxAttachmentChars(S.maxAttachmentChars);
         COMPOSER().setModel(c.model || null);
         setStatus(S.enabled ? 'Ready' : 'Not switched on', S.enabled ? '' : 'off');
         $('oa-send').disabled = !S.enabled;

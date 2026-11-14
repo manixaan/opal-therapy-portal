@@ -219,6 +219,8 @@
 
   api.init = init; api.autosize = autosize; api.attachmentsText = attachmentsText; api.clearAttachments = clearAttachments;
   api.setModel = setModel; api.renderContext = renderContext; api.stopDictation = stopDictation;
+  /** The server's attachment cap (from the Assist config), applied once known. */
+  api.setMaxAttachmentChars = function (n) { if (n > 0) C.maxAttachmentChars = n; };
   api.busyReading = function () { return C.attachments.some(function (a) { return a.loading; }); };
   global.OpalAssistComposer = api;
 })(typeof window !== 'undefined' ? window : globalThis);
