@@ -3,11 +3,23 @@
 ## 1. Status line
 
 **RAN** at 2026-11-15 18:11 UTC. Commit audited: `9444e23` (origin/develop, "Merge branch
-'flight-tracking' — Add a flight"). First-ever run of this audit — no prior brief existed, so the
-14-day window (2026-11-01 to 2026-11-15) was used in place of "since the last audit."
+'flight-tracking' — Add a flight").
 
-Counts across the tracker's 13 features: **3 proven · 7 needs-refinement · 3 untouched ·
-0 built-untested · 0 broken**.
+**Correction on the change window**: this audit initially treated tonight as a first run (no
+`docs/qa/nightly/*.md` exists on `develop`) and used a 14-day window. While finishing delivery, the
+real `claude/nightly-audit` branch was found on `origin` with a full history back to 2026-11-01 and
+a 2026-11-14 brief — the last audit date should have been **2026-11-14**, not "none." The 2026-11-14
+brief audited the *same* commit (`9444e23`) this run did, so no code changed between the two audits;
+the 14-day "what changed" section below is still accurate, just wider than strictly necessary.
+
+**Correction on classification**: comparing tonight's first-pass labels against the 2026-11-14
+brief's per-feature table surfaced a methodology error — several features whose only real gap was
+"nobody has proven the tab/browser" were first labelled `needs-refinement` instead of the more
+precise `tab-unproven` or `built-untested`. Six labels were corrected before delivery (see each
+feature's "Correction note" in its `STATUS.md`); the counts below are the corrected ones.
+
+Counts across the tracker's 13 features: **2 proven · 4 needs-refinement · 1 built-untested ·
+4 tab-unproven · 2 untouched · 0 broken**.
 
 This is a Sunday run, so the complete suites were also run once per the weekly-deep-run rule:
 full unit suite 5521/5534 pass, full integration suite 1216/1217 pass. Both single failures are the
@@ -24,23 +36,25 @@ for. Flagging this plainly in case it's worth knowing who or what is writing tho
 
 1. **Portal-Splose-Outlook Integration — "Multi Calendar Rules" has no code anywhere.** The
    Calendar tab is used daily and everything else in this integration (408 tests) passes, but this
-   one task is genuinely unbuilt. → `/opal-feature`, see
+   one task is genuinely unbuilt — the only `needs-refinement` item that is a true code gap rather
+   than a missing check. → `/opal-feature`, see
    `docs/qa/nightly/features/portal-splose-outlook-integration-works/START.md`.
 2. **Employee Personal Page — no test proves leave/CPD approval actually works end to end.**
-   Code is built and guarded; nobody has proven the therapist→owner round trip. → `/opal-critical`,
-   see `docs/qa/nightly/features/employee-personal-page-my-profile-tab/START.md`.
+   Code is built and guarded; nobody has proven the therapist→owner round trip (`built-untested`).
+   → `/opal-critical`, see `docs/qa/nightly/features/employee-personal-page-my-profile-tab/START.md`.
 3. **Interactive Assessments — WHODAS 2.0 scoring has never been checked in a browser for a real
-   client.** Backend is fully tested (860 tests); nobody has looked at the tab. → `/opal-critical`,
-   see `docs/qa/nightly/features/interactive-assessments/START.md`.
+   client.** Backend is fully tested (860 tests); nobody has looked at the tab (`tab-unproven`).
+   → `/opal-critical`, see `docs/qa/nightly/features/interactive-assessments/START.md`.
 4. **Report Templates — none of FCA / Progress Letter / Client Agreement Form has been hand-run
-   to a downloaded file.** → `/opal-critical`, see `docs/qa/nightly/features/report-templates/START.md`.
+   to a downloaded file** (`tab-unproven`). → `/opal-critical`, see
+   `docs/qa/nightly/features/report-templates/START.md`.
 5. **Xero Integration — never connected to a real Xero sandbox.** Everything up to the Xero
-   boundary is tested and guarded; the actual numbers have never been checked. → `/opal-critical`,
-   see `docs/qa/nightly/features/xero-integration-works/START.md`.
+   boundary is tested and guarded; the actual numbers have never been checked (`tab-unproven`).
+   → `/opal-critical`, see `docs/qa/nightly/features/xero-integration-works/START.md`.
 
 No `broken` features and no case where the tracker claims *more* progress than the evidence shows.
-All seven `needs-refinement` items point the same way: strong code, no proof the last mile (a
-browser check, a round-trip test, or a specific unbuilt rule) has happened.
+Across the board, strong code with no proof the last mile (a browser check, a round-trip test, or a
+specific unbuilt rule) has happened.
 
 ## 3. Every feature
 
@@ -50,15 +64,15 @@ browser check, a round-trip test, or a specific unbuilt rule) has happened.
 | Portal Onboarding Workflow | idea | needs-refinement | extensively built/tested; Stage 1/2/3 tasks open, no written scope | 871 pass, 1 fail (env) |
 | Clinical resources | idea | proven | fully built, guarded, tested, tab-covered | 578 pass |
 | Inductions | idea | needs-refinement | pack delivery proven; Induction Playground step types unbuilt | 339 pass |
-| Professional Development | idea | proven | no code of its own — lives inside Resource Hub, tested there | 168 pass (shared) |
-| Automated Reminders | idea | untouched | no SMS/email reminder code anywhere; "Snapshot" ≠ this card | 6 pass (unrelated feature) |
-| Employee Personal Page (My Profile Tab) | idea | needs-refinement | built/guarded; no leave/CPD round-trip test exists | 9 pass, 1 fail (env/root) |
-| Interactive Assessments | idea | needs-refinement | well tested; no browser proof of the tab | 860 pass |
+| Professional Development | idea | tab-unproven | no code of its own — lives inside Resource Hub, tested there, but no browser proof of the tab | 168 pass (shared) |
+| Automated Reminders | idea | needs-refinement | "Snapshot" half built/tested but is a different feature; client-reminder half entirely unbuilt | 6 pass (unrelated feature) |
+| Employee Personal Page (My Profile Tab) | idea | built-untested | built/guarded, tab renders; no test exercises leave/CPD approval | 9 pass, 1 fail (env/root) |
+| Interactive Assessments | idea | tab-unproven | well tested; no browser proof of the tab | 860 pass |
 | Opa Mobile Companion | idea | proven | both open tasks (Case Noting, Calendar View) already built/tested | 53 pass |
 | Password Master Document | idea | untouched | correctly so — OneDrive document by design | none (n/a) |
-| Report Templates | idea | needs-refinement | built/tested this week; three document flows never hand-checked | 239 pass |
+| Report Templates | idea | tab-unproven | built/tested this week; three document flows never hand-checked | 239 pass |
 | Update Opal Docs Register | idea | untouched | correctly so — SharePoint task, not portal code | none (n/a) |
-| Xero Integration Works | idea | needs-refinement | tested/guarded; real Xero sandbox never connected | 85 pass |
+| Xero Integration Works | idea | tab-unproven | tested/guarded; real Xero sandbox never connected | 85 pass |
 
 (Counts above are unit+integration tests run tonight that are specific to each feature; several
 test files are shared between features and so are counted once, under the feature they were run
@@ -78,10 +92,11 @@ step, and a done-means test). Summary of the skill to run each under:
 
 ## 5. Ideas without a start
 
-Every feature folder was created tonight (first run). Three needed no `START.md` beyond a one-line
-note because they are already `proven`: **Clinical resources**, **Professional Development**
-(which has no code of its own — see disagreement note), and **Opa Mobile Companion**. The rest all
-have a full `START.md`.
+Every feature folder was created tonight. Two needed no `START.md` beyond a one-line note because
+they are already `proven`: **Clinical resources** and **Opa Mobile Companion**. The rest all have a
+full `START.md`, including **Professional Development**, which has no code of its own (see
+disagreement note) but is not `proven` — it is `tab-unproven`, so it still gets a short browser-check
+prompt.
 
 ## 6. What changed since last audit (14-day window, 2026-11-01 to 2026-11-15)
 
@@ -140,11 +155,31 @@ against claiming a clean result that wasn't observed):
 - Only two e2e spec files exist repo-wide (`e2e/tests/portal.spec.js`,
   `e2e/tests/tutorials.spec.js`); most features have no dedicated e2e spec and rely on
   `docs/qa/BROWSER_QA_RESULTS.md` for tab coverage, or get no tab evidence at all.
-- `docs/qa/nightly/` had no prior dated brief and no `features/` folder before tonight — this is
-  the first run of this audit.
+- `docs/qa/nightly/` on `develop` had no prior dated brief and no `features/` folder before
+  tonight — but, as corrected in the Status line above, that is because this branch's deliverables
+  live only on `claude/nightly-audit` (never merged to `develop`), not because this was the first
+  run. The real last audit was 2026-11-14, on `origin/claude/nightly-audit`.
 
-**Write-back to tracker**: `node ../scripts/nightly-audit/post-tracker.mjs /tmp/writeback.json` →
-`post-tracker: 13 features posted, 0 already posted tonight, brief posted`. Succeeded.
+**Write-back to tracker**: run twice — once before the classification correction above, once after.
+First run: `post-tracker: 13 features posted, 0 already posted tonight, brief posted`. Second run
+(with corrected text): `post-tracker: 0 features posted, 13 already posted tonight, brief posted`.
+Both succeeded; no hand-crafted API calls were made (per the hard limit, this script is the only
+sanctioned write path). The script always refreshes `features.claude_update`/`next_action` on every
+run, so those two fields now hold the corrected (post-fix) text for every feature. The one-time
+activity-feed row and assistant message it posts per feature are idempotent per night, so for the 6
+corrected features (Professional Development, Automated Reminders, Employee Personal Page,
+Interactive Assessments, Report Templates, Xero Integration) that one-time note still carries the
+pre-correction wording from the first run — a minor, transparent inconsistency in the historical log,
+not in the live fields a person actually reads first.
+
+**A deliberate divergence from 2026-11-14 kept, not corrected**: that brief called Inductions,
+Portal Onboarding Workflow and Portal-Splose-Outlook "proven" with a flagged caveat (a hybrid,
+not one of the six defined labels). Tonight's audit classified all three as `needs-refinement`
+instead — each genuinely has at least one tracker task still `todo` with no written scope or no
+code at all (Induction Playground's step types; Onboarding's Stage 1/2/3; Multi Calendar Rules),
+and the rule is explicit that an open `todo` task disqualifies `proven`. This looks like a stricter
+reading than the prior night's, not a regression — flagging the difference so it isn't mistaken for
+new breakage.
 
 **Open questions for the team**:
 - Who/what wrote this run's `next_action` fields in the tracker, several of which read as direct

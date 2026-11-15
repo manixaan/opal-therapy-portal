@@ -1,7 +1,7 @@
 # Employee Personal Page (My Profile Tab)
 
 - Tracker stage: idea | Tracker environment: none
-- Evidence label: **needs-refinement**
+- Evidence label: **built-untested**
 - Created: yes
 - Addressed this window: no
 
@@ -43,3 +43,10 @@ None.
 ## Disagreement
 None directionally — code is extensively built; the gap (missing round-trip test) matches what the
 tracker itself already says.
+
+## Correction note
+This audit's first pass called this `needs-refinement`. Corrected to `built-untested` before
+delivery, matching how the 2026-11-14 audit classified this same card: "no test exercises it or the
+only tests are unrelated" is the more precise label than needs-refinement here, since the gap is
+specifically that no test exercises the leave/CPD approval logic at all (the incidental references
+found don't count).

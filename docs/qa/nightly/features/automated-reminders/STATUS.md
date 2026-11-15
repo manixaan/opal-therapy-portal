@@ -2,7 +2,7 @@
 
 - Tracker idea text: "24Hr Automatic Client Appt Reminders"
 - Tracker stage: idea | Tracker environment: none
-- Evidence label: **untouched**
+- Evidence label: **needs-refinement**
 - Created: no (for what the card actually asks for — see note)
 - Addressed this window: no
 
@@ -35,3 +35,10 @@ None.
 
 ## Disagreement
 None — the tracker correctly shows this as not yet built.
+
+## Correction note
+This audit's first pass called this `untouched`. Corrected to `needs-refinement` before delivery,
+matching how the 2026-11-14 audit classified this same card: the "Therapist Snapshot" half of the
+card does have real, tested code (even though it's a different feature than the name suggests), so
+`untouched` ("nothing in the code base matches the feature") undersells it — the better single label
+is `needs-refinement`, carrying the genuinely-open client-reminder half as the open task.

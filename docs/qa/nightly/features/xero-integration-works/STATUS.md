@@ -1,7 +1,7 @@
 # Xero Integration Works
 
 - Tracker stage: idea | Tracker environment: none
-- Evidence label: **needs-refinement**
+- Evidence label: **tab-unproven**
 - Created: yes
 - Addressed this window: no
 
@@ -35,3 +35,9 @@ None directly.
 None — the one thing never done (a real Xero sandbox connection check) matches the tracker's own
 next_action exactly: "Connect a real Xero sandbox, confirm the Finance tab's numbers populate
 correctly in a browser, and record that check."
+
+## Correction note
+This audit's first pass called this `needs-refinement`. Corrected to `tab-unproven` before delivery,
+matching how the 2026-11-14 audit classified this same card: the guard/visibility layer is proven in
+the browser, but nothing proves the Finance tab's actual numbers against a real connection — the
+substance of the gap is a browser/data-accuracy check, not a functional code gap.

@@ -38,6 +38,8 @@ something new before building anything against that task.
 ## Done means
 A test proves a reminder is sent (or queued) 24h before an appointment and that a confirmation updates
 state. Evidence label should move to `built-untested` once code exists, then `proven` once tested and
-checked in a browser/E2E.
+checked in a browser/E2E. (A separate, already-built "Snapshot" feature exists and is tested — that
+half of this card does not need further work unless it turns out to be what "Therapist Snapshot"
+actually means.)
 
 Tracker: 398a0b36-a12f-4190-83e4-b3a8932b3b46

@@ -1,7 +1,7 @@
 # Report Templates
 
 - Tracker stage: idea | Tracker environment: none
-- Evidence label: **needs-refinement**
+- Evidence label: **tab-unproven**
 - Created: yes
 - Addressed this window: yes — heavily touched (Support Letter + Progress Report templates, live preview)
 
@@ -40,3 +40,8 @@ preview, no Splose round-trip per keystroke), 24aee93 (Support Letter and Progre
 ## Disagreement
 None — the gap (no hand-check of the three document flows through to a downloaded file) matches the
 tracker's own next_action exactly.
+
+## Correction note
+This audit's first pass called this `needs-refinement`. Corrected to `tab-unproven` before delivery,
+matching how the 2026-11-14 audit classified this same card: the gap is purely "no browser proof of
+any composer page", not a functional code gap.

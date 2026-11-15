@@ -1,7 +1,7 @@
 # Professional Development
 
 - Tracker stage: idea | Tracker environment: none
-- Evidence label: **proven**
+- Evidence label: **tab-unproven**
 - Created: yes — but not as a standalone subsystem (see note)
 - Addressed this window: not directly
 
@@ -30,3 +30,9 @@ This tracker card names no code of its own — it names an existing slice of the
 The tracker's own next_action agrees: "Clarify in the tracker which subsystem this card means, or
 merge it with Employee Personal Page if it means the CPD section." Reporting only, not changing the
 tracker.
+
+## Correction note
+This audit's first pass called this `proven` on the strength of the integration tests alone, but
+the `proven` label requires tab/browser evidence too, and none was found for the PD/CPD tab
+specifically (no e2e spec, no docs/qa/BROWSER_QA_RESULTS.md entry naming it) — corrected to
+`tab-unproven` before delivery, matching how the 2026-11-14 audit classified this same card.

@@ -1,7 +1,7 @@
 # Interactive Assessments
 
 - Tracker stage: idea | Tracker environment: none
-- Evidence label: **needs-refinement**
+- Evidence label: **tab-unproven**
 - Created: yes
 - Addressed this window: no
 
@@ -30,3 +30,8 @@ None directly.
 ## Disagreement
 None — the gap (no browser proof of WHODAS 2.0 scoring for a real client) matches exactly what the
 tracker's own next_action already asks for.
+
+## Correction note
+This audit's first pass called this `needs-refinement`. Corrected to `tab-unproven` before delivery,
+matching how the 2026-11-14 audit classified this same card: the substance of the gap is purely "no
+browser proof", not a functional code gap, so `tab-unproven` is the precise single label.
