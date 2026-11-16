@@ -14,25 +14,22 @@
 ## Guard check
 requireAuth at every route; leave/CPD approve+reject additionally gated by inline
 `canApprove(req.user)` role check (file's own header documents this as deliberate HR-style RBAC,
-2026-08-06). No unguarded route found.
+2026-08-06). No unguarded route found (re-confirmed tonight).
 
-## Tests
-- No dedicated leave/CPD round-trip test exists anywhere. Grepped for updateLeaveStatus / leave_request
-  / profile/leave / profile/cpd across every test file — found only an incidental route-list mention
-  (onboarding-security.test.js) and an unrelated availability-engine fixture insert
-  (scheduler-availability.itest.js). This confirms the tracker's own next_action: the gap is real.
+## Tests (re-run fresh tonight)
+- No dedicated leave/CPD round-trip test exists anywhere. Re-grepped tonight for
+  updateLeaveStatus / leave_request / profile/leave / profile/cpd across every unit test file —
+  found only an incidental route-list mention (onboarding-security.test.js) and an unrelated
+  availability-engine fixture insert (scheduler-availability.itest.js). Confirms the gap is real.
 - Ran tests/integration/readonly-and-hardening.itest.js + audit.itest.js
   (DB_NAME=therapy_scheduler_audit_profile): 9/10 pass, 1 FAIL.
   **Failing test** (readonly-and-hardening.itest.js, D-7, line 121): expects an unwritable storage
-  directory (chmod 0o000) to make a document upload fail with 5xx and leave no orphaned row. In this
-  sandbox the test runs as root (confirmed via `whoami`/`id` → uid=0), and root bypasses Unix
-  permission bits, so the write succeeds (201) instead of failing. This is a confirmed **environment
-  artifact**, not an application defect — the paired D-6 check (missing storage object → 404) in the
-  same test passes correctly. Flag for the team: this test needs a non-root runner or a failure-
-  injection mock to be meaningful here.
-- Tab coverage: docs/qa/BROWSER_QA_RESULTS.md section I — "Leave/CPD/documents: setup card + profile
-  sections render; no fake-success strings; disabled features honestly labelled" — 3/3 pass
-  (render-level only, not the approval round trip).
+  directory (chmod 0o000) to make a document upload fail with 5xx. This sandbox runs as root, and
+  root bypasses Unix permission bits, so the write succeeds (201) instead of failing — the same
+  confirmed **environment artifact** as last night, not an application defect. The paired D-6 check
+  (missing storage object → 404) in the same test passes correctly.
+- Tab coverage: docs/qa/BROWSER_QA_RESULTS.md section I — render-level only, not the approval round
+  trip, unchanged since last night.
 
 ## Open tasks (from tracker)
 - "Review Portal Structure" — todo.
@@ -44,9 +41,5 @@ None.
 None directionally — code is extensively built; the gap (missing round-trip test) matches what the
 tracker itself already says.
 
-## Correction note
-This audit's first pass called this `needs-refinement`. Corrected to `built-untested` before
-delivery, matching how the 2026-11-14 audit classified this same card: "no test exercises it or the
-only tests are unrelated" is the more precise label than needs-refinement here, since the gap is
-specifically that no test exercises the leave/CPD approval logic at all (the incidental references
-found don't count).
+## Note
+No change from the 2026-11-15 audit. Re-verified fresh tonight: same code, same tests, same result.

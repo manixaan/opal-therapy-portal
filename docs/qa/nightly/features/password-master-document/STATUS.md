@@ -6,10 +6,10 @@
 - Addressed this window: no
 
 ## Located files
-None. Grepped for "password master" / "master document" / "password doc" across backend/ and
-frontend/current/ — no matches. This is correct: the idea text explicitly describes a OneDrive
-document, not a portal feature ("A master doc that exists on onedrive with all accounts login
-details for all portals in use.").
+None. Re-grepped tonight for "password master" / "master document" / "password doc" across
+backend/ and frontend/current/ — no matches. This is correct: the idea text explicitly describes a
+OneDrive document, not a portal feature ("A master doc that exists on onedrive with all accounts
+login details for all portals in use.").
 
 ## Guard check
 N/A — nothing to guard-check.
@@ -27,3 +27,6 @@ None.
 None — the tracker's own next_action agrees this should stay outside the portal: "Keep this as a
 OneDrive document; if it ever becomes a portal feature, use a proper secrets manager instead of a
 shared password list."
+
+## Note
+No change from the 2026-11-15 audit. Re-verified fresh tonight (re-grepped, not assumed).

@@ -12,26 +12,28 @@
 - Routes: assessments-routes.js (2 guards), fca-routes.js (2), whodas-routes.js (2), letter-routes.js (2)
 
 ## Guard check
-All four route files guarded. OK.
+All four route files guarded. OK (re-confirmed tonight).
 
-## Tests
-- Unit: 12 suites / 738 tests — PASS
-- Integration: 3 suites / 122 tests — PASS (DB_NAME=therapy_scheduler_audit_assess). WARN logged
-  ("splose client list unavailable (splose down)") — an exercised fallback path, not a failure.
+## Tests (re-run fresh tonight)
+- Unit: 12 suites / 738 tests — PASS (fca-docx-engine, fca-frontend-helpers, fca-preview-lifecycle,
+  fca-preview-pages, fca-resolve-scalars, fca-wizard-behaviour, whodas-external-completion,
+  whodas-frontend-guards, whodas-scoring, whodas-templates, assessment-catalogue,
+  assessment-surface-guards).
+- Integration: 3 suites / 122 tests — PASS (assessments, fca-reports, whodas;
+  DB_NAME=therapy_scheduler_audit_assess). Same benign WARN logged as last night ("splose client
+  list unavailable (splose down)") — an exercised fallback path, not a failure.
 - Tab coverage: NONE found. No e2e spec for FCA/WHODAS/assessments; no pass entry in
-  docs/qa/BROWSER_QA_RESULTS.md (only an unrelated mention of "Assessment" in an error-log table).
+  docs/qa/BROWSER_QA_RESULTS.md (unchanged since last night).
 
 ## Open tasks (from tracker)
 - "Assessment Review" — todo.
 
 ## Commits in window touching this
-None directly.
+None.
 
 ## Disagreement
 None — the gap (no browser proof of WHODAS 2.0 scoring for a real client) matches exactly what the
 tracker's own next_action already asks for.
 
-## Correction note
-This audit's first pass called this `needs-refinement`. Corrected to `tab-unproven` before delivery,
-matching how the 2026-11-14 audit classified this same card: the substance of the gap is purely "no
-browser proof", not a functional code gap, so `tab-unproven` is the precise single label.
+## Note
+No change from the 2026-11-15 audit. Re-verified fresh tonight: same code, same tests, same result.

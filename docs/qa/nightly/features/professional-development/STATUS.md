@@ -13,17 +13,18 @@ this as a human-entered catalogue by design (no provider API/feed/scraper; no bo
 
 ## Guard check
 router.use('/api/rh2', requireAuth, hubEnabled-check); PD/CPD writes additionally gated by
-canAuthor(req.user) role check inline. OK.
+canAuthor(req.user) role check inline. OK (re-confirmed tonight).
 
-## Tests
+## Tests (re-run fresh tonight)
 Covered entirely by tests/integration/resource-hub-r2.itest.js, already run and passing under the
-"Clinical resources" feature folder — 7/7 suites, 168/168 tests pass, including the PD/CPD routes.
+"Clinical resources" feature folder tonight — 7/7 suites, 168/168 tests pass, including the PD/CPD
+routes.
 
 ## Open tasks (from tracker)
 None.
 
 ## Commits in window touching this
-None directly.
+None.
 
 ## Disagreement
 This tracker card names no code of its own — it names an existing slice of the Resource Hub feature.
@@ -31,8 +32,5 @@ The tracker's own next_action agrees: "Clarify in the tracker which subsystem th
 merge it with Employee Personal Page if it means the CPD section." Reporting only, not changing the
 tracker.
 
-## Correction note
-This audit's first pass called this `proven` on the strength of the integration tests alone, but
-the `proven` label requires tab/browser evidence too, and none was found for the PD/CPD tab
-specifically (no e2e spec, no docs/qa/BROWSER_QA_RESULTS.md entry naming it) — corrected to
-`tab-unproven` before delivery, matching how the 2026-11-14 audit classified this same card.
+## Note
+No change from the 2026-11-15 audit. Re-verified fresh tonight: same code, same tests, same result.

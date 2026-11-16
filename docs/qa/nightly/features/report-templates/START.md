@@ -23,9 +23,8 @@ Report Templates
 
 ## Where it lives today
 backend/letter-routes.js, backend/templates-routes.js, backend/fca-routes.js,
-backend/service-agreements/templates/. Heavily built and tested this window (Support Letter +
-Progress Report masters with live preview). CRITICAL-level because these are clinical letters/FCA
-reports.
+backend/service-agreements/templates/. Heavily built and tested (184 unit + 55 integration tests
+pass). CRITICAL-level because these are clinical letters/FCA reports.
 
 ## Start here
 This is primarily a hand-check, as the tracker's own next_action says: "Open a client record as a

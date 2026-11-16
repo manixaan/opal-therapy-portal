@@ -23,10 +23,9 @@ Inductions
 
 ## Where it lives today
 backend/learning-routes.js, backend/induction-assistant-routes.js, backend/onboarding-induction.js,
-frontend/current/induction*.js. The induction-pack delivery mechanism is proven and was heavily
-extended this window (8 commits adding packs for booking rules, calendar fundamentals, cancellation
-policy, FCA/case-note/progress-report writing). "Induction Playground" (richer step types: photos,
-quizzes, hold points) has no code anywhere yet.
+frontend/current/induction*.js. The induction-pack delivery mechanism is proven and heavily tested
+(271 unit + 68 integration tests pass). "Induction Playground" (richer step types: photos, quizzes,
+hold points) has no code anywhere yet.
 
 ## Start here
 Open backend/tests/induction-packs.test.js to see the existing pack-definition pattern (the recent

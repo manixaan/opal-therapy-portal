@@ -1,8 +1,9 @@
 /opal-feature
 
 The PD/CPD catalogue and log are tested by tests/integration/resource-hub-r2.itest.js (7/7 suites
-pass) but no browser/E2E evidence proves the PD/CPD tab itself renders and works. This card has no
-code of its own — it names a slice of the Resource Hub feature (/api/rh2/pd, /api/rh2/cpd).
+pass, re-confirmed tonight) but no browser/E2E evidence proves the PD/CPD tab itself renders and
+works. This card has no code of its own — it names a slice of the Resource Hub feature (/api/rh2/pd,
+/api/rh2/cpd).
 
 ## Start here
 Open the Resource Hub's PD/CPD tab as a therapist, log a CPD activity and view the PD catalogue, then
