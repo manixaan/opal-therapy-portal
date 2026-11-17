@@ -39,6 +39,19 @@ None.
 Tracker stage "idea" significantly understates reality — this is one of the most heavily built and
 tested subsystems in the repository.
 
+## Additional detail (2026-11-17)
+Tonight's independent re-run went a level more specific than prior nights: the Stage 1/2 *checklist
+items themselves* (not just the overall stage) are stale against the running code. Checklist items
+marked not-done — "Add editable preview", "Make preview/PDF/doc identical", "Add Send button", and
+Stage 2's "Make the employee contract dynamic" — are all already implemented:
+`onboarding-journey-routes.js` has `preview.docx`/`download`/`download.pdf`/`offer/email/draft`
+routes, and `onboarding-contract-docx.js` reuses the Letter-of-Offer's own scalars, so the contract
+genuinely is dynamic. The one checklist item confirmed still missing, by a repo-wide grep finding
+zero SharePoint integration anywhere: Stage 2's "store documents in SharePoint." Recommend the
+humans re-tick the Stage 1/2 checklists against the code before writing a new build prompt — the
+real remaining gap is narrower than the checklists suggest.
+
 ## Note
-No change from the 2026-11-15 audit. Re-verified fresh tonight: same code, same tests (same single
-known environment artifact), same result.
+No change from the 2026-11-16 audit. Independently re-verified fresh tonight (separate parallel
+audit pass, its own throwaway database) — same code, same tests (same single known environment
+artifact), same result, plus the checklist-level detail above.

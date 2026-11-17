@@ -39,4 +39,9 @@ exercised; the open tasks are real, specific gaps (Induction Playground's richer
 tracker/evidence mismatch.
 
 ## Note
-No change from the 2026-11-15 audit. Re-verified fresh tonight: same code, same tests, same result.
+No change from the 2026-11-16 audit. Independently re-verified fresh tonight (separate parallel
+audit pass, its own throwaway database). Also confirmed the AI side specifically: an AI co-author
+(`induction_assistant`, owner-only side chat, properly governed — INTERNAL classification, Australia
+region, fail-closed) exists, but it's a side chat, not the inline "ask AI to improve this step"
+button the Induction Playground checklist describes — that gap is still open, same conclusion as
+last night.

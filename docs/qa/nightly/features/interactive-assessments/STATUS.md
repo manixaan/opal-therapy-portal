@@ -36,4 +36,8 @@ None — the gap (no browser proof of WHODAS 2.0 scoring for a real client) matc
 tracker's own next_action already asks for.
 
 ## Note
-No change from the 2026-11-15 audit. Re-verified fresh tonight: same code, same tests, same result.
+No change from the 2026-11-16 audit. Independently re-verified fresh tonight (separate parallel
+audit pass, its own throwaway database) — same code, same tests, same result. Also confirmed two
+near-miss window commits are non-matches: `554fcea` ("Writing an FCA report" induction pack) is
+content only, and `24aee93` (Report Templates' clinical-letter-templates merge) touched
+`backend/fca/docx-engine.js` as shared composition machinery without regressing any FCA/WHODAS test.

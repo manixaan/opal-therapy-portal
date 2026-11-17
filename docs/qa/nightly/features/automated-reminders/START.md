@@ -23,8 +23,9 @@
 
 ## Where it lives today
 Nothing yet. No SMS/email send-and-confirm flow exists anywhere in backend/. A separate, already-built
-"Snapshot" feature (backend/snapshot-routes.js) exists but is an unrelated personal reminders/task list,
-not this.
+"Snapshot" feature (`backend/snapshot-routes.js`, self-scoped by design, 6/6 integration tests
+passing; its UI is `frontend/current/reports.js`'s "Daily & Weekly Snapshot" panel) exists but is an
+unrelated personal reminders/task list, not this.
 
 ## Start here
 Before writing code, the tracker's own next_action needs a human decision: "Decide the reminder channel

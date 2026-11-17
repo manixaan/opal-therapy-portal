@@ -22,16 +22,20 @@ Xero Integration Works
 (none recorded)
 
 ## Where it lives today
-backend/accounting-routes.js, backend/xero-api.js, backend/xero-payroll-*.js. CRITICAL-level
-(accounting/Xero). Well tested at unit (57/57) and integration (28/28) level; guard/visibility layer
-proven in the browser (section H, 9/9).
+`backend/accounting-routes.js`, `backend/xero-api.js`, `backend/xero-payroll-*.js`,
+`backend/finance-routes.js` (owner-only Financial Dashboard), `backend/onboarding-payroll-routes.js`
++ `backend/xero-payroll-sync.js` (a real 10-step Xero employee-creation pipeline for Payroll
+Automation). CRITICAL-level (accounting/Xero). Owner-guarded and tested at 144 passing tests total;
+guard/visibility layer proven in the browser (section H).
 
 ## Start here
 This is primarily a hand-check, as the tracker's own next_action says: "Connect a real Xero sandbox,
 confirm the Finance tab's numbers populate correctly in a browser, and record that check." No sandbox
 credentials exist in this audit environment, so this cannot be done from a nightly run — it needs a
-person with access to a real (or sandbox) Xero account. Record the result in
-docs/qa/BROWSER_QA_RESULTS.md once done.
+person with access to a real (never production) Xero sandbox account. Record the result in
+docs/qa/BROWSER_QA_RESULTS.md once done. Before that: both tasks' checklists in the tracker read as
+100% unticked despite substantial built-and-tested code already behind them (see STATUS.md) — worth
+re-ticking against the running code first.
 
 ## Done means
 A docs/qa/BROWSER_QA_RESULTS.md entry proves the Finance tab's numbers populate correctly against a

@@ -33,4 +33,8 @@ merge it with Employee Personal Page if it means the CPD section." Reporting onl
 tracker.
 
 ## Note
-No change from the 2026-11-15 audit. Re-verified fresh tonight: same code, same tests, same result.
+No change from the 2026-11-16 audit. Independently re-verified fresh tonight (separate parallel
+audit pass, its own throwaway database) — same code, same tests, same result. Also worth flagging:
+the portal now runs two separate CPD systems (`/api/profile/cpd` for leave/CPD approval under
+Employee Personal Page, `/api/rh2/cpd` for this card's self-logged CPD tracking) — intentional per
+this card's own next_action to decide a merge, not a code defect.

@@ -41,4 +41,13 @@ The tracker has real scope (or no Stage 3 card) and, once concrete work is ident
 under backend/tests/integration/onboarding-*.itest.js proves it. Evidence label should move to `proven`
 once the three open tasks are resolved either way.
 
+## Addendum (2026-11-17)
+Tonight's audit found the gap is narrower than it first looks: Stage 1's Letter-of-Offer
+preview/PDF/send flow and Stage 2's dynamic employee contract already exist in code (see
+STATUS.md's "Additional detail"). If picking this up, start by re-ticking those checklist items
+against the running code, then build SharePoint document storage for Stage 2 — a repo-wide grep
+confirms it's the one piece genuinely missing — following the existing document-handling pattern in
+`backend/onboarding-pack-routes.js` and the Outlook-draft integration pattern in
+`backend/onboarding-journey-routes.js` for style.
+
 Tracker: 32b768b1-8bf3-40a6-9669-a8908922aa21

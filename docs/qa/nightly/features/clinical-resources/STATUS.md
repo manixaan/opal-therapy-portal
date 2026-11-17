@@ -39,4 +39,5 @@ tracker's own next_action verbatim ("Move this card's tracker stage up to reflec
 audit does not change the tracker; reporting the gap only.
 
 ## Note
-No change from the 2026-11-15 audit. Re-verified fresh tonight: same code, same tests, same result.
+No change from the 2026-11-16 audit. Independently re-verified fresh tonight (separate parallel
+audit pass, its own throwaway database) — same code, same tests, same result.

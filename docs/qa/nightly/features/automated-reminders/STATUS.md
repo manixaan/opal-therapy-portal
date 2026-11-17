@@ -34,5 +34,13 @@ None.
 ## Disagreement
 None — the tracker correctly shows this as not yet built.
 
+## Additional detail (2026-11-17)
+Tonight's pass also located the Snapshot feature's frontend: `frontend/current/reports.js`
+(functions `openReportPanel`/`switchReportMode`), wired into `mockup_v3.html`, pulling billable
+hours/travel/idle-gap data from `/api/events`, plus the personal reminders/tasks widget from
+`snapshot-routes.js`. No dedicated unit test exists for this report-panel logic beyond the generic
+frontend guard suites.
+
 ## Note
-No change from the 2026-11-15 audit. Re-verified fresh tonight: same code, same tests, same result.
+No change from the 2026-11-16 audit. Independently re-verified fresh tonight (separate parallel
+audit pass, its own throwaway database) — same code, same tests, same result.

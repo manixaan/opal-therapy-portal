@@ -41,5 +41,20 @@ None.
 None — the gap (no hand-check of the three document flows through to a downloaded file) matches the
 tracker's own next_action exactly.
 
+## Additional detail (2026-11-17)
+Tonight's locate pass found a more structured engine than previously recorded:
+`backend/templates/catalogue.js`, `compose.js`, `export-boundary.js`, `pdf-export.js`,
+`document-model.js`, `appendices.js`, `service-agreement-map.js`, `support-letter-map.js`,
+`progress-report-map.js` sit behind `templates-routes.js`, with `letter-routes.js` as a legacy
+alias superseded 2026-11-07. Task → catalogue mapping: **Client Agreement Form** = `service_agreement`;
+**Progress Letter** = `progress_report` (current)/`support_letter`; **FCA** = `fca` catalogue id —
+this last one may overlap with the separate FCA report flow under "Interactive Assessments"
+(`backend/fca-routes.js`); worth the humans clarifying which card owns FCA report generation. Running
+the fuller file set gives **235 unit + 27 integration** passing (vs. 184+55 previously recorded) —
+a wider, not narrower, test set; still 100% passing either way. The `clinical-letter-templates`
+merge (`64e432f`/`0561d91`/`24aee93`, 2026-11-07 — Support Letter + Progress Report masters, live
+side-by-side preview) sits inside this engine but adds no hand-check evidence.
+
 ## Note
-No change from the 2026-11-15 audit. Re-verified fresh tonight: same code, same tests, same result.
+No change in label from the 2026-11-16 audit. Independently re-verified fresh tonight (separate
+parallel audit pass, its own throwaway database) — same conclusion, wider file/test detail above.

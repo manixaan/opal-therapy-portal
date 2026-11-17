@@ -42,4 +42,5 @@ None directionally — code is extensively built; the gap (missing round-trip te
 tracker itself already says.
 
 ## Note
-No change from the 2026-11-15 audit. Re-verified fresh tonight: same code, same tests, same result.
+No change from the 2026-11-16 audit. Independently re-verified fresh tonight (separate parallel
+audit pass, its own throwaway database) — same code, same tests, same result.

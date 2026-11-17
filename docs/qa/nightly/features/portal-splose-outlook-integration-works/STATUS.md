@@ -43,5 +43,6 @@ Tracker stage "idea" significantly understates reality: a large, heavily-tested 
 exists and is exercised nightly. The only real gap is the "Multi Calendar Rules" task.
 
 ## Note
-No change from the 2026-11-15 audit. Re-verified fresh tonight with an independently-built test file
-selection (see above); same code, zero failures, same conclusion.
+No change from the 2026-11-16 audit. Independently re-verified fresh tonight (separate parallel
+audit pass, its own throwaway database, independently-built test file selection — see above); same
+code, zero failures, same conclusion.
