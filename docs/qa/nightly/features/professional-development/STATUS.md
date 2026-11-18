@@ -1,40 +1,37 @@
 # Professional Development
 
-- Tracker stage: idea | Tracker environment: none
+- Tracker stage: **idea**
+- Tracker environment: **none**
 - Evidence label: **tab-unproven**
-- Created: yes — but not as a standalone subsystem (see note)
-- Addressed this window: not directly
+- Addressed since the last audit (2026-11-17..2026-11-18): **no**
+- Created (any located code): **yes**
 
 ## Located files
-NOT a standalone subsystem. The PD/CPD functionality lives inside resource-hub-r2-routes.js
-(/api/rh2/pd, /api/rh2/pd/catalogue, /api/rh2/cpd, /api/rh2/cpd/summary) and
-frontend/current/resourcehub.js (PD/CPD tab UI). backend/migrations/029_pd_catalogue.sql documents
-this as a human-entered catalogue by design (no provider API/feed/scraper; no booking integration).
+- No dedicated code of its own. Two plausible homes exist, and the card's own next_action has not picked between them: (1) backend/profile-routes.js — /api/profile/cpd, /api/profile/documents, /api/profile/credentials (My Profile's PD credentials/documents sections); (2) Resource Hub (backend/resources-routes.js, resource-library-routes.js) where PD-related material could equally well live as library content, which is where this audit has previously placed it.
+
+## Could not locate / notable gaps
+- No dedicated frontend tab or page for "Professional Development" as a standalone card either way.
 
 ## Guard check
-router.use('/api/rh2', requireAuth, hubEnabled-check); PD/CPD writes additionally gated by
-canAuthor(req.user) role check inline. OK (re-confirmed tonight).
+OK either way — Resource Hub is requireAuth + requireRole('owner')/requireManager; profile-routes.js is requireAuth + inline canApprove.
 
-## Tests (re-run fresh tonight)
-Covered entirely by tests/integration/resource-hub-r2.itest.js, already run and passing under the
-"Clinical resources" feature folder tonight — 7/7 suites, 168/168 tests pass, including the PD/CPD
-routes.
+## Tests run
+- unit/integration: `Resource Hub's own 12 unit files/398 tests + 7 integration files/168 tests cover it if PD content lives there; no test exercises /api/profile/cpd or /api/profile/documents specifically if it lives in My Profile instead` — **pass (via Resource Hub) / none (via My Profile)** (—)
 
-## Open tasks (from tracker)
-None.
+## Tab / browser proof
+Resource Hub has E2E proof (portal.spec.js); there is no dedicated "PD" tab proof under either home.
 
-## Commits in window touching this
-None.
+## Recency
+Not touched since the last audit (2026-11-17); zero commits anywhere since 2026-11-14.
 
-## Disagreement
-This tracker card names no code of its own — it names an existing slice of the Resource Hub feature.
-The tracker's own next_action agrees: "Clarify in the tracker which subsystem this card means, or
-merge it with Employee Personal Page if it means the CPD section." Reporting only, not changing the
-tracker.
+## Open tasks (from the tracker)
+(no tasks recorded on this card)
+
+## Reason for the label
+Whichever home this card actually belongs to, the underlying code is tested — the real gap is that nobody has opened a PD-specific view in a browser and confirmed it, which the tracker's own next_action ("open the PD tab... record a browser check") already asks for. That is a tab/proof gap, not missing code, hence `tab-unproven`.
 
 ## Note
-No change from the 2026-11-16 audit. Independently re-verified fresh tonight (separate parallel
-audit pass, its own throwaway database) — same code, same tests, same result. Also worth flagging:
-the portal now runs two separate CPD systems (`/api/profile/cpd` for leave/CPD approval under
-Employee Personal Page, `/api/rh2/cpd` for this card's self-logged CPD tracking) — intentional per
-this card's own next_action to decide a merge, not a code defect.
+This card has no idea/why/strategy text and 0 tasks. Its own next_action already asks whether it should merge into Resource Hub or My Profile rather than stand alone — that decision should be made before chasing more test coverage here.
+
+## Disagreement with the tracker
+None — the tracker's own words already match the evidence.

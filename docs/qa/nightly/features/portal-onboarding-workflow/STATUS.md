@@ -1,57 +1,44 @@
 # Portal Onboarding Workflow
 
-- Tracker stage: idea | Tracker environment: none
+- Tracker stage: **idea**
+- Tracker environment: **none**
 - Evidence label: **needs-refinement**
-- Created: yes — 29 onboarding-*.js backend files, a standalone onboarding.html/.js frontend
-- Addressed this window: no — zero commits anywhere since 2026-11-15
+- Addressed since the last audit (2026-11-17..2026-11-18): **no**
+- Created (any located code): **yes**
 
 ## Located files
-- Backend: onboarding-routes.js (29 guard refs) plus 28 other onboarding-*.js route/lib files
-  (journey, pack, payroll, returns, wizard-link, workflow, etc.)
-- Frontend: frontend/current/onboarding.js, onboarding.html (standalone page)
+- backend/onboarding-employee-routes.js
+- backend/onboarding-workflow-routes.js
+- backend/onboarding-journey-routes.js
+- backend/onboarding-pack-routes.js
+- backend/onboarding-package-docs-routes.js
+- backend/onboarding-returns-routes.js
+- backend/onboarding-defaults-routes.js
+- backend/onboarding-assignment-routes.js
+- backend/onboarding-library-routes.js
+- backend/onboarding-routes.js
+- frontend: ONBOARDING TAB banner + frontend/current/onboarding.js + standalone onboarding.html / onboarding-invite.html
 
 ## Guard check
-onboarding-routes.js: OK (29 requireAuth/requirePermission/requireRole references). `node --check`
-passes (re-confirmed tonight across all of backend/*.js).
+OK — requireAuth + requirePermission('onboarding.*') per route throughout.
 
-## Tests (re-run fresh tonight)
-- Unit: 27 suites run, 26 PASS / 1 FAIL — tests/onboarding-document-reader.test.js fails because
-  `@tesseract.js-data/eng` (an OCR training-data package declared in package.json) is not present in
-  this sandbox's node_modules. Confirmed environment/install gap, not an application defect —
-  653/654 individual tests still pass. The hard limit against running `npm install` means this
-  cannot be fixed from this audit; flagging again for whoever maintains the environment's setup
-  script.
-- Integration: 10 suites / 232 tests — all PASS (DB_NAME=therapy_scheduler_audit_onb). Same WARN
-  logged as last night (ONBOARDING_ENCRYPTION_KEY not set, falls back to TOKEN_ENCRYPTION_KEY) —
-  expected on this sandbox, not a test failure.
-- Tab coverage: docs/qa/BROWSER_QA_RESULTS.md section C (onboarding/profile chain) and
-  e2e/tests/portal.spec.js's invite-flow test both cover this (confirmed unchanged tonight).
+## Tests run
+- unit: `25 onboarding-*.test.js files run (excluding payroll/security, covered under Xero/cross-cutting): 24 passed, 1 FAILED — tests/onboarding-document-reader.test.js: "Cannot find module '@tesseract.js-data/eng/package.json'". @tesseract.js-data/eng is declared in backend/package.json but genuinely absent from backend/node_modules in this sandbox. This is the SAME environment/install artifact this audit's prior nights (2026-11-15 through 2026-11-17) have already confirmed independently — flagging again for whoever maintains the environment's setup script; the hard limit against running `npm install` means it cannot be fixed from inside this audit. 604 other tests in the same run passed.` — **fail (1 of 25 files, known environment artifact)** (604 pass / 1 fail)
+- integration: `onboarding-defaults.itest.js, onboarding-journey.itest.js, onboarding-pack.itest.js, onboarding-portal-route.itest.js, onboarding-returns.itest.js, onboarding-wizard-link.itest.js, onboarding-workflow.itest.js, onboarding.itest.js` — **pass** (8 files / 208 tests)
 
-## Open tasks (from tracker)
-- "Stage 1" — todo
-- "Stage 2" — todo
-- "stage 3" — todo
+## Tab / browser proof
+docs/qa/BROWSER_QA_RESULTS.md row C (onboarding/profile chain) — dated 2026-08-01, stale but exists; e2e/tests/portal.spec.js also touches the invite flow.
 
-## Commits in window touching this
-None.
+## Recency
+Not touched since the last audit (2026-11-17); zero commits anywhere since 2026-11-14.
 
-## Disagreement
-Tracker stage "idea" significantly understates reality — this is one of the most heavily built and
-tested subsystems in the repository.
+## Open tasks (from the tracker)
+- Stage 1 — todo
+- Stage 2 — todo
+- stage 3 — todo
 
-## Additional detail (2026-11-17)
-Tonight's independent re-run went a level more specific than prior nights: the Stage 1/2 *checklist
-items themselves* (not just the overall stage) are stale against the running code. Checklist items
-marked not-done — "Add editable preview", "Make preview/PDF/doc identical", "Add Send button", and
-Stage 2's "Make the employee contract dynamic" — are all already implemented:
-`onboarding-journey-routes.js` has `preview.docx`/`download`/`download.pdf`/`offer/email/draft`
-routes, and `onboarding-contract-docx.js` reuses the Letter-of-Offer's own scalars, so the contract
-genuinely is dynamic. The one checklist item confirmed still missing, by a repo-wide grep finding
-zero SharePoint integration anywhere: Stage 2's "store documents in SharePoint." Recommend the
-humans re-tick the Stage 1/2 checklists against the code before writing a new build prompt — the
-real remaining gap is narrower than the checklists suggest.
+## Reason for the label
+Extensively built and tested (812 of 813 onboarding tests pass; node --check is clean on every backend file). The one failing test is a 4-night-running environment artifact (missing OCR language package), not a logic defect, so it does not make this `broken`. The real, specific gap is functional: SharePoint document storage for Stage 2 is confirmed absent by a repo-wide grep, and the dynamic-employee-contract work Stage 2 asks for is still open — genuinely unbuilt code, which is why this is `needs-refinement`.
 
-## Note
-No change from the 2026-11-16 audit. Independently re-verified fresh tonight (separate parallel
-audit pass, its own throwaway database) — same code, same tests (same single known environment
-artifact), same result, plus the checklist-level detail above.
+## Disagreement with the tracker
+Tracker "idea" stage vs. a very large, mostly-tested, already-permissioned workflow; separately, all three stage tasks remain todo (Letter of Offer preview/send flow, SharePoint storage for Stage 2, dynamic employee contract, Stage 3 undefined).

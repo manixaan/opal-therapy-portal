@@ -1,33 +1,34 @@
 # Password Master Document
 
-- Tracker stage: idea | Tracker environment: none
+- Tracker stage: **idea**
+- Tracker environment: **none**
 - Evidence label: **untouched**
-- Created: no (by design — see note)
-- Addressed this window: no
+- Addressed since the last audit (2026-11-17..2026-11-18): **no**
+- Created (any located code): **no**
 
 ## Located files
-None. Re-grepped tonight for "password master" / "master document" / "password doc" across
-backend/ and frontend/current/ — no matches. This is correct: the idea text explicitly describes a
-OneDrive document, not a portal feature ("A master doc that exists on onedrive with all accounts
-login details for all portals in use.").
+(nothing located)
+
+## Could not locate / notable gaps
+- no code — the idea itself says "keep this on OneDrive"
 
 ## Guard check
-N/A — nothing to guard-check.
+n/a
 
-## Tests
-N/A.
+## Tests run
+(no targeted tests located)
 
-## Open tasks (from tracker)
-None.
+## Tab / browser proof
+n/a
 
-## Commits in window touching this
-None.
+## Recency
+n/a
 
-## Disagreement
-None — the tracker's own next_action agrees this should stay outside the portal: "Keep this as a
-OneDrive document; if it ever becomes a portal feature, use a proper secrets manager instead of a
-shared password list."
+## Open tasks (from the tracker)
+(no tasks recorded on this card)
 
-## Note
-No change from the 2026-11-16 audit. Independently re-verified fresh tonight (re-grepped, not
-assumed).
+## Reason for the label
+next_action is literally "No portal action needed; keep this on OneDrive." Nothing to locate.
+
+## Disagreement with the tracker
+None — the tracker's own words already match the evidence.

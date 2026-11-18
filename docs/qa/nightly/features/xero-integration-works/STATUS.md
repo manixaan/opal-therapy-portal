@@ -1,56 +1,47 @@
 # Xero Integration Works
 
-- Tracker stage: idea | Tracker environment: none
+- Tracker stage: **idea**
+- Tracker environment: **none**
 - Evidence label: **tab-unproven**
-- Created: yes
-- Addressed this window: no
+- Addressed since the last audit (2026-11-17..2026-11-18): **no**
+- Created (any located code): **yes**
 
 ## Located files
-accounting-routes.js (3 guards), accounting-db.js, accounting-exceptions.js, xero-api.js,
-xero-payroll-api.js, xero-payroll-connection.js, xero-payroll-db.js, xero-payroll-mapping.js,
-xero-payroll-sync.js, xero-sync.js. No TODO/FIXME found in accounting-routes.js, xero-api.js or
-xero-payroll-sync.js (re-confirmed tonight by grep; unchanged file set, zero commits since last
-audit).
+- backend/xero-api.js
+- backend/xero-payroll-api.js
+- backend/xero-payroll-connection.js
+- backend/xero-payroll-db.js
+- backend/xero-payroll-mapping.js
+- backend/xero-payroll-sync.js
+- backend/xero-sync.js
+- backend/accounting-routes.js
+- backend/finance-routes.js
+- backend/invoicing-routes.js
+- backend/onboarding-payroll-routes.js
+- frontend tabs: ACCOUNTING TAB, FINANCE TAB, INVOICING TAB (mockup_v3.html)
+
+## Could not locate / notable gaps
+- a Xero sandbox connection has not been confirmed live this run (no browser access)
 
 ## Guard check
-OK — re-confirmed tonight.
+OK — ownerOnly / requirePermission('manage_billing') / requirePermission('onboarding.payroll')
 
-## Tests (re-run fresh tonight, not copied from last night)
-- Unit: 4 suites / 57 tests — PASS (xero-payroll-api, xero-payroll-mapping, xero-payroll-sync,
-  onboarding-payroll).
-- Integration: 2 suites / 28 tests — PASS (accounting-phase2, accounting-routes;
-  DB_NAME=therapy_scheduler_audit_xero).
-- Tab coverage: docs/qa/BROWSER_QA_RESULTS.md section H — Accounting/Finance tab, unchanged since
-  last night, still explicitly notes "no Xero connection attempted, no write action exercised."
+## Tests run
+- unit: `xero-payroll-api.test.js, xero-payroll-mapping.test.js, xero-payroll-sync.test.js, finance-flags.test.js, finance-routes.test.js, invoicing-billing-mark.test.js, onboarding-payroll.test.js` — **pass** (7 files / 81 tests)
+- integration: `accounting-phase2.itest.js, accounting-routes.itest.js, finance-routes.itest.js, invoicing.itest.js, onboarding-payroll-xero.itest.js` — **pass** (5 files / 63 tests)
 
-## Open tasks (from tracker)
-- "Financial Dashboard" — todo.
-- "Payroll Automation" — todo.
+## Tab / browser proof
+docs/qa/BROWSER_QA_RESULTS.md row H (owner-gated, Xero connected:false) — dated 2026-08-01, stale relative to this window, but exists.
 
-## Commits in window touching this
-None — zero commits anywhere in backend/frontend since 2026-11-15.
+## Recency
+Not touched since the last audit (2026-11-17); zero commits anywhere since 2026-11-14.
 
-## Disagreement
-None — the one thing never done (a real Xero sandbox connection check) matches the tracker's own
-next_action exactly.
+## Open tasks (from the tracker)
+- Financial Dashboard — todo
+- Payroll Automation — todo
 
-## Additional detail (2026-11-17)
-Tonight's independent locate pass found a wider file set than previously recorded, which changes
-the picture of how much is actually built: `backend/finance-routes.js` (the owner-only Financial
-Dashboard — `/api/finance/status|dashboard|payroll/overview|payroll/pay-runs/:id|invoicing/summary`,
-every route `requireAuth + requireRole('owner')`) and `backend/onboarding-payroll-routes.js` +
-`backend/xero-payroll-sync.js` (a genuine 10-step orchestrated Xero employee-creation pipeline —
-duplicate check, super-fund resolution/creation, POST /Employees, configure, pay template, read-back
-verification, pay-run readiness — not a stub). Running the fuller matching test set gives
-**81 unit + 63 integration = 144 passing tests** (including `finance-routes.test.js`,
-`invoicing-billing-mark.test.js`, `tests/integration/finance-routes.itest.js`,
-`invoicing.itest.js`, and `onboarding-payroll-xero.itest.js`, none of which were in last night's
-file list). Both tracker tasks ("Financial Dashboard", "Payroll Automation") are substantially built
-and owner-guarded despite reading as 100% unticked — the tracker understates this one, if anything,
-rather than overstating it. The classification (`tab-unproven`) and the one real remaining gap (a
-live Xero sandbox check) are unchanged.
+## Reason for the label
+The gap here is proof, not missing functionality: Financial Dashboard and Payroll Automation are both substantially built, owner-guarded and 144 tests pass. Every checklist item still reads as undone, but the one thing never actually done is connecting a real Xero sandbox and watching it work in a browser — a tab/real-world proof gap, matching this audit's established convention (see docs/qa/nightly/features/README.md's history) of calling that `tab-unproven` rather than `needs-refinement`, which is reserved for a genuinely unbuilt piece of code.
 
-## Note
-No change in label from the 2026-11-16 audit. Independently re-verified fresh tonight (separate
-parallel audit pass, its own throwaway database) — same conclusion, wider and more specific evidence
-(see above).
+## Disagreement with the tracker
+Tracker stage is "idea" while the backend is built and heavily tested — the tracker under-describes how much exists.

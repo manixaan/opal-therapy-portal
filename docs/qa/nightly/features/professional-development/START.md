@@ -1,17 +1,33 @@
 /opal-feature
 
-The PD/CPD catalogue and log are tested by tests/integration/resource-hub-r2.itest.js (7/7 suites
-pass, re-confirmed tonight) but no browser/E2E evidence proves the PD/CPD tab itself renders and
-works. This card has no code of its own — it names a slice of the Resource Hub feature (/api/rh2/pd,
-/api/rh2/cpd).
+## Idea
+Professional Development
+
+## Why
+(not yet written in the tracker)
+
+## Who uses it
+(not yet written in the tracker)
+
+## What they see
+(not yet written in the tracker)
+
+## What should happen
+(not yet written in the tracker)
+
+## Outcome
+(not yet written in the tracker)
+
+## Decision
+(not yet written in the tracker)
+
+## Where it lives today
+- No dedicated code of its own. Two plausible homes exist, and the card's own next_action has not picked between them: (1) backend/profile-routes.js — /api/profile/cpd, /api/profile/documents, /api/profile/credentials (My Profile's PD credentials/documents sections); (2) Resource Hub (backend/resources-routes.js, resource-library-routes.js) where PD-related material could equally well live as library content, which is where this audit has previously placed it.
 
 ## Start here
-Open the Resource Hub's PD/CPD tab as a therapist, log a CPD activity and view the PD catalogue, then
-record the result in docs/qa/BROWSER_QA_RESULTS.md. Separately, recommend clarifying or merging this
-tracker card with Resource Hub or Employee Personal Page, as the tracker's own next_action already
-suggests.
+Decide first whether this card merges into Resource Hub or My Profile (its own next_action) — the underlying code is tested either way. Once that's settled, open whichever page actually serves Professional Development as a therapist and record a plain browser check, the way the tracker's own next_action asks.
 
 ## Done means
-A docs/qa/BROWSER_QA_RESULTS.md entry (or e2e spec) proves the PD/CPD tab renders and works.
+The merge decision is recorded and a browser check of whichever page now serves PD is written down; label becomes `proven`.
 
 Tracker: 37f4e057-ae96-4a9e-a576-5f808b7dc8fb

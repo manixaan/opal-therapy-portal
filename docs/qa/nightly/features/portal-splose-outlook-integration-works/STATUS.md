@@ -1,48 +1,36 @@
 # Portal - Splose - Outlook | Integration Works
 
-- Tracker stage: idea | Tracker environment: none
+- Tracker stage: **idea**
+- Tracker environment: **none**
 - Evidence label: **needs-refinement**
-- Created: yes — extensive code exists
-- Addressed this window: no — zero commits anywhere since 2026-11-15 (last window's flight-tracking,
-  weekend-bookable, calendar-declutter etc. commits were already accounted for in that audit)
+- Addressed since the last audit (2026-11-17..2026-11-18): **no**
+- Created (any located code): **yes**
 
 ## Located files
-- Backend: outlook-oauth.js (library, no routes), routes-outlook-integration.js, splose-sync-routes.js,
-  splose-link-routes.js, sync-settings-routes.js, block-review-routes.js, travel-sync-routes.js,
-  travel-routes.js, calendar-routes.js, booking-rules.js, flight-routes.js
-- Frontend: Calendar tab in mockup_v3.html, frontend/current/flights.js/.css
+- backend/splose-sync-routes.js
+- backend/travel-sync-routes.js
+- backend/sync-settings-routes.js
+- backend/calendar-routes.js
+- backend/splose-link-routes.js
 
 ## Guard check
-All located route files guarded (requireAuth + permission/role middleware or router.use chain). No
-unguarded endpoint found (re-confirmed tonight).
+OK — requireAuth + requireRole/requirePermission throughout.
 
-## Tests (re-run fresh tonight — file selection built independently from located route files, not
-copied from last night's list; counts differ slightly from the 2026-11-15 brief as a result, with
-no failures either way)
-- Unit: 18 suites / 261 tests — all PASS (booking-rules, flight-routes, flights-frontend,
-  splose-link-routes, travel-sync-routes, block-review, outlook-mirror, outlook-delta-preserve,
-  sync, sync-status-route, sync-preferences, sync-safety, splose-api-queue, splose-credentials,
-  splose-match, splose-poller, splose-auto-sync-reset, splose-alert-dialog).
-- Integration: 17 suites / 135 tests — all PASS (block-review, calendar-category-colours,
-  calendar-local-first, event-delete-cascade, event-series, event-times, event-travel-plan,
-  events-sync, outlook-claim, outlook-delta-preserve, splose-connection, splose-draft-sync,
-  splose-link-ignore, sync-settings, travel-outlook-sync, travel-overrides, series-master;
-  DB_NAME=therapy_scheduler_audit_cal).
-- Tab coverage: docs/qa/BROWSER_QA_RESULTS.md sections C/D/E/F all pass (confirmed unchanged
-  tonight).
+## Tests run
+- unit: `outlook-delta-preserve.test.js, outlook-mirror.test.js, splose-alert-dialog.test.js, splose-api-queue.test.js, splose-auto-sync-reset.test.js, splose-credentials.test.js, splose-draft-sync.test.js, splose-link-routes.test.js, splose-match.test.js, splose-poller.test.js, travel-outlook-sync.test.js, travel-sync-routes.test.js` — **pass** (12 files / 156 tests)
+- integration: `calendar-category-colours.itest.js, calendar-local-first.itest.js, outlook-claim.itest.js, outlook-delta-preserve.itest.js, splose-connection.itest.js, splose-draft-sync.itest.js, splose-link-ignore.itest.js, sync-settings.itest.js, travel-outlook-sync.itest.js` — **pass** (9 files / 84 tests)
 
-## Open tasks (from tracker)
-- "Multi Calendar Rules" — todo. Re-confirmed genuinely unbuilt tonight: no "multi calendar" string
-  anywhere in backend/.
+## Tab / browser proof
+docs/qa/BROWSER_QA_RESULTS.md rows E/F/J (Outlook state, Splose fail-closed boundaries, direct-URL/permission checks) — dated 2026-08-01, STALE: that doc notes "Travel & Flights tab disabled (Coming soon)", which is now false — flight-routes.js/flights.js shipped 2026-11-14, inside this audit window. The browser QA snapshot pre-dates the current build. A known prior defect in the same doc — GET /api/outlook/categories 500s with no Outlook connection (Medium) — was not re-verified live this run; flag it for a human recheck.
 
-## Commits in window touching this
-None.
+## Recency
+Not touched since the last audit (2026-11-17). For orientation, calendar colours/tiles, weekends bookable, flight booking, event-panel declutter (8+ commits).
 
-## Disagreement
-Tracker stage "idea" significantly understates reality: a large, heavily-tested integration already
-exists and is exercised nightly. The only real gap is the "Multi Calendar Rules" task.
+## Open tasks (from the tracker)
+- Multi Calendar Rules — todo
 
-## Note
-No change from the 2026-11-16 audit. Independently re-verified fresh tonight (separate parallel
-audit pass, its own throwaway database, independently-built test file selection — see above); same
-code, zero failures, same conclusion.
+## Reason for the label
+Code, guards, and 240 backend tests all pass, but the one task (Multi Calendar Rules) is todo and the next_action ("walk the Multi Calendar Rules checklist against the live portal") is open.
+
+## Disagreement with the tracker
+Tracker "idea" stage vs. a large, tested, actively developed calendar/sync subsystem.

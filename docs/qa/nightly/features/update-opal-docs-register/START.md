@@ -18,18 +18,16 @@ Update Opal Docs Register
 ## Outcome
 (not yet written in the tracker)
 
-## Decisions
-(none recorded)
+## Decision
+(not yet written in the tracker)
 
 ## Where it lives today
-Nothing — this is an Excel register on SharePoint, outside the portal.
+nothing yet
 
 ## Start here
-This card does not need a Claude Code session. The tracker's own next_action is the whole task:
-"List every required document type in the Excel register on SharePoint with its exists/missing
-state." That work happens in SharePoint, not in this repository.
+This is not a coding task. Open the existing Excel document register on SharePoint and list every document type the business needs (protocols, policies, contracts), marking what exists versus what needs creating. No Claude Code session should pick this up as a build task.
 
 ## Done means
-No code change is expected for this card as written.
+The SharePoint register lists every required document type with its existence/relevance/onboarding-need columns filled in; this never reaches a `proven` code label because there is no code.
 
 Tracker: 45c66127-e21b-47c5-be70-6c9c61952126

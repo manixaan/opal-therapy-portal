@@ -18,26 +18,17 @@ Inductions
 ## Outcome
 (not yet written in the tracker)
 
-## Decisions
-(none recorded)
+## Decision
+(not yet written in the tracker)
 
 ## Where it lives today
-backend/learning-routes.js, backend/induction-assistant-routes.js, backend/onboarding-induction.js,
-frontend/current/induction*.js. The induction-pack delivery mechanism is proven and heavily tested
-(271 unit + 68 integration tests pass). "Induction Playground" (richer step types: photos, quizzes,
-hold points) has no code anywhere yet.
+- backend/induction-assistant-routes.js (requireAuth + requireRole('owner') router-wide)
+- frontend: induction.js, induction-modules.js, induction-assistant.js, induction.css, induction-assistant.css
 
 ## Start here
-Open backend/tests/induction-packs.test.js to see the existing pack-definition pattern (the recent
-commits like c19a488 "Writing a Case Note" are good neighbours to copy). For "Induction Playground",
-the new step types (photo capture, quiz, hold point) need a schema addition to whatever defines a
-pack step today — start there, add one new step type end to end (schema → route → frontend render)
-with a test, rather than all three at once.
+Build one new Induction Playground step type — start with photo, as the tracker's own next_action says — in frontend/current/induction.js next to the existing 'quiz'/'checkpoint' step types, with a test the way tests/induction-registry.test.js tests the existing types. Confirm it end to end with e2e/tests/tutorials.spec.js's pattern.
 
 ## Done means
-A test proves one new step type (photo, quiz, or hold point) end to end, and the "Portal Inductions"
-/ "Splose Inductions" bookkeeping tasks are closed once someone confirms they are in fact done (the
-tracker's own next_action already says so). Evidence label should move to `proven` once the Playground
-gap is either built or descoped.
+A new test alongside tests/induction-registry.test.js proves the photo step type, and a sample induction using it saves and displays to a trainee; label becomes `proven`.
 
 Tracker: 21c90e45-6bc2-4bb9-9022-520338c00eb8

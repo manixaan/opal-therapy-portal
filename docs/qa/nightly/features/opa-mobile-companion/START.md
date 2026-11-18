@@ -18,26 +18,17 @@ Opa Mobile Companion
 ## Outcome
 (not yet written in the tracker)
 
-## Decisions
-(none recorded)
+## Decision
+(not yet written in the tracker)
 
 ## Where it lives today
-`backend/mobile-routes.js` (calendar/travel/appointments, self-scoped), `backend/case-note-routes.js`
-(the AI case-noting path, shared with the desktop case-noting workspace), via
-`backend/clinical-note-provider.js` → `backend/ai/ai-gateway.js`. 435 unit + 3 integration passing.
-No mobile client exists in this repository.
+- backend/mobile-routes.js (self-scoped by design — every query filters by req.user.id, matches the snapshot-routes.js exception, requireAuth alone is correct here)
+- backend/case-note-routes.js generateGovernedDraft() — mobile voice notes (voiceNoteId) link into the same governed AI case-note generation pathway used by the desktop Case Notes workspace
 
 ## Start here
-Both tasks on this card are manual-testing jobs, not build tasks — the automated coverage is already
-strong (435 unit + 3 integration passing). On the actual test device: dictate one case note end to
-end, checking speech-capture accuracy and whether the AI summary follows the clinical pathway and
-handles sensitive details safely, then confirm the saved note lands against the right client.
-Separately, open the Calendar View icon and confirm events/travel/navigation work. Record the
-walkthrough result rather than writing code — do not close these tasks on test counts alone (that
-was this audit's own mistake on 2026-11-15/16; see STATUS.md's "Correction").
+On the test device, dictate a case note through the mobile app and confirm it reaches backend/case-note-routes.js generateGovernedDraft() correctly linked by voiceNoteId, the same path the desktop Case Notes workspace uses. This is a manual walkthrough, not a build task — no new code is implied unless the walkthrough finds a defect.
 
 ## Done means
-A recorded manual walkthrough result (pass/fail per checklist item) handed to Ann for sign-off, per
-the tracker's own checklist. Evidence label moves to `proven` once that sign-off exists.
+A full device walkthrough (dictate -> AI summary -> save) is recorded with no defect, or defects found are filed as their own tasks; label becomes `proven`.
 
 Tracker: e786d774-43bf-4a8b-826d-94bcb97a9613

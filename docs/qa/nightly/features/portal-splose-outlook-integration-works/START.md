@@ -1,4 +1,4 @@
-/opal-feature
+/opal-critical
 
 ## Idea
 Portal - Splose - Outlook | Integration Works
@@ -18,25 +18,20 @@ Portal - Splose - Outlook | Integration Works
 ## Outcome
 (not yet written in the tracker)
 
-## Decisions
-(none recorded)
+## Decision
+(not yet written in the tracker)
 
 ## Where it lives today
-backend/booking-rules.js, backend/calendar-routes.js, backend/travel-routes.js,
-backend/splose-sync-routes.js, backend/sync-settings-routes.js — the calendar tab in
-frontend/current/mockup_v3.html. This is a large, already-working integration; the one
-concrete open item is "Multi Calendar Rules" (tracker task, status todo).
+- backend/splose-sync-routes.js
+- backend/travel-sync-routes.js
+- backend/sync-settings-routes.js
+- backend/calendar-routes.js
+- backend/splose-link-routes.js
 
 ## Start here
-Open backend/booking-rules.js and backend/tests/booking-rules.test.js to see the existing
-rule pattern (weekend bookability, travel blocks). "Multi Calendar Rules" has no code anywhere
-yet — start by asking the practice what rule they actually need (e.g. one practitioner syncing
-two Outlook calendars, or two practitioners sharing one). Add the rule as a new function in
-booking-rules.js alongside the existing ones, with a test in booking-rules.test.js first.
+Walk the Multi Calendar Rules checklist against the live portal: book a session, confirm the "changes saved but not synced" indicator, check travel-time calculation, and confirm Portal/Splose match in both directions. This is a verification pass (backend/splose-sync-routes.js and calendar-routes.js already pass 240 tests), not a build task.
 
 ## Done means
-A new test in backend/tests/booking-rules.test.js (or a new tests/multi-calendar-rules.test.js)
-passes, proving the specific multi-calendar rule the practice described. Evidence label should
-reach `proven` once that test exists and the calendar tab has been checked by hand against it.
+Each Multi Calendar Rules checklist item is manually confirmed against the live portal with no bug found; label becomes `proven`.
 
 Tracker: eba1c6a7-3ba4-420f-acf4-1c5838991138

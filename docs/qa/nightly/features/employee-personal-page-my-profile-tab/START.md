@@ -18,24 +18,17 @@ Employee Personal Page (My Profile Tab)
 ## Outcome
 (not yet written in the tracker)
 
-## Decisions
-(none recorded)
+## Decision
+(not yet written in the tracker)
 
 ## Where it lives today
-backend/profile-routes.js (leave, CPD, documents, credentials, work-schedule routes);
-frontend/current/profile.js. Fully built and wired both sides — this is CRITICAL-level work because
-it touches employment-sensitive data (leave, CPD approvals).
+- backend/profile-routes.js (leave, cpd, documents, credentials)
+- frontend tab: PROFILE TAB (mockup_v3.html)
 
 ## Start here
-Open backend/profile-routes.js around line 124 (`PATCH /api/profile/leave/:id/approve`) and line 261
-(`PATCH /api/profile/cpd/:id/approve`) — both already guarded by `canApprove(req.user)`. Write a new
-integration test (e.g. backend/tests/integration/profile-leave-cpd-approval.itest.js, following the
-pattern in tests/integration/onboarding-workflow.itest.js) that: (1) a therapist submits a leave
-request, (2) a read_only or therapist user is denied approval (403), (3) an owner/admin approves it,
-(4) the audit log records `leave_request_approved`. Repeat for CPD.
+Copy the pattern from an existing *.itest.js (e.g. tests/integration/case-note-approval-edit.itest.js) to add tests/integration/profile-leave-cpd.itest.js: submit a leave request as a therapist, approve it via backend/profile-routes.js as an owner, and assert the therapist sees the updated status. Do the same for one CPD item.
 
 ## Done means
-The new integration test passes and proves the full therapist→owner round trip for both leave and CPD.
-Evidence label should move to `proven` once that test exists and passes.
+tests/integration/profile-leave-cpd.itest.js (or similarly named) passes, proving the leave/CPD approval round trip; label becomes `proven`.
 
 Tracker: 83bb9988-52ba-4f8c-85ba-7b65aca189b2

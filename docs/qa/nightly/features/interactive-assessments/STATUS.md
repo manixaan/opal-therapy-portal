@@ -1,43 +1,33 @@
 # Interactive Assessments
 
-- Tracker stage: idea | Tracker environment: none
+- Tracker stage: **idea**
+- Tracker environment: **none**
 - Evidence label: **tab-unproven**
-- Created: yes
-- Addressed this window: no
+- Addressed since the last audit (2026-11-17..2026-11-18): **no**
+- Created (any located code): **yes**
 
 ## Located files
-- Backend: backend/fca/ (client-search, data-layers, docx-engine, letter-blocks, resolve-scalars, etc.),
-  backend/whodas/ (scoring.js, instrument.js, completed-pdf.js, template-registry.js),
-  backend/assessments/ (availability.js, definitions.js, share.js)
-- Routes: assessments-routes.js (2 guards), fca-routes.js (2), whodas-routes.js (2), letter-routes.js (2)
+- backend/whodas-routes.js (requireClinicalRead/Write per route)
+- backend/assessments-routes.js (requireClinicalRead/Write per route)
 
 ## Guard check
-All four route files guarded. OK (re-confirmed tonight).
+OK — requireClinicalRead/Write throughout.
 
-## Tests (re-run fresh tonight)
-- Unit: 12 suites / 738 tests — PASS (fca-docx-engine, fca-frontend-helpers, fca-preview-lifecycle,
-  fca-preview-pages, fca-resolve-scalars, fca-wizard-behaviour, whodas-external-completion,
-  whodas-frontend-guards, whodas-scoring, whodas-templates, assessment-catalogue,
-  assessment-surface-guards).
-- Integration: 3 suites / 122 tests — PASS (assessments, fca-reports, whodas;
-  DB_NAME=therapy_scheduler_audit_assess). Same benign WARN logged as last night ("splose client
-  list unavailable (splose down)") — an exercised fallback path, not a failure.
-- Tab coverage: NONE found. No e2e spec for FCA/WHODAS/assessments; no pass entry in
-  docs/qa/BROWSER_QA_RESULTS.md (unchanged since last night).
+## Tests run
+- unit: `assessment-catalogue.test.js, assessment-surface-guards.test.js, whodas-external-completion.test.js, whodas-frontend-guards.test.js, whodas-scoring.test.js, whodas-templates.test.js` — **pass** (6 files / 481 tests)
+- integration: `assessments.itest.js, whodas.itest.js` — **pass** (2 files / 81 tests)
 
-## Open tasks (from tracker)
-- "Assessment Review" — todo.
+## Tab / browser proof
+None found — no dedicated Assessment tab banner, no E2E, no browser QA entry.
 
-## Commits in window touching this
-None.
+## Recency
+Not touched since the last audit (2026-11-17); zero commits anywhere since 2026-11-14.
 
-## Disagreement
-None — the gap (no browser proof of WHODAS 2.0 scoring for a real client) matches exactly what the
-tracker's own next_action already asks for.
+## Open tasks (from the tracker)
+- Assessment Review — todo
 
-## Note
-No change from the 2026-11-16 audit. Independently re-verified fresh tonight (separate parallel
-audit pass, its own throwaway database) — same code, same tests, same result. Also confirmed two
-near-miss window commits are non-matches: `554fcea` ("Writing an FCA report" induction pack) is
-content only, and `24aee93` (Report Templates' clinical-letter-templates merge) touched
-`backend/fca/docx-engine.js` as shared composition machinery without regressing any FCA/WHODAS test.
+## Reason for the label
+WHODAS 2.0 is fully built, guarded and tested (481 unit + 81 integration tests pass) — the only thing missing is a browser check proving the tab actually renders and works for a therapist; that is a tab-proof gap, not unbuilt functionality, so `tab-unproven` rather than `needs-refinement`. The remaining human review/triage of the other pending assessments is a separate, non-code task the tracker already owns.
+
+## Disagreement with the tracker
+Tracker "idea" stage vs. WHODAS 2.0 already fully built and heavily tested.
