@@ -1,0 +1,37 @@
+# Opa Mobile Companion
+
+- Tracker stage: **idea**
+- Tracker environment: **none**
+- Evidence label: **needs-refinement**
+- Addressed in the 2026-11-04..2026-11-18 change window: **yes**
+- Created (any located code): **yes**
+
+## Located files
+- backend/mobile-routes.js (self-scoped by design — every query filters by req.user.id, matches the snapshot-routes.js exception, requireAuth alone is correct here)
+- backend/case-note-routes.js generateGovernedDraft() — mobile voice notes (voiceNoteId) link into the same governed AI case-note generation pathway used by the desktop Case Notes workspace
+
+## Could not locate / notable gaps
+- The mobile app's own frontend code lives outside this repository (native app) — nothing here can prove it renders or runs on a device.
+
+## Guard check
+OK — self-scoped by design (mobile-routes.js header documents own-day/own-user scoping).
+
+## Tests run
+- unit: `mobile-routes.test.js, case-note-routes.test.js, casenotes-compose.test.js, casenotes-helpers.test.js, casenotes-workspace.test.js` — **pass** (5 files / 171 tests)
+- integration: `case-note-approval-edit.itest.js, case-note-client-link.itest.js, case-note-deidentification.itest.js, case-note-workspace.itest.js` — **pass** (4 files / 13 tests)
+
+## Tab / browser proof
+N/A — mobile client is outside this repo.
+
+## Recency
+The desktop case-note workspace (shared code path) landed in-window (e222a77, 2026-11-14).
+
+## Open tasks (from the tracker)
+- Case Noting — todo
+- Calendar View — todo
+
+## Reason for the label
+Both tasks (Case Noting, Calendar View) are todo and the next_action ("run the manual device walkthrough") is open, even though the backend voice-note capture and AI-governed draft generation are built and tested.
+
+## Disagreement with the tracker
+Tracker "idea" stage vs. a built, tested, AI-governed backend pathway for this feature.
