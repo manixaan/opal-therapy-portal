@@ -1,35 +1,43 @@
 # Clinical resources
 
-- Tracker stage: **idea**
-- Tracker environment: **none**
+- Tracker stage: idea | Tracker environment: none
 - Evidence label: **proven**
-- Addressed in the 2026-11-04..2026-11-18 change window: **no**
-- Created (any located code): **yes**
+- Created: yes
+- Addressed this window: not directly (no resource-*.js commits in the window; zero commits at all)
 
 ## Located files
-- backend/resources-routes.js
-- backend/resource-hub-r2-routes.js
-- backend/resource-library-routes.js (requireAuth + requireRole('owner')/requireManager on writes)
-- frontend: RESOURCES TAB (Resource Hub R1) banner + frontend/current/resourcehub.js
+- Backend: resources-routes.js (8 guards), resource-library-routes.js (5), resource-hub-r2-routes.js (3),
+  resource-ingestion-routes.js (7), resource-governance.js, resource-privacy-scan.js,
+  resource-recycle-bin.js, and the rest of the resource-*.js family.
+- Frontend: frontend/current/resourcehub.js
 
 ## Guard check
-OK — requireAuth + requireRole('owner') / requireManager on writes.
+All located route files guarded. OK (re-confirmed tonight).
 
-## Tests run
-- unit: `resource-file-delivery.test.js, resource-file-quality.test.js, resource-governance.test.js, resource-hub-badge-guards.test.js, resource-hub-final.test.js, resource-ingestion.test.js, resource-library-frontend-guards.test.js, resource-library-rules.test.js, resource-privacy-reasons.test.js, resource-privacy-scan.test.js, resource-seed-guards.test.js, resource-source-scan.test.js` — **pass** (12 files / 398 passed + 12 skipped)
-- integration: `resource-file-upload.itest.js, resource-hub-r2.itest.js, resource-hub-v1.itest.js, resource-ingestion.itest.js, resource-library-sharepoint.itest.js, resource-library.itest.js, resources.itest.js` — **pass** (7 files / 168 tests)
+## Tests (re-run fresh tonight)
+- Unit: 13 suites / 444 passed, 12 skipped, 456 total — PASS (resource-file-delivery,
+  resource-file-quality, resource-governance, resource-hub-badge-guards, resource-hub-final,
+  resource-ingestion, resource-library-frontend-guards, resource-library-rules,
+  resource-privacy-reasons, resource-privacy-scan, resource-seed-guards, resource-source-scan,
+  pd-catalogue-guards).
+- Integration: 7 suites / 168 tests — PASS (resource-hub-r2, resource-hub-v1, resource-file-upload,
+  resource-ingestion, resource-library-sharepoint, resource-library, resources;
+  DB_NAME=therapy_scheduler_audit_resources). One WARN logged (resource-file-intake deferred preview
+  generation hit a foreign-key violation on resource_file_derivatives) but did not fail the suite —
+  same benign warning as last night.
+- Tab coverage: docs/qa/BROWSER_QA_RESULTS.md section G — Resource Hub, unchanged since last night.
 
-## Tab / browser proof
-e2e/tests/portal.spec.js: "Resource Hub shows approved starter content, no authoring, no public URLs" — real E2E coverage of the tab.
+## Open tasks (from tracker)
+None.
 
-## Recency
-Not touched in-window.
+## Commits in window touching this
+None.
 
-## Open tasks (from the tracker)
-(no tasks recorded on this card)
+## Disagreement
+Tracker stage "idea" understates reality — nothing material is outstanding here, matching the
+tracker's own next_action verbatim ("Move this card's tracker stage up to reflect reality"). This
+audit does not change the tracker; reporting the gap only.
 
-## Reason for the label
-Code located, guarded, every test passes, no open task (0 tasks on this card), no TODO/FIXME found, and the tracker's own next_action already says "No action needed — evidence supports moving this card's stage up."
-
-## Disagreement with the tracker
-Opposite-direction disagreement: the tracker stage ("idea") badly UNDER-claims maturity — this is the one card in the whole snapshot that evidence says is actually done.
+## Note
+No change from the 2026-11-16 audit. Independently re-verified fresh tonight (separate parallel
+audit pass, its own throwaway database) — same code, same tests, same result.

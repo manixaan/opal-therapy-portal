@@ -1,34 +1,29 @@
 # Update Opal Docs Register
 
-- Tracker stage: **idea**
-- Tracker environment: **none**
+- Tracker stage: idea | Tracker environment: none
 - Evidence label: **untouched**
-- Addressed in the 2026-11-04..2026-11-18 change window: **no**
-- Created (any located code): **no**
+- Created: no (by design — see note)
+- Addressed this window: no
 
 ## Located files
-(nothing located)
-
-## Could not locate / notable gaps
-- no code — this is explicitly an organising/SharePoint task, not a build task
+None. Re-grepped tonight for "docs register" / "documentation register" across backend/ and
+frontend/current/ — no matches. Correct: this is an Excel/SharePoint task, not a portal feature.
 
 ## Guard check
-n/a
+N/A.
 
-## Tests run
-(no targeted tests located)
+## Tests
+N/A.
 
-## Tab / browser proof
-n/a
+## Open tasks (from tracker)
+- "Update Excel Sheet to include all documentation required" — todo.
 
-## Recency
-n/a
+## Commits in window touching this
+None.
 
-## Open tasks (from the tracker)
-- Update Excel Sheet to include all documentation required — todo
+## Disagreement
+None.
 
-## Reason for the label
-The task's own explanation says this is "an organising job, not a coding job" (SharePoint/Excel document register). Nothing in the codebase matches it.
-
-## Disagreement with the tracker
-None — the tracker's own words already match the evidence.
+## Note
+No change from the 2026-11-16 audit. Independently re-verified fresh tonight (re-grepped, not
+assumed).

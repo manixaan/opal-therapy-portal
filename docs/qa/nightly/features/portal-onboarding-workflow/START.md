@@ -18,26 +18,36 @@ Portal Onboarding Workflow
 ## Outcome
 (not yet written in the tracker)
 
-## Decision
-(not yet written in the tracker)
+## Decisions
+(none recorded)
 
 ## Where it lives today
-- backend/onboarding-employee-routes.js
-- backend/onboarding-workflow-routes.js
-- backend/onboarding-journey-routes.js
-- backend/onboarding-pack-routes.js
-- backend/onboarding-package-docs-routes.js
-- backend/onboarding-returns-routes.js
-- backend/onboarding-defaults-routes.js
-- backend/onboarding-assignment-routes.js
-- backend/onboarding-library-routes.js
-- backend/onboarding-routes.js
-- frontend: ONBOARDING TAB banner + frontend/current/onboarding.js + standalone onboarding.html / onboarding-invite.html
+backend/onboarding-routes.js plus 28 other onboarding-*.js files; frontend/current/onboarding.js and
+onboarding.html. This is extensively built and tested (653/654 unit tests, 232/232 integration tests
+pass). The tracker's three "Stage" tasks have no scope written against them — "Stage 1", "Stage 2" and
+"stage 3" are empty titles with no description in the tasks fetched tonight.
 
 ## Start here
-Two separate threads: (1) the environment is missing the @tesseract.js-data/eng OCR package that tests/onboarding-document-reader.test.js needs — that's an environment/install fix, not a code fix (see Technical detail in the brief). (2) Re-tick the Stage 1/2 checklists against the running code in backend/onboarding-employee-routes.js and onboarding-pack-routes.js, then add SharePoint storage for Stage 2 documents as the tracker's next_action asks.
+This is primarily a tracker-hygiene decision for a person, not a coding task: the tracker's own
+next_action says "Write real scope for Stage 1/2/3 in the tracker, or close/archive what's already
+done." Before any code change, someone on the team needs to open the tracker and say what Stage 1/2/3
+actually mean — the code evidence suggests most of what a reasonable Stage 1/2 would need already
+exists (onboarding-journey-routes.js, onboarding-pack-routes.js, onboarding-payroll-routes.js all
+tested). If real Stage 3 scope emerges, start by reading onboarding-journey.js to find the pattern to
+extend.
 
 ## Done means
-tests/onboarding-document-reader.test.js passes once the OCR language package is installed, and the Stage 1/2 checklists are re-ticked against the running code; label becomes `proven`.
+The tracker has real scope (or no Stage 3 card) and, once concrete work is identified, a passing test
+under backend/tests/integration/onboarding-*.itest.js proves it. Evidence label should move to `proven`
+once the three open tasks are resolved either way.
+
+## Addendum (2026-11-17)
+Tonight's audit found the gap is narrower than it first looks: Stage 1's Letter-of-Offer
+preview/PDF/send flow and Stage 2's dynamic employee contract already exist in code (see
+STATUS.md's "Additional detail"). If picking this up, start by re-ticking those checklist items
+against the running code, then build SharePoint document storage for Stage 2 — a repo-wide grep
+confirms it's the one piece genuinely missing — following the existing document-handling pattern in
+`backend/onboarding-pack-routes.js` and the Outlook-draft integration pattern in
+`backend/onboarding-journey-routes.js` for style.
 
 Tracker: 32b768b1-8bf3-40a6-9669-a8908922aa21

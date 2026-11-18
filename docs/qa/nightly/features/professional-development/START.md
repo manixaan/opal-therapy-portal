@@ -1,33 +1,17 @@
-/opal-critical
+/opal-feature
 
-## Idea
-Professional Development
-
-## Why
-(not yet written in the tracker)
-
-## Who uses it
-(not yet written in the tracker)
-
-## What they see
-(not yet written in the tracker)
-
-## What should happen
-(not yet written in the tracker)
-
-## Outcome
-(not yet written in the tracker)
-
-## Decision
-(not yet written in the tracker)
-
-## Where it lives today
-- backend/profile-routes.js — /api/profile/cpd, /api/profile/documents, /api/profile/credentials (shared file with Employee Personal Page; no dedicated file of its own)
+The PD/CPD catalogue and log are tested by tests/integration/resource-hub-r2.itest.js (7/7 suites
+pass, re-confirmed tonight) but no browser/E2E evidence proves the PD/CPD tab itself renders and
+works. This card has no code of its own — it names a slice of the Resource Hub feature (/api/rh2/pd,
+/api/rh2/cpd).
 
 ## Start here
-Decide first whether this card merges into Resource Hub or My Profile (its own next_action). If it stays separate, add a test exercising backend/profile-routes.js's /api/profile/cpd and /api/profile/documents endpoints the way credential-surface-guards.test.js tests the credentials endpoints next to them.
+Open the Resource Hub's PD/CPD tab as a therapist, log a CPD activity and view the PD catalogue, then
+record the result in docs/qa/BROWSER_QA_RESULTS.md. Separately, recommend clarifying or merging this
+tracker card with Resource Hub or Employee Personal Page, as the tracker's own next_action already
+suggests.
 
 ## Done means
-Either the merge decision is recorded and this card is archived, or a new test proves the CPD/PD-document endpoints and the label becomes `proven`.
+A docs/qa/BROWSER_QA_RESULTS.md entry (or e2e spec) proves the PD/CPD tab renders and works.
 
 Tracker: 37f4e057-ae96-4a9e-a576-5f808b7dc8fb

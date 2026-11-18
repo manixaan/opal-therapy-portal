@@ -1,38 +1,47 @@
 # Inductions
 
-- Tracker stage: **idea**
-- Tracker environment: **none**
+- Tracker stage: idea | Tracker environment: none
 - Evidence label: **needs-refinement**
-- Addressed in the 2026-11-04..2026-11-18 change window: **yes**
-- Created (any located code): **yes**
+- Created: yes
+- Addressed this window: no — zero commits anywhere since the 2026-11-15 audit (last window's
+  8 induction-pack commits were already accounted for in that audit)
 
 ## Located files
-- backend/induction-assistant-routes.js (requireAuth + requireRole('owner') router-wide)
-- frontend: induction.js, induction-modules.js, induction-assistant.js, induction.css, induction-assistant.css
-
-## Could not locate / notable gaps
-- No 'photo'/image step type anywhere in the induction frontend (only 'quiz' and 'checkpoint'/hold-point exist) — this matches the tracker's own next_action exactly ('start with photo'), so it is not a disagreement, just confirmation.
+- Backend: learning-routes.js (5 guards), induction-assistant-routes.js (2 guards),
+  learning-content.js, onboarding-induction.js, onboarding-learning-bridge.js
+- Frontend: frontend/current/induction*.js
 
 ## Guard check
-OK — requireAuth + requireRole('owner').
+OK — both route files guarded (re-confirmed tonight).
 
-## Tests run
-- unit: `induction-assistant.test.js, induction-packs.test.js, induction-registry.test.js` — **pass** (3 files / 92 tests)
-- integration: `induction-assistant.itest.js, onboarding-induction.itest.js` — **pass** (2 files / 7 tests)
+## Tests (re-run fresh tonight)
+- Unit: 7 suites / 271 tests — PASS (induction-assistant, induction-packs, induction-registry,
+  learning-admin-routes, learning-content, learning-routes, assign-learning-guards).
+- Integration: 4 suites / 68 tests — PASS (learning, learning-admin, induction-assistant,
+  onboarding-induction; DB_NAME=therapy_scheduler_audit_learning). Same benign PDF
+  "Invalid PDF structure" warning as last night (expected test fixture, non-fatal).
+- Tab coverage: e2e/tests/tutorials.spec.js covers the induction dashboard and walkthrough lifecycle
+  end to end (confirmed unchanged tonight).
 
-## Tab / browser proof
-e2e/tests/tutorials.spec.js proves the LEARNER side end-to-end (start, highlight, advance, pause, resume across reload/re-login, complete, restart) — real E2E coverage. No coverage of the creator/builder or AI-helper side.
+## Open tasks (from tracker)
+- "Induction Playground" — todo. Re-confirmed genuinely open tonight: grepped for
+  "Induction Playground" and its richer step types (photos, quizzes, hold points) across backend/
+  — no match.
+- "Portal Inductions" — todo.
+- "Splose Inductions" — todo.
 
-## Recency
-Heavily touched in-window: 8+ commits adding induction PACKS (content) — booking rules, cancellation policy, calendar fundamentals, FCA/progress-report/case-note writing packs, professional wording — but not the builder itself.
+## Commits in window touching this
+None.
 
-## Open tasks (from the tracker)
-- Induction Playground — todo
-- Portal Inductions — todo
-- Splose Inductions — todo
+## Disagreement
+None directionally — the underlying induction-pack delivery mechanism is proven and heavily
+exercised; the open tasks are real, specific gaps (Induction Playground's richer step types), not a
+tracker/evidence mismatch.
 
-## Reason for the label
-All three tasks (Induction Playground, Portal Inductions, Splose Inductions) are todo; the visual step-editor, AI helper and photo step type the tasks describe are still open work.
-
-## Disagreement with the tracker
-Tracker "idea" stage vs. a working, E2E-proven learner experience and a real owner-only, AI-assisted content-authoring pipeline already shipping new packs regularly.
+## Note
+No change from the 2026-11-16 audit. Independently re-verified fresh tonight (separate parallel
+audit pass, its own throwaway database). Also confirmed the AI side specifically: an AI co-author
+(`induction_assistant`, owner-only side chat, properly governed — INTERNAL classification, Australia
+region, fail-closed) exists, but it's a side chat, not the inline "ask AI to improve this step"
+button the Induction Playground checklist describes — that gap is still open, same conclusion as
+last night.

@@ -18,19 +18,23 @@ Report Templates
 ## Outcome
 (not yet written in the tracker)
 
-## Decision
-(not yet written in the tracker)
+## Decisions
+(none recorded)
 
 ## Where it lives today
-- backend/fca-routes.js (requireClinicalRead/Write per route)
-- backend/letter-routes.js (requireClinicalRead/Write per route — covers Progress Letter)
-- backend/templates-routes.js + backend/templates/service-agreement-map.js (Client Agreement Form generation)
-- backend/service-agreements/templates/*.docx, *.pdf (shipped templates)
+backend/letter-routes.js, backend/templates-routes.js, backend/fca-routes.js,
+backend/service-agreements/templates/. Heavily built and tested (184 unit + 55 integration tests
+pass). CRITICAL-level because these are clinical letters/FCA reports.
 
 ## Start here
-As a therapist, run all three flows by hand through to a downloaded file: an FCA draft (backend/fca-routes.js + frontend FCA wizard), a Progress Letter (backend/letter-routes.js), and a Client Agreement Form (backend/templates-routes.js + backend/templates/service-agreement-map.js). Note where a client-facing signing page is missing — none exists in frontend/current/ today.
+This is primarily a hand-check, as the tracker's own next_action says: "Open a client record as a
+therapist and run each of the three document flows by hand through to a downloaded file; record the
+result." Do that for FCA, Progress Letter and Client Agreement Form, then record the result in
+docs/qa/BROWSER_QA_RESULTS.md so future nightly audits pick it up as tab coverage. Only write new code
+if the hand-check finds something broken.
 
 ## Done means
-All three document flows are run by hand to a downloaded file with no errors, and either a signing surface is added or the tracker records that none is needed; label becomes `proven`.
+A docs/qa/BROWSER_QA_RESULTS.md entry (or an e2e spec) exists proving all three document flows produce
+a correct downloaded file. Evidence label should move to `proven` once that entry lands.
 
 Tracker: 91ae30e7-9cda-4198-956f-8b9cdf043003

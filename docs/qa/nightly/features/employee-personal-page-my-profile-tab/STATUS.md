@@ -1,33 +1,46 @@
 # Employee Personal Page (My Profile Tab)
 
-- Tracker stage: **idea**
-- Tracker environment: **none**
-- Evidence label: **needs-refinement**
-- Addressed in the 2026-11-04..2026-11-18 change window: **no**
-- Created (any located code): **yes**
+- Tracker stage: idea | Tracker environment: none
+- Evidence label: **built-untested**
+- Created: yes
+- Addressed this window: no
 
 ## Located files
-- backend/profile-routes.js (leave, cpd, documents, credentials)
-- frontend tab: PROFILE TAB (mockup_v3.html)
+- Backend: profile-routes.js (31 requireAuth refs — leave, CPD, documents, credentials, work-schedule,
+  notification-prefs, setup-status routes)
+- Frontend: frontend/current/profile.js — confirmed real fetch() calls to /api/profile/leave and
+  /api/profile/cpd (submit + approve + reject), not placeholders.
 
 ## Guard check
-OK functionally — requireAuth router-wide plus an inline canApprove(req.user) role check on the leave/cpd approve-reject routes. Style note: this is an inline check rather than the requirePermission() convention backend-api.md prefers; not a missing guard.
+requireAuth at every route; leave/CPD approve+reject additionally gated by inline
+`canApprove(req.user)` role check (file's own header documents this as deliberate HR-style RBAC,
+2026-08-06). No unguarded route found (re-confirmed tonight).
 
-## Tests run
-- unit: `credential-surface-guards.test.js, security.test.js, smart-route-backend.test.js, onboarding-security.test.js (indirect/partial coverage of profile-routes.js — credentials, work-schedule 404 scoping, leave route existence)` — **pass** (4 files / 94 tests)
-- integration: `none found that exercises /api/profile/leave or /api/profile/cpd` — **no test exists** (—)
+## Tests (re-run fresh tonight)
+- No dedicated leave/CPD round-trip test exists anywhere. Re-grepped tonight for
+  updateLeaveStatus / leave_request / profile/leave / profile/cpd across every unit test file —
+  found only an incidental route-list mention (onboarding-security.test.js) and an unrelated
+  availability-engine fixture insert (scheduler-availability.itest.js). Confirms the gap is real.
+- Ran tests/integration/readonly-and-hardening.itest.js + audit.itest.js
+  (DB_NAME=therapy_scheduler_audit_profile): 9/10 pass, 1 FAIL.
+  **Failing test** (readonly-and-hardening.itest.js, D-7, line 121): expects an unwritable storage
+  directory (chmod 0o000) to make a document upload fail with 5xx. This sandbox runs as root, and
+  root bypasses Unix permission bits, so the write succeeds (201) instead of failing — the same
+  confirmed **environment artifact** as last night, not an application defect. The paired D-6 check
+  (missing storage object → 404) in the same test passes correctly.
+- Tab coverage: docs/qa/BROWSER_QA_RESULTS.md section I — render-level only, not the approval round
+  trip, unchanged since last night.
 
-## Tab / browser proof
-PROFILE TAB exists; no E2E or browser QA entry.
+## Open tasks (from tracker)
+- "Review Portal Structure" — todo.
 
-## Recency
-Not touched in-window.
+## Commits in window touching this
+None.
 
-## Open tasks (from the tracker)
-- Review Portal Structure — todo
+## Disagreement
+None directionally — code is extensively built; the gap (missing round-trip test) matches what the
+tracker itself already says.
 
-## Reason for the label
-The one task (Review Portal Structure) is todo, and the next_action — "add an integration test proving the leave/CPD approval round trip end to end" — exactly names the gap found: no such integration test exists.
-
-## Disagreement with the tracker
-None — the tracker's own words already match the evidence.
+## Note
+No change from the 2026-11-16 audit. Independently re-verified fresh tonight (separate parallel
+audit pass, its own throwaway database) — same code, same tests, same result.

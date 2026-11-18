@@ -18,17 +18,29 @@
 ## Outcome
 (not yet written in the tracker)
 
-## Decision
-(not yet written in the tracker)
+## Decisions
+(none recorded)
 
 ## Where it lives today
-- backend/snapshot-routes.js (self-scoped by design, requireAuth alone OK) for the Therapist Snapshot task
-- frontend/current/reports.js consumes /api/snapshot (Today report tab)
+Nothing yet. No SMS/email send-and-confirm flow exists anywhere in backend/. A separate, already-built
+"Snapshot" feature (`backend/snapshot-routes.js`, self-scoped by design, 6/6 integration tests
+passing; its UI is `frontend/current/reports.js`'s "Daily & Weekly Snapshot" panel) exists but is an
+unrelated personal reminders/task list, not this.
 
 ## Start here
-Decide the reminder channel (SMS or email) before writing any code — nothing exists yet for Automated Client Appt Reminders. Separately, re-check the Therapist Snapshot's "minimise" checklist item against frontend/current/reports.js; no matching code was found this run even though the tracker checklist marks it done.
+Before writing code, the tracker's own next_action needs a human decision: "Decide the reminder channel
+(SMS/email) and build the send-and-confirm flow." Once a channel is picked, the natural home is a new
+backend/appointment-reminders-routes.js (or similar) alongside booking-rules.js, scheduled from the
+existing Outlook/Splose sync cycle (see backend/splose-sync-routes.js for the sync-cycle pattern) rather
+than a new poller. Separately, "Therapist Snapshot" in the tracker does not match any utilisation view
+in the code — clarify with the team whether this means the existing personal Snapshot feature or
+something new before building anything against that task.
 
 ## Done means
-The reminder channel decision is recorded in the tracker and the Therapist Snapshot checklist matches real code; label becomes `proven` once a real reminder is sent and confirmed.
+A test proves a reminder is sent (or queued) 24h before an appointment and that a confirmation updates
+state. Evidence label should move to `built-untested` once code exists, then `proven` once tested and
+checked in a browser/E2E. (A separate, already-built "Snapshot" feature exists and is tested — that
+half of this card does not need further work unless it turns out to be what "Therapist Snapshot"
+actually means.)
 
 Tracker: 398a0b36-a12f-4190-83e4-b3a8932b3b46
