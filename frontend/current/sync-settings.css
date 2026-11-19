@@ -30,7 +30,7 @@
 .sys-dir-controls .sys-field:first-child { min-width: 260px; }
 .sys-field small { color: var(--muted, #99928a); font-size: 11.5px; max-width: 34ch; }
 .sys-date { display: flex; align-items: center; gap: 8px; }
-.sys-date input, .sys-table input[type=date] {
+.sys-date input {
   height: 30px; padding: 0 8px; border: 1px solid var(--border, #e6e1d9); border-radius: 8px;
   background: var(--panel, #fff); color: var(--ink, #241f1a); font: inherit; font-size: 12.5px;
 }
@@ -38,12 +38,34 @@
 .sys-note { font-size: 11.5px; color: var(--muted, #99928a); }
 .sys-note.warn { color: #8a5a14; }
 
-.sys-table-wrap { overflow-x: auto; padding: 8px 12px 14px; }
-.sys-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
-.sys-table th, .sys-table td { padding: 8px; text-align: left; border-bottom: 1px solid var(--border-soft, #eee9e1); white-space: nowrap; }
-.sys-table thead th { font-size: 11px; font-weight: 600; color: var(--muted, #99928a); text-transform: uppercase; letter-spacing: .04em; }
-.sys-table tbody th { font-weight: 600; color: var(--ink, #241f1a); }
-.sys-table tr:last-child th, .sys-table tr:last-child td { border-bottom: 0; }
+/* Off · Sync now only · Automatic — one choice per direction */
+.sys-seg { display: inline-flex; border: 1px solid var(--border, #e6e1d9); border-radius: 9px; overflow: hidden; flex-shrink: 0; }
+.sys-seg input { position: absolute; opacity: 0; pointer-events: none; }
+.sys-seg label { padding: 6px 12px; font-size: 12.5px; font-weight: 500; color: var(--muted, #99928a); cursor: pointer; border-left: 1px solid var(--border, #e6e1d9); white-space: nowrap; }
+.sys-seg label:first-of-type { border-left: 0; }
+.sys-seg input:checked + label { background: var(--accent, #7a5cc4); color: #fff; }
+.sys-seg input:focus-visible + label { outline: 2px solid var(--accent, #7a5cc4); outline-offset: -2px; }
+.sys-pad-x { padding: 0 20px 14px; }
+.sys-pad-b { padding-bottom: 14px; }
+
+/* Sync now review — three tabs */
+.sys-tabs { display: flex; gap: 4px; padding: 0 20px; border-bottom: 1px solid var(--border, #e6e1d9); }
+.sys-tabs[hidden] { display: none; }
+.sys-tab { display: inline-flex; align-items: center; gap: 6px; padding: 10px 12px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--muted, #99928a); font: 600 13px/1 inherit; font-family: inherit; cursor: pointer; margin-bottom: -1px; }
+.sys-tab.active { color: var(--ink, #241f1a); border-bottom-color: var(--accent, #7a5cc4); }
+.sys-tab:focus-visible { outline: 2px solid var(--accent, #7a5cc4); outline-offset: -2px; border-radius: 6px 6px 0 0; }
+.sys-tab .n { background: var(--bg, #f4f1ec); border-radius: 999px; padding: 2px 7px; font-size: 11px; color: var(--muted, #99928a); }
+.sys-tab .n.has { background: var(--accent, #7a5cc4); color: #fff; }
+.sys-panel[hidden] { display: none; }
+.sys-selectall { display: inline-flex; align-items: center; gap: 8px; margin: 4px 0 8px; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.sys-selectall input { accent-color: var(--accent, #7a5cc4); }
+.sys-everything { margin: 0; font-weight: 500; }
+.sys-item-top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.sys-status { font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 999px; background: var(--bg, #f4f1ec); color: var(--ink, #241f1a); white-space: nowrap; }
+.sys-status.s-create, .sys-status.s-update { background: #e8e1f6; color: #4b3590; }
+.sys-status.s-delete { background: #f8e4e1; color: #7a2a22; }
+.sys-status.s-review { background: #f7ecd6; color: #7a5212; }
+.sys-list.is-disabled { opacity: .55; pointer-events: none; }
 
 /* Sync now preview */
 .sys-modal { position: fixed; inset: 0; z-index: 9000; display: flex; align-items: center; justify-content: center; }
@@ -83,6 +105,10 @@
 
 @media (max-width: 600px) {
   .sys-dir { padding: 12px 16px; }
+  .sys-dir-head { flex-direction: column; align-items: flex-start; }
+  .sys-seg label { padding: 6px 9px; }
+  .sys-tabs { padding: 0 12px; }
+  .sys-dialog-foot { flex-wrap: wrap; }
   .sys-dir-controls { flex-direction: column; gap: 12px; }
   .sys-dir-controls .sys-field:first-child { min-width: 0; }
   .sys-dialog { width: calc(100vw - 16px); max-height: calc(100vh - 16px); }

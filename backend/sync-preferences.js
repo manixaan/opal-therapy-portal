@@ -1,28 +1,24 @@
 'use strict';
 
 /**
- * SYNC SETTINGS (migration 081) — which way each calendar sync runs, from
- * when, and whether it runs on its own.
+ * SYNC SETTINGS (migration 081, simplified 19 Nov 2026) — which way each
+ * calendar sync runs, from when, and whether it runs on its own.
  *
- * Five directions. For each one a person has three choices — on/off, a
- * "sync events from" date (anything starting earlier is left alone in that
- * direction) and auto (runs by itself) versus only when "Sync now" is pressed.
- * The Owner sets the practice defaults and three limits per direction:
- * allowed at all, allowed to run automatically, and the earliest sync-from
- * date anyone may choose.
+ * A person chooses for two directions only — Portal → Outlook and
+ * Outlook → Portal: Off, "Sync now only" or Automatic, plus a "sync events
+ * from" date (anything starting earlier is left alone in that direction).
  *
- * Resolution, fail-closed:
- *   enabled  = practice.allowed  AND (user.enabled ?? practice.enabled)
- *   auto     = practice.allowAuto AND (user.auto ?? practice.auto)
- *   syncFrom = the later of (user.syncFrom ?? practice.syncFrom) and practice.earliestFrom
- * and above all of it the environment flags (ENABLE_OUTLOOK_WRITE, ...) —
+ * The other three directions are fixed, not settings:
+ *   portal_to_splose   on — client bookings queue for Sync Splose; it runs as
+ *                      automatically as ENABLE_SPLOSE_AUTO_SYNC allows
+ *   splose_to_portal   retired (off): Splose appointments are not brought in
+ *                      and the "new in Splose" alerts are dropped
+ *   splose_to_outlook  retired (off)
+ * Stored rows for those directions, and every practice-scope row (the old
+ * Owner defaults & limits), are ignored — they stay in the table untouched.
+ *
+ * Above all of it sit the environment flags (ENABLE_OUTLOOK_WRITE, ...) —
  * a page setting can never switch on what the environment has switched off.
- *
- * DEFAULTS reproduce how sync behaved before this page existed, so upgrading
- * changes nothing until someone changes a setting: the portal→Outlook copy on
- * save and the 90-second Outlook poll stay automatic; Splose publishing stays
- * exactly as automatic as ENABLE_SPLOSE_AUTO_SYNC makes it; Splose imports stay
- * manual (the watcher still asks about each change).
  *
  * Reading the settings can fail (database down, table missing). Callers treat
  * a failure as "not allowed": a booking is still saved in the portal, it just
@@ -33,12 +29,15 @@ const flags = require('./feature-flags');
 
 const DIRECTIONS = ['portal_to_outlook', 'outlook_to_portal', 'portal_to_splose', 'splose_to_portal', 'splose_to_outlook'];
 
+/** The directions a person may set. Everything else is FIXED below. */
+const USER_DIRECTIONS = ['portal_to_outlook', 'outlook_to_portal'];
+
 const DEFAULTS = {
-  portal_to_outlook: { allowed: true, allowAuto: true, enabled: true, auto: true,  syncFrom: null, earliestFrom: null },
-  outlook_to_portal: { allowed: true, allowAuto: true, enabled: true, auto: true,  syncFrom: null, earliestFrom: null },
-  portal_to_splose:  { allowed: true, allowAuto: true, enabled: true, auto: true,  syncFrom: null, earliestFrom: null },
-  splose_to_portal:  { allowed: true, allowAuto: true, enabled: true, auto: false, syncFrom: null, earliestFrom: null },
-  splose_to_outlook: { allowed: true, allowAuto: true, enabled: true, auto: true,  syncFrom: null, earliestFrom: null },
+  portal_to_outlook: { enabled: true,  auto: true,  syncFrom: null },
+  outlook_to_portal: { enabled: true,  auto: true,  syncFrom: null },
+  portal_to_splose:  { enabled: true,  auto: true,  syncFrom: null },
+  splose_to_portal:  { enabled: false, auto: false, syncFrom: null },
+  splose_to_outlook: { enabled: false, auto: false, syncFrom: null },
 };
 
 const PRACTICE_TIME_ZONE = 'Australia/Perth';
@@ -67,7 +66,6 @@ function asDate(v) {
   return DATE_RE.test(s) ? s : null;
 }
 
-const laterOf = (a, b) => (!a ? b : !b ? a : (a > b ? a : b));
 const pick = (v, d) => (v === null || v === undefined ? d : v);
 
 /** What the environment allows, per direction. Pure over the flags module. */
@@ -94,45 +92,30 @@ function environment(sploseConfigured) {
   return env;
 }
 
-function rowToPractice(r) {
-  return {
-    allowed: r.allowed, allowAuto: r.allow_auto, enabled: r.enabled, auto: r.auto,
-    syncFrom: asDate(r.sync_from), earliestFrom: asDate(r.earliest_from),
-  };
-}
 function rowToUser(r) {
   return { enabled: r.enabled, auto: r.auto, syncFrom: asDate(r.sync_from) };
 }
 
 /**
  * Pure: settings rows + environment → the effective settings per direction.
- *   practiceRows  sync_settings rows with scope 'practice'
  *   userRows      sync_settings rows with scope 'user' for one person
  *   env           environment() output
+ * practiceRows is accepted and ignored (the Owner limits were retired).
  */
-function resolve({ practiceRows, userRows, env }) {
-  const byDir = (rows) => {
-    const m = {};
-    for (const r of rows || []) if (r && DIRECTIONS.includes(r.direction)) m[r.direction] = r;
-    return m;
-  };
-  const pr = byDir(practiceRows), ur = byDir(userRows);
+function resolve({ userRows, env }) {
+  const ur = {};
+  for (const r of userRows || []) if (r && USER_DIRECTIONS.includes(r.direction)) ur[r.direction] = r;
   const out = {};
   for (const d of DIRECTIONS) {
     const base = DEFAULTS[d];
-    const p0 = pr[d] ? rowToPractice(pr[d]) : {};
-    const practice = {
-      allowed: pick(p0.allowed, base.allowed), allowAuto: pick(p0.allowAuto, base.allowAuto),
-      enabled: pick(p0.enabled, base.enabled), auto: pick(p0.auto, base.auto),
-      syncFrom: pick(p0.syncFrom, base.syncFrom), earliestFrom: pick(p0.earliestFrom, base.earliestFrom),
-    };
+    const settable = USER_DIRECTIONS.includes(d);
     const user = ur[d] ? rowToUser(ur[d]) : { enabled: null, auto: null, syncFrom: null };
     const e = (env && env[d]) || { blockedBy: 'UNKNOWN' };
-    const enabled = practice.allowed === true && pick(user.enabled, practice.enabled) === true;
-    const auto = practice.allowAuto === true && pick(user.auto, practice.auto) === true;
-    const syncFrom = laterOf(pick(user.syncFrom, practice.syncFrom), practice.earliestFrom);
+    const enabled = pick(user.enabled, base.enabled) === true;
+    const auto = pick(user.auto, base.auto) === true;
+    const syncFrom = pick(user.syncFrom, base.syncFrom);
     out[d] = {
-      direction: d, enabled, auto, syncFrom, practice, user,
+      direction: d, settable, enabled, auto, syncFrom, user,
       blockedBy: e.blockedBy || null, autoBlockedBy: e.autoBlockedBy || null, writeBlockedBy: e.writeBlockedBy || null,
       runs: enabled && !e.blockedBy,
       runsAutomatically: enabled && auto && !e.blockedBy && !e.autoBlockedBy,
@@ -228,16 +211,13 @@ async function applyOutlookCutoff(db, userId, changed, syncFrom) {
 
 async function loadRows(db, userId) {
   const { rows } = await db.pool.query(
-    `SELECT scope, user_id, direction, enabled, sync_from, auto, allowed, allow_auto, earliest_from, updated_at
+    `SELECT scope, user_id, direction, enabled, sync_from, auto, updated_at
        FROM sync_settings
-      WHERE scope = 'practice' OR (scope = 'user' AND user_id = $1)`,
+      WHERE scope = 'user' AND user_id = $1`,
     [userId]
   );
   const list = Array.isArray(rows) ? rows : [];
-  return {
-    practiceRows: list.filter(r => r.scope === 'practice'),
-    userRows: list.filter(r => r.scope === 'user'),
-  };
+  return { userRows: list.filter(r => r.scope === 'user') };
 }
 
 function sploseConfigured() {
@@ -272,70 +252,37 @@ function dateOrNull(v) {
 }
 
 /**
- * Validate one person's changes against the practice limits.
- *   practice  resolve()[d].practice per direction
- *   body      { [direction]: { enabled?, auto?, syncFrom? } } — null = back to the practice default
+ * Validate one person's changes. Only Portal → Outlook and Outlook → Portal
+ * are settings; the other directions are fixed and refused here.
+ *   body      { [direction]: { enabled?, auto?, syncFrom? } } — null = back to the default
  * Returns { errors: [..], changes: { [direction]: { enabled?, auto?, syncFrom? } } }
  */
-function validateUserUpdate(resolved, body) {
+function validateUserUpdate(_resolved, body) {
   const errors = [], changes = {};
   if (!body || typeof body !== 'object' || Array.isArray(body)) return { errors: ['Nothing to save'], changes };
   for (const [d, raw] of Object.entries(body)) {
     if (!DIRECTIONS.includes(d)) { errors.push(`Unknown direction: ${d}`); continue; }
-    if (!raw || typeof raw !== 'object') { errors.push(`${d}: expected an object`); continue; }
-    const p = resolved[d].practice;
-    const c = {};
-    if ('enabled' in raw) {
-      const t = triState(raw.enabled);
-      if (!t.ok) errors.push(`${d}: enabled must be true, false or null`);
-      else if (t.value === true && !p.allowed) errors.push(`${d}: the Owner has not allowed this sync`);
-      else c.enabled = t.value;
-    }
-    if ('auto' in raw) {
-      const t = triState(raw.auto);
-      if (!t.ok) errors.push(`${d}: auto must be true, false or null`);
-      else if (t.value === true && !p.allowAuto) errors.push(`${d}: the Owner has not allowed this sync to run automatically`);
-      else c.auto = t.value;
-    }
-    if ('syncFrom' in raw) {
-      const t = dateOrNull(raw.syncFrom);
-      if (!t.ok) errors.push(`${d}: syncFrom must be a date (YYYY-MM-DD) or null`);
-      // null falls back to the practice default, which resolve() clamps to the earliest date.
-      else if (t.value !== null && p.earliestFrom && t.value < p.earliestFrom) errors.push(`${d}: the earliest date the Owner allows is ${p.earliestFrom}`);
-      else c.syncFrom = t.value;
-    }
-    if (Object.keys(c).length) changes[d] = c;
-  }
-  return { errors, changes };
-}
-
-/** Validate the Owner's practice defaults and limits. */
-function validatePracticeUpdate(body) {
-  const errors = [], changes = {};
-  if (!body || typeof body !== 'object' || Array.isArray(body)) return { errors: ['Nothing to save'], changes };
-  for (const [d, raw] of Object.entries(body)) {
-    if (!DIRECTIONS.includes(d)) { errors.push(`Unknown direction: ${d}`); continue; }
+    if (!USER_DIRECTIONS.includes(d)) { errors.push(`${d} is not a setting you can change`); continue; }
     if (!raw || typeof raw !== 'object') { errors.push(`${d}: expected an object`); continue; }
     const c = {};
-    for (const k of ['allowed', 'allowAuto', 'enabled', 'auto']) {
+    for (const k of ['enabled', 'auto']) {
       if (!(k in raw)) continue;
       const t = triState(raw[k]);
       if (!t.ok) errors.push(`${d}: ${k} must be true, false or null`); else c[k] = t.value;
     }
-    for (const k of ['syncFrom', 'earliestFrom']) {
-      if (!(k in raw)) continue;
-      const t = dateOrNull(raw[k]);
-      if (!t.ok) errors.push(`${d}: ${k} must be a date (YYYY-MM-DD) or null`); else c[k] = t.value;
+    if ('syncFrom' in raw) {
+      const t = dateOrNull(raw.syncFrom);
+      if (!t.ok) errors.push(`${d}: syncFrom must be a date (YYYY-MM-DD) or null`); else c.syncFrom = t.value;
     }
     if (Object.keys(c).length) changes[d] = c;
   }
   return { errors, changes };
 }
 
-const COLUMN = { enabled: 'enabled', auto: 'auto', syncFrom: 'sync_from', allowed: 'allowed', allowAuto: 'allow_auto', earliestFrom: 'earliest_from' };
+const COLUMN = { enabled: 'enabled', auto: 'auto', syncFrom: 'sync_from' };
 
-/** Upsert validated changes. scope 'user' needs userId. One transaction. */
-async function saveChanges(db, { scope, userId = null, actorUserId, changes }) {
+/** Upsert one person's validated changes. One transaction. */
+async function saveChanges(db, { userId, actorUserId, changes }) {
   const client = await db.pool.connect();
   try {
     await client.query('BEGIN');
@@ -343,10 +290,8 @@ async function saveChanges(db, { scope, userId = null, actorUserId, changes }) {
       const keys = Object.keys(c);
       if (!keys.length) continue;
       const existing = await client.query(
-        scope === 'practice'
-          ? `SELECT id FROM sync_settings WHERE scope = 'practice' AND direction = $1 FOR UPDATE`
-          : `SELECT id FROM sync_settings WHERE scope = 'user' AND user_id = $2 AND direction = $1 FOR UPDATE`,
-        scope === 'practice' ? [d] : [d, userId]
+        `SELECT id FROM sync_settings WHERE scope = 'user' AND user_id = $2 AND direction = $1 FOR UPDATE`,
+        [d, userId]
       );
       if (existing.rows.length) {
         const sets = keys.map((k, i) => `${COLUMN[k]} = $${i + 2}`);
@@ -356,7 +301,7 @@ async function saveChanges(db, { scope, userId = null, actorUserId, changes }) {
         );
       } else {
         const cols = keys.map(k => COLUMN[k]);
-        const params = [scope, scope === 'practice' ? null : userId, d, ...keys.map(k => c[k]), actorUserId];
+        const params = ['user', userId, d, ...keys.map(k => c[k]), actorUserId];
         const ph = params.map((_, i) => `$${i + 1}`);
         await client.query(
           `INSERT INTO sync_settings (scope, user_id, direction, ${cols.join(', ')}, updated_by) VALUES (${ph.join(', ')})`,
@@ -375,6 +320,7 @@ async function saveChanges(db, { scope, userId = null, actorUserId, changes }) {
 
 module.exports = {
   DIRECTIONS,
+  USER_DIRECTIONS,
   DEFAULTS,
   localDay,
   onOrAfter,
@@ -388,6 +334,5 @@ module.exports = {
   effectiveFor,
   effectiveOrNull,
   validateUserUpdate,
-  validatePracticeUpdate,
   saveChanges,
 };

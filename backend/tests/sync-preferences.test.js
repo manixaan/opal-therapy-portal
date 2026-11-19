@@ -1,16 +1,17 @@
 'use strict';
 
 /**
- * Sync settings resolver (migration 081) — pure rules, no database.
+ * Sync settings resolver (migration 081, simplified 19 Nov 2026) — pure rules, no database.
  *
  * Pins:
- *   - no rows = the behaviour from before the page existed
- *   - the Owner's limits win over a person's choice (allowed, allowAuto, earliestFrom)
+ *   - no rows: Outlook automatic both ways, portal → Splose queues, Splose → portal / Outlook retired
+ *   - only Portal → Outlook and Outlook → Portal are settings; practice rows and
+ *     rows for the fixed directions are ignored
  *   - environment flags win over everything
  *   - allows(): off / manual-only / cutoff; allowsLinked() ignores the cutoff
  *   - a null prefs object (unreadable settings) allows nothing
  *   - the Outlook cutoff keeps old events the portal already holds and cancellations
- *   - validation refuses what the Owner has not allowed
+ *   - validation refuses the fixed directions
  */
 
 const prefs = require('../sync-preferences');
@@ -24,18 +25,17 @@ const practice = (direction, over) => ({ scope: 'practice', direction, ...over }
 const user = (direction, over) => ({ scope: 'user', direction, ...over });
 
 describe('resolve()', () => {
-  test('no rows reproduces the old behaviour: Outlook automatic both ways, Splose publishing follows its flag, imports manual', () => {
-    const r = prefs.resolve({ practiceRows: [], userRows: [], env: ALL_ON_ENV() });
-    expect(r.portal_to_outlook).toMatchObject({ enabled: true, auto: true, syncFrom: null, runsAutomatically: true });
-    expect(r.outlook_to_portal).toMatchObject({ enabled: true, auto: true, runsAutomatically: true });
-    expect(r.portal_to_splose).toMatchObject({ enabled: true, auto: true, runs: true, runsAutomatically: true });
-    expect(r.splose_to_portal).toMatchObject({ enabled: true, auto: false, runsAutomatically: false });
-    expect(r.splose_to_outlook).toMatchObject({ enabled: true, auto: true });
+  test('no rows: Outlook automatic both ways, Splose publishing follows its flag, Splose inbound retired', () => {
+    const r = prefs.resolve({ userRows: [], env: ALL_ON_ENV() });
+    expect(r.portal_to_outlook).toMatchObject({ settable: true, enabled: true, auto: true, syncFrom: null, runsAutomatically: true });
+    expect(r.outlook_to_portal).toMatchObject({ settable: true, enabled: true, auto: true, runsAutomatically: true });
+    expect(r.portal_to_splose).toMatchObject({ settable: false, enabled: true, auto: true, runs: true, runsAutomatically: true });
+    expect(r.splose_to_portal).toMatchObject({ settable: false, enabled: false, runs: false });
+    expect(r.splose_to_outlook).toMatchObject({ settable: false, enabled: false, runs: false });
   });
 
   test('a person may switch a direction off, set a date and turn auto off', () => {
     const r = prefs.resolve({
-      practiceRows: [],
       userRows: [user('outlook_to_portal', { enabled: false }), user('portal_to_outlook', { auto: false, sync_from: '2026-11-01' })],
       env: ALL_ON_ENV(),
     });
@@ -43,35 +43,28 @@ describe('resolve()', () => {
     expect(r.portal_to_outlook).toMatchObject({ runs: true, runsAutomatically: false, syncFrom: '2026-11-01' });
   });
 
-  test('the Owner\'s limits win: not allowed, no auto, earliest date', () => {
+  test('retired Owner limits and stored rows for fixed directions are ignored', () => {
     const r = prefs.resolve({
       practiceRows: [
-        practice('portal_to_outlook', { allowed: false }),
-        practice('portal_to_splose', { allow_auto: false }),
-        practice('splose_to_portal', { earliest_from: '2026-10-01' }),
+        practice('portal_to_outlook', { allowed: false, earliest_from: '2026-10-01' }),
+        practice('portal_to_splose', { allowed: false }),
       ],
       userRows: [
-        user('portal_to_outlook', { enabled: true }),
-        user('portal_to_splose', { auto: true }),
-        user('splose_to_portal', { sync_from: '2025-01-01' }),
+        user('portal_to_outlook', { enabled: true, sync_from: '2025-01-01' }),
+        user('portal_to_splose', { enabled: false }),
+        user('splose_to_portal', { enabled: true, auto: true }),
+        user('splose_to_outlook', { enabled: true }),
       ],
       env: ALL_ON_ENV(),
     });
-    expect(r.portal_to_outlook.enabled).toBe(false);
-    expect(r.portal_to_splose.auto).toBe(false);
-    expect(r.splose_to_portal.syncFrom).toBe('2026-10-01');
-  });
-
-  test('practice defaults apply where the person has not chosen', () => {
-    const r = prefs.resolve({
-      practiceRows: [practice('splose_to_portal', { auto: true, sync_from: '2026-11-03' })],
-      userRows: [], env: ALL_ON_ENV(),
-    });
-    expect(r.splose_to_portal).toMatchObject({ auto: true, syncFrom: '2026-11-03' });
+    expect(r.portal_to_outlook).toMatchObject({ enabled: true, syncFrom: '2025-01-01' });
+    expect(r.portal_to_splose.enabled).toBe(true);
+    expect(r.splose_to_portal.runs).toBe(false);
+    expect(r.splose_to_outlook.runs).toBe(false);
   });
 
   test('pg DATE values (local-midnight Date objects) read back as the same day', () => {
-    const r = prefs.resolve({ practiceRows: [], userRows: [user('outlook_to_portal', { sync_from: new Date(2026, 10, 1) })], env: ALL_ON_ENV() });
+    const r = prefs.resolve({ userRows: [user('outlook_to_portal', { sync_from: new Date(2026, 10, 1) })], env: ALL_ON_ENV() });
     expect(r.outlook_to_portal.syncFrom).toBe('2026-11-01');
   });
 
@@ -79,13 +72,13 @@ describe('resolve()', () => {
     const env = ALL_ON_ENV();
     env.portal_to_outlook.blockedBy = 'ENABLE_OUTLOOK_WRITE';
     env.portal_to_splose.autoBlockedBy = 'ENABLE_SPLOSE_AUTO_SYNC';
-    const r = prefs.resolve({ practiceRows: [], userRows: [user('portal_to_splose', { auto: true })], env });
+    const r = prefs.resolve({ userRows: [user('portal_to_splose', { auto: true })], env });
     expect(r.portal_to_outlook).toMatchObject({ enabled: true, runs: false, blockedBy: 'ENABLE_OUTLOOK_WRITE' });
     expect(r.portal_to_splose).toMatchObject({ runs: true, runsAutomatically: false });
   });
 
   test('a missing environment entry is treated as blocked', () => {
-    const r = prefs.resolve({ practiceRows: [], userRows: [], env: {} });
+    const r = prefs.resolve({ userRows: [], env: {} });
     for (const d of prefs.DIRECTIONS) expect(r[d].runs).toBe(false);
   });
 });
@@ -114,7 +107,7 @@ describe('environment()', () => {
 });
 
 describe('allows() / allowsLinked()', () => {
-  const base = () => prefs.resolve({ practiceRows: [], userRows: [user('portal_to_outlook', { sync_from: '2026-11-01' })], env: ALL_ON_ENV() });
+  const base = () => prefs.resolve({ userRows: [user('portal_to_outlook', { sync_from: '2026-11-01' })], env: ALL_ON_ENV() });
 
   test('cutoff is the practice-local day: 31 Oct 23:30 Perth is before 1 Nov', () => {
     const p = base();
@@ -123,9 +116,15 @@ describe('allows() / allowsLinked()', () => {
   });
 
   test('manual-only needs manual: true', () => {
-    const p = prefs.resolve({ practiceRows: [], userRows: [], env: ALL_ON_ENV() });
-    expect(prefs.allows(p, 'splose_to_portal')).toBe(false);
-    expect(prefs.allows(p, 'splose_to_portal', { manual: true })).toBe(true);
+    const p = prefs.resolve({ userRows: [user('outlook_to_portal', { auto: false })], env: ALL_ON_ENV() });
+    expect(prefs.allows(p, 'outlook_to_portal')).toBe(false);
+    expect(prefs.allows(p, 'outlook_to_portal', { manual: true })).toBe(true);
+  });
+
+  test('retired Splose → portal never runs, even by hand', () => {
+    const p = prefs.resolve({ userRows: [], env: ALL_ON_ENV() });
+    expect(prefs.allows(p, 'splose_to_portal', { manual: true })).toBe(false);
+    expect(prefs.allows(p, 'splose_to_outlook', { manual: true })).toBe(false);
   });
 
   test('an already-linked event keeps in step whatever the cutoff', () => {
@@ -165,76 +164,55 @@ describe('partitionOldOutlook()', () => {
 });
 
 describe('validateUserUpdate()', () => {
-  const limited = () => prefs.resolve({
-    practiceRows: [
-      practice('portal_to_outlook', { allowed: false }),
-      practice('portal_to_splose', { allow_auto: false }),
-      practice('splose_to_portal', { earliest_from: '2026-10-01' }),
-    ],
-    userRows: [], env: ALL_ON_ENV(),
-  });
+  const r = () => prefs.resolve({ userRows: [], env: ALL_ON_ENV() });
 
-  test('refuses what the Owner has not allowed', () => {
-    const { errors } = prefs.validateUserUpdate(limited(), {
-      portal_to_outlook: { enabled: true },
-      portal_to_splose: { auto: true },
-      splose_to_portal: { syncFrom: '2026-09-01' },
+  test('refuses the fixed directions', () => {
+    const { errors, changes } = prefs.validateUserUpdate(r(), {
+      portal_to_splose: { enabled: false },
+      splose_to_portal: { enabled: true },
+      splose_to_outlook: { auto: true },
     });
     expect(errors).toHaveLength(3);
+    expect(changes).toEqual({});
   });
 
-  test('accepts switching off, dates on/after the earliest, and null (back to default)', () => {
-    const { errors, changes } = prefs.validateUserUpdate(limited(), {
+  test('accepts on/off, auto, dates and null (back to default) for the Outlook directions', () => {
+    const { errors, changes } = prefs.validateUserUpdate(r(), {
       portal_to_outlook: { enabled: false },
-      splose_to_portal: { syncFrom: '2026-10-15', auto: null },
-      outlook_to_portal: { syncFrom: null },
+      outlook_to_portal: { syncFrom: '2026-10-15', auto: null },
     });
     expect(errors).toEqual([]);
     expect(changes).toEqual({
       portal_to_outlook: { enabled: false },
-      splose_to_portal: { syncFrom: '2026-10-15', auto: null },
-      outlook_to_portal: { syncFrom: null },
+      outlook_to_portal: { syncFrom: '2026-10-15', auto: null },
     });
   });
 
   test('rejects unknown directions, bad types and bad dates', () => {
-    const r = prefs.resolve({ practiceRows: [], userRows: [], env: ALL_ON_ENV() });
-    expect(prefs.validateUserUpdate(r, { sideways: { enabled: true } }).errors).toHaveLength(1);
-    expect(prefs.validateUserUpdate(r, { portal_to_outlook: { enabled: 'yes' } }).errors).toHaveLength(1);
-    expect(prefs.validateUserUpdate(r, { portal_to_outlook: { syncFrom: '01/11/2026' } }).errors).toHaveLength(1);
-    expect(prefs.validateUserUpdate(r, null).errors).toHaveLength(1);
+    expect(prefs.validateUserUpdate(r(), { sideways: { enabled: true } }).errors).toHaveLength(1);
+    expect(prefs.validateUserUpdate(r(), { portal_to_outlook: { enabled: 'yes' } }).errors).toHaveLength(1);
+    expect(prefs.validateUserUpdate(r(), { portal_to_outlook: { syncFrom: '01/11/2026' } }).errors).toHaveLength(1);
+    expect(prefs.validateUserUpdate(r(), null).errors).toHaveLength(1);
   });
-});
 
-describe('validatePracticeUpdate()', () => {
-  test('accepts every field and rejects bad values', () => {
-    const ok = prefs.validatePracticeUpdate({ portal_to_outlook: { allowed: true, allowAuto: false, enabled: true, auto: null, syncFrom: '2026-11-01', earliestFrom: null } });
-    expect(ok.errors).toEqual([]);
-    expect(Object.keys(ok.changes.portal_to_outlook)).toHaveLength(6);
-    expect(prefs.validatePracticeUpdate({ portal_to_outlook: { earliestFrom: 'soon' } }).errors).toHaveLength(1);
+  test('the practice validator is gone', () => {
+    expect(prefs.validatePracticeUpdate).toBeUndefined();
   });
 });
 
 describe('alertDecision() — the Splose watcher', () => {
-  const r = (userRows) => prefs.resolve({ practiceRows: [], userRows, env: ALL_ON_ENV() });
+  const r = (userRows) => prefs.resolve({ userRows, env: ALL_ON_ENV() });
   const created = (start) => ({ kind: 'created', details: { start } });
 
-  test('defaults: new Splose appointments are asked about (as before)', () => {
-    expect(prefs.alertDecision(r([]), created('2026-11-10T01:00:00Z'))).toBe('keep');
+  test('Splose → portal is retired: "new in Splose" alerts are not recorded', () => {
+    expect(prefs.alertDecision(r([]), created('2026-11-10T01:00:00Z'))).toBe('drop');
+    expect(prefs.alertDecision(r([user('splose_to_portal', { enabled: true, auto: true })]), created('2026-11-10T01:00:00Z'))).toBe('drop');
   });
-  test('Splose → portal off, or before its date → not recorded', () => {
-    expect(prefs.alertDecision(r([user('splose_to_portal', { enabled: false })]), created('2026-11-10T01:00:00Z'))).toBe('drop');
-    expect(prefs.alertDecision(r([user('splose_to_portal', { sync_from: '2026-12-01' })]), created('2026-11-10T01:00:00Z'))).toBe('drop');
-  });
-  test('Splose → portal automatic → brought in without asking', () => {
-    expect(prefs.alertDecision(r([user('splose_to_portal', { auto: true })]), created('2026-11-10T01:00:00Z'))).toBe('auto');
-  });
-  test('portal → Splose off silences "not in Splose" for that calendar only', () => {
-    expect(prefs.alertDecision(r([user('portal_to_splose', { enabled: false })]), { kind: 'unlinked', details: { start: '2026-11-10T01:00:00Z' } })).toBe('drop');
-    expect(prefs.alertDecision(r([]), { kind: 'unlinked', details: { start: '2026-11-10T01:00:00Z' } })).toBe('keep');
+  test('"not in Splose" alerts still ask — portal → Splose is fixed on', () => {
+    expect(prefs.alertDecision(r([user('portal_to_splose', { enabled: false })]), { kind: 'unlinked', details: { start: '2026-11-10T01:00:00Z' } })).toBe('keep');
   });
   test('moves and cancellations always ask; unreadable settings always ask', () => {
-    expect(prefs.alertDecision(r([user('splose_to_portal', { enabled: false })]), { kind: 'moved', details: {} })).toBe('keep');
+    expect(prefs.alertDecision(r([]), { kind: 'moved', details: {} })).toBe('keep');
     expect(prefs.alertDecision(null, created('2026-11-10T01:00:00Z'))).toBe('keep');
   });
 });

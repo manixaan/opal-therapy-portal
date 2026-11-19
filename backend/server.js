@@ -1093,7 +1093,8 @@ require('./splose-credentials').apply().then((conn) => {
       // brought in without asking when that direction runs automatically. A
       // portal booking is only flagged "not in Splose" when portal → Splose is
       // on for it. Moves and cancellations of linked appointments always ask.
-      decideAlert: async (alert, userId) => (userId ? syncPrefs.alertDecision(await syncPrefs.effectiveOrNull(db, userId), alert) : 'keep'),
+      // No portal account: Splose → portal is retired for everyone, so a "new in Splose" alert is dropped.
+      decideAlert: async (alert, userId) => (userId ? syncPrefs.alertDecision(await syncPrefs.effectiveOrNull(db, userId), alert) : (alert && alert.kind === 'created' ? 'drop' : 'keep')),
       autoApply: (alert, userId) => require('./sync-settings-routes')._backfill().autoImport(userId, alert.sploseAppointmentId),
     });
     app.set('sploseWatcher', watcher);

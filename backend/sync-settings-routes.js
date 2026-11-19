@@ -3,28 +3,29 @@
 /**
  * SYNC SETTINGS ROUTES (migration 081)
  *
- *   GET  /api/sync-settings                       my effective settings (+ the practice's, for the Owner)
- *   PUT  /api/sync-settings                       { directions: { <dir>: { enabled?, auto?, syncFrom? } } }
- *   PUT  /api/sync-settings/practice              Owner: { directions: { <dir>: { allowed?, allowAuto?, enabled?, auto?, syncFrom?, earliestFrom? } } }
+ *   GET  /api/sync-settings                       my effective settings
+ *   PUT  /api/sync-settings                       { directions: { portal_to_outlook|outlook_to_portal: { enabled?, auto?, syncFrom? } } }
  *   POST /api/sync-settings/:direction/plan       what "Sync now" would do — reads only, writes nothing
  *   POST /api/sync-settings/:direction/apply      { decisions: [{ key, action, counterpartId? }] }
  *   POST /api/sync-settings/outlook/pull          run the Outlook → portal catch-up now (this calendar)
  *
  * Guards: signed in, not read-only / pre-employee. Everything is the caller's
  * own calendar; an Owner or Admin may name another person with ?userId= (the
- * way reception drives a week in Sync Splose). Practice defaults and limits
- * are the Owner's alone. Every save and every apply is audited with ids and
+ * way reception drives a week in Sync Splose). The Owner's practice defaults
+ * and limits were retired on 19 Nov 2026. Sync now plans only the three live
+ * directions (Outlook both ways, portal → Splose). Every save and every apply is audited with ids and
  * counts only — never titles, client names or times.
  */
 
 const express = require('express');
 const router = express.Router();
 const db = require('./database');
-const { requireAuth, requireRole } = require('./permissions');
+const { requireAuth } = require('./permissions');
 const prefs = require('./sync-preferences');
 const backfillMod = require('./sync-backfill');
 
-const DIR_RE = /^(portal_to_outlook|outlook_to_portal|portal_to_splose|splose_to_portal|splose_to_outlook)$/;
+// Splose → portal and Splose → Outlook were retired: no Sync now for them.
+const DIR_RE = /^(portal_to_outlook|outlook_to_portal|portal_to_splose)$/;
 
 function denyReadOnly(req, res, next) {
   if (!req.user || req.user.role === 'read_only' || req.user.role === 'pre_employee') {
@@ -86,7 +87,7 @@ router.get('/api/sync-settings', safe(async (req, res) => {
   const t = await targetUserId(req);
   if (t.error) return res.status(t.error.status).json(t.error);
   const effective = await prefs.effectiveFor(db, t.id);
-  res.json({ userId: t.id, isOwner: req.user.role === 'owner', directions: prefs.DIRECTIONS, effective });
+  res.json({ userId: t.id, directions: prefs.USER_DIRECTIONS, effective });
 }));
 
 router.put('/api/sync-settings', safe(async (req, res) => {
@@ -96,18 +97,9 @@ router.put('/api/sync-settings', safe(async (req, res) => {
   const { errors, changes } = prefs.validateUserUpdate(resolved, req.body && req.body.directions);
   if (errors.length) return res.status(400).json({ error: errors[0], errors, code: 'invalid' });
   if (!Object.keys(changes).length) return res.status(400).json({ error: 'Nothing to save', code: 'invalid' });
-  await prefs.saveChanges(db, { scope: 'user', userId: t.id, actorUserId: req.session.userId, changes });
+  await prefs.saveChanges(db, { userId: t.id, actorUserId: req.session.userId, changes });
   await audit(req, 'sync_settings.user_updated', t.id, { forUser: t.id, changed: summarise(changes) });
   res.json({ ok: true, effective: await prefs.effectiveFor(db, t.id) });
-}));
-
-router.put('/api/sync-settings/practice', requireRole('owner'), safe(async (req, res) => {
-  const { errors, changes } = prefs.validatePracticeUpdate(req.body && req.body.directions);
-  if (errors.length) return res.status(400).json({ error: errors[0], errors, code: 'invalid' });
-  if (!Object.keys(changes).length) return res.status(400).json({ error: 'Nothing to save', code: 'invalid' });
-  await prefs.saveChanges(db, { scope: 'practice', actorUserId: req.session.userId, changes });
-  await audit(req, 'sync_settings.practice_updated', 'practice', { changed: summarise(changes) });
-  res.json({ ok: true, effective: await prefs.effectiveFor(db, req.session.userId) });
 }));
 
 /** Which fields changed per direction — names only, for the audit row. */

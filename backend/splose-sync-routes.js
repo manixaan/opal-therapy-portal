@@ -225,6 +225,9 @@ router.get('/api/splose-sync/alerts', safe(async (req, res) => {
        LEFT JOIN events e ON e.id = a.event_id
       WHERE a.acknowledged_at IS NULL AND (a.user_id = $1 ${manager ? 'OR a.user_id IS NULL' : ''})
         AND NOT (a.kind = 'unlinked' AND COALESCE(e.splose_sync_ignored_at IS NOT NULL, FALSE))
+        -- Splose → portal was retired (19 Nov 2026): "booked directly in Splose"
+        -- alerts recorded before then are no longer shown.
+        AND a.kind <> 'created'
       ORDER BY a.detected_at
       LIMIT 50`,
     [userId]
@@ -254,6 +257,11 @@ router.post('/api/splose-sync/alerts/:id/ack', safe(async (req, res) => {
   );
   const alert = found.rows[0];
   if (!alert) return res.status(404).json({ error: 'No such open alert' });
+  // Splose → portal is retired (19 Nov 2026): a "booked in Splose" alert can
+  // no longer bring the appointment in.
+  if (alert.kind === 'created' && verdict === 'valid') {
+    return res.status(409).json({ error: 'Appointments made in Splose are no longer brought into the portal', code: 'splose_to_portal_retired' });
+  }
 
   let applied = null;
   if (verdict === 'valid') {

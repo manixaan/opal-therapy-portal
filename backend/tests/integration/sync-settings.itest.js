@@ -7,14 +7,16 @@
  *
  * Pins:
  *   - migration 081: table, scope check, one practice row per direction
- *   - GET defaults; PUT own within the Owner's limits; practice is Owner-only;
- *     read-only refused; a therapist cannot touch another calendar
+ *   - GET defaults; PUT own (Outlook directions only — the Owner limits and the
+ *     Splose directions are no longer settings); read-only refused; a therapist
+ *     cannot touch another calendar
  *   - booking: portal → Outlook manual-only or before the date → held, no Graph call;
- *     portal → Splose off → nothing queued
+ *     portal → Splose cannot be switched off — bookings always queue
  *   - Sync now portal → Outlook: an Outlook event already at that time is LINKED,
  *     never duplicated; create writes once; forged keys are refused
  *   - Sync now Outlook → portal: links a hand-entered portal booking, imports the rest once
- *   - Sync now Splose → portal / portal → Splose: link instead of copy; create queues only
+ *   - Sync now portal → Splose: link instead of copy; create queues only
+ *   - Splose → portal is retired: no Sync now, and the watcher records no "new in Splose" alerts
  *   - every save and apply is audited without titles or client names
  *   - the Splose watcher drops / auto-imports per the settings
  */
@@ -132,32 +134,32 @@ describe('migration 081', () => {
 });
 
 describe('settings routes', () => {
-  test('GET defaults; PUT own; Owner limits refuse; practice is Owner-only; audited', async () => {
+  test('GET defaults; PUT own; Splose directions and practice limits are not settings; audited', async () => {
     const app = buildApp();
     const { agent, user } = await agentFor(app);
     const g = await agent.get('/api/sync-settings');
     expect(g.status).toBe(200);
-    expect(g.body.effective.portal_to_outlook).toMatchObject({ enabled: true, auto: true, runs: true });
-    expect(g.body.isOwner).toBe(false);
+    expect(g.body.directions).toEqual(['portal_to_outlook', 'outlook_to_portal']);
+    expect(g.body.effective.portal_to_outlook).toMatchObject({ enabled: true, auto: true, runs: true, settable: true });
+    expect(g.body.effective.splose_to_portal).toMatchObject({ enabled: false, runs: false, settable: false });
+    expect(g.body.effective.portal_to_outlook.practice).toBeUndefined();
 
     const put = await agent.put('/api/sync-settings').send({ directions: { outlook_to_portal: { syncFrom: '2026-11-01', auto: false } } });
     expect(put.status).toBe(200);
     expect(put.body.effective.outlook_to_portal).toMatchObject({ syncFrom: '2026-11-01', auto: false, runsAutomatically: false });
 
-    expect((await agent.put('/api/sync-settings/practice').send({ directions: { portal_to_outlook: { allowed: false } } })).status).toBe(403);
-
+    for (const d of ['portal_to_splose', 'splose_to_portal', 'splose_to_outlook']) {
+      expect((await agent.put('/api/sync-settings').send({ directions: { [d]: { enabled: true } } })).status).toBe(400);
+    }
     const owner = await agentFor(app, { role: 'owner' }, '19521');
-    const lim = await owner.agent.put('/api/sync-settings/practice').send({ directions: { portal_to_outlook: { allowed: false }, splose_to_portal: { earliestFrom: '2026-10-01' } } });
-    expect(lim.status).toBe(200);
+    expect((await owner.agent.put('/api/sync-settings/practice').send({ directions: { portal_to_outlook: { allowed: false } } })).status).toBe(404);
 
-    const refused = await agent.put('/api/sync-settings').send({ directions: { portal_to_outlook: { enabled: true } } });
-    expect(refused.status).toBe(400);
-    const early = await agent.put('/api/sync-settings').send({ directions: { splose_to_portal: { syncFrom: '2026-01-01' } } });
-    expect(early.status).toBe(400);
-    expect((await agent.get('/api/sync-settings')).body.effective.portal_to_outlook.enabled).toBe(false);
+    // A practice row left over from before is ignored.
+    await db.pool.query(`INSERT INTO sync_settings (scope, direction, allowed, enabled) VALUES ('practice', 'portal_to_outlook', false, false)`);
+    expect((await agent.get('/api/sync-settings')).body.effective.portal_to_outlook).toMatchObject({ enabled: true, runs: true });
 
     const audits = await db.pool.query(`SELECT action, metadata FROM audit_logs WHERE action LIKE 'sync_settings.%' ORDER BY created_at`);
-    expect(audits.rows.map(r => r.action)).toEqual(['sync_settings.user_updated', 'sync_settings.practice_updated']);
+    expect(audits.rows.map(r => r.action)).toEqual(['sync_settings.user_updated']);
     expect(JSON.stringify(audits.rows)).not.toMatch(/Jane|Client Appointment/);
     expect(audits.rows[0].metadata.forUser).toBe(user.id);
   });
@@ -198,14 +200,13 @@ describe('the everyday sync honours the settings', () => {
     expect(outlook.createOutlookEvent).toHaveBeenCalledTimes(1);
   });
 
-  test('portal → Splose off: nothing is queued', async () => {
+  test('portal → Splose is fixed on: a stored "off" row is ignored and the booking still queues', async () => {
     const app = buildApp();
-    const { agent } = await agentFor(app);
-    await agent.put('/api/sync-settings').send({ directions: { portal_to_splose: { enabled: false } } });
-    const b = await book(agent);
-    expect(b.sploseQueued).toBeNull();
+    const { agent, user } = await agentFor(app);
+    await db.pool.query(`INSERT INTO sync_settings (scope, user_id, direction, enabled) VALUES ('user', $1, 'portal_to_splose', false)`, [user.id]);
+    await book(agent);
     const q = await db.pool.query(`SELECT COUNT(*)::int AS n FROM splose_sync_queue`);
-    expect(q.rows[0].n).toBe(0);
+    expect(q.rows[0].n).toBe(1);
   });
 });
 
@@ -271,33 +272,23 @@ describe('Sync now — no duplicates', () => {
     expect((await agent.post('/api/sync-settings/outlook_to_portal/plan')).body.items).toEqual([]);
   });
 
-  test('Splose → portal: links the matching portal booking; imports the other; never writes Splose', async () => {
+  test('Splose → portal and Splose → Outlook are retired: no Sync now', async () => {
     const app = buildApp();
-    const { agent, user } = await agentFor(app);
-    await agent.put('/api/sync-settings').send({ directions: { portal_to_splose: { enabled: false } } });
-    const a = await book(agent);
-    mockDiary = [appt(5001, START), appt(5002, later(5)), appt(5003, later(7), { practitionerId: 19521 })];
-    const plan = await agent.post('/api/sync-settings/splose_to_portal/plan');
-    expect(plan.status).toBe(200);
-    expect(plan.body.items.map(i => [i.key, i.action])).toEqual([['remote:5001', 'link'], ['remote:5002', 'create']]);
-    const apply = await agent.post('/api/sync-settings/splose_to_portal/apply').send({ decisions: plan.body.defaults });
-    expect(apply.body.done).toHaveLength(2);
-    const rows = await db.pool.query(
-      `SELECT id, splose_id, source FROM events WHERE user_id = $1 AND is_deleted IS NOT TRUE ORDER BY start_time`, [user.id]);
-    expect(rows.rows).toEqual([
-      { id: a.dbId, splose_id: '5001', source: 'app' },
-      { id: expect.any(String), splose_id: '5002', source: 'splose' },
-    ]);
+    const { agent } = await agentFor(app);
+    for (const d of ['splose_to_portal', 'splose_to_outlook']) {
+      expect((await agent.post(`/api/sync-settings/${d}/plan`)).status).toBe(400);
+      expect((await agent.post(`/api/sync-settings/${d}/apply`).send({ decisions: [{ key: 'remote:1', action: 'create' }] })).status).toBe(400);
+    }
     expect(mockSplose.createAppointment).not.toHaveBeenCalled();
   });
 
   test('portal → Splose: link adopts the Splose id; create only queues', async () => {
     const app = buildApp();
     const { agent, user } = await agentFor(app);
-    await agent.put('/api/sync-settings').send({ directions: { portal_to_splose: { enabled: false } } });
     const a = await book(agent);
     const b = await book(agent, { startTime: later(3), endTime: later(4) });
-    await agent.put('/api/sync-settings').send({ directions: { portal_to_splose: { enabled: true } } });
+    // As if both were booked before Splose sync existed: nothing queued yet.
+    await db.pool.query(`DELETE FROM splose_sync_queue`);
     mockDiary = [appt(6001, START)];
     const plan = await agent.post('/api/sync-settings/portal_to_splose/plan');
     expect(plan.status).toBe(200);
@@ -315,9 +306,9 @@ describe('Sync now — no duplicates', () => {
   test('a switched-off direction cannot be planned or applied', async () => {
     const app = buildApp();
     const { agent } = await agentFor(app);
-    await agent.put('/api/sync-settings').send({ directions: { splose_to_portal: { enabled: false } } });
-    expect((await agent.post('/api/sync-settings/splose_to_portal/plan')).status).toBe(409);
-    expect((await agent.post('/api/sync-settings/splose_to_portal/apply').send({ decisions: [{ key: 'remote:1', action: 'create' }] })).status).toBe(409);
+    await agent.put('/api/sync-settings').send({ directions: { outlook_to_portal: { enabled: false } } });
+    expect((await agent.post('/api/sync-settings/outlook_to_portal/plan')).status).toBe(409);
+    expect((await agent.post('/api/sync-settings/outlook_to_portal/apply').send({ decisions: [{ key: 'remote:1', action: 'create' }] })).status).toBe(409);
     expect((await agent.post('/api/sync-settings/sideways/plan')).status).toBe(400);
   });
 });
@@ -334,29 +325,26 @@ describe('the Splose watcher honours the settings', () => {
     return w.run();
   }
 
-  test('off → not recorded; automatic → brought in once and closed; default → asked', async () => {
+  test('Splose → portal is retired: new Splose appointments are not recorded or imported, even with an old "automatic" row', async () => {
     const app = buildApp();
     const { agent, user } = await agentFor(app);
-    const soon = new Date(Date.now() + 2 * 86400000).toISOString();
-    mockDiary = [appt(7001, soon)];
-
-    await agent.put('/api/sync-settings').send({ directions: { splose_to_portal: { enabled: false } } });
+    mockDiary = [appt(7001, new Date(Date.now() + 2 * 86400000).toISOString())];
     await runWatcher();
     expect((await db.pool.query(`SELECT COUNT(*)::int AS n FROM splose_change_alerts`)).rows[0].n).toBe(0);
 
-    await agent.put('/api/sync-settings').send({ directions: { splose_to_portal: { enabled: true, auto: true } } });
+    await db.pool.query(`INSERT INTO sync_settings (scope, user_id, direction, enabled, auto) VALUES ('user', $1, 'splose_to_portal', true, true)`, [user.id]);
     await runWatcher();
-    const alerts = await db.pool.query(`SELECT kind, acknowledged_at, verdict FROM splose_change_alerts`);
-    expect(alerts.rows).toEqual([{ kind: 'created', acknowledged_at: expect.any(Date), verdict: 'valid' }]);
-    const ev = await db.pool.query(`SELECT splose_id FROM events WHERE user_id = $1 AND is_deleted IS NOT TRUE`, [user.id]);
-    expect(ev.rows).toEqual([{ splose_id: '7001' }]);
-    await runWatcher(); // the appointment is now held — not imported twice
-    expect((await db.pool.query(`SELECT COUNT(*)::int AS n FROM events WHERE splose_id = '7001'`)).rows[0].n).toBe(1);
-
-    mockDiary.push(appt(7002, new Date(Date.now() + 3 * 86400000).toISOString()));
-    await agent.put('/api/sync-settings').send({ directions: { splose_to_portal: { auto: false } } });
-    await runWatcher();
-    const open = await db.pool.query(`SELECT splose_appointment_id FROM splose_change_alerts WHERE acknowledged_at IS NULL`);
-    expect(open.rows).toEqual([{ splose_appointment_id: '7002' }]);
+    expect((await db.pool.query(`SELECT COUNT(*)::int AS n FROM splose_change_alerts`)).rows[0].n).toBe(0);
+    expect((await db.pool.query(`SELECT COUNT(*)::int AS n FROM events WHERE splose_id = '7001'`)).rows[0].n).toBe(0);
+    // An alert recorded before the retirement is no longer shown; other kinds still are.
+    await db.pool.query(
+      `INSERT INTO splose_change_alerts (user_id, splose_appointment_id, kind, fingerprint, details)
+       VALUES ($1, '7001', 'created', 'old-created', '{}'::jsonb), ($1, '7002', 'cancelled', 'old-cancel', '{}'::jsonb)`, [user.id]);
+    const list = await agent.get('/api/splose-sync/alerts');
+    expect(list.status).toBe(200);
+    expect(list.body.alerts.map(a => a.kind)).toEqual(['cancelled']);
+    const hidden = await db.pool.query(`SELECT id FROM splose_change_alerts WHERE kind = 'created'`);
+    expect((await agent.post(`/api/splose-sync/alerts/${hidden.rows[0].id}/ack`).send({ verdict: 'valid' })).status).toBe(409);
+    expect((await db.pool.query(`SELECT COUNT(*)::int AS n FROM events WHERE splose_id = '7001'`)).rows[0].n).toBe(0);
   });
 });
