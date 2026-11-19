@@ -205,3 +205,28 @@ describe('drawer history (navigation.js)', () => {
     expect(pop).toMatch(/if \(backPending\(\)\) \{[\s\S]*if \(deferred\) \{[\s\S]*writeRoute\(deferred[\s\S]*return;/);
   });
 });
+
+// 19 Nov 2026 — the side panel can move an event to another date: same start, same duration.
+describe('side panel: change the day', () => {
+  const fs2 = require('fs');
+  const SHELL2 = fs2.readFileSync(require('path').join(__dirname, '../../frontend/current/mockup_v3.html'), 'utf8');
+  const day = SHELL2.slice(SHELL2.indexOf('function bdPerthDate(iso) {'), SHELL2.indexOf('/* ---------- Editable-time flow inside detail drawer ---------- */'));
+  test('the Day row offers Change for a movable, saved, timed event', () => {
+    expect(SHELL2).toContain("const _canMoveDay = MOVABLE_TYPES.has(s.type) && !s.cancelled && !s.allDay && s.endH < 24 && !!s.dbId && !!s.startTimeIso;");
+    expect(SHELL2).toContain(`onclick="bdDayEdit('\${id}', true)">Change</button>`);
+  });
+  test('this week: the drag path (evaluateMove → commitMove / openMoveImpact) at the same start and duration', () => {
+    expect(day).toMatch(/const startMin = s\.startH \* 60 \+ \(s\.startM \|\| 0\), dur = durMin\(s\);/);
+    expect(day).toMatch(/const impact = evaluateMove\(id, key, startMin, dur\);[\s\S]*pendingMove = \{ id, day: key, startMin, duration: dur, impact \}; commitMove\(\);[\s\S]*openMoveImpact\(id, key, startMin, dur, impact\)/);
+  });
+  test('another week: the same PATCH a move uses, Perth times, then a reload', () => {
+    expect(day).toContain("fetch('/api/outlook/events/' + encodeURIComponent(s.dbId), {");
+    expect(day).toContain('const startIso = `${ymd}T${pad(Math.floor(startMin / 60))}:${pad(startMin % 60)}:00+08:00`;');
+    expect(day).toContain("loadOutlookEventsToCalendar()");
+  });
+  test('bdPerthDate reads the Perth calendar day', () => {
+    const fn = new Function(day.slice(0, day.indexOf('function bdDayEdit')) + '; return bdPerthDate;')();
+    expect(fn('2026-11-16T17:30:00Z')).toBe('2026-11-17');   // 1:30 am Perth next day
+    expect(fn('2026-11-17T01:00:00Z')).toBe('2026-11-17');
+  });
+});

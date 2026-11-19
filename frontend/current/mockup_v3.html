@@ -3183,6 +3183,11 @@ window.opIcon = function (name, size) {
   .detail-panel { display: none; flex: 1; flex-direction: column; overflow: hidden; }
   .detail-panel.active { display: flex; }
   /* ── Notes box pinned at bottom of detail drawer ── */
+.bd-day-view { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .bd-day-view[hidden], .bd-day-edit[hidden] { display: none; }
+  .bd-day-edit { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .bd-day-edit input[type=date] { height: 30px; padding: 0 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); color: var(--ink); font: inherit; font-size: 13px; }
+  .bd-day-note { flex-basis: 100%; font-size: 12px; color: var(--muted); }
   .bd-notes-box {
     border-top: 1px solid var(--border); background: var(--panel-soft); flex-shrink: 0;
   }
@@ -15012,7 +15017,22 @@ function openBlockDetail(id) {
 
   const rows = [];
   rows.push(row('Session type', escapeHtml(sessionKindLabel(s))));
-  rows.push(row('Day',   DAY_FULL[s.day] + ' · ' + sessionDateLabel(s)));
+  // Day, with "Change" (19 Nov 2026): move the event to another date — same
+  // start time, same duration.
+  const _canMoveDay = MOVABLE_TYPES.has(s.type) && !s.cancelled && !s.allDay && s.endH < 24 && !!s.dbId && !!s.startTimeIso;
+  rows.push(`<div class="row bd-day-row">
+      <div class="k">Day</div>
+      <div class="v">
+        <div class="bd-day-view"><span>${escapeHtml(DAY_FULL[s.day] + ' · ' + sessionDateLabel(s))}</span>${_canMoveDay
+          ? ` <button type="button" class="btn btn-xs bd-day-change" onclick="bdDayEdit('${id}', true)">Change</button>` : ''}</div>
+        ${_canMoveDay ? `<div class="bd-day-edit" hidden>
+          <input type="date" id="bd-day-input" value="${bdPerthDate(s.startTimeIso)}" aria-label="New date" oninput="bdDayPreview('${id}')">
+          <button type="button" class="btn btn-xs primary" id="bd-day-apply" onclick="bdApplyDay('${id}')">Move</button>
+          <button type="button" class="btn btn-xs" onclick="bdDayEdit('${id}', false)">Cancel</button>
+          <div class="bd-day-note" id="bd-day-note">Same time (${fmtTime(s.startH, s.startM)} – ${fmtClockTime(s.endH, s.endM)}) and duration (${durMin(s)} min).</div>
+        </div>` : ''}
+      </div>
+    </div>`);
   // Editable time row for movable sessions — change duration or shift start in place.
   // Not for an all-day event, nor one that runs past midnight (the inputs hold one day).
   const _movableTime = MOVABLE_TYPES.has(s.type) && !s.cancelled && !s.allDay && s.endH < 24;
@@ -15699,6 +15719,79 @@ function notesKeyHandler(e) {
   if (e.key === 'Tab') {
     e.preventDefault();
     document.execCommand('insertHTML', false, '    ');
+  }
+}
+
+/* ---------- Change the day (19 Nov 2026) ----------
+   The event moves to another date at the same start time and duration.
+   In the week on screen it goes through the calendar's own move path
+   (evaluateMove → commitMove: clash checks, the Outlook write-back, the
+   Splose queue and Cmd+Z, exactly like a drag). Another week is saved with
+   the same PATCH that path uses, and the calendar reloads. */
+function bdPerthDate(iso) {
+  const d = new Date(iso); if (isNaN(d)) return '';
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Perth', year: 'numeric', month: '2-digit', day: '2-digit' })
+    .formatToParts(d).map(x => [x.type, x.value]));
+  return `${p.year}-${p.month}-${p.day}`;
+}
+function bdDayEdit(id, on) {
+  const view = document.querySelector('.bd-day-row .bd-day-view'), edit = document.querySelector('.bd-day-row .bd-day-edit');
+  if (!view || !edit) return;
+  edit.hidden = !on; view.hidden = !!on;
+  if (on) { const i = document.getElementById('bd-day-input'); if (i) { i.focus(); try { i.showPicker && i.showPicker(); } catch (_) {} } bdDayPreview(id); }
+}
+function _bdDayKeyFor(ymd) {
+  // The day key in the week on screen, or null when that date is another week.
+  return Object.keys(DAY_DATES || {}).find(k => DAY_DATES[k] === ymd) || null;
+}
+function bdDayPreview(id) {
+  const s = SESSIONS[id], i = document.getElementById('bd-day-input'), note = document.getElementById('bd-day-note'), btn = document.getElementById('bd-day-apply');
+  if (!s || !i || !note || !btn) return;
+  const ymd = i.value, cur = bdPerthDate(s.startTimeIso);
+  const same = `Same time (${fmtTime(s.startH, s.startM)} – ${fmtClockTime(s.endH, s.endM)}) and duration (${durMin(s)} min).`;
+  btn.disabled = !ymd || ymd === cur;
+  if (!ymd) { note.textContent = 'Pick a date.'; return; }
+  if (ymd === cur) { note.textContent = 'That is the day it is on now. ' + same; return; }
+  const d = new Date(ymd + 'T00:00:00+08:00');
+  const label = d.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Australia/Perth' });
+  note.textContent = 'Move to ' + label + '. ' + same + (_bdDayKeyFor(ymd) ? '' : ' (another week — it will be there when you open that week)');
+}
+async function bdApplyDay(id) {
+  const s = SESSIONS[id], i = document.getElementById('bd-day-input');
+  if (!s || !i || !i.value) return;
+  const ymd = i.value;
+  if (ymd === bdPerthDate(s.startTimeIso)) return;
+  const startMin = s.startH * 60 + (s.startM || 0), dur = durMin(s);
+  const key = _bdDayKeyFor(ymd);
+  if (key) {
+    // In the week on screen: exactly like dragging the tile to that day.
+    const impact = evaluateMove(id, key, startMin, dur);
+    closeBlockDetail();
+    if (impact.verdict === 'ok') { pendingMove = { id, day: key, startMin, duration: dur, impact }; commitMove(); pendingMove = null; }
+    else openMoveImpact(id, key, startMin, dur, impact);
+    return;
+  }
+  // Another week: same save as a move, then reload what the calendar shows.
+  const pad = (n) => String(n).padStart(2, '0');
+  const endMin = startMin + dur;
+  const startIso = `${ymd}T${pad(Math.floor(startMin / 60))}:${pad(startMin % 60)}:00+08:00`;
+  const endIso = `${ymd}T${pad(Math.floor(endMin / 60))}:${pad(endMin % 60)}:00+08:00`;
+  const btn = document.getElementById('bd-day-apply'); if (btn) { btn.disabled = true; btn.textContent = 'Moving…'; }
+  try {
+    const r = await fetch('/api/outlook/events/' + encodeURIComponent(s.dbId), {
+      method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ startTime: startIso, endTime: endIso }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || 'The move could not be saved');
+    closeBlockDetail();
+    const label = new Date(ymd + 'T00:00:00+08:00').toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Australia/Perth' });
+    showToast('Moved to ' + label, `${fmtTime(s.startH, s.startM)} – ${fmtClockTime(s.endH, s.endM)} · ${dur} min` + (j.savedToOutlook ? ' · Outlook updated' : ''));
+    if (typeof loadOutlookEventsToCalendar === 'function') loadOutlookEventsToCalendar();
+    if (window.SploseSync && window.SploseSync.refresh) window.SploseSync.refresh();
+  } catch (err) {
+    if (btn) { btn.disabled = false; btn.textContent = 'Move'; }
+    showToast('Not moved', err.message || 'Check your connection and try again.', 'warn');
   }
 }
 
