@@ -3191,7 +3191,7 @@ window.opIcon = function (name, size) {
     padding: 6px 10px 4px; gap: 8px;
   }
   .bd-notes-label {
-    font-size: 10px; font-weight: 700; text-transform: uppercase;
+    font-size: 11.5px; font-weight: 700; text-transform: uppercase;
     letter-spacing: 0.5px; color: var(--muted); white-space: nowrap;
   }
   .notes-toolbar {
@@ -3205,10 +3205,14 @@ window.opIcon = function (name, size) {
   .notes-fmt-btn:hover { background: var(--accent-soft); border-color: var(--accent); }
   .notes-fmt-sep { width: 1px; background: var(--border); margin: 2px 2px; }
   .notes-editor {
-    padding: 6px 10px; outline: none; font-size: 12px; line-height: 1.55;
+    padding: 10px 12px; outline: none; font-size: 14px; line-height: 1.55;
     color: var(--ink); overflow-y: auto; background: var(--panel);
     border-top: 1px solid var(--border);
+    /* Larger (19 Nov 2026): was 72–140 px at 12 px text. Drag to resize. */
+    min-height: 160px; max-height: 45vh; resize: vertical;
   }
+  .notes-editor:focus { box-shadow: inset 0 0 0 2px var(--accent); }
+  .notes-editor[contenteditable="false"] { opacity: .6; }
   .notes-editor:empty::before {
     content: 'Add notes or reminders for this session…';
     color: var(--muted); pointer-events: none; display: block;
@@ -7601,11 +7605,11 @@ window.opIcon = function (name, size) {
         </div>
       </div>
       <div class="notes-editor" id="notes-editor" contenteditable="true"
-           oninput="notesAutoSave()" onkeydown="notesKeyHandler(event)"
-           style="min-height:72px;max-height:140px;"></div>
+           oninput="notesAutoSave()" onblur="notesFlush()" onkeydown="notesKeyHandler(event)"
+           role="textbox" aria-multiline="true" aria-label="Notes for this appointment"></div>
       <div class="notes-statusbar" style="border-top:none;padding:3px 8px 4px;">
-        <span id="notes-save-status" style="font-size:10px;color:var(--muted);">Notes save automatically</span>
-        <span id="notes-char-count" style="font-size:10px;color:var(--muted);"></span>
+        <span id="notes-save-status" style="font-size:11.5px;color:var(--muted);">Notes save automatically</span>
+        <span id="notes-char-count" style="font-size:11.5px;color:var(--muted);"></span>
       </div>
     </div>
   </div>
@@ -15141,6 +15145,7 @@ function __bdLocationRows(rows, s, id) {
 }
 
 function closeBlockDetail() {
+  if (typeof notesFlush === 'function') notesFlush();   // a note typed just before closing still saves
   document.getElementById('detail-backdrop').classList.remove('show');
   document.getElementById('detail-drawer').classList.remove('show');
   document.querySelectorAll('.session.selected').forEach(x => x.classList.remove('selected'));
@@ -15430,35 +15435,76 @@ async function pushAppEventToOutlook(dbId, data) {
   }
 }
 
-// ===== Notes tab =====
+// ===== Notes (side panel) =====
+// Saved on the event itself (PATCH /api/events/:dbId/notes → custom_metadata.notes),
+// 19 Nov 2026. They used to go to localStorage under the tile's per-load id
+// (S-MON-xxxx), so every reload lost them; and a save still pending when
+// another event was opened landed on THAT event. Now each save carries the
+// event it was typed into, and a pending save is flushed before switching.
 window.__notesCurrentId = null;
-let __notesSaveTimer   = null;
+let __notesSaveTimer = null;
+let __notesPending = null;   // { sessionId, dbId, html }
 
 function notesLoadForSession(id) {
+  notesFlush();                                   // finish the previous event's save first
   window.__notesCurrentId = id;
-  const saved = localStorage.getItem(`session_note_${id}`) || '';
+  const s = SESSIONS[id];
   const editor = document.getElementById('notes-editor');
-  if (editor) {
-    editor.innerHTML = saved;
-    __notesUpdateCount();
-    document.getElementById('notes-save-status').textContent = saved ? 'Saved' : 'Notes save automatically';
+  if (!editor) return;
+  // Server copy first; an old browser-only note (pre-19 Nov) is picked up once and saved properly.
+  let html = (s && s.notesHtml) || '';
+  let legacy = '';
+  try { legacy = localStorage.getItem(`session_note_${id}`) || ''; } catch (_) {}
+  if (!html && legacy && s && s.dbId) { html = legacy; __notesQueue(id, legacy); notesFlush(); }
+  editor.innerHTML = html;
+  editor.contentEditable = (s && s.dbId) ? 'true' : 'false';
+  __notesUpdateCount();
+  document.getElementById('notes-save-status').textContent = !(s && s.dbId)
+    ? 'Notes can be added once the appointment is saved'
+    : (html ? 'Saved' : 'Notes save automatically');
+}
+
+function __notesQueue(sessionId, html) {
+  const s = SESSIONS[sessionId];
+  if (!s || !s.dbId) return;
+  __notesPending = { sessionId, dbId: s.dbId, html };
+}
+
+async function notesFlush() {
+  clearTimeout(__notesSaveTimer);
+  const p = __notesPending;
+  __notesPending = null;
+  if (!p) return;
+  const status = document.getElementById('notes-save-status');
+  const mine = () => window.__notesCurrentId === p.sessionId;
+  try {
+    const r = await fetch('/api/events/' + encodeURIComponent(p.dbId) + '/notes', {
+      method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notes: p.html }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || 'Could not save');
+    // Keep the tile's copy in step (cleaned by the server).
+    const s = SESSIONS[p.sessionId];
+    if (s) s.notesHtml = (j.notes && j.notes.html) || '';
+    try { localStorage.removeItem(`session_note_${p.sessionId}`); } catch (_) {}
+    if (mine() && status) status.textContent = 'Saved · ' + new Date().toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' });
+  } catch (err) {
+    if (mine() && status) status.textContent = 'Not saved — ' + (err.message || 'check your connection');
+    showToast('Notes not saved', err.message || 'Check your connection and try again.', 'warn');
   }
 }
 
-function notesSave() {
-  const id = window.__notesCurrentId;
-  if (!id) return;
-  const editor = document.getElementById('notes-editor');
-  if (!editor) return;
-  const content = editor.innerHTML;
-  localStorage.setItem(`session_note_${id}`, content);
-  document.getElementById('notes-save-status').textContent = 'Saved · ' + new Date().toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' });
-}
+function notesSave() { return notesFlush(); }
 
 function notesAutoSave() {
+  const id = window.__notesCurrentId;
+  const editor = document.getElementById('notes-editor');
+  if (!id || !editor) return;
+  __notesQueue(id, editor.innerHTML);
   document.getElementById('notes-save-status').textContent = 'Saving…';
   clearTimeout(__notesSaveTimer);
-  __notesSaveTimer = setTimeout(notesSave, 700);
+  __notesSaveTimer = setTimeout(notesFlush, 700);
   __notesUpdateCount();
 }
 
@@ -18766,6 +18812,8 @@ function groupEventsByDay(events) {
           travel: (event.custom_metadata && event.custom_metadata.travel) || null,
           // Booked in the portal: its type and client (booking-rules.js).
           booking: (event.custom_metadata && event.custom_metadata.booking) || null,
+          // Side-panel notes, stored on the event (19 Nov 2026; server-cleaned HTML).
+          notesHtml: (event.custom_metadata && event.custom_metadata.notes && event.custom_metadata.notes.html) || '',
           // The event's client (Splose sync or a portal booking) — shown in
           // the detail panel; the tile already names them in its title.
           clientName: event.client_name || null,
@@ -19078,6 +19126,7 @@ function mergeEventsIntoDayData(eventsByDay) {
             endTimeIso: session.endTimeIso,
             travel: session.travel || null,
             booking: session.booking || null,
+            notesHtml: session.notesHtml || '',
             clientName: session.clientName || null,
             clientId: session.clientId || null,
           });

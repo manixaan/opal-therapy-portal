@@ -2611,6 +2611,45 @@ router.patch('/api/events/:dbId/travel', requireAuth, async (req, res) => {
 });
 
 /**
+ * PATCH /api/events/:dbId/notes   { notes: "<html from the side panel's notes editor>" }
+ * The side panel's notes (19 Nov 2026). They used to live only in the
+ * browser's localStorage under the tile's per-load id, so they vanished on
+ * every reload. Stored on the event (custom_metadata.notes), portal-only —
+ * never sent to Outlook or Splose. Cleaned to the editor's own formatting
+ * (rich-notes.js) before storing. Own events only; read-only refused.
+ */
+router.patch('/api/events/:dbId/notes', requireAuth, async (req, res) => {
+  try {
+    if (req.user.role === 'read_only' || req.user.role === 'pre_employee') {
+      return res.status(403).json({ error: 'Your account cannot change bookings' });
+    }
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(req.params.dbId))) return res.status(404).json({ error: 'Event not found' });
+    const raw = req.body && req.body.notes;
+    if (raw !== null && typeof raw !== 'string') return res.status(400).json({ error: 'notes must be text' });
+    const { sanitizeNotesHtml, textLength, MAX_LEN } = require('./rich-notes');
+    if (typeof raw === 'string' && raw.length > MAX_LEN * 2) return res.status(400).json({ error: 'Notes are too long' });
+    const html = sanitizeNotesHtml(raw || '');
+    const empty = !textLength(html);
+    const r = await db.pool.query(
+      `UPDATE events
+          SET custom_metadata = CASE WHEN $3::boolean
+                THEN COALESCE(custom_metadata, '{}'::jsonb) - 'notes'
+                ELSE COALESCE(custom_metadata, '{}'::jsonb) || jsonb_build_object('notes', jsonb_build_object('html', $4::text, 'updatedAt', NOW(), 'updatedBy', $2::text))
+              END,
+              updated_at = NOW()
+        WHERE id = $1 AND user_id = $2 AND (is_deleted IS NULL OR is_deleted = FALSE)
+        RETURNING id`,
+      [req.params.dbId, req.session.userId, empty, html]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'Event not found' });
+    res.json({ ok: true, notes: empty ? null : { html } });
+  } catch (err) {
+    console.error('Event notes save error:', err.message);
+    res.status(500).json({ error: 'Could not save the notes' });
+  }
+});
+
+/**
  * PATCH /api/outlook/events/:dbId/location
  * Write the routing address back to the corresponding Outlook event.
  * Also persists the manual_location override to the local DB row so it
