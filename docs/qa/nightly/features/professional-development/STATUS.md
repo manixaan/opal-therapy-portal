@@ -2,36 +2,39 @@
 
 - Tracker stage: **idea**
 - Tracker environment: **none**
-- Evidence label: **tab-unproven**
-- Addressed since the last audit (2026-11-17..2026-11-18): **no**
+- Evidence label: **built-untested**
+- Addressed since the last audit (2026-11-18..2026-11-19): **no**
 - Created (any located code): **yes**
 
 ## Located files
-- No dedicated code of its own. Two plausible homes exist, and the card's own next_action has not picked between them: (1) backend/profile-routes.js — /api/profile/cpd, /api/profile/documents, /api/profile/credentials (My Profile's PD credentials/documents sections); (2) Resource Hub (backend/resources-routes.js, resource-library-routes.js) where PD-related material could equally well live as library content, which is where this audit has previously placed it.
+- My Profile tab's CPD section (frontend/current/mockup_v3.html — "Professional Development Documents" card) backed by backend/profile-routes.js's `/api/profile/cpd`, `/api/profile/documents` and `/api/profile/credentials` routes
+- frontend/current/profile.js and frontend/current/induction-modules.js (a walkthrough step named "Professional Development (CPD)")
+- **Tonight's finding corrects last night's framing**: this card is not an open two-way choice between Resource Hub and My Profile — a fresh grep tonight found concrete, named "Professional Development" UI inside the My Profile tab's CPD section. That is its real home.
 
 ## Could not locate / notable gaps
-- No dedicated frontend tab or page for "Professional Development" as a standalone card either way.
+No dedicated, standalone "Professional Development" tab or page exists — it lives inside My Profile's CPD section, not as its own card.
 
 ## Guard check
-OK either way — Resource Hub is requireAuth + requireRole('owner')/requireManager; profile-routes.js is requireAuth + inline canApprove.
+OK — backend/profile-routes.js is requireAuth router-wide + inline canApprove(req.user) on the approve/reject routes (lines ~124-125, 154-155).
 
 ## Tests run
-- unit/integration: `Resource Hub's own 12 unit files/398 tests + 7 integration files/168 tests cover it if PD content lives there; no test exercises /api/profile/cpd or /api/profile/documents specifically if it lives in My Profile instead` — **pass (via Resource Hub) / none (via My Profile)** (—)
+- unit: the same 4 files that cover profile-routes.js generally — `credential-surface-guards.test.js, security.test.js, smart-route-backend.test.js, onboarding-security.test.js` — **pass** (4 files / 94 tests), but none of these test the CPD routes specifically; they are indirect/partial coverage (credentials, work-schedule scoping, leave route existence).
+- integration: no test exercises `/api/profile/cpd` specifically — confirmed by a fresh grep tonight (the only incidental hit, `scheduler-availability.itest.js`, inserts a `leave_requests` row for an unrelated availability-blocking test, not a CPD/PD round trip) — **no test exists** (—)
 
 ## Tab / browser proof
-Resource Hub has E2E proof (portal.spec.js); there is no dedicated "PD" tab proof under either home.
+Resource Hub has E2E proof (portal.spec.js) but that is a different subsystem; there is still no dedicated "Professional Development" tab/page proof under its real home (My Profile).
 
 ## Recency
-Not touched since the last audit (2026-11-17); zero commits anywhere since 2026-11-14.
+Not touched since the last audit (2026-11-18); tonight's 10 commits were all in the calendar/booking/travel/notes/sync subsystem, outside this feature's located files.
 
 ## Open tasks (from the tracker)
 (no tasks recorded on this card)
 
 ## Reason for the label
-Whichever home this card actually belongs to, the underlying code is tested — the real gap is that nobody has opened a PD-specific view in a browser and confirmed it, which the tracker's own next_action ("open the PD tab... record a browser check") already asks for. That is a tab/proof gap, not missing code, hence `tab-unproven`.
-
-## Note
-This card has no idea/why/strategy text and 0 tasks. Its own next_action already asks whether it should merge into Resource Hub or My Profile rather than stand alone — that decision should be made before chasing more test coverage here.
+**Reclassified tonight from `tab-unproven` to `built-untested`.** Last night's label assumed the code's home was still undecided between Resource Hub and My Profile, with Resource Hub's own tests treated as indirect coverage. Tonight's fresh grep resolved the location: it is concretely the CPD section of the My Profile tab, backed by backend/profile-routes.js. No test — unit or integration — exercises the `/api/profile/cpd` round trip itself (only unrelated/incidental hits), which is exactly the `built-untested` definition (code located and guarded, but no test exercises it, or the only tests are unrelated) rather than a tab-proof gap on tested code.
 
 ## Disagreement with the tracker
-None — the tracker's own words already match the evidence.
+None beyond the location correction above — the tracker's own next_action ("decide whether this card merges into Resource Hub or My Profile") is now answered by the code: it already lives in My Profile.
+
+## Note
+**Worth a decision, not more test-chasing first:** this card's underlying code and test gap (no CPD/leave round-trip test) is the *same* gap already tracked under "Employee Personal Page (My Profile Tab)" feature 83bb9988-52ba-4f8c-85ba-7b65aca189b2. The team may want to merge these two tracker cards, or at minimum have one integration test satisfy both.

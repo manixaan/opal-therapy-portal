@@ -26,9 +26,9 @@ Employee Personal Page (My Profile Tab)
 - frontend tab: PROFILE TAB (mockup_v3.html)
 
 ## Start here
-Copy the pattern from an existing *.itest.js (e.g. tests/integration/case-note-approval-edit.itest.js) to add tests/integration/profile-leave-cpd.itest.js: submit a leave request as a therapist, approve it via backend/profile-routes.js as an owner, and assert the therapist sees the updated status. Do the same for one CPD item.
+Add an integration test (follow the pattern in tests/integration/case-note-approval-edit.itest.js) that submits a leave request via backend/profile-routes.js as a therapist, approves it as an owner, and asserts the therapist sees the approved status. Do the same for one CPD item.
 
 ## Done means
-tests/integration/profile-leave-cpd.itest.js (or similarly named) passes, proving the leave/CPD approval round trip; label becomes `proven`.
+The new test file passes.
 
 Tracker: 83bb9988-52ba-4f8c-85ba-7b65aca189b2

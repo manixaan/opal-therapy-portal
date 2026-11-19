@@ -1,4 +1,4 @@
-/opal-critical
+/opal-feature
 
 ## Idea
 Report Templates
@@ -24,13 +24,13 @@ Report Templates
 ## Where it lives today
 - backend/fca-routes.js (requireClinicalRead/Write per route)
 - backend/letter-routes.js (requireClinicalRead/Write per route — covers Progress Letter)
-- backend/templates-routes.js + backend/templates/service-agreement-map.js (Client Agreement Form generation)
+- backend/templates-routes.js (requireTemplateRead/Write per route — more precise than last night's "requireAuth" note, still fully guarded) + backend/templates/service-agreement-map.js (Client Agreement Form generation)
 - backend/service-agreements/templates/*.docx, *.pdf (shipped templates)
 
 ## Start here
-As a therapist, run all three flows by hand through to a downloaded file: an FCA draft (backend/fca-routes.js + frontend FCA wizard), a Progress Letter (backend/letter-routes.js), and a Client Agreement Form (backend/templates-routes.js + backend/templates/service-agreement-map.js). Note where a client-facing signing page is missing — none exists in frontend/current/ today.
+Run all three document flows by hand through to a downloaded file (FCA, Progress Letter, Client Agreement Form) and record the result in docs/qa/BROWSER_QA_RESULTS.md.
 
 ## Done means
-All three document flows are run by hand to a downloaded file with no errors, and either a signing surface is added or the tracker records that none is needed; label becomes `proven`.
+All three flows have a recorded hand-check; label becomes `proven`.
 
 Tracker: 91ae30e7-9cda-4198-956f-8b9cdf043003

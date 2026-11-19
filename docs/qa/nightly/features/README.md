@@ -12,8 +12,8 @@ One row per tracker idea. Rewritten nightly. See scripts/nightly-audit/PROMPT.md
 | Interactive Assessments | idea | tab-unproven | no | [interactive-assessments/START.md](interactive-assessments/START.md) |
 | Employee Personal Page (My Profile Tab) | idea | built-untested | no | [employee-personal-page-my-profile-tab/START.md](employee-personal-page-my-profile-tab/START.md) |
 | Automated Reminders | idea | needs-refinement | no | [automated-reminders/START.md](automated-reminders/START.md) |
-| Professional Development | idea | tab-unproven | no | [professional-development/START.md](professional-development/START.md) |
+| Professional Development | idea | built-untested | no | [professional-development/START.md](professional-development/START.md) |
 | Inductions | idea | needs-refinement | no | [inductions/START.md](inductions/START.md) |
 | Clinical resources | idea | proven | no | [clinical-resources/START.md](clinical-resources/START.md) |
 | Portal Onboarding Workflow | idea | needs-refinement | no | [portal-onboarding-workflow/START.md](portal-onboarding-workflow/START.md) |
-| Portal - Splose - Outlook \| Integration Works | idea | needs-refinement | no | [portal-splose-outlook-integration-works/START.md](portal-splose-outlook-integration-works/START.md) |
+| Portal - Splose - Outlook \| Integration Works | idea | needs-refinement | **yes** | [portal-splose-outlook-integration-works/START.md](portal-splose-outlook-integration-works/START.md) |

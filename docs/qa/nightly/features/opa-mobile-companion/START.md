@@ -26,9 +26,9 @@ Opa Mobile Companion
 - backend/case-note-routes.js generateGovernedDraft() — mobile voice notes (voiceNoteId) link into the same governed AI case-note generation pathway used by the desktop Case Notes workspace
 
 ## Start here
-On the test device, dictate a case note through the mobile app and confirm it reaches backend/case-note-routes.js generateGovernedDraft() correctly linked by voiceNoteId, the same path the desktop Case Notes workspace uses. This is a manual walkthrough, not a build task — no new code is implied unless the walkthrough finds a defect.
+On the test device, dictate a case note through the Opa Mobile Companion app and confirm it reaches backend/case-note-routes.js's generateGovernedDraft() (linked by voiceNoteId) and produces a usable draft linked to the right client. This is a manual walkthrough first — only write code if it finds a real defect.
 
 ## Done means
-A full device walkthrough (dictate -> AI summary -> save) is recorded with no defect, or defects found are filed as their own tasks; label becomes `proven`.
+The walkthrough is recorded as passing (or the defect found is filed as its own task).
 
 Tracker: e786d774-43bf-4a8b-826d-94bcb97a9613

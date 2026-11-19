@@ -35,9 +35,9 @@ Portal Onboarding Workflow
 - frontend: ONBOARDING TAB banner + frontend/current/onboarding.js + standalone onboarding.html / onboarding-invite.html
 
 ## Start here
-Re-tick the Stage 1/2 checklists against the running code in backend/onboarding-employee-routes.js and onboarding-pack-routes.js (most items are further along than the checklist shows), then add SharePoint storage for Stage 2 documents — confirmed absent by a repo-wide grep — as the tracker's next_action asks. Separately, whoever maintains the environment's setup script should install the missing @tesseract.js-data/eng OCR package so tests/onboarding-document-reader.test.js stops failing on a 4-night-running environment artifact; that is not a Claude Code session's job to fix.
+Re-tick the Stage 1/2 checklists in backend/onboarding-employee-routes.js and onboarding-pack-routes.js against the running code — most items are further along than the checklist shows — then add SharePoint storage for Stage 2 documents, confirmed absent by a repo-wide grep for the fifth night running.
 
 ## Done means
-SharePoint storage for Stage 2 documents exists and the Stage 1/2 checklists are re-ticked against the running code; label becomes `proven` once a tab/browser check is also recorded.
+Stage 2 documents land in SharePoint and the checklist matches reality; the new path is covered by an integration test alongside the existing onboarding-pack.itest.js pattern.
 
 Tracker: 32b768b1-8bf3-40a6-9669-a8908922aa21
