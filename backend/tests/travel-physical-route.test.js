@@ -149,16 +149,21 @@ describe('travel runs between physical stops', () => {
 
 describe('between two sessions: straight on, or home in between', () => {
   // Home is Willetton: Osborne Park ↔ home 25 min, Joondalup ↔ home 40 min.
-  test('enough time to go home (drive + 30 min + drive) → two legs: home, then from home', () => {
+  // 19 Nov 2026 (owner's call): a long gap no longer sends the therapist home
+  // on its own — Direct until they choose Via home.
+  test('a long gap stays direct unless Via home is chosen; then two legs: home, then from home', () => {
     const c = load();
     const a = add(c, { at: '19:45', to: '20:45', s: { address: OSBORNE, patient: 'A' } });
     const b = add(c, { at: '22:15', to: '23:15', s: { address: SCHOOL, patient: 'B' } });
-    // 90-minute gap ≥ 25 home + 30 there + 22 out (Scarborough)
-    const L = legs(c).filter((x) => x.kind === 'between');
+    // 90-minute gap: enough to go home, but nobody chose it → direct, home offered.
+    let L = legs(c).filter((x) => x.kind === 'between');
+    expect(L.map((x) => [x.via, x.homeAvailable, x.auto])).toEqual([[null, true, true]]);
+    c.SESSIONS[a.id].travel = { next: 'home' };
+    L = legs(c).filter((x) => x.kind === 'between');
     expect(L.map((x) => x.via)).toEqual(['home-return', 'home-out']);
     expect([L[0].fromSessionId, L[0].toLoc.suburb, hhmm(L[0].startMin), hhmm(L[0].endMin)]).toEqual([a.id, 'Willetton', '20:45', '21:10']);
     expect([L[1].toSessionId, L[1].fromLoc.suburb, hhmm(L[1].startMin), hhmm(L[1].endMin)]).toEqual([b.id, 'Willetton', '21:53', '22:15']);
-    expect(L.every((x) => x.auto && x.plan === 'home')).toBe(true);   // the suggestion is one of the two options
+    expect(L.every((x) => !x.auto && x.plan === 'home')).toBe(true);  // chosen, not suggested
   });
 
   test('not enough time to go home → one direct leg', () => {
@@ -446,36 +451,46 @@ describe('past days are not mirrored to Outlook (11 Oct 2026)', () => {
   });
 });
 
-describe('desk work happens at home when there is time (28 Oct 2026)', () => {
+describe('desk work: where you are unless "at home" is chosen (28 Oct 2026; 19 Nov 2026 no automatic home)', () => {
   // Home is Willetton. Osborne Park ↔ home 25 min.
   const RP = { title: 'Resource Preparation', booking: { kind: 'resource-prep', group: 'nf2f' }, type: 'custom' };
 
-  test('a session, then desk work with time to get home → one drive home ending at it; no Direct ⇄ switch', () => {
+  test('desk work with time to get home is still done where you are — no drive (the "Unsure" report bug)', () => {
     const c = load();
     const a = add(c, { at: '09:30', to: '10:30', s: { address: OSBORNE, patient: 'Adon' } });
     const d = add(c, { at: '11:00', to: '11:45', s: RP });
+    expect(c.deskWorkPlan(d)).toMatchObject({ mode: 'here', auto: true, reason: 'default', homeAvailable: true });
+    expect(legs(c).some((x) => x.gapToSessionId === d.id)).toBe(false);
+    expect(legs(c).map((x) => x.kind)).toEqual(['start', 'end']);
+    expect(legs(c)[1].fromSessionId).toBe(a.id);
+  });
+
+  test('desk work at home (chosen) → one drive home ending at it; no Direct ⇄ switch', () => {
+    const c = load();
+    const a = add(c, { at: '09:30', to: '10:30', s: { address: OSBORNE, patient: 'Adon' } });
+    const d = add(c, { at: '11:00', to: '11:45', s: Object.assign({}, RP, { travel: { desk: 'home' } }) });
     const L = legs(c);
     const toHome = L.find((x) => x.kind === 'between');
     expect([toHome.fromSessionId, toHome.gapToSessionId, toHome.toLoc.suburb, toHome.toHome]).toEqual([a.id, d.id, 'Willetton', true]);
     expect([hhmm(toHome.startMin), hhmm(toHome.endMin)]).toEqual(['10:30', '10:55']);   // leaves when the session ends
     expect(L.some((x) => x.kind === 'end')).toBe(false);                                   // already home
-    expect(c.deskWorkPlan(d)).toMatchObject({ mode: 'home', auto: true, reason: 'time', driveMin: 25 });
+    expect(c.deskWorkPlan(d)).toMatchObject({ mode: 'home', auto: false, reason: 'chosen' });
   });
 
-  test('not enough time to get home → done where you are: no stop, the drive home comes after', () => {
+  test('not chosen → done where you are: no stop, the drive home comes after', () => {
     const c = load();
     const a = add(c, { at: '09:30', to: '10:30', s: { address: OSBORNE, patient: 'Adon' } });
-    const d = add(c, { at: '10:40', to: '11:30', s: RP });                                  // 10 min free < 25 min drive
-    expect(c.deskWorkPlan(d)).toMatchObject({ mode: 'here', reason: 'notime', driveMin: 25, gapMin: 10 });
+    const d = add(c, { at: '10:40', to: '11:30', s: RP });
+    expect(c.deskWorkPlan(d)).toMatchObject({ mode: 'here', reason: 'default' });
     const L = legs(c);
     expect(L.map((x) => x.kind)).toEqual(['start', 'end']);
     expect(L[1].fromSessionId).toBe(a.id);
   });
 
-  test('the next client after desk work at home is reached from home', () => {
+  test('the next client after desk work at home (chosen) is reached from home', () => {
     const c = load();
     add(c, { at: '09:00', to: '10:00', s: { address: OSBORNE, patient: 'A' } });
-    const d = add(c, { at: '11:00', to: '12:00', s: RP });
+    const d = add(c, { at: '11:00', to: '12:00', s: Object.assign({}, RP, { travel: { desk: 'home' } }) });
     const b = add(c, { at: '13:00', to: '14:00', s: { address: JOONDALUP, patient: 'B' } });
     const out = legs(c).find((x) => x.kind === 'between' && x.toSessionId === b.id);
     expect([out.fromSessionId, out.fromLoc.suburb, out.travelMin]).toEqual([d.id, 'Willetton', 40]);
@@ -545,12 +560,12 @@ describe('the travel panel names the real next stop (28 Oct 2026)', () => {
   test('session → desk work: where it happens, not Direct / Via home; never "next client"', () => {
     const c = load();
     add(c, { at: '09:30', to: '10:30', s: { address: OSBORNE, patient: 'Adon Palliveettil' } });
-    const d = add(c, { at: '11:00', to: '11:45', s: { title: 'Resource Preparation', booking: { kind: 'resource-prep', group: 'nf2f' }, type: 'custom' } });
+    const d = add(c, { at: '11:00', to: '11:45', s: { title: 'Resource Preparation', booking: { kind: 'resource-prep', group: 'nf2f' }, type: 'custom', travel: { desk: 'home' } } });
     const html = panelFor(c, (x) => x.gapToSessionId === d.id);
     expect(html).toContain('to Home · 11:00');
     expect(html).toContain('>Do it at home</button>');
     expect(html).toContain('>Do it here (no drive)</button>');
-    expect(html).toContain('Suggested: there is time to get home first (25 min drive).');
+    expect(html).toContain('Your choice: at home.');
     expect(html).not.toContain('data-mode="home"');
     expect(html).not.toMatch(/next client/);
   });
@@ -560,7 +575,7 @@ describe('the travel panel names the real next stop (28 Oct 2026)', () => {
     add(c, { at: '10:40', to: '11:30', s: { title: 'Case Noting', booking: { kind: 'case-noting', group: 'nf2f' }, type: 'custom' } });
     const html = panelFor(c, (x) => x.kind === 'end');
     expect(html).toContain('Desk work in this gap');
-    expect(html).toContain('not enough time to get home first (25 min drive, 10 min free)');
+    expect(html).toContain('nothing is driven unless you choose &quot;Do it at home&quot;');
     expect(html).toContain('data-desk-set="home"');
   });
   test('between two clients the direct option names the next client', () => {

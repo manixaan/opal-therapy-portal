@@ -166,7 +166,7 @@ describe('traffic alerts', () => {
   // Sam Pell in Joondalup at 12:15: home → Joondalup is 40 min, leaving 11:35.
   function day(c) {
     const a = add(c, { at: '09:00', to: '10:00', s: { address: OSBORNE, patient: 'A' } });
-    const desk = add(c, { at: '10:40', to: '11:30', s: { title: 'Resource Preparation', type: 'custom', booking: { kind: 'resource-prep', group: 'nf2f' } } });
+    const desk = add(c, { at: '10:40', to: '11:30', s: { title: 'Resource Preparation', type: 'custom', booking: { kind: 'resource-prep', group: 'nf2f' }, travel: { desk: 'home' } } }); // at home: chosen (19 Nov 2026)
     const b = add(c, { at: '12:15', to: '13:15', s: { address: JOONDALUP, patient: 'Sam Pell' } });
     return { a, desk, b };
   }

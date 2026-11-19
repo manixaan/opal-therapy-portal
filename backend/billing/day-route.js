@@ -126,11 +126,10 @@ function viaBase(base, from, to, gapMin, minutesFor, choice) {
   if (choice === 'home') {
     return { toBase: minutesFor ? minutesFor(from, base.address) : null, fromBase: minutesFor ? minutesFor(base.address, to) : null };
   }
-  if (!minutesFor || !(gapMin > 0)) return null;
-  const toBase = minutesFor(from, base.address);
-  const fromBase = minutesFor(base.address, to);
-  if (toBase == null || fromBase == null) return null; // cannot decide → chain, as without facts
-  return gapMin >= toBase + fromBase + TRAVEL_HOME_MIN_STAY ? { toBase, fromBase } : null;
+  // No choice → a direct drive (19 Nov 2026): a trip home in between is billed
+  // only when the therapist chose it, as the calendar draws it (travel.js).
+  void gapMin;
+  return null;
 }
 
 /**

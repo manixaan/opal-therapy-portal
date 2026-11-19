@@ -1180,7 +1180,7 @@ describe('deleting a session re-plans the travel either side (6 Oct 2026)', () =
       SESSIONS.N2 = { id: 'N2', day: 'mon', type: 'therapy', startH: 16, startM: 0, endH: 17, endM: 0, address: ${JSON.stringify(A_ADDR)}, patient: 'Noah Mathew', dbId: 'db-N2' };`);
   }
 
-  test('the stale Direct is cleared and the new gap is asked about — Via home is the suggestion for a long gap', async () => {
+  test('the stale Direct is cleared and the new gap is asked about — Direct is the suggestion; Via home only when chosen', async () => {
     const env = makeEnv(HOME);
     day(env);
     env.ev("var __ctx = travelNeighboursOf('S'); delete SESSIONS.S; var __done = travelReplanAfterDelete(__ctx);");
@@ -1189,8 +1189,8 @@ describe('deleting a session re-plans the travel either side (6 Oct 2026)', () =
     expect(popup(env).textContent).toMatch(/Travel after removing Sean Hickey/);
     expect(popup(env).textContent).toMatch(/Noah Mathew 7:45am and Noah Mathew 4:00pm are now back to back/);
     const opts = Array.from(popup(env).querySelectorAll('.tc-opt')).map((b) => b.textContent);
-    expect(opts[0]).toMatch(/^Go direct to Noah Mathew · same place, no drive$/);
-    expect(opts[1]).toMatch(/^Go home in between · \d+ min home, \d+ min out \(suggested\)$/);
+    expect(opts[0]).toMatch(/^Go direct to Noah Mathew · same place, no drive \(suggested\)$/);
+    expect(opts[1]).toMatch(/^Go home in between · \d+ min home, \d+ min out$/);
     popup(env).querySelector('[data-key="home"]').click();
     expect(await env.ev('__done')).toBe('home');
     expect(travelPatches(env, 'db-N1').pop().body).toEqual({ next: 'home', afterOffsetMin: null });

@@ -221,7 +221,8 @@ describe('normal invoicing', () => {
     }
   });
 
-  test('a long gap between sessions is a trip home: Return + Start legs, same as the calendar', async () => {
+  // 19 Nov 2026: a trip home in between is billed only when chosen (travel.next 'home'), as the calendar draws it.
+  test('a long gap with Via home chosen is a trip home: Return + Start legs, same as the calendar', async () => {
     const app = buildApp();
     const org = await seedOrganisation();
     const { agent } = await login(app, 'owner', org.id);
@@ -232,8 +233,9 @@ describe('normal invoicing', () => {
     await profile(agent, 'a1', planManaged('Afternoon Client', 1));
     route('Base, Perth WA 6000', 'M home, Perth WA 6000', 15, 10); route('M home, Perth WA 6000', 'Base, Perth WA 6000', 15, 10);
     route('Base, Perth WA 6000', 'A home, Perth WA 6000', 20, 14); route('A home, Perth WA 6000', 'Base, Perth WA 6000', 20, 14); route('M home, Perth WA 6000', 'A home, Perth WA 6000', 25, 18);
-    await event(pr, { clientId: 'm1', clientName: 'Morning Client', date: d, start: '09:00', location: 'M home, Perth WA 6000' });
+    const m = await event(pr, { clientId: 'm1', clientName: 'Morning Client', date: d, start: '09:00', location: 'M home, Perth WA 6000' });
     await event(pr, { clientId: 'a1', clientName: 'Afternoon Client', date: d, start: '14:00', location: 'A home, Perth WA 6000' }); // 4 h gap
+    await db.pool.query(`UPDATE events SET custom_metadata = '{"travel":{"next":"home"}}'::jsonb WHERE id = $1`, [m]);
     await run(agent, d, d);
     const kinds = [];
     for (const inv of await invoices(agent)) {

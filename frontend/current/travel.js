@@ -592,26 +592,17 @@ function isDeskWork(s) {
   return DESK_TYPES.has(s.type);
 }
 /* Where a desk block happens: { mode: 'home'|'here', auto, base, homeAvailable,
-   reason: 'chosen'|'start'|'time'|'notime'|'nobase', driveMin, gapMin, prevId }. */
+   reason: 'chosen'|'default'|'nobase' }. Home only when chosen (19 Nov 2026). */
 function deskWorkPlan(s) {
   const choice = s && s.travel && (s.travel.desk === 'home' || s.travel.desk === 'here') ? s.travel.desk : null;
   const base = s && s.day ? dayAnchorBase(s.day) : null;
   const baseKey = base && !base.unset && !base.remote ? (base.addr || base.suburb) : null;
   if (!baseKey) return { mode: 'here', auto: !choice, base: null, homeAvailable: false, reason: 'nobase' };
   if (choice) return { mode: choice, auto: false, base, homeAvailable: true, reason: 'chosen' };
-  // The last stop with a place of its own before this block (other desk
-  // blocks are skipped: they would only ask the same question).
-  const start = sessionStartMin(s);
-  const prior = sessionsForDay(s.day).filter(x => x !== s && !isTravelBlock(x) && !isDeskWork(x)
-    && sessionEndMin(x) <= start && isPhysicalLocation(sessionLocation(x)));
-  const prev = prior.length ? prior[prior.length - 1] : null;
-  if (!prev) return { mode: 'home', auto: true, base, homeAvailable: true, reason: 'start' };
-  const prevKey = locTravelKey(sessionLocation(prev));
-  const driveMin = canonAddr(prevKey) === canonAddr(baseKey) ? 0 : travelMinutes(prevKey, baseKey);
-  const gapMin = start - sessionEndMin(prev);
-  const fits = !(driveMin > 0) || gapMin >= driveMin;
-  return { mode: fits ? 'home' : 'here', auto: true, base, homeAvailable: true,
-           reason: fits ? 'time' : 'notime', driveMin, gapMin, prevId: prev.id };
+  // Nothing chosen → where the therapist already is (19 Nov 2026, owner's
+  // call): the portal no longer sends desk work home on its own — an
+  // "Unsure" report grew a drive home and back. "Do it at home" is a choice.
+  return { mode: 'here', auto: true, base, homeAvailable: true, reason: 'default' };
 }
 /* ---------- Not driving this (29 Oct 2026) ----------
    A travel leg is worked out from the day, not saved, so "delete" means
@@ -2174,8 +2165,10 @@ function betweenTravelPlan(curr, next, base) {
   out.homeAvailable = true;
   const toBase = travelMinutes(fromKey, baseKey), fromBase = travelMinutes(baseKey, toKey);
   if (!(toBase > 0) || !(fromBase > 0)) return out;
-  const gap = sessionStartMin(next) - sessionEndMin(curr);
-  const goHome = choice === 'home' || (!choice && gap >= toBase + fromBase + TRAVEL_HOME_MIN_STAY);
+  // A trip home in between only when the therapist chose it (19 Nov 2026,
+  // owner's call): the gap rule used to send them home on its own. "Via home"
+  // stays offered on the leg's switch.
+  const goHome = choice === 'home';
   if (goHome) Object.assign(out, { mode: 'home', home: Object.assign({}, base, { baseId: base.baseId || null }), toBase, fromBase });
   return out;
 }
@@ -2992,9 +2985,7 @@ function _renderTravelPanel(seg) {
     // which way to drive — at home (this drive), where I am, or elsewhere.
     var dp = deskWorkPlan(gapTo);
     var deskAt = function (x) { return _tpEsc(_tpFmtTime(x.startH, x.startM || 0) + ' ' + (_stopName(x) || x.title || 'desk work')); };
-    var deskWhy = dp.reason === 'chosen' ? 'Your choice: at home.'
-      : dp.reason === 'start' ? 'Suggested: you start the day at home.'
-      : 'Suggested: there is time to get home first (' + (dp.driveMin || 0) + ' min drive).';
+    var deskWhy = 'Your choice: at home.';
     html += '<div class="tp-section-title">Travel from ' + deskAt(gapFrom) + ' to Home · ' + deskAt(gapTo) + '</div>';
     html += '<div class="tp-plan-opts tp-desk" data-desk-session="' + _tpEsc(gapTo.id) + '">' +
       '<button type="button" class="tp-plan-opt on" data-desk="home">Do it at home</button>' +
@@ -3018,8 +3009,7 @@ function _renderTravelPanel(seg) {
     var placeName = plan.placeAvailable ? plan.placeLabel || 'the saved place' : '';
     var why = plan.mode === 'elsewhere' ? 'Going to ' + placeName + ' in between (chosen with Go Somewhere Else).'
       : !plan.homeAvailable ? 'No home base set for this day (or a stop is at home), so it is a direct drive.'
-      : plan.auto ? (goingHome ? 'Suggested: there is time to go home (' + plan.toBase + ' min home, ' + TRAVEL_HOME_MIN_STAY + ' min there, ' + plan.fromBase + ' min out).'
-                               : 'Suggested: not enough time to go home in between.')
+      : plan.auto ? 'Direct — you only go home in between if you choose Via home.'
       : 'Your choice.';
     // The two appointments either side of the gap, by time: the same client
     // twice in a day read as "Noah Mathew and Noah Mathew".
@@ -3255,7 +3245,7 @@ function _deskHereList(seg) {
   rows.forEach(function (x) {
     var p = deskWorkPlan(x);
     var why = p.reason === 'chosen' ? 'done where you are — your choice'
-      : 'done where you are — not enough time to get home first (' + (p.driveMin || 0) + ' min drive, ' + Math.max(0, p.gapMin || 0) + ' min free)';
+      : 'done where you are — nothing is driven unless you choose "Do it at home"';
     html += '<div class="tp-desk-row" data-desk-session="' + _tpEsc(x.id) + '">' +
       '<div><strong>' + _tpEsc(_tpFmtTime(x.startH, x.startM || 0) + ' ' + (x.title || 'Desk work')) + '</strong>' +
       '<div class="tp-plan-hint">' + _tpEsc(why) + '</div></div>' +
