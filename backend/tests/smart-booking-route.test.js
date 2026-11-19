@@ -186,17 +186,18 @@ const legs = (env) => Array.from(env.win.document.querySelectorAll('#day-mon .tr
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe('15-minute snapping — one grid for every calendar gesture', () => {
+describe('5-minute snapping for calendar drags; clicks book the quarter-hour; Smart Booking exact (19 Nov 2026)', () => {
   const grab = (re) => { const m = SHELL.match(re); expect(m).not.toBeNull(); return m[0]; };
   const ctx = { HOUR_PX: 72, START_H: 0, END_H: 24, Math };
   vm.createContext(ctx);
-  vm.runInContext(grab(/const SLOT_SNAP_MIN = 15;/), ctx);
+  vm.runInContext(grab(/const SLOT_SNAP_MIN = 5;/), ctx);
+  vm.runInContext(grab(/const CLICK_SLOT_MIN = 15;/), ctx);
   vm.runInContext(grab(/function calSnapMin\(minutes\) \{[\s\S]*?\n\}/), ctx);
   vm.runInContext(grab(/function calYToMinutes\(col, clientY, mode\) \{[\s\S]*?\n\}/), ctx);
   const col = { getBoundingClientRect: () => ({ top: 0 }) };
   const at = (h, m) => ((h * 60 + m) / 60) * 72;
 
-  test.each([[10, 2, 600], [10, 8, 615], [10, 22, 615], [10, 24, 630]])('create: %i:%i snaps to minute %i', (h, m, want) => {
+  test.each([[10, 2, 600], [10, 8, 610], [10, 22, 620], [10, 24, 625]])('drag: %i:%i snaps to minute %i', (h, m, want) => {
     expect(ctx.calYToMinutes(col, at(h, m))).toBe(want);
     expect(ctx.calSnapMin(h * 60 + m)).toBe(want);
   });
@@ -218,11 +219,11 @@ describe('15-minute snapping — one grid for every calendar gesture', () => {
     expect(SHELL).toContain('bspSetDur(durMin, !opts.fromDrag);');
   });
 
-  test('typed start times land on the grid too — once the field is left', async () => {
+  test('typed start times are kept to the minute — no 15-minute grid (19 Nov 2026)', async () => {
     const env = makeEnv();
-    env.$('bsp-start').value = '10:08';
+    env.$('bsp-start').value = '16:50';
     env.$('bsp-start').dispatchEvent(new env.win.Event('blur'));
-    expect(start(env)).toBe('10:15');
+    expect(start(env)).toBe('16:50');
   });
 
   test('typing a start time is never snapped mid-entry (Chrome fires change per keystroke)', async () => {
@@ -382,10 +383,10 @@ describe('Smart Booking: straight on from the last client, or home in between', 
     env.ev("BOOKING_STATE.selectedPatient = { id: 'p1', first: 'Sean', last: 'Hickey' }");
     await chooseLocation(env, CV_ADDR);
     expect(status(env).textContent).toMatch(/Not enough time to get here from Ada Client/);
-    expect(status(env).textContent).toMatch(/Earliest you can see Sean Hickey: 10:30 AM \(direct\)/);
+    expect(status(env).textContent).toMatch(/Earliest you can see Sean Hickey: 10:25 AM \(direct\)/);
     status(env).querySelector('[data-route="earliest"]').click();
     await flush();
-    expect(start(env)).toBe('10:30');
+    expect(start(env)).toBe('10:25');
     expect(status(env).textContent).not.toMatch(/Not enough time/);
   });
 
@@ -415,7 +416,7 @@ describe('planNextStop — the pure earliest-feasible-start rule', () => {
   const env = makeEnv();
   const plan = (o) => env.win.planNextStop(Object.assign({ prevEndMin: 600, durationMin: 60, busy: [] }, o));
 
-  test.each([[25, 630], [15, 615], [8, 615], [35, 645], [0, 600]])('%i min of travel from 10:00 → first slot at minute %i', (travel, want) => {
+  test.each([[25, 625], [15, 615], [8, 608], [35, 635], [0, 600]])('%i min of travel from 10:00 → earliest start at minute %i (exact, no grid)', (travel, want) => {
     const p = plan({ travelMin: travel });
     expect(p.startMin).toBe(want);
     // The drive sits against the appointment it leads to (4 Oct 2026), and the
@@ -426,7 +427,7 @@ describe('planNextStop — the pure earliest-feasible-start rule', () => {
 
   test('route minutes, buffer and the booking grid are kept apart', () => {
     const p = plan({ travelMin: 21, bufferMin: 5 });
-    expect([p.travelMin, p.bufferMin, p.earliestStartMin, p.travelEndMin]).toEqual([21, 5, 630, 625]); // arrive, 5 min buffer, start
+    expect([p.travelMin, p.bufferMin, p.earliestStartMin, p.travelEndMin]).toEqual([21, 5, 626, 621]); // arrive, 5 min buffer, start
   });
 
   test('a confirmed appointment in the way moves the proposal to the next slot that fits, duration kept', () => {
@@ -439,7 +440,10 @@ describe('planNextStop — the pure earliest-feasible-start rule', () => {
 
   test('a later start the clinician chose is kept; an earlier one is clamped and reported', () => {
     expect(plan({ travelMin: 25, desiredStartMin: 660 })).toMatchObject({ startMin: 660, clampedFromMin: null });
-    expect(plan({ travelMin: 25, desiredStartMin: 615 })).toMatchObject({ startMin: 630, clampedFromMin: 615 });
+    expect(plan({ travelMin: 25, desiredStartMin: 615 })).toMatchObject({ startMin: 625, clampedFromMin: 615 });
+    // The reported bug: previous session ends 4:50 pm, same place, no drive → 4:50 is allowed.
+    expect(plan({ prevEndMin: 16 * 60 + 50, travelMin: 0, desiredStartMin: 16 * 60 + 50 })).toMatchObject({ startMin: 16 * 60 + 50, clampedFromMin: null });
+    expect(plan({ prevEndMin: 16 * 60 + 50, travelMin: 0 })).toMatchObject({ earliestStartMin: 16 * 60 + 50, startMin: 16 * 60 + 50 });
   });
 
   test('a chosen start that collides is reported, not silently moved', () => {
@@ -456,31 +460,31 @@ describe('planNextStop — the pure earliest-feasible-start rule', () => {
 describe('Book Another Client — Client A → travel → proposed Client B', () => {
   const routes = { [A_ADDR + '|' + CV_ADDR]: 25, [A_ADDR + '|' + FAR_ADDR]: 35, [A_ADDR + '|' + NEAR_ADDR]: 8 };
 
-  test('travel is routed from A\'s confirmed location and B lands on the next 15-minute slot', async () => {
+  test('travel is routed from A\'s confirmed location and B starts the minute the drive ends (no grid)', async () => {
     const env = makeEnv({ routes });
     continueFrom(env);
     await chooseLocation(env, CV_ADDR);
-    expect(start(env)).toBe('10:30');
-    expect(end(env)).toBe('11:30');
+    expect(start(env)).toBe('10:25');
+    expect(end(env)).toBe('11:25');
     const call = env.routeCalls()[0].body;
     expect([call.origin, call.destination]).toEqual([A_ADDR, CV_ADDR]);
     expect(call.departureTime).toBe(new Date('2026-10-05T10:00:00+08:00').toISOString()); // leaves when A ends
     const leg = legs(env)[0];
-    expect(leg.style.top).toBe(env.ev('tToY(10, 5)') + 'px');   // 10:05–10:30, arriving as B starts
+    expect(leg.style.top).toBe(env.ev('tToY(10, 0)') + 'px');   // 10:00–10:25, arriving as B starts
     expect(leg.textContent).toMatch(/25 min/);
     expect(status(env).textContent).toMatch(/25 min drive from Ada Client/);
-    expect(env.ev('__calls.preview[__calls.preview.length - 1]')).toMatchObject({ startMin: 630, durationMin: 60 });
+    expect(env.ev('__calls.preview[__calls.preview.length - 1]')).toMatchObject({ startMin: 625, durationMin: 60 });
   });
 
   test('changing B\'s location re-routes and moves the whole appointment, never shrinking it', async () => {
     const env = makeEnv({ routes });
     continueFrom(env);
     await chooseLocation(env, CV_ADDR);
-    expect([start(env), end(env)]).toEqual(['10:30', '11:30']);
+    expect([start(env), end(env)]).toEqual(['10:25', '11:25']);
     await chooseLocation(env, FAR_ADDR);
-    expect([start(env), end(env)]).toEqual(['10:45', '11:45']);
+    expect([start(env), end(env)]).toEqual(['10:35', '11:35']);
     await chooseLocation(env, NEAR_ADDR);
-    expect([start(env), end(env)]).toEqual(['10:15', '11:15']);
+    expect([start(env), end(env)]).toEqual(['10:08', '11:08']);
     expect(legs(env)[0].textContent).toMatch(/8 min/);
   });
 
@@ -509,7 +513,7 @@ describe('Book Another Client — Client A → travel → proposed Client B', ()
     env.$('bsp-start').value = '11:00'; env.ev('bspOnStartChange()'); await flush();
     expect(start(env)).toBe('11:00');
     env.$('bsp-start').value = '10:00'; env.ev('bspOnStartChange()'); await flush();
-    expect(start(env)).toBe('10:30');
+    expect(start(env)).toBe('10:25');
     expect(status(env).className).toMatch(/warn/);
     expect(status(env).textContent).toMatch(/earlier than the drive allows/);
   });
@@ -528,7 +532,7 @@ describe('Book Another Client — Client A → travel → proposed Client B', ()
     status(env).querySelector('[data-route="retry"]').click();
     await flush();
     expect(fixed.filter((c) => c.url === '/api/maps/routes')).toHaveLength(1);
-    expect(start(env)).toBe('10:30');
+    expect(start(env)).toBe('10:25');
   });
 
   test('continue with manual timing stops auto-moving and says so', async () => {
@@ -883,7 +887,7 @@ describe('after Create appointment — What would you like to do next?', () => {
     await flush(100);
     expect(start(env)).toBe('10:00');
     await chooseLocation(env, CV_ADDR);                      // the client's address: 25 min drive
-    expect(start(env)).toBe('10:30');
+    expect(start(env)).toBe('10:25');
     await chooseLocation(env, '');                           // telehealth: No address
     expect(start(env)).toBe('10:00');
     expect(end(env)).toBe('11:00');

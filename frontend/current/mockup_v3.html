@@ -171,14 +171,14 @@
      store and computeDayTravelSegments(), the calendar leg overlays and the
      travel details panel. Deferred and loaded ahead of profile.js and
      reports.js, both of which reach into it. -->
-<script src="/travel.js?v=54" defer></script>
+<script src="/travel.js?v=55" defer></script>
 <!-- Traffic alerts: a re-priced drive that now runs into a client session —
      point at it, offer Make room, Acknowledge or Ignore (today and tomorrow). -->
 <script src="/travel-alerts.js?v=1" defer></script>
 <!-- Route-aware Smart Booking: client location selector, work-location
      notice, and the "What next?" continuation after a booking. Extends the
      booking panel; the route maths live in travel.js, loaded just above. -->
-<script src="/booking-route.js?v=12" defer></script>
+<script src="/booking-route.js?v=13" defer></script>
 <script src="/recurrence.js?v=1" defer></script>
 <script src="/nf2f.js?v=7" defer></script>
 <!-- Travel block: a billable start → end drive, priced by Google Maps. -->
@@ -4830,14 +4830,14 @@ window.opIcon = function (name, size) {
           <div class="bsp-time-row">
             <div class="bsp-time-field">
               <label class="bsp-field-label">Start</label>
-              <input type="time" id="bsp-start" step="900" value="09:00" oninput="bspOnStartChange()">
+              <input type="time" id="bsp-start" step="60" value="09:00" oninput="bspOnStartChange()">
             </div>
             <div class="bsp-time-arrow">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
             </div>
             <div class="bsp-time-field">
               <label class="bsp-field-label">End</label>
-              <input type="time" id="bsp-end" step="900" value="10:00" oninput="bspOnEndChange()">
+              <input type="time" id="bsp-end" step="60" value="10:00" oninput="bspOnEndChange()">
             </div>
           </div>
 
@@ -7701,7 +7701,7 @@ window.opIcon = function (name, size) {
           </div>
           <div class="form-field">
             <label>Start <span class="req">*</span></label>
-            <input type="time" id="qa-start" value="09:00" step="900">
+            <input type="time" id="qa-start" value="09:00" step="60">
           </div>
           <div class="form-field">
             <label>Duration</label>
@@ -11574,7 +11574,8 @@ let dragState = {
    which had no way to distinguish a click from a drag.
    ───────────────────────────────────────────────────────────────────── */
 const DRAG_THRESHOLD = 8; // px — below this = treat as a click
-const SLOT_SNAP_MIN = 15;  // selection snaps to 15-minute slots
+const SLOT_SNAP_MIN = 5;   // drags, moves and resizes land on 5-minute steps (19 Nov 2026; was 15)
+const CLICK_SLOT_MIN = 15; // a single click still books the quarter-hour slot it is in
 
 /* SINGLE SOURCE OF TRUTH for pointer→time and time→pixel conversion.
    The column's bounding rect is scroll-independent (it moves with the
@@ -11592,15 +11593,15 @@ function calYToMinutes(col, clientY, mode) {
   const y = clientY - col.getBoundingClientRect().top;
   const raw = (y / HOUR_PX) * 60 + START_H * 60;
   const snapped = mode === 'floor'
-    ? Math.floor(raw / SLOT_SNAP_MIN) * SLOT_SNAP_MIN  // a click books the slot it is in
+    ? Math.floor(raw / CLICK_SLOT_MIN) * CLICK_SLOT_MIN  // a click books the slot it is in
     : calSnapMin(raw);
   return Math.max(START_H * 60, Math.min(END_H * 60, snapped));
 }
 function calMinutesToY(minutesOfDay) {
   return ((minutesOfDay - START_H * 60) / 60) * HOUR_PX;
 }
-/* The one 15-minute grid every calendar gesture lands on: drag-to-create,
-   moving and resizing appointments, and the proposed Smart Booking block. */
+/* The one 5-minute grid every calendar drag lands on: drag-to-create, moving
+   and resizing appointments. Smart Booking's proposed start is exact. */
 function calSnapMin(minutes) {
   return Math.round(minutes / SLOT_SNAP_MIN) * SLOT_SNAP_MIN;
 }
@@ -11862,7 +11863,7 @@ function showEventCreationPopup(dayLabel, startTime, endTime, day, startMinutes,
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
       <div>
         <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--muted);display:block;margin-bottom:5px;">Start</label>
-        <input id="ecp-start" type="time" step="900" value="${startVal}" style="
+        <input id="ecp-start" type="time" step="60" value="${startVal}" style="
           width:100%;padding:10px 12px;font-size:15px;font-weight:700;color:var(--accent-deep);
           background:var(--accent-soft);border:1.5px solid var(--accent);border-radius:8px;outline:none;
           font-family:inherit;cursor:pointer;
@@ -11870,7 +11871,7 @@ function showEventCreationPopup(dayLabel, startTime, endTime, day, startMinutes,
       </div>
       <div>
         <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--muted);display:block;margin-bottom:5px;">End</label>
-        <input id="ecp-end" type="time" step="900" value="${endVal}" style="
+        <input id="ecp-end" type="time" step="60" value="${endVal}" style="
           width:100%;padding:10px 12px;font-size:15px;font-weight:700;color:var(--accent-deep);
           background:var(--accent-soft);border:1.5px solid var(--accent);border-radius:8px;outline:none;
           font-family:inherit;cursor:pointer;
@@ -14907,9 +14908,9 @@ function openBlockDetail(id) {
       <div class="k">Time</div>
       <div class="v" style="display:flex;flex-direction:column;gap:2px;">
         <div class="time-edit">
-          <input type="time" id="bd-start" value="${startT}" step="900" onchange="bdRecalc('${id}')" oninput="bdRecalc('${id}')">
+          <input type="time" id="bd-start" value="${startT}" step="60" onchange="bdRecalc('${id}')" oninput="bdRecalc('${id}')">
           <span class="sep">–</span>
-          <input type="time" id="bd-end"   value="${endT}"   step="900" onchange="bdRecalc('${id}')" oninput="bdRecalc('${id}')">
+          <input type="time" id="bd-end"   value="${endT}"   step="60" onchange="bdRecalc('${id}')" oninput="bdRecalc('${id}')">
           <span class="dur-pill" id="bd-dur">${durMin(s)} min</span>
         </div>
         <div class="time-edit-actions">

@@ -877,7 +877,8 @@
       var parts = (start.value || '').split(':').map(Number);
       if (parts.length < 2 || !Number.isFinite(parts[0])) return;
       var m = parts[0] * 60 + (parts[1] || 0);
-      var snapped = Math.min(23 * 60 + 45, Math.round(m / 15) * 15);
+      // No 15-minute grid any more (19 Nov 2026): a typed 4:50 stays 4:50.
+      var snapped = Math.min(23 * 60 + 59, m);
       if (snapped !== m) { start.value = hhmm(snapped); if (fn('bspOnStartChange')) global.bspOnStartChange(); }
     });
     var wl = $('bsp-wl-notice');

@@ -1094,7 +1094,7 @@ function addStopAfterSession(sessionId, patientId) {
   const toKey   = p.address || p.suburb;
   const travel  = (fromKey && toKey && fromKey !== toKey) ? travelMinutes(fromKey, toKey) : 0;
   const endMin  = sessionEndMin(s);
-  const earliest = Math.ceil((endMin + travel) / 15) * 15;
+  const earliest = endMin + travel;   // exact minute, no 15-minute rounding (19 Nov 2026)
   const dur = 60, finish = earliest + dur;
   const ctx = { sessionId: s.id, dbId: s.dbId || null, label: (s.patient || s.title || 'the previous session'), suburb: fromLoc.suburb || '', travelMin: travel, patientId: p.id };
   if (typeof closeTravelPanel === 'function') closeTravelPanel();
@@ -1189,7 +1189,9 @@ function travelChainAfterMove(sessionId) {
 
    Nothing here writes a record: the proposed travel and appointment are
    previews until Create appointment. */
-var SMART_ROUTE_CONFIG = { slotMin: 15, defaultBufferMin: 0, maxBufferMin: 60, debounceMs: 300 };
+// slotMin 1 (19 Nov 2026): no booking grid — the earliest start is the exact
+// minute the previous stop ends plus the drive (4:50 + no drive = 4:50, not 5:00).
+var SMART_ROUTE_CONFIG = { slotMin: 1, defaultBufferMin: 0, maxBufferMin: 60, debounceMs: 300 };
 
 /* Operational buffer added to every routed leg. APP_SETTINGS.travelBufferMin
    overrides the default when it is a whole number of minutes in range. */
