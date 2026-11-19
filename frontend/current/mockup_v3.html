@@ -205,7 +205,7 @@
      Snapshot Day V2 work list. Deferred, so it runs after the shell's
      inline scripts and keeps the same globals they expect. -->
 <script src="/reports.js?v=9" defer></script>
-<script src="/navigation.js?v=16" defer></script>
+<script src="/navigation.js?v=17" defer></script>
 <script>
 /* Opal line icons — one consistent stroke set replacing emoji throughout.
    Usage: opIcon('calendar') → inline SVG string (14px, currentColor). */
@@ -13127,13 +13127,21 @@ async function confirmBooking() {
         // tile so the reload below replaces it — unstamped, it stayed beside
         // the reloaded copy and the event showed twice.
         const _optId = addSession(col, {
+          id: newDbId ? sessionIdForEvent(newDbId) : undefined,
           day: t.day, type: tileType,
           startH: t.startH, startM: t.startM, endH: t.endH, endM: t.endM,
           title: outlookTitle, sub: _location || (_leaf ? _leaf.label : (CAT_LABELS[cat] || cat)),
           categories: [outlookCategory], dbId: newDbId, outlookId,
           address: _location || null, location: _location || null,
           ...(_client ? { patient: _clientName, patientId: _client.id } : {}),
-          ...(_travelRoute ? { booking: { kind: 'travel-block', group: 'travel', route: _travelRoute } } : {}),
+          // The booking it was made as, as the reload will carry it — so the
+          // drawer of the just-made tile names it (Case Management, not
+          // "Report writing"; a nf2f block's clients, not none).
+          ...(_travelRoute ? { booking: { kind: 'travel-block', group: 'travel', route: _travelRoute } }
+            : _leaf ? { booking: _nfClients
+              ? { kind: BOOKING_STATE.serviceType, group: 'nf2f', clients: _nfClients }
+              : { kind: BOOKING_STATE.serviceType, group: _leaf.group, clientId: _client ? String(_client.id) : null, clientName: _clientName || null } }
+            : {}),
           startTimeIso: new Date(t.startISO).toISOString(), endTimeIso: new Date(t.endISO).toISOString(),
         });
         if (_optId && SESSIONS[_optId]) {
@@ -13342,10 +13350,12 @@ async function confirmBooking() {
       // was booked with, and the Outlook stamp (so the next reload replaces
       // it instead of leaving a duplicate).
       const _optId = addSession(col, {
+        id: newDbId ? sessionIdForEvent(newDbId) : undefined,
         day: slot.day, type,
         startH: slot.startH, startM: slot.startM,
         endH: eh, endM: em,
-        title: `${fmtTime(slot.startH, slot.startM)} ${TYPE_LABEL[type] || 'Session'}`,
+        // The title it was saved with — what the reloaded tile will show.
+        title: _outlookTitle,
         sub, patient: sub,
         patientId: patient?.id,
         region: patient?.region || 'central',
@@ -13353,7 +13363,7 @@ async function confirmBooking() {
         // client's suburb (a telehealth from the car is not a home visit).
         suburb: _outlookLocation ? (patient?.suburb || '') : '',
         locationUnknown: !_outlookLocation,
-        booking: BOOKING_LEAVES[BOOKING_STATE.serviceType] ? { kind: BOOKING_STATE.serviceType } : null,
+        booking: BOOKING_LEAVES[BOOKING_STATE.serviceType] ? { kind: BOOKING_STATE.serviceType, group: BOOKING_LEAVES[BOOKING_STATE.serviceType].group, clientId: patient?.id != null ? String(patient.id) : null, clientName: _patName || null } : null,
         dbId: newDbId, outlookId,
         address: _outlookLocation || null, location: _outlookLocation || null,
         startTimeIso: new Date(startISO).toISOString(), endTimeIso: new Date(endISO).toISOString(),
@@ -13784,6 +13794,12 @@ function scheduleTitleRecovery() {
 function addSession(col, opts) {
   // Auto-assign id if absent (for legacy call sites)
   const id = opts.id || ('S-' + (opts.day||'').toUpperCase() + '-' + Math.random().toString(36).slice(2,7));
+  // One event, one tile: a stable id already on screen (the optimistic tile of
+  // a booking, then its reload) is replaced, never left as an orphan whose
+  // click would open the newer copy's registry entry.
+  if (opts.id && SESSIONS[opts.id] && SESSIONS[opts.id].element && SESSIONS[opts.id].element.parentNode) {
+    SESSIONS[opts.id].element.parentNode.removeChild(SESSIONS[opts.id].element);
+  }
   const el = document.createElement('div');
   // Address status — only meaningful for appointment-type sessions. We stamp
   // a class + badge so the weekly view telegraphs which appointments can
@@ -13825,20 +13841,18 @@ function addSession(col, opts) {
   if (noSubject && (opts.outlookId || opts.type === 'outlook')) {
     if (typeof scheduleTitleRecovery === 'function') scheduleTitleRecovery();
   }
-  // For untitled events: prefer patient name → first category → type label → placeholder
-  const _noSubCats = opts.categories && opts.categories.length ? opts.categories[0] : null;
-  const _noSubFallback = opts.patient || opts.sub || null;
-  const _typeLabel = { therapy: 'Client Appointment', travel: 'Travel', meeting: 'Meeting', admin: 'Admin' }[opts.type] || null;
+  // For untitled events: patient name → first category → booking → type label →
+  // placeholder — the same words the detail drawer uses (sessionTitleText).
+  const _noSubText = noSubject ? sessionTitleText(opts) : '';
+  const _noSubEsc = String(_noSubText).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
   const displayTitle = noSubject
-    ? (_noSubFallback
-        ? (_typeLabel && opts.patient ? _typeLabel + ' - ' + _noSubFallback : _noSubFallback)
-        : _noSubCats
-          ? '<em style="opacity:0.65">' + _noSubCats + '</em>'
-          : _typeLabel
-            ? '<em style="opacity:0.65">' + _typeLabel + '</em>'
-            : (window.__titleRecoveryDone
-                ? '<em style="opacity:0.5">Untitled event</em>'
-                : '<em style="opacity:0.55">Syncing title…</em>'))
+    ? ((opts.patient || opts.sub)
+        ? _noSubEsc
+        : _noSubText !== 'Untitled event'
+          ? '<em style="opacity:0.65">' + _noSubEsc + '</em>'
+          : (window.__titleRecoveryDone
+              ? '<em style="opacity:0.5">Untitled event</em>'
+              : '<em style="opacity:0.55">Syncing title…</em>'))
     : typeFirstTitle(opts.title);
   // Tile content: wrapping title, then location. The time span is kept for
   // move/resize bookkeeping but hidden by CSS — the time lives in the tooltip
@@ -14164,10 +14178,10 @@ function dayRowHTML(r) {
     <div class="day-content">
       <div class="day-swatch" style="background:${colorVar}"></div>
       <div class="day-text">
-        <div class="title">${r.title}${nowTag}${cancelTag}</div>
-        <div class="meta">${r.meta}</div>
+        <div class="title">${escapeHtml(sessionTitleText(r))}${nowTag}${cancelTag}</div>
+        <div class="meta">${r.meta ? escapeHtml(r.meta) : ''}</div>
       </div>
-      <button class="${btnClass}" onclick="openBlockDetail(${JSON.stringify(r).replace(/"/g,'&quot;')})">${btnLabel}</button>
+      ${r.sessionId ? `<button class="${btnClass}" onclick="openBlockDetail('${String(r.sessionId).replace(/[^A-Za-z0-9-]/g, '')}')">${btnLabel}</button>` : ''}
     </div>
   </div>`;
 }
@@ -14877,26 +14891,119 @@ function sessionKindLabel(s) {
   const k = s && s.booking && s.booking.kind;
   const leaf = k && typeof BOOKING_LEAVES === 'object' ? BOOKING_LEAVES[k] : null;
   if (leaf && leaf.label) return leaf.label;
-  return TYPE_LABEL[s && s.type] || (s && s.type) || 'Session';
+  // Flights are booked by flights.js, not from the leaf catalogue; their
+  // category is Travel, but a flight is not "Travel (billable)" (20 Nov 2026).
+  if (k === 'flight') return 'Flight';
+  if (k === 'flight-checkin') return 'Check-in & boarding';
+  // Not booked in the portal: the Outlook category the person filed it under
+  // (what colours the tile) says what it is — the broad type it was classified
+  // into does not ("Dentist" filed as Admin is not "Admin / Case noting").
+  const cat = s && Array.isArray(s.categories) ? s.categories.find(c => c && String(c).trim()) : null;
+  if (!k && cat) return String(cat).trim();
+  return TYPE_LABEL[s && s.type] || EVENT_TYPE_LABEL[s && s.type] || 'Event';
+}
+// Classified Outlook types TYPE_LABEL has no wording for (the drawer showed
+// the raw key: "teams_meeting", "leave").
+const EVENT_TYPE_LABEL = { meeting: 'Meeting', teams_meeting: 'Teams meeting', leave: 'Leave', personal: 'Personal' };
+
+/* ONE title for an event, shared by its tile and its detail drawer (20 Nov
+   2026). The drawer used to build its own — the booking leaf or the broad
+   type label — so "Dentist" opened as "Admin / Case noting", a Custom event
+   "Car service" as "Custom", "PD — Sensory workshop" as "Professional
+   development", and "Client Appointment - Jane Citizen" (no client on the
+   row) lost the client altogether. Plain text: callers escape it. */
+function sessionTitleText(s) {
+  if (!s) return '';
+  const t = typeof s.title === 'string' ? s.title.trim() : '';
+  const noSubject = !t || t === '(No subject)' || t === '(No title)' || t === 'Untitled';
+  if (!noSubject) return typeFirstTitle(t);
+  const who = s.patient || null;
+  const typeWord = { therapy: 'Client Appointment', travel: 'Travel', meeting: 'Meeting', admin: 'Admin' }[s.type] || null;
+  if (who) return typeWord ? typeWord + ' - ' + who : who;
+  if (s.sub) return String(s.sub);
+  const cat = Array.isArray(s.categories) && s.categories.length ? s.categories[0] : null;
+  if (cat) return String(cat);
+  if (s.booking && s.booking.kind) return sessionKindLabel(s);
+  return typeWord || 'Untitled event';
+}
+// The drawer heading: the tile's title, plus the client(s) when the title does
+// not already name them (a Splose "Client Appointment (booked in Splose)").
+function sessionDrawerTitle(s) {
+  const title = sessionTitleText(s);
+  const names = bdClientNames(s);
+  const low = title.toLowerCase();
+  const missing = names.filter(n => low.indexOf(String(n).toLowerCase()) === -1);
+  if (!missing.length) return title;
+  if (names.length > 1) return /\b\d+ clients\b/i.test(title) ? title : `${title} · ${names.length} clients`;
+  return `${title} · ${missing[0]}`;
+}
+/* Time of day for an hour that may run past midnight (an overnight flight
+   ends at 26:00 in the grid's terms): "02:00 (next day)", never "2:00 PM". */
+function fmtClockTime(h, m) {
+  const over = Math.floor((h || 0) / 24);
+  const t = fmtTime(((h || 0) % 24 + 24) % 24, m || 0);
+  return over > 0 ? `${t} (next day)` : t;
+}
+// The event's own calendar date ("Mon 23 Nov"), from its start time in Perth.
+// DAY_LABEL is the CURRENT week's dates, so an event in any other week showed
+// this week's date beside its weekday.
+function sessionDateLabel(s) {
+  const iso = s && s.startTimeIso;
+  const d = iso ? new Date(iso) : null;
+  if (d && !isNaN(d.getTime())) {
+    return d.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Australia/Perth' });
+  }
+  return DAY_LABEL[s && s.day] || '';
+}
+/* A meeting link or app ("Microsoft Teams Meeting", "Zoom") is not a place:
+   no address card, no Maps, no Navigate. */
+function isVirtualLocation(addr) {
+  return /\b(microsoft teams|teams meeting|zoom|webex|google meet|skype|online|telehealth|phone call)\b|^https?:\/\//i.test(String(addr || '').trim());
+}
+/* The SESSIONS key for a stored event: stable across reloads and week
+   changes, so a #…!event/<id> link, Back/Forward, and the Scheduler (which
+   knows events by their database id) all open the same event. Random ids
+   (S-MON-xxxxx) were regenerated on every load, so those links opened
+   nothing — or, after a collision, a different event. */
+function sessionIdForEvent(dbId) {
+  const k = String(dbId == null ? '' : dbId).replace(/[^A-Za-z0-9-]/g, '');
+  return k ? 'E-' + k : null;
+}
+function resolveSessionId(id) {
+  if (id == null) return null;
+  const k = String(id);
+  if (SESSIONS[k]) return k;
+  const byKey = sessionIdForEvent(k);
+  if (byKey && SESSIONS[byKey]) return byKey;
+  const hit = Object.keys(SESSIONS).find(x => SESSIONS[x] && SESSIONS[x].dbId != null && String(SESSIONS[x].dbId) === k);
+  return hit || null;
 }
 
 /* ---------- Detail drawer ---------- */
 function openBlockDetail(id) {
+  // A database id (the Scheduler) or a stable E-<dbId> key both resolve here.
+  const _rid = resolveSessionId(id);
+  if (!_rid) {
+    // A deep link (#…!event/<id>) restored before the events have loaded:
+    // open it once they have (see __openPendingEventDetail).
+    if (id != null && typeof id !== 'object') window.__pendingEventDetailId = String(id);
+    return;
+  }
+  id = _rid;
+  window.__pendingEventDetailId = null;
   const s = SESSIONS[id];
-  if (!s) return;
   // highlight selection
   document.querySelectorAll('.session.selected').forEach(x => x.classList.remove('selected'));
-  s.element.classList.add('selected');
+  if (s.element) s.element.classList.add('selected');
 
   const swatch = document.getElementById('bd-swatch');
-  swatch.style.background = s.element.style.background;
+  swatch.style.background = (s.element && (s.element.style.background || s.element.style.getPropertyValue('--cat-border'))) || '';
 
-  const _titleClients = bdClientNames(s);
-  const _titleWho = _titleClients.length > 1 ? `${_titleClients.length} clients` : (_titleClients[0] || '');
-  const _kindLabel = (s.booking && s.booking.kind) ? sessionKindLabel(s) : (TYPE_LABEL[s.type] || null);
-  document.getElementById('bd-title').textContent = (_titleWho ? `${_kindLabel || 'Session'} · ${_titleWho}` : (_kindLabel || s.title));
-  document.getElementById('bd-subtitle').textContent =
-    `${DAY_FULL[s.day] || s.day} · ${fmtTime(s.startH, s.startM)} – ${fmtTime(s.endH, s.endM)} AWST · ${durMin(s)} min`;
+  // Same title as the tile (sessionTitleText), plus any client it does not name.
+  document.getElementById('bd-title').textContent = sessionDrawerTitle(s);
+  document.getElementById('bd-subtitle').textContent = s.allDay
+    ? `${DAY_FULL[s.day] || s.day} · All day`
+    : `${DAY_FULL[s.day] || s.day} · ${fmtTime(s.startH, s.startM)} – ${fmtClockTime(s.endH, s.endM)} AWST · ${durMin(s)} min`;
 
   // Decluttered 14 Nov 2026: no billing / location tags, Splose resource,
   // client section, Location heading or invoicing block — only Cancelled.
@@ -14905,9 +15012,10 @@ function openBlockDetail(id) {
 
   const rows = [];
   rows.push(row('Session type', escapeHtml(sessionKindLabel(s))));
-  rows.push(row('Day',   DAY_FULL[s.day] + ' · ' + DAY_LABEL[s.day]));
-  // Editable time row for movable sessions — change duration or shift start in place
-  const _movableTime = MOVABLE_TYPES.has(s.type) && !s.cancelled;
+  rows.push(row('Day',   DAY_FULL[s.day] + ' · ' + sessionDateLabel(s)));
+  // Editable time row for movable sessions — change duration or shift start in place.
+  // Not for an all-day event, nor one that runs past midnight (the inputs hold one day).
+  const _movableTime = MOVABLE_TYPES.has(s.type) && !s.cancelled && !s.allDay && s.endH < 24;
   if (_movableTime) {
     const startT = String(s.startH).padStart(2,'0') + ':' + String(s.startM || 0).padStart(2,'0');
     const endT   = String(s.endH).padStart(2,'0')   + ':' + String(s.endM   || 0).padStart(2,'0');
@@ -14926,8 +15034,10 @@ function openBlockDetail(id) {
         </div>
       </div>
     </div>`);
+  } else if (s.allDay) {
+    rows.push(row('Time', 'All day'));
   } else {
-    rows.push(row('Time',  `${fmtTime(s.startH, s.startM)} – ${fmtTime(s.endH, s.endM)}  (${durMin(s)} min)`));
+    rows.push(row('Time',  `${fmtTime(s.startH, s.startM)} – ${fmtClockTime(s.endH, s.endM)}  (${durMin(s)} min)`));
   }
   if (window.TravelBlock) rows.push(...TravelBlock.detailRows(s, row));
 
@@ -14972,7 +15082,7 @@ function openBlockDetail(id) {
   }
   // Navigate to location button — shown whenever we have a routable address
   const navAddr = s.address || s.location || s.locationObj?.formattedAddress;
-  if (navAddr && !s.locationObj?.isMissing) {
+  if (navAddr && !s.locationObj?.isMissing && !isVirtualLocation(navAddr)) {
     const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(navAddr)}`;
     parts.push(`<a class="btn" href="${mapsUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:5px;text-decoration:none;">
       <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
@@ -15011,9 +15121,11 @@ function openBlockDetail(id) {
 // or the portal booking metadata (one client, or several for non-face-to-face).
 function bdClientNames(s) {
   if (!s) return [];
+  const b = s.booking || {};
+  // A non-face-to-face block's own client list wins — it can name several.
+  if (b.group === 'nf2f' && Array.isArray(b.clients) && b.clients.length) return b.clients.map(c => c && c.clientName).filter(Boolean);
   if (s.patient) return [s.patient];
   if (s.clientName) return [s.clientName];
-  const b = s.booking || {};
   if (Array.isArray(b.clients) && b.clients.length) return b.clients.map(c => c && c.clientName).filter(Boolean);
   if (b.clientName) return [b.clientName];
   return [];
@@ -15040,6 +15152,11 @@ function bdDeleteEvent(id) {
 function __bdLocationRows(rows, s, id) {
   // Resolve the best address we have
   const addr   = s.address || s.location || s.locationObj?.formattedAddress || null;
+  // A Teams/Zoom meeting: say so — never an address card with Maps (20 Nov 2026).
+  if (addr && isVirtualLocation(addr)) {
+    rows.push(row('Location', `${escapeHtml(addr)} <span style="color:var(--ink-soft);">· online</span>`));
+    return;
+  }
   const locObj = s.locationObj || (addr ? { formattedAddress: addr, isMissing: false, source: 'unknown' } : { isMissing: true, source: 'unknown' });
   const addrOk = addr && isValidRoutingLocation(addr);
 
@@ -15117,7 +15234,11 @@ function __bdLocationRows(rows, s, id) {
         <span>Address</span>${sourceBadge}
       </div>
       <div style="grid-column:1 / -1;width:100%;display:flex;flex-direction:column;gap:5px;">
-        ${locObj.isMissing
+        ${locObj.isMissing && !sessionNeedsFullAddress(s)
+          // Same rule as the tile's "!" chip: a block that needs no address
+          // (a booking, Case Noting, a meeting) is not warned about here either.
+          ? `<div style="font-size:11.5px;color:var(--ink-soft);padding:3px 0;">No address — it happens wherever you already are. Add one to make it a stop.</div>`
+          : locObj.isMissing
           ? `<div style="font-size:11.5px;color:var(--warn,#b06e12);padding:5px 7px;background:var(--warn-soft);border-radius:5px;border-left:2px solid var(--warn,#b06e12);">
               Address required for travel calculation. ${locObj.missingReason || 'No address on record'} — add it below.
              </div>`
@@ -18355,6 +18476,26 @@ function __updateMonthScrollLabel() {
   }
 }
 
+/* A deep link (#calendar/week!event/E-<dbId>) is restored before the events
+   arrive: openBlockDetail parks the id, and the first render that has the
+   event opens it — going to its week first when it is in another one. An id
+   that names no loaded event is dropped, never guessed at. */
+function __openPendingEventDetail() {
+  const want = window.__pendingEventDetailId;
+  if (!want) return;
+  if (resolveSessionId(want)) { openBlockDetail(want); return; }
+  const cache = window.__outlookEventsCache;
+  if (!Array.isArray(cache) || !cache.length) return;           // not loaded yet — keep waiting
+  const dbId = /^E-/.test(want) ? want.slice(2) : want;
+  const ev = cache.find(e => e && String(e.id) === dbId);
+  window.__pendingEventDetailId = null;
+  if (!ev || typeof gotoWeekOf !== 'function') return;
+  window.__pendingEventDetailId = want;                          // reopened by the week's render
+  gotoWeekOf(__perthDateStr(new Date(ev.start_time)));
+  if (window.__pendingEventDetailId && resolveSessionId(want)) openBlockDetail(want);
+  window.__pendingEventDetailId = null;
+}
+
 // Re-render the visible week from cache. Called by load + every nav action.
 function renderCurrentWeek() {
   __clearOutlookTiles();
@@ -18364,6 +18505,7 @@ function renderCurrentWeek() {
   const eventsByDay = groupEventsByDay(slice);
   mergeEventsIntoDayData(eventsByDay);
   renderToday();
+  __openPendingEventDetail();
   // Post-render decorations — run after all tiles are in the DOM
   requestAnimationFrame(() => {
     if (!window.OUTLOOK_ONLY) {
@@ -18536,6 +18678,9 @@ function addAllDayChip(day, opts) {
   const grid = document.getElementById('cal-grid');
   if (!cell) return null;
   const id = opts.id || ('AD-' + day.toUpperCase() + '-' + Math.random().toString(36).slice(2, 7));
+  if (opts.id && SESSIONS[opts.id] && SESSIONS[opts.id].element && SESSIONS[opts.id].element.parentNode) {
+    SESSIONS[opts.id].element.parentNode.removeChild(SESSIONS[opts.id].element);
+  }
   const el = document.createElement('div');
   el.className = 'allday-chip';
   el.dataset.type = opts.type || 'outlook';
@@ -19087,14 +19232,23 @@ function mergeEventsIntoDayData(eventsByDay) {
           // falsely conflict with every session that day.
           const _spanMin = (endH * 60 + endM) - (startH * 60 + startM);
           if (_spanMin >= 23 * 60 && typeof addAllDayChip === 'function') {
-            addAllDayChip(day, {
+            const _adId = addAllDayChip(day, {
+              id: sessionIdForEvent(session.dbId) || undefined,
               day, type: session.type || 'outlook',
               startH, startM, endH: Math.min(endH, 23), endM: endH > 23 ? 59 : endM,
               title: session.title,
               outlookId: session.outlookId, dbId: session.dbId,
               categories: session.categories || [],
               startTimeIso: session.startTimeIso, endTimeIso: session.endTimeIso,
+              // The drawer reads these too — an all-day event is still the event.
+              address: session.location || null, location: session.location || null,
+              locationObj: session.locationObj || { isMissing: true, source: 'unknown' },
+              booking: session.booking || null, travel: session.travel || null,
+              clientName: session.clientName || null, clientId: session.clientId || null,
+              seriesId: session.seriesId || null, seriesIndex: session.seriesIndex,
+              notesHtml: session.notesHtml || '',
             });
+            if (_adId) session.sessionId = _adId;
             return;
           }
 
@@ -19111,6 +19265,7 @@ function mergeEventsIntoDayData(eventsByDay) {
             : '';
 
           const id = addSession(dayCol, {
+            id: sessionIdForEvent(session.dbId) || undefined,
             day: day,
             type: session.type || 'outlook',
             startH: startH,
@@ -19132,7 +19287,14 @@ function mergeEventsIntoDayData(eventsByDay) {
             notesHtml: session.notesHtml || '',
             clientName: session.clientName || null,
             clientId: session.clientId || null,
+            // Dropped here before 20 Nov 2026: every repeating appointment's
+            // drawer said "Doesn't repeat" (recurrence.js reads seriesId), and
+            // the drawer's notes never saw the server copy.
+            seriesId: session.seriesId || null,
+            seriesIndex: session.seriesIndex,
+            notesHtml: session.notesHtml || '',
           });
+          session.sessionId = id;   // the Today agenda's Open button opens this tile
           if (SESSIONS[id]) {
             SESSIONS[id].outlookSynced = true;
             // DOM stamp so a re-render can sweep the tile even if its registry

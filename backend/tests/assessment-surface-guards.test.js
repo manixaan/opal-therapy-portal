@@ -696,7 +696,7 @@ describe('changed assets are cache-busted', () => {
       // 14: bootRestore lifts the boot cloak once the start screen is settled.
       // 15: the no-hash landing waits (bounded) for settings before lifting the cloak.
       // 16: '#resources/library/<folder-id>' — a Library folder is an address.
-      ['navigation.js', 16],
+      ['navigation.js', 17],
       // 9: the Owner surface consolidated to Packages / Start Onboarding /
       // Track Onboarding, with the old tabs folded in. The CSS stays at 8 —
       // the consolidation reuses the existing ob-* styles unchanged.

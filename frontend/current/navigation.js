@@ -400,12 +400,24 @@
     return s;
   }
 
+  /* How opening an overlay writes history (20 Nov 2026). Switching an open
+     overlay to another record of the same kind — event A's drawer to event
+     B's — REPLACES the entry: stacking them meant closing B went Back to A,
+     and the drawer reopened on the event the user had just left. */
+  function overlayWriteMode(prev, next) {
+    var p = prev ? normaliseRoute(prev) : null;
+    var n = normaliseRoute(next);
+    if (p && p.overlay && n.overlay && p.overlay === n.overlay && routesEqual(baseOf(p), baseOf(n))) return 'replace';
+    return pushOrReplace(p, n);
+  }
+
   var helpers = {
     encodeRoute: encodeRoute,
     decodeRoute: decodeRoute,
     normaliseRoute: normaliseRoute,
     routesEqual: routesEqual,
     pushOrReplace: pushOrReplace,
+    overlayWriteMode: overlayWriteMode,
     baseOf: baseOf,
     DEFAULT_TAB: DEFAULT_TAB,
     KNOWN_TABS: KNOWN_TABS,
@@ -527,11 +539,11 @@
 
   /* ── Writing history ──────────────────────────────────────────────────── */
 
-  function writeRoute(state) {
+  function writeRoute(state, forceMode) {
     if (NAV.restoring) return;                     // restoration never pushes
     if (!NAV.booted) return;                       // never clobber the arrival hash
     var next = normaliseRoute(state);
-    var mode = pushOrReplace(NAV.current, next);
+    var mode = forceMode || pushOrReplace(NAV.current, next);
     var url = encodeRoute(next);
     try {
       if (mode === 'push') hist.pushState({ opalNav: url }, '', url);
@@ -569,12 +581,33 @@
     st.overlayId = id || null;
     var next = normaliseRoute(st);
     if (!next.overlay) return;                     // normalisation rejected it
+    // A close is still waiting for its history.back() to land. Writing now
+    // would put this overlay's entry ABOVE the one being popped, and the
+    // traversal would then land on the OLD overlay's entry — popstate
+    // restored the previous event into the drawer the user had just opened
+    // for another one (20 Nov 2026). Write it once the pop has landed.
+    if (backPending()) { NAV.deferredOverlay = next; return; }
     if (routesEqual(next, NAV.current)) return;    // already the current entry
-    writeRoute(next);
+    writeRoute(next, overlayWriteMode(NAV.current, next));
+  }
+
+  // history.back() is asynchronous; its popstate normally lands within a
+  // frame. The window bounds a back() that never produces one (no entry to
+  // go back to), so a later real Back is never swallowed.
+  var BACK_PENDING_MS = 1000;
+  function backPending() {
+    return !!(NAV.pendingBackAt && Date.now() - NAV.pendingBackAt < BACK_PENDING_MS);
   }
 
   function closeOverlay(kind, id) {
     if (NAV.restoring || NAV.inNav || !NAV.booted) return;
+    // Closed again before the earlier close's pop landed: the overlay opened
+    // in between was never written, so there is nothing to go back over —
+    // just never write it.
+    if (backPending() && NAV.deferredOverlay && NAV.deferredOverlay.overlay === kind) {
+      NAV.deferredOverlay = null;
+      return;
+    }
     if (!NAV.current || NAV.current.overlay !== kind) return;
     if (id && NAV.current.overlayId && NAV.current.overlayId !== safeId(id)) return;
 
@@ -583,7 +616,9 @@
     NAV.lastBackAt = now;
 
     NAV.current = baseOf(NAV.current);             // demote first — see (c) above
-    try { hist.back(); } catch (e) { /* nothing we can do */ }
+    NAV.pendingBackAt = now;
+    NAV.deferredOverlay = null;
+    try { hist.back(); } catch (e) { NAV.pendingBackAt = 0; }
   }
 
   function supportPopOpen() { return !!q('.sp-show'); }
@@ -1377,6 +1412,19 @@
     var st = (ev && ev.state && ev.state.opalNav)
       ? decodeRoute(ev.state.opalNav)
       : decodeRoute((global.location && global.location.hash) || '');
+    // The pop our own close asked for. If an overlay was opened while it was
+    // in flight, keep what is on screen (do not restore — that would close it,
+    // or reopen the old one) and record the new overlay on top.
+    if (backPending()) {
+      var deferred = NAV.deferredOverlay;
+      NAV.pendingBackAt = 0;
+      NAV.deferredOverlay = null;
+      if (deferred) {
+        NAV.current = normaliseRoute(st);
+        writeRoute(deferred, overlayWriteMode(NAV.current, deferred));
+        return;
+      }
+    }
     restore(st);
   });
 
