@@ -737,7 +737,7 @@ describe('changed assets are cache-busted', () => {
       // Via home switch; the panel names the real next stop (28 Oct 2026).
       // 52: drives priced at their own departure time; right-click › Not driving
       // this; the traffic-alert hook; Make room's apply shared (29 Oct 2026).
-      ['travel.js', 56],
+      ['travel.js', 57],
       // 1: traffic alerts — a re-priced drive running into a client session.
       ['travel-alerts.js', 1], ['travel-alerts.css', 2],
       // 1: booking-route.js/.css are new — client location selector, the
@@ -746,7 +746,7 @@ describe('changed assets are cache-busted', () => {
       // 7 (js) / 2 (css): the MMM zone under the session address, sent with Create appointment.
       // 8 (js): the typed start snaps to 15 min on blur, not per keystroke.
       // 9 (js): no Return Home when a no-address booking leaves you at home already.
-      ['booking-route.js', 13], ['booking-route.css', 6],
+      ['booking-route.js', 14], ['booking-route.css', 6],
       // 1: recurrence.js/.css are new — Repeat in Smart Booking, the event panel and delete scope.
       ['recurrence.js', 1], ['recurrence.css', 1],
       // 1: nf2f.js/.css are new — several clients on a non-face-to-face block, its billing timer and allocation.

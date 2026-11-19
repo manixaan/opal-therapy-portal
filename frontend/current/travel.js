@@ -1257,6 +1257,57 @@ function placeProposalTravel(out, prevEnd, busy) {
   return out;
 }
 
+/* ─── Travel earlier, do it there (19 Nov 2026, Antony's idea) ─────────────
+   A client session is booked right after a report, non-face-to-face block or
+   telehealth that the therapist does somewhere else (usually at home), and
+   the drive from there no longer fits. Rather than push the client later,
+   offer: drive BEFORE that block, do the block at the client's place, then
+   start the session straight after it. Only when the free time before the
+   block holds the whole drive. Nothing is saved until Create appointment;
+   then the block's location becomes the client's address. */
+/* Can this block be done anywhere? Reports, non-face-to-face work and telehealth. */
+function isRelocatableBlock(s) {
+  if (!s || s.cancelled || isTravelBlock(s)) return false;
+  const b = s.booking || {};
+  if (b.group === 'report' || b.group === 'nf2f') return true;
+  if (b.kind === 'telehealth' || b.kind === 'telehealth-ei') return true;
+  if (!b.kind && (DESK_TYPES.has(s.type) || /\btelehealth\b/i.test(String(s.title || '')))) return true;
+  return false;
+}
+/* PURE — in:  items [{ id, startMin, endMin, label, relocatable }] (the day,
+               travel and the proposal excluded), desiredStartMin, travelMin
+               (from where the therapist is before the block to the client),
+               bufferMin, dayStartMin, freeFromMin (when the therapist can leave
+               the place the drive starts from — the end of the stop there; it
+               wins over the blocks' own ends when later)
+           out: { ok, reason, block: { id, label, startMin, endMin }, leaveAtMin,
+                  arriveMin, travelMin, freeBeforeMin }
+   reason: 'none' (no block ends before the start), 'overlap' (a block runs
+   into the start), 'fixed' (the block before is not a report / nf2f /
+   telehealth), 'notime' (the drive does not fit before it). */
+function planRelocateBefore(input) {
+  const i = input || {};
+  const desired = Number(i.desiredStartMin);
+  const travel = Math.max(0, Math.round(Number(i.travelMin) || 0)) + Math.max(0, Math.round(Number(i.bufferMin) || 0));
+  const out = { ok: false, reason: null, block: null, leaveAtMin: null, arriveMin: null, travelMin: travel, freeBeforeMin: 0 };
+  const items = (i.items || []).filter(b => b && b.startMin < desired);
+  if (items.some(b => b.endMin > desired)) { out.reason = 'overlap'; return out; }
+  if (!items.length) { out.reason = 'none'; return out; }
+  const last = items.slice().sort((a, b) => a.endMin - b.endMin || a.startMin - b.startMin)[items.length - 1];
+  out.block = { id: last.id, label: last.label, startMin: last.startMin, endMin: last.endMin };
+  if (!last.relocatable) { out.reason = 'fixed'; return out; }
+  const before = items.filter(b => b !== last && b.endMin <= last.startMin);
+  if (items.some(b => b !== last && b.endMin > last.startMin)) { out.reason = 'fixed'; return out; }   // something runs alongside it
+  let prevEnd = before.length ? Math.max.apply(null, before.map(b => b.endMin)) : (i.dayStartMin != null ? i.dayStartMin : 0);
+  if (i.freeFromMin != null && Number(i.freeFromMin) > prevEnd) prevEnd = Number(i.freeFromMin);
+  out.freeBeforeMin = last.startMin - prevEnd;
+  if (out.freeBeforeMin < travel) { out.reason = 'notime'; return out; }
+  out.ok = true;
+  out.leaveAtMin = last.startMin - travel;
+  out.arriveMin = last.startMin;
+  return out;
+}
+
 /* ─── Make room (24 Oct 2026) ─────────────────────────────────────────────
    A client's time is fixed; every other block before it is not. When the drive does not fit, the run of flexible blocks after the
    last fixed one can be shortened so the therapist leaves in time — evenly,
@@ -1350,7 +1401,8 @@ function planMakeRoom(input) {
    stop when continuing a route ("Book another client"); manualStart is set
    when the clinician types a start or drags the proposed block. */
 var BOOKING_ROUTE = { context: null, manualStart: false, manualTiming: false, lastClamp: null, status: null, seq: 0, timer: null, viaMode: 'auto', lastPredId: null, shownMode: null, suggestedStartMin: null,
-                     squeeze: null, squeezePlan: null, squeezeOffer: null };
+                     squeeze: null, squeezePlan: null, squeezeOffer: null,
+                     relocate: null, relocateOffer: null };
 
 function _sessionByDbId(dbId) {
   if (!dbId || !window.SESSIONS) return null;
@@ -1488,6 +1540,9 @@ function runBspRoutePreview(opts) {
   BOOKING_ROUTE.squeezePlan = null; BOOKING_ROUTE.squeezeOffer = null;
   const sq0 = BOOKING_ROUTE.squeeze;
   if (sq0 && (sq0.day !== day || sq0.desiredStartMin !== startMin)) BOOKING_ROUTE.squeeze = null;
+  BOOKING_ROUTE.relocateOffer = null;
+  const rl0 = BOOKING_ROUTE.relocate;
+  if (rl0 && (rl0.day !== day || rl0.desiredStartMin !== startMin)) BOOKING_ROUTE.relocate = null;
   let pred = _bspPredecessor(day, startMin);
   if (!pred) { setBspRouteStatus('hidden'); return; }
   BOOKING_ROUTE.lastPredId = pred.s && pred.s.id ? pred.s.id : null;
@@ -1543,10 +1598,21 @@ function runBspRoutePreview(opts) {
       : 'After ' + fromName + ' — choose the location to calculate travel.');
     return;
   }
+  // Travel earlier, do it there (held): the block before is done at the
+  // client's place, so the session follows it with no drive at all.
+  const rl = BOOKING_ROUTE.relocate;
+  const rlS = rl && window.SESSIONS && window.SESSIONS[rl.blockId];
+  if (rl && rlS && canonAddr(rl.address) === canonAddr(toKey)) {
+    pred = { s: rlS, explicit: pred.explicit, endMin: sessionEndMin(rlS), fromKey: toKey, suburb: addrSuburb(toKey) || '',
+             label: _blockName(rlS) + ' at ' + (addrSuburb(toKey) || 'the client\'s place'), relocated: true };
+    fromName = esc(pred.label);
+  } else if (rl) BOOKING_ROUTE.relocate = null;
   // Straight from the last stop, or home in between? Same rule as the
   // calendar (betweenTravelPlan): home when there is time, unless the
   // therapist chose; Book Another Client means "go straight on" by default.
-  const homePlan = _bspHomePlan(day, pred, toKey, startMin);
+  // Held relocation: the session follows the block at the same place — no
+  // Direct ⇄ Via home choice to make (or to save on Create).
+  const homePlan = pred.relocated ? { available: false, home: false } : _bspHomePlan(day, pred, toKey, startMin);
   const prevName = fromName;
   if (homePlan.home) {
     // The drive home after the last stop stays on the calendar; the proposal
@@ -1618,7 +1684,8 @@ function runBspRoutePreview(opts) {
   const moved = {};
   if (room && room.blocks.length) { room.blocks.forEach(b => { moved[b.id] = b; }); BOOKING_ROUTE.squeezePlan = room; }
   else if (sq) BOOKING_ROUTE.squeeze = null;   // nothing left to shorten
-  const hold = !!BOOKING_ROUTE.squeeze;
+  // A held Make room or a held "travel earlier, do it there" keeps the start the clinician wants.
+  const hold = !!BOOKING_ROUTE.squeeze || !!BOOKING_ROUTE.relocate;
   if (hold && predS && moved[predS.id]) pred = Object.assign({}, pred, { endMin: pred.endMin - (moved[predS.id].endMin - moved[predS.id].newEndMin) });
 
   const busy = sessionsForDay(day)
@@ -1718,9 +1785,100 @@ function runBspRoutePreview(opts) {
       notes.push('Make room is not available: there is no block before it that can be shortened.');
     }
   }
+  // Travel earlier, do it there (19 Nov 2026): the block before is a report,
+  // non-face-to-face or telehealth — drive before it and do it at the client's.
+  if (want != null) {
+    const rel = _bspRelocateOffer(day, want, toKey, pred, route, fmt);
+    if (rel && rel.html) notes.push(rel.html);
+  }
+  const rlHeld = BOOKING_ROUTE.relocate;
+  if (rlHeld && pred.relocated) {
+    // The block's own drive in (and the previous stop's drive home) give way to the new drive before it.
+    document.querySelectorAll('.travel-overlay:not(.preview)').forEach(el => {
+      if (el.dataset.toSession === rlHeld.blockId || (rlHeld.prevStopId && el.dataset.fromSession === rlHeld.prevStopId)) el.classList.add('suppressed');
+    });
+    if (col && rlHeld.travelMin > 0) {
+      _previewLeg(col, rlHeld.leaveAtMin, rlHeld.arriveMin, '',
+        '<span class="t-ico">Travel</span><span class="t-label">' + rlHeld.travelMin + ' min · ' + esc(rlHeld.fromSuburb || 'from') + ' → ' + esc(toSub) + '</span>',
+        'Travel ' + rlHeld.travelMin + ' min before ' + rlHeld.label + ' · ' + (rlHeld.fromLabel || '') + ' → ' + toSub);
+    }
+    notes.push('<strong>' + esc(rlHeld.label) + '</strong> will be done at ' + esc(rlHeld.client || 'the client') + '\'s location (' + esc(toKey) + '): leave ' + esc(rlHeld.fromLabel || 'where you are') +
+      ' at <strong>' + fmt(rlHeld.leaveAtMin) + '</strong>' + (rlHeld.travelMin ? ' (' + rlHeld.travelMin + ' min drive)' : '') +
+      ', then straight into this session. Saved when you press Create appointment. ' +
+      '<button type="button" class="bsp-route-btn" data-route="relocate-off">Keep ' + esc(rlHeld.label) + ' where it is</button>');
+  }
   if (hold && room) _bspDrawSqueeze(col, room, fmt);
   setBspRouteStatus(kind, parts.join(' · ') + switchBtn + (notes.length ? '<div class="bsp-route-note">' + notes.join(' ') + '</div>' : '') +
     (hold && room ? _bspSqueezeHtml(room, BOOKING_ROUTE.squeeze, fmt) : ''));
+}
+
+/* The "travel earlier, do it there" offer for a start the drive does not
+   allow: { html } to add to the route note, or null. Needs a REAL routed
+   drive from where the therapist is before the block; when that is not
+   cached yet it is fetched and the preview runs again. */
+function _bspRelocateOffer(day, want, toKey, pred, route, fmt) {
+  const esc = _tpEsc;
+  const items = sessionsForDay(day).filter(x => !isTravelBlock(x) && !x.cancelled)
+    .map(x => ({ id: x.id, startMin: sessionStartMin(x), endMin: sessionEndMin(x), label: _blockName(x), relocatable: isRelocatableBlock(x) && !!x.dbId }));
+  const first = planRelocateBefore({ items, desiredStartMin: want, travelMin: 0 });
+  if (!first.block || first.reason === 'fixed' || first.reason === 'none' || first.reason === 'overlap') return null;
+  const blk = window.SESSIONS && window.SESSIONS[first.block.id];
+  if (!blk) return null;
+  // Booking for another therapist: their blocks are not the ones on this grid
+  // to move (and the save would be refused) — not offered.
+  if (_bspForOtherTherapist()) return null;
+  // Where the drive starts: the last place the therapist actually is before the
+  // block — the last physical stop before it (never the block itself, nor its
+  // own drive in), else the day's base. Free time is counted from that stop's end.
+  const prevStop = sessionsForDay(day).filter(x => x !== blk && !isTravelBlock(x) && isPhysicalStop(x) && sessionEndMin(x) <= first.block.startMin).pop() || null;
+  const base = dayAnchorBase(day);
+  const originKey = prevStop ? locTravelKey(sessionLocation(prevStop))
+    : (base && !base.unset && !base.remote ? (base.addr || base.suburb) : null);
+  if (!originKey) return null;
+  const at = { address: originKey, label: prevStop ? _stopName(prevStop) : ((base && base.label) || 'Home') };
+  let travelMin = null;
+  if (canonAddr(originKey) === canonAddr(toKey)) travelMin = 0;
+  else if (!pred.viaHome && pred.fromKey && canonAddr(originKey) === canonAddr(pred.fromKey)) travelMin = route.durationMin;
+  else {
+    const dep = (typeof DAY_DATES !== 'undefined' && DAY_DATES && DAY_DATES[day]) ? DAY_DATES[day] + 'T' + _hhmm(Math.max(0, first.block.startMin - 60)) + ':00+08:00' : null;
+    const bucket = _departureBucket(dep);
+    const key = routeKey(originKey, toKey, 'driving') + (bucket ? '|t' + bucket : '');
+    const cached = ROUTE_CACHE.get(key);
+    if (isFresh(cached) && cached.source === 'routes-api') travelMin = cached.durationMin;
+    else if (!ROUTE_INFLIGHT.has(key) && !(cached && isFresh(cached))) {
+      fetchRoute(originKey, toKey, 'driving', { departureTime: dep }).catch(() => null).then(() => runBspRoutePreview({ cachedOnly: true }));
+      return null;
+    } else return null;
+  }
+  // With nothing before it, the day starts at working hours, not midnight.
+  const dayStart = (typeof WORK_S !== 'undefined' ? WORK_S : 8) * 60;
+  const plan = planRelocateBefore({ items, desiredStartMin: want, travelMin, bufferMin: routeBufferMin(), dayStartMin: dayStart,
+                                    freeFromMin: prevStop ? sessionEndMin(prevStop) : null });
+  const label = first.block.label;
+  if (!plan.ok) {
+    if (plan.reason === 'notime') {
+      return { html: 'Doing ' + esc(label) + ' at the client\'s location is not possible either: ' + Math.max(0, plan.freeBeforeMin) +
+        ' min free before it, the drive needs ' + plan.travelMin + ' min.' };
+    }
+    return null;
+  }
+  const client = _bspClientName();
+  BOOKING_ROUTE.relocateOffer = { day, desiredStartMin: want, blockId: first.block.id, address: toKey, label,
+    leaveAtMin: plan.leaveAtMin, arriveMin: plan.arriveMin, travelMin: plan.travelMin,
+    fromLabel: at.label, fromSuburb: addrSuburb(originKey) || at.label || '', prevStopId: prevStop ? prevStop.id : null, client };
+  return { html: '<button type="button" class="bsp-route-btn" data-route="relocate">Leave ' + esc(at.label) + ' at ' + fmt(plan.leaveAtMin) +
+    ', do ' + esc(label) + ' at ' + esc(client) + '\'s location — keep ' + fmt(want) + '</button>' };
+}
+
+/* On Create appointment: the held block takes the client's address (portal +
+   its Outlook copy), so the calendar draws the drive before it. */
+async function bspCommitRelocate() {
+  const rl = BOOKING_ROUTE.relocate;
+  BOOKING_ROUTE.relocate = null; BOOKING_ROUTE.relocateOffer = null;
+  if (!rl || typeof saveSessionAddress !== 'function') return false;
+  // saveSessionAddress says itself whether it reached the appointment ("Location
+  // updated" / "Address kept locally") — no second, possibly wrong, toast here.
+  return saveSessionAddress(rl.blockId, rl.address, null, null);
 }
 
 /* A block's name for the Make room list: its own title, else its client. */
@@ -1892,6 +2050,15 @@ async function bspCommitSqueeze() {
   return done;
 }
 
+/* Booking for someone else (owner/admin picked another therapist)? */
+function _bspForOtherTherapist() {
+  try {
+    // eslint-disable-next-line no-undef
+    const t = (typeof _bspSelectedTherapist !== 'undefined') ? _bspSelectedTherapist : null;
+    const me = window.APP_USER && window.APP_USER.id;
+    return !!(t && t.userId && me && String(t.userId) !== String(me));
+  } catch (_) { return false; }
+}
 function _bspClientName() {
   const p = (typeof BOOKING_STATE !== 'undefined' && BOOKING_STATE && BOOKING_STATE.selectedPatient) || null;
   return (p && ([p.first, p.last].filter(Boolean).join(' ') || p.name)) || 'this client';
@@ -1958,6 +2125,8 @@ function _bspHomePlan(day, pred, toKey, startMin) {
 function bspCommitBetweenChoice() {
   // What the preview SHOWED is what gets kept — the clinician's pick, or the
   // suggestion they saw — so the calendar never redraws the gap differently.
+  // A held "travel earlier, do it there" replaces the gap's Direct / Via home question.
+  if (BOOKING_ROUTE.relocate) { BOOKING_ROUTE.viaMode = 'auto'; BOOKING_ROUTE.shownMode = null; return; }
   const mode = BOOKING_ROUTE.viaMode !== 'auto' ? BOOKING_ROUTE.viaMode : BOOKING_ROUTE.shownMode;
   const id = BOOKING_ROUTE.lastPredId;
   BOOKING_ROUTE.viaMode = 'auto';
@@ -1973,6 +2142,19 @@ document.addEventListener('click', e => {
   if (b.dataset.route === 'retry') { BOOKING_ROUTE.manualTiming = false; runBspRoutePreview({ fresh: true }); }
   if (b.dataset.route === 'manual') { BOOKING_ROUTE.manualTiming = true; runBspRoutePreview(); }
   if (b.dataset.route === 'direct' || b.dataset.route === 'home') { BOOKING_ROUTE.viaMode = b.dataset.route; runBspRoutePreview(); }
+  if (b.dataset.route === 'relocate' && BOOKING_ROUTE.relocateOffer) {
+    const o = BOOKING_ROUTE.relocateOffer;
+    BOOKING_ROUTE.relocate = Object.assign({}, o);
+    BOOKING_ROUTE.squeeze = null;
+    const el = document.getElementById('bsp-start');
+    if (el && el.value !== _hhmm(o.desiredStartMin)) {
+      el.value = _hhmm(o.desiredStartMin);
+      if (typeof window.bspOnStartChange === 'function') window.bspOnStartChange();
+      else el.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    runBspRoutePreview();
+  }
+  if (b.dataset.route === 'relocate-off') { BOOKING_ROUTE.relocate = null; runBspRoutePreview(); }
   if (b.dataset.route === 'squeeze' && BOOKING_ROUTE.squeezeOffer) {
     const o = BOOKING_ROUTE.squeezeOffer;
     BOOKING_ROUTE.squeeze = { day: o.day, desiredStartMin: o.desiredStartMin, cuts: {} };

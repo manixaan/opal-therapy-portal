@@ -1813,3 +1813,118 @@ describe('a dragged block\'s text follows it (24 Oct 2026)', () => {
     expect(el.title).not.toContain('9:00 AM');
   });
 });
+
+// 19 Nov 2026 (Antony's idea): a report / non-face-to-face block / telehealth
+// right before a client session can be done at the client's place instead of
+// pushing the client later — drive before it, then go straight in.
+describe('travel earlier, do the block there', () => {
+  const HOME = { week: { mon: 'home-1' }, homes: [{ id: 'home-1', label: 'Home', addr: HOME_ADDR, suburb: 'Bull Creek', kind: 'local' }] };
+  const routes = { [HOME_ADDR + '|' + CV_ADDR]: 20, [A_ADDR + '|' + CV_ADDR]: 25 };
+  function day(env, block) {
+    env.ev(`SESSIONS.R = Object.assign({ id: 'R', day: 'mon', startH: 13, startM: 30, endH: 14, endM: 30, dbId: 'db-R',
+      address: ${JSON.stringify(HOME_ADDR)} }, ${JSON.stringify(block)});
+      document.getElementById('booking-side-panel').classList.add('open'); bspSelectDay('mon');
+      document.getElementById('bsp-start').value = '14:30';`);
+  }
+  const REPORT = { type: 'report', title: 'Progress Report — Evana Samuel', booking: { kind: 'progress-report', group: 'report' } };
+
+  test('the pure rule: only a report / nf2f / telehealth block, and only when the drive fits before it', () => {
+    const env = makeEnv();
+    const plan = (o) => env.win.planRelocateBefore(Object.assign({ desiredStartMin: 870, travelMin: 20, dayStartMin: 480 }, o));
+    const R = { id: 'R', startMin: 810, endMin: 870, label: 'Report', relocatable: true };
+    expect(plan({ items: [R] })).toMatchObject({ ok: true, leaveAtMin: 790, arriveMin: 810, travelMin: 20 });
+    expect(plan({ items: [R], bufferMin: 5 })).toMatchObject({ ok: true, leaveAtMin: 785 });
+    expect(plan({ items: [{ ...R, relocatable: false }] })).toMatchObject({ ok: false, reason: 'fixed' });
+    expect(plan({ items: [R, { id: 'C', startMin: 720, endMin: 800, label: 'Client', relocatable: false }] }))
+      .toMatchObject({ ok: false, reason: 'notime', freeBeforeMin: 10 });
+    expect(plan({ items: [{ ...R, endMin: 880 }] })).toMatchObject({ ok: false, reason: 'overlap' });
+    expect(plan({ items: [] })).toMatchObject({ ok: false, reason: 'none' });
+    expect(env.win.isRelocatableBlock({ booking: { group: 'nf2f' } })).toBe(true);
+    expect(env.win.isRelocatableBlock({ booking: { kind: 'telehealth', group: 'direct' } })).toBe(true);
+    expect(env.win.isRelocatableBlock({ type: 'therapy', patient: 'X', booking: { kind: 'therapy', group: 'direct' } })).toBe(false);
+  });
+
+  test('a report at home 1:30–2:30, client at 2:30: offered, held, and the report moves on Create', async () => {
+    const env = makeEnv(Object.assign({ routes }, HOME));
+    day(env, REPORT);
+    await chooseLocation(env, CV_ADDR);
+    expect(status(env).textContent).toMatch(/Not enough time to get here/);
+    const btn = status(env).querySelector('[data-route="relocate"]');
+    expect(btn).not.toBeNull();
+    expect(btn.textContent).toMatch(/Leave Home at 1:10\s?PM, do Progress Report — Evana Samuel at this client's location — keep 2:30\s?PM/i);
+    btn.click();
+    await settled(env);
+    expect(start(env)).toBe('14:30');
+    expect(status(env).textContent).toMatch(/will be done at this client's location \(20 Example Rd, Canning Vale WA 6155\): leave Home at 1:10\s?PM \(20 min drive\)/i);
+    expect(status(env).textContent).not.toMatch(/Not enough time/);
+    // Held: no Direct ⇄ Via home switch, and nothing to save for it on Create.
+    expect(status(env).querySelector('[data-route="direct"], [data-route="home"]')).toBeNull();
+    expect(env.ev('BOOKING_ROUTE.shownMode')).toBeNull();
+    // The drive before the report is previewed on the calendar.
+    expect(Array.from(env.win.document.querySelectorAll('#day-mon .travel-overlay.preview')).some((l) => /20 min/.test(l.textContent))).toBe(true);
+    // Create appointment: the report takes the client's address (portal + Outlook copy).
+    await env.ev('bspCommitRelocate()');
+    const patch = env.log.filter((c) => c.method === 'PATCH' && c.url === '/api/outlook/events/db-R/location').pop();
+    expect(patch.body.location).toBe(CV_ADDR);
+    expect(env.ev('SESSIONS.R.address')).toBe(CV_ADDR);
+    expect(env.ev('BOOKING_ROUTE.relocate')).toBeNull();
+  });
+
+  test('"Keep it where it is" drops the hold; a client session before is never offered', async () => {
+    const env = makeEnv(Object.assign({ routes }, HOME));
+    day(env, REPORT);
+    await chooseLocation(env, CV_ADDR);
+    status(env).querySelector('[data-route="relocate"]').click();
+    await settled(env);
+    status(env).querySelector('[data-route="relocate-off"]').click();
+    await settled(env);
+    expect(env.ev('BOOKING_ROUTE.relocate')).toBeNull();
+
+    const env2 = makeEnv(Object.assign({ routes }, HOME));
+    day(env2, { type: 'therapy', patient: 'Other Client', booking: { kind: 'therapy', group: 'direct' } });
+    await chooseLocation(env2, CV_ADDR);
+    expect(status(env2).querySelector('[data-route="relocate"]')).toBeNull();
+  });
+
+  test('no time before the block for the drive: it says so instead of offering', async () => {
+    const env = makeEnv(Object.assign({ routes }, HOME));
+    env.ev(`SESSIONS.C = { id: 'C', day: 'mon', type: 'therapy', startH: 12, startM: 30, endH: 13, endM: 20,
+      address: ${JSON.stringify(HOME_ADDR)}, patient: 'Home Client', dbId: 'db-C' }`);
+    day(env, REPORT);
+    await chooseLocation(env, CV_ADDR);
+    expect(status(env).querySelector('[data-route="relocate"]')).toBeNull();
+    expect(status(env).textContent).toMatch(/at the client's location is not possible either: 10 min free before it, the drive needs 20 min/);
+  });
+
+  // Verifier 19 Nov: the drive must start where the therapist really is before
+  // the block — the last stop before it — not where the block is now.
+  test('coming from a client elsewhere: planned from THAT client, so a 45 min drive in a 40 min window is refused', async () => {
+    const JOONDALUP = '7 Far Rd, Joondalup WA 6027';
+    const env = makeEnv(Object.assign({ routes: Object.assign({}, routes, { [JOONDALUP + '|' + CV_ADDR]: 45, [JOONDALUP + '|' + HOME_ADDR]: 40 }) }, HOME));
+    env.ev(`SESSIONS.J = { id: 'J', day: 'mon', type: 'therapy', startH: 12, startM: 0, endH: 12, endM: 50,
+      address: ${JSON.stringify(JOONDALUP)}, patient: 'Joon Client', dbId: 'db-J' }`);
+    day(env, REPORT);
+    await chooseLocation(env, CV_ADDR);
+    await settled(env);
+    expect(status(env).querySelector('[data-route="relocate"]')).toBeNull();
+    expect(status(env).textContent).toMatch(/not possible either: 40 min free before it, the drive needs 45 min/);
+  });
+
+  test('a report somewhere else with nothing before it: the drive starts from home, not from the report', async () => {
+    const OTHER = '9 Office Way, Perth WA 6000';
+    const env = makeEnv(Object.assign({ routes: Object.assign({}, routes, { [OTHER + '|' + CV_ADDR]: 45 }) }, HOME));
+    day(env, Object.assign({}, REPORT, { address: OTHER }));
+    await chooseLocation(env, CV_ADDR);
+    await settled(env);
+    const btn = status(env).querySelector('[data-route="relocate"]');
+    expect(btn && btn.textContent).toMatch(/Leave Home at 1:10\s?PM/);   // home → client 20 min, not office → client 45
+  });
+
+  test('booking for another therapist: not offered', async () => {
+    const env = makeEnv(Object.assign({ routes }, HOME));
+    env.ev("var _bspSelectedTherapist = { userId: 'someone-else' }; window.APP_USER = { id: 'me' };");
+    day(env, REPORT);
+    await chooseLocation(env, CV_ADDR);
+    expect(status(env).querySelector('[data-route="relocate"]')).toBeNull();
+  });
+});

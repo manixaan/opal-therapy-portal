@@ -171,14 +171,14 @@
      store and computeDayTravelSegments(), the calendar leg overlays and the
      travel details panel. Deferred and loaded ahead of profile.js and
      reports.js, both of which reach into it. -->
-<script src="/travel.js?v=56" defer></script>
+<script src="/travel.js?v=57" defer></script>
 <!-- Traffic alerts: a re-priced drive that now runs into a client session —
      point at it, offer Make room, Acknowledge or Ignore (today and tomorrow). -->
 <script src="/travel-alerts.js?v=1" defer></script>
 <!-- Route-aware Smart Booking: client location selector, work-location
      notice, and the "What next?" continuation after a booking. Extends the
      booking panel; the route maths live in travel.js, loaded just above. -->
-<script src="/booking-route.js?v=13" defer></script>
+<script src="/booking-route.js?v=14" defer></script>
 <script src="/recurrence.js?v=1" defer></script>
 <script src="/nf2f.js?v=7" defer></script>
 <!-- Travel block: a billable start → end drive, priced by Google Maps. -->
@@ -13327,6 +13327,8 @@ async function confirmBooking() {
           // Make room: the blocks shortened for this appointment are saved
           // now, before the reload below reads the calendar back (travel.js).
           if (typeof bspCommitSqueeze === 'function') await bspCommitSqueeze();
+          // Travel earlier, do it there: the block before takes the client's address now.
+          if (typeof bspCommitRelocate === 'function') await bspCommitRelocate();
         }
         console.log('✅ Outlook event created:', outlookId);
       } else {
