@@ -322,11 +322,11 @@ describe('the changed assets are cache-busted', () => {
   test('both onboarding assets carry the new version', () => {
     // Azure staging does not revalidate on ETag; a stale onboarding.js there
     // would call routes the old code does not know about.
-    expect(SHELL).toContain('href="/onboarding.css?v=8"');
+    expect(SHELL).toContain('href="/onboarding.css?v=9"');
     // 10: the management surface is handed to onboarding-journey.js.
     expect(SHELL).toContain('src="/onboarding.js?v=17"');
     expect(SHELL).toContain('src="/onboarding-journey.js?v=81"');
-    expect(SHELL).toContain('href="/onboarding-journey.css?v=42"');
+    expect(SHELL).toContain('href="/onboarding-journey.css?v=43"');
   });
 
   test('no markup is built and thrown away — a statement never begins with "+ \'"', () => {

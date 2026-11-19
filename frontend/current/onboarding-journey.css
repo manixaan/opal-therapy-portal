@@ -564,3 +564,98 @@ tr.oj-droprow.is-dragover td { background: #eef5f1; }
 .oj-rd-verify { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 14px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: #f7faf8; font-size: 13px; }
 .oj-rd-verify.is-done strong { color: #2f7d5b; }
 .oj-rd-verify .oj-rd-state { flex-basis: 100%; margin: 0; }
+
+/* ── Night mode ──────────────────────────────────────────────────────────
+   The light washes, pale chips and dark inks above, re-valued for
+   <html data-theme="dark"> from the theme tokens: lifted warm surfaces,
+   tinted status chips with their *-ink text, low-contrast borders.
+   Night-only (one extra type selector of weight, so state rules still win);
+   day mode is untouched. */
+html:where([data-theme="dark"]) .oj-chip.is-you,
+html:where([data-theme="dark"]) .oj-chip.is-active,
+html:where([data-theme="dark"]) .oj-chip.is-draft,
+html:where([data-theme="dark"]) .oj-chip.is-approved { background: var(--warn-soft); color: var(--warn-ink); border-color: color-mix(in srgb, var(--warn) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .oj-chip.is-employee,
+html:where([data-theme="dark"]) .oj-chip.is-sent,
+html:where([data-theme="dark"]) .oj-chip.is-in_progress { background: var(--info-soft); color: var(--info-ink); border-color: color-mix(in srgb, var(--info) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .oj-chip.is-done,
+html:where([data-theme="dark"]) .oj-chip.is-complete,
+html:where([data-theme="dark"]) .oj-chip.is-accepted { background: var(--ok-soft); color: var(--ok-ink); border-color: color-mix(in srgb, var(--ok) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .oj-chip.is-danger,
+html:where([data-theme="dark"]) .oj-chip.is-blocked,
+html:where([data-theme="dark"]) .oj-chip.is-failed,
+html:where([data-theme="dark"]) .oj-chip.is-declined,
+html:where([data-theme="dark"]) .oj-chip.is-withdrawn { background: var(--danger-soft); color: var(--danger-ink); border-color: color-mix(in srgb, var(--danger) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .oj-tile.is-you .oj-tile-n { color: var(--warn-ink); }
+html:where([data-theme="dark"]) .oj-tile.is-danger .oj-tile-n { color: var(--danger-ink); }
+html:where([data-theme="dark"]) .oj-row-bin:hover,
+html:where([data-theme="dark"]) .oj-row-bin:focus-visible { background: var(--danger-soft); border-color: color-mix(in srgb, var(--danger) 38%, var(--panel)); color: var(--danger-ink); }
+html:where([data-theme="dark"]) .oj-track-step.is-active { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .oj-track-step.is-complete { background: var(--ok-soft); border-color: color-mix(in srgb, var(--ok) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .oj-track-step.is-blocked { background: var(--danger-soft); border-color: color-mix(in srgb, var(--danger) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .oj-next-banner.is-you { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .oj-next-banner.is-employee { background: var(--info-soft); border-color: color-mix(in srgb, var(--info) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .oj-stage-pill { background: var(--warn-soft); color: var(--warn-ink); }
+html:where([data-theme="dark"]) .oj-stage-pill.is-complete { background: var(--ok-soft); color: var(--ok-ink); }
+html:where([data-theme="dark"]) .oj-group li.is-overdue { color: var(--danger-ink); }
+html:where([data-theme="dark"]) .oj-due.is-overdue { color: var(--danger-ink); }
+html:where([data-theme="dark"]) .oj-letter { background: var(--panel); }
+html:where([data-theme="dark"]) .oj-task.is-open .oj-task-dot { border-color: var(--border); }
+html:where([data-theme="dark"]) .oj-task.is-portal .oj-task-dot { background: var(--info-soft); border-color: color-mix(in srgb, var(--info) 38%, var(--panel)); color: var(--info-ink); }
+html:where([data-theme="dark"]) .oj-task.is-skipped .oj-task-dot { background: var(--panel-sunk); border-color: var(--border); }
+html:where([data-theme="dark"]) .oj-task.is-danger .oj-task-dot { background: var(--danger-soft); color: var(--danger-ink); }
+html:where([data-theme="dark"]) .oj-task.is-danger { background: var(--panel); }
+html:where([data-theme="dark"]) .oj-task-portal { color: var(--info-ink); }
+html:where([data-theme="dark"]) .oj-task-ctl.is-overdue { color: var(--danger-ink); }
+html:where([data-theme="dark"]) .oj-warn { color: var(--warn-ink); }
+html:where([data-theme="dark"]) .oj-pack-section.is-dragover td { background: var(--panel-soft); }
+html:where([data-theme="dark"]) .oj-file-x:hover { background: var(--danger-soft); color: var(--danger-ink); border-color: color-mix(in srgb, var(--danger) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .oj-yes { color: var(--ok-ink); }
+html:where([data-theme="dark"]) .oj-toggle.is-on { background: var(--ok-soft); color: var(--ok-ink); border-color: color-mix(in srgb, var(--ok) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .oj-draft-status.is-error { color: var(--danger-ink); }
+html:where([data-theme="dark"]) .oj-sent-banner { background: var(--info-soft); border-color: color-mix(in srgb, var(--info) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .oj-sent-banner strong { color: var(--info-ink); }
+html:where([data-theme="dark"]) .oj-attn-item.is-high { background: var(--panel); border-color: color-mix(in srgb, var(--danger) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .oj-attn-ico { background: var(--warn-soft); color: var(--warn-ink); }
+html:where([data-theme="dark"]) .oj-attn-item.is-high .oj-attn-ico { background: var(--danger-soft); color: var(--danger-ink); }
+html:where([data-theme="dark"]) .oj-chip.is-parallel { background: var(--info-soft); color: var(--info-ink); border-color: color-mix(in srgb, var(--info) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .oj-ready.is-ready { background: var(--panel); border-color: color-mix(in srgb, var(--ok) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .oj-rdy.is-progress .oj-rdy-mark { color: var(--info-ink); }
+html:where([data-theme="dark"]) .oj-stepper-step.is-current > button { background: var(--warn-soft); }
+html:where([data-theme="dark"]) .oj-stepper-step.is-attention > button { background: var(--warn-soft); }
+html:where([data-theme="dark"]) .oj-stepper-note { background: var(--warn-soft); color: var(--warn-ink); }
+html:where([data-theme="dark"]) .oj-pack-addrow td { background: var(--warn-soft); }
+html:where([data-theme="dark"]) .oj-lt-help code { background: var(--accent-soft); color: var(--accent-ink); }
+html:where([data-theme="dark"]) .oj-lt-sheet { background: var(--panel-sunk); }
+html:where([data-theme="dark"]) .oj-droprow.is-dragover { background: var(--panel-soft) !important; }
+html:where([data-theme="dark"]) tr.oj-droprow.is-dragover td { background: var(--panel-soft); }
+html:where([data-theme="dark"]) .oj-pack-empty.is-dragover td { background: var(--panel-soft); }
+html:where([data-theme="dark"]) .oj-fmt-btn:hover { background: var(--panel-soft); border-color: var(--border); }
+html:where([data-theme="dark"]) .oj-doccheck.is-warn { background: var(--panel); }
+html:where([data-theme="dark"]) .oj-doccheck-issues { color: var(--warn-ink); }
+html:where([data-theme="dark"]) .oj-doccheck-fields li.is-blank { color: var(--warn-ink); }
+html:where([data-theme="dark"]) .oj-attach-item.is-sub { background: var(--panel); }
+html:where([data-theme="dark"]) .oj-attach-item.is-not_applicable { background: var(--panel-soft); }
+html:where([data-theme="dark"]) .oj-attach-item.oj-droprow.is-dragover { background: var(--panel-soft); }
+html:where([data-theme="dark"]) .oj-chip.is-warn { background: var(--warn-soft); color: var(--warn-ink); border-color: color-mix(in srgb, var(--warn) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .oj-ok { color: var(--ok-ink); }
+html:where([data-theme="dark"]) .oj-unplaced { background: var(--panel); border-color: color-mix(in srgb, var(--warn) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .oj-rd-note { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 38%, var(--panel)); color: var(--warn-ink); }
+html:where([data-theme="dark"]) .oj-rd-issue { color: var(--danger-ink); }
+html:where([data-theme="dark"]) .oj-rd-conf { background: var(--warn-soft); color: var(--warn-ink); }
+html:where([data-theme="dark"]) .oj-rd-edit input { background: var(--panel); }
+html:where([data-theme="dark"]) .oj-rd-edit input:disabled { background: var(--panel-soft); }
+html:where([data-theme="dark"]) .oj-rd-row.is-you .oj-rd-state { color: var(--warn-ink); }
+html:where([data-theme="dark"]) .oj-rd-sources { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 38%, var(--panel)); color: var(--warn-ink); }
+html:where([data-theme="dark"]) .oj-rd-verify { background: var(--panel); }
+html:where([data-theme="dark"]) .oj-rd-verify.is-done strong { color: var(--accent-ink); }
+/* The ink-filled active filter inverts by night: light fill, dark label. */
+html:where([data-theme="dark"]) .oj-filter.active { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+html:where([data-theme="dark"]) .oj-next.is-you .oj-next-who { background: var(--warn-soft); color: var(--warn-ink); }
+html:where([data-theme="dark"]) .oj-next.is-employee .oj-next-who { background: var(--info-soft); color: var(--info-ink); }
+/* Amber step numbers carry white by day; by night the amber takes a dark numeral. */
+html:where([data-theme="dark"]) .oj-track-step.is-active .oj-track-n,
+html:where([data-theme="dark"]) .oj-stage.is-active .oj-stage-n,
+html:where([data-theme="dark"]) .oj-step.is-active .oj-step-n,
+html:where([data-theme="dark"]) .oj-stepper-step.is-current .oj-stepper-n,
+html:where([data-theme="dark"]) .oj-stepper-step.is-attention .oj-stepper-n { color: var(--bg); }

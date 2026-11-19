@@ -4,17 +4,18 @@
  * SYNC SETTINGS (migration 081, simplified 19 Nov 2026) — which way each
  * calendar sync runs, from when, and whether it runs on its own.
  *
- * A person chooses for two directions only — Portal → Outlook and
- * Outlook → Portal: Off, "Sync now only" or Automatic, plus a "sync events
- * from" date (anything starting earlier is left alone in that direction).
+ * A person chooses for four directions — Portal → Outlook, Outlook → Portal,
+ * Portal → Splose and Splose → Portal: Off, "Sync now only" (the calendar's
+ * Sync button) or Automatic, plus a "sync events from" date (anything starting
+ * earlier is left alone in that direction).
  *
- * The other three directions are fixed, not settings:
- *   portal_to_splose   on — client bookings queue for Sync Splose; it runs as
- *                      automatically as ENABLE_SPLOSE_AUTO_SYNC allows
- *   splose_to_portal   retired (off): Splose appointments are not brought in
- *                      and the "new in Splose" alerts are dropped
- *   splose_to_outlook  retired (off)
- * Stored rows for those directions, and every practice-scope row (the old
+ *   portal_to_splose   client bookings queue for Sync Splose; Automatic lets
+ *                      the server publish them (as ENABLE_SPLOSE_AUTO_SYNC allows)
+ *   splose_to_portal   Splose appointments come into the portal; Sync now only
+ *                      asks about each one, Automatic brings them in — either
+ *                      way they land in "Blocks to review" to be checked
+ *   splose_to_outlook  retired (off) — not a setting
+ * Stored rows for splose_to_outlook, and every practice-scope row (the old
  * Owner defaults & limits), are ignored — they stay in the table untouched.
  *
  * Above all of it sit the environment flags (ENABLE_OUTLOOK_WRITE, ...) —
@@ -30,13 +31,13 @@ const flags = require('./feature-flags');
 const DIRECTIONS = ['portal_to_outlook', 'outlook_to_portal', 'portal_to_splose', 'splose_to_portal', 'splose_to_outlook'];
 
 /** The directions a person may set. Everything else is FIXED below. */
-const USER_DIRECTIONS = ['portal_to_outlook', 'outlook_to_portal'];
+const USER_DIRECTIONS = ['portal_to_outlook', 'outlook_to_portal', 'portal_to_splose', 'splose_to_portal'];
 
 const DEFAULTS = {
   portal_to_outlook: { enabled: true,  auto: true,  syncFrom: null },
   outlook_to_portal: { enabled: true,  auto: true,  syncFrom: null },
   portal_to_splose:  { enabled: true,  auto: true,  syncFrom: null },
-  splose_to_portal:  { enabled: false, auto: false, syncFrom: null },
+  splose_to_portal:  { enabled: true,  auto: false, syncFrom: null },
   splose_to_outlook: { enabled: false, auto: false, syncFrom: null },
 };
 
@@ -252,8 +253,8 @@ function dateOrNull(v) {
 }
 
 /**
- * Validate one person's changes. Only Portal → Outlook and Outlook → Portal
- * are settings; the other directions are fixed and refused here.
+ * Validate one person's changes. Splose → Outlook is not a setting and is
+ * refused here.
  *   body      { [direction]: { enabled?, auto?, syncFrom? } } — null = back to the default
  * Returns { errors: [..], changes: { [direction]: { enabled?, auto?, syncFrom? } } }
  */

@@ -41,3 +41,16 @@
 .fin-legend i.exp { background:#c2412e; opacity:.6; }
 .fin-empty { font-size:13px; color:var(--muted); padding:12px 0; }
 .fin-drawer { border:1px solid var(--border); border-radius:12px; padding:14px 16px; margin-top:12px; background:var(--surface-2,rgba(0,0,0,0.02)); }
+
+/* ── Night mode ──────────────────────────────────────────────────────────
+   The light washes, pale chips and dark inks above, re-valued for
+   <html data-theme="dark"> from the theme tokens: lifted warm surfaces,
+   tinted status chips with their *-ink text, low-contrast borders.
+   Night-only (one extra type selector of weight, so state rules still win);
+   day mode is untouched. */
+html:where([data-theme="dark"]) .fin-card.warn .val { color: var(--danger-ink); }
+html:where([data-theme="dark"]) .fin-card.good .val { color: var(--ok-ink); }
+html:where([data-theme="dark"]) .fin-warn { background: var(--warn-soft); color: var(--warn-ink); border-color: color-mix(in srgb, var(--warn) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .fin-pill.paid,
+html:where([data-theme="dark"]) .fin-pill.posted { color: var(--ok-ink); }
+html:where([data-theme="dark"]) .fin-pill.overdue { color: var(--danger-ink); }

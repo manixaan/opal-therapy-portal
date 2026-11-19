@@ -169,3 +169,11 @@
   padding: 2px 6px; border-radius: var(--radius-sm);
 }
 .sp-file-clear:hover { background: var(--border-soft); color: var(--ink); }
+
+/* ── Night mode ──────────────────────────────────────────────────────────
+   The light washes, pale chips and dark inks above, re-valued for
+   <html data-theme="dark"> from the theme tokens: lifted warm surfaces,
+   tinted status chips with their *-ink text, low-contrast borders.
+   Night-only (one extra type selector of weight, so state rules still win);
+   day mode is untouched. */
+html:where([data-theme="dark"]) .sp-privacy { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 38%, var(--panel)); }

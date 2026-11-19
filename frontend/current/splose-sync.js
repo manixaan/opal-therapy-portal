@@ -21,6 +21,11 @@
        Ignore drops the booking from Splose sync for good (Owner/Admin can
        undo), Send creates it — Send needs ENABLE_SPLOSE_WRITE, the others don't
 
+     • the Sync popup (19 Nov 2026): one popup, three tabs — Outlook, Splose,
+       Portal. This module owns the shell and the Splose tab (the queue above,
+       plus "in the portal, not in Splose" from SyncSettings); the Outlook and
+       Portal tabs are painted by sync-settings.js (SyncSettings.review).
+
    Globals on window (window.SploseSync), no modules — the house pattern.
    ═══════════════════════════════════════════════════════════════════════════ */
 'use strict';
@@ -47,7 +52,10 @@
     ignored: [], ignoredCanUndo: false, showIgnored: false,
     picked: {},             // queueId → ticked (survives re-renders)
     svcChoice: {},          // queueId → chosen service id
+    tab: 'splose',          // Sync popup tab: 'outlook' | 'splose' | 'portal'
   };
+  var TABS = [{ key: 'outlook', label: 'Outlook' }, { key: 'splose', label: 'Splose' }, { key: 'portal', label: 'Portal' }];
+  function review() { return global.SyncSettings && global.SyncSettings.review; }
 
   function esc(s) {
     return String(s === undefined || s === null ? '' : s)
@@ -87,6 +95,11 @@
   function canUse() {
     var u = global.APP_USER;
     return S.enabled && u && u.role !== 'read_only' && u.role !== 'pre_employee';
+  }
+  /** The Sync popup itself (Outlook / Portal tabs) needs only a working account. */
+  function canOpen() {
+    var u = global.APP_USER;
+    return !!(u && u.role !== 'read_only' && u.role !== 'pre_employee');
   }
 
   // ── Server state ──────────────────────────────────────────────────────────
@@ -169,9 +182,9 @@
     btn.id = 'splose-sync-btn';
     btn.className = 'splose-sync-btn';
     btn.type = 'button';
-    btn.title = 'Review the changes waiting to be written to Splose';
+    btn.title = 'Sync Outlook, Splose and the portal';
     btn.setAttribute('data-help', 'cal-splose-sync');
-    btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg><span class="lbl">Sync Splose</span><span class="cnt" hidden>0</span>';
+    btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg><span class="lbl">Sync</span><span class="cnt" hidden>0</span>';
     btn.addEventListener('click', function () { openPanel(); });
     var legend = doc.getElementById('cal-legend-wrap');
     if (legend && legend.parentElement === bar) bar.insertBefore(btn, legend); else bar.appendChild(btn);
@@ -181,14 +194,16 @@
     ensureButton();
     var btn = doc.getElementById('splose-sync-btn');
     if (!btn) return;
-    btn.hidden = !canUse();
+    btn.hidden = !canOpen();
     var n = S.pending.filter(function (c) { return c.status !== 'publishing'; }).length;
     var cnt = btn.querySelector('.cnt');
     cnt.textContent = String(n);
     cnt.hidden = n === 0;
     btn.classList.toggle('has-pending', n > 0);
     btn.classList.toggle('publishing', !!S.publishing);
-    btn.querySelector('.lbl').textContent = S.publishing ? 'Syncing…' : 'Sync Splose';
+    var lbl = S.publishing ? 'Syncing…' : 'Sync';
+    if (btn.querySelector('.lbl').textContent !== lbl) btn.querySelector('.lbl').textContent = lbl;
+    cnt.title = n ? n + ' change' + (n === 1 ? '' : 's') + ' waiting to be written to Splose' : '';
   }
 
   // ── Tile decoration ───────────────────────────────────────────────────────
@@ -237,29 +252,80 @@
     p.innerHTML =
       '<div class="ssp-backdrop"></div>' +
       '<div class="ssp-card">' +
-        '<header class="ssp-head"><div><div class="ssp-eyebrow">Splose</div><h2 id="splose-sync-title">Changes waiting to be written to Splose</h2></div>' +
+        '<header class="ssp-head"><div><div class="ssp-eyebrow">Sync</div><h2 id="splose-sync-title">What each calendar is missing</h2></div>' +
         '<button type="button" class="ssp-close" aria-label="Close">×</button></header>' +
-        '<div class="ssp-body"></div>' +
+        '<nav class="ssp-tabs" role="tablist" aria-label="Calendars">' + TABS.map(function (t) {
+          return '<button type="button" role="tab" class="ssp-tab" id="ssp-tab-' + t.key + '" data-tab="' + t.key + '" aria-controls="ssp-tabpanel">' +
+            esc(t.label) + '<span class="n" hidden></span></button>';
+        }).join('') + '</nav>' +
+        '<div class="ssp-body" id="ssp-tabpanel" role="tabpanel"></div>' +
         '<footer class="ssp-foot"></footer>' +
       '</div>';
     doc.body.appendChild(p);
     p.querySelector('.ssp-close').addEventListener('click', closePanel);
     p.querySelector('.ssp-backdrop').addEventListener('click', closePanel);
-    p.addEventListener('keydown', function (e) { if (e.key === 'Escape') closePanel(); });
+    p.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') { closePanel(); return; }
+      if (e.target.classList && e.target.classList.contains('ssp-tab') && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) {
+        var keys = TABS.map(function (t) { return t.key; });
+        var i = keys.indexOf(S.tab) + (e.key === 'ArrowRight' ? 1 : -1);
+        switchTab(keys[(i + keys.length) % keys.length], true);
+        e.preventDefault();
+      }
+    });
+    p.querySelector('.ssp-tabs').addEventListener('click', function (e) {
+      var b = e.target.closest && e.target.closest('.ssp-tab');
+      if (b) switchTab(b.getAttribute('data-tab'), true);
+    });
     return p;
   }
 
-  function openPanel() {
-    if (!canUse()) return;
+  function switchTab(key, focus) {
+    S.tab = key;
+    renderPanel();
+    if (focus) { var b = doc.getElementById('ssp-tab-' + key); if (b) b.focus(); }
+  }
+
+  function paintTabs() {
+    var p = doc.getElementById('splose-sync-panel');
+    if (!p) return;
+    var counts = { splose: canUse() ? S.pending.filter(function (c) { return c.status !== 'publishing'; }).length : null };
+    var rv = review();
+    if (rv) {
+      counts.outlook = rv.count('outlook'); counts.portal = rv.count('portal');
+      // The Splose tab also lists portal bookings that never reached Splose.
+      var plan = rv.count('splose');
+      if (typeof plan === 'number' && counts.splose != null) counts.splose += plan;
+    }
+    TABS.forEach(function (t) {
+      var b = doc.getElementById('ssp-tab-' + t.key);
+      if (!b) return;
+      var on = t.key === S.tab;
+      b.classList.toggle('active', on); b.setAttribute('aria-selected', on ? 'true' : 'false'); b.tabIndex = on ? 0 : -1;
+      var n = b.querySelector('.n'), v = counts[t.key];
+      n.hidden = v == null; n.textContent = v == null ? '' : String(v);
+      n.classList.toggle('has', typeof v === 'number' && v > 0);
+      n.classList.toggle('err', v === '!');
+      n.title = v === '!' ? 'Could not be read' : v === '–' ? 'Switched off' : '';
+    });
+  }
+
+  function openPanel(tab) {
+    if (!canOpen()) return;
     S.panelOpen = true;
     var p = ensurePanel();
     p.hidden = false;
+    var waiting = canUse() && S.pending.some(function (c) { return c.status !== 'publishing'; });
+    S.tab = (typeof tab === 'string' && TABS.some(function (t) { return t.key === tab; })) ? tab : (waiting ? 'splose' : 'outlook');
+    if (review()) review().load({ fresh: true }); // fresh plans (and no old results) every time the popup opens
     p.querySelector('.ssp-body').innerHTML = '<div class="ssp-empty">Loading…</div>';
-    Promise.all([refreshPending(), refreshStatus(), loadReference(), loadIgnored()]).then(function () {
+    paintTabs();
+    var jobs = canUse() ? [refreshPending(), refreshStatus(), loadReference(), loadIgnored()] : [];
+    Promise.all(jobs).then(function () {
       renderPanel();
-      var first = p.querySelector('button, select, input');
+      var first = doc.getElementById('ssp-tab-' + S.tab);
       if (first) first.focus();
-      loadMatches();
+      if (canUse()) loadMatches();
     });
   }
   function closePanel() {
@@ -423,10 +489,35 @@
     return ids;
   }
 
+  /** Paint the active tab. Outlook / Portal come from SyncSettings.review. */
   function renderPanel() {
     var p = ensurePanel();
     var body = p.querySelector('.ssp-body');
     var foot = p.querySelector('.ssp-foot');
+    paintTabs();
+    body.onchange = null; body.onclick = null; foot.onchange = null; foot.onclick = null;
+    if (S.tab !== 'splose') {
+      if (review()) review().renderTab(S.tab, body, foot);
+      else { body.innerHTML = '<div class="ssp-empty">Sync is still loading — try again in a moment.</div>'; foot.innerHTML = ''; }
+      return;
+    }
+    if (!canUse()) {
+      body.innerHTML = '<div class="ssp-warn">Splose sync is switched off on this server, or your account cannot use it.</div>';
+      foot.innerHTML = '<button type="button" class="btn" data-act="close">Close</button>';
+      foot.querySelector('[data-act=close]').addEventListener('click', closePanel);
+      return;
+    }
+    renderSploseTab(body, foot);
+    // Below the queue: portal bookings that never reached Splose at all.
+    if (!S.publishing && review()) {
+      var host = doc.createElement('div');
+      host.className = 'ssp-plan-host';
+      body.appendChild(host);
+      review().renderSplosePlan(host);
+    }
+  }
+
+  function renderSploseTab(body, foot) {
     var rows = S.pending;
 
     if (S.publishing) {
@@ -539,12 +630,22 @@
     });
 
     foot.innerHTML =
+      '<label class="sys-selectall sys-everything"><input type="checkbox" data-act="pick-all"> Select all</label>' +
       '<button type="button" class="btn" data-act="close">Not now</button>' +
       '<span class="spacer"></span>' +
       (S.writeEnabled ? '' : '<span class="ssp-hint ssp-off">' + esc(WRITE_OFF_REASON) + '</span>') +
       '<button type="button" class="btn primary" data-act="publish"' + (S.writeEnabled ? '' : ' disabled title="' + esc(WRITE_OFF_REASON) + '"') + '>Send selected to Splose</button>';
     foot.querySelector('[data-act=close]').addEventListener('click', closePanel);
     foot.querySelector('[data-act=publish]').addEventListener('click', function () { publishSelected(); });
+    // Select all for the queue (19 Nov 2026), kept in step with the row ticks.
+    var all = foot.querySelector('[data-act=pick-all]');
+    var boxes = function () { return Array.prototype.slice.call(body.querySelectorAll('input[data-pick]:not(:disabled)')); };
+    var sync = function () { var b = boxes(), n = b.filter(function (i) { return i.checked; }).length; all.checked = !!b.length && n === b.length; all.indeterminate = n > 0 && n < b.length; all.disabled = !b.length; };
+    all.addEventListener('change', function () {
+      boxes().forEach(function (i) { i.checked = all.checked; S.picked[i.getAttribute('data-pick')] = all.checked; });
+    });
+    body.querySelectorAll('input[data-pick]').forEach(function (i) { i.addEventListener('change', sync); });
+    sync();
   }
 
   function renderCreateSummary(list) {
@@ -927,7 +1028,8 @@
   if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', boot); else boot();
 
   global.SploseSync = {
-    open: openPanel, close: closePanel, refresh: refreshPending, publishAll: function () { return openPanel(); },
+    open: openPanel, close: closePanel, refresh: refreshPending, publishAll: function () { return openPanel('splose'); },
+    rerender: function () { if (S.panelOpen) renderPanel(); },
     _state: S,
   };
 })(window);

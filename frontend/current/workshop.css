@@ -348,3 +348,16 @@ body.wk-picking, body.wk-picking * { cursor: crosshair !important; }
 .wk-field-roles .wk-roles { gap: 6px; }
 .wk-field-roles .wk-role { border: 1px solid var(--border, #e5e7eb); border-radius: 999px; padding: 4px 10px 4px 6px; font-size: 12.5px; display: inline-flex; align-items: center; gap: 4px; }
 .wk-field-roles .wk-role.is-off { opacity: .45; }
+
+/* ── Night mode ──────────────────────────────────────────────────────────
+   The light washes, pale chips and dark inks above, re-valued for
+   <html data-theme="dark"> from the theme tokens: lifted warm surfaces,
+   tinted status chips with their *-ink text, low-contrast borders.
+   Night-only (one extra type selector of weight, so state rules still win);
+   day mode is untouched. */
+html:where([data-theme="dark"]) .wk-pill-ok { background: var(--ok-soft); color: var(--accent-ink); }
+html:where([data-theme="dark"]) .wk-pill-draft { background: var(--warn-soft); color: var(--warn-ink); }
+html:where([data-theme="dark"]) .wk-pill-muted { background: var(--panel-soft); color: var(--ink-soft); }
+html:where([data-theme="dark"]) .wk-tone-ok { color: var(--accent-ink); }
+html:where([data-theme="dark"]) .wk-tone-warn { color: var(--warn-ink); }
+html:where([data-theme="dark"]) .wk-tone-bad { color: var(--danger-ink); }

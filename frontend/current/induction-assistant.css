@@ -85,3 +85,10 @@ body.wk-open.ia-open .ia-dock { right: calc(var(--wk-dock-w, 460px) + 16px); }
 .rh2-asl-ai-spark { color: var(--accent, #0f7c6c); }
 
 
+/* ── Night mode ──────────────────────────────────────────────────────────
+   The light washes, pale chips and dark inks above, re-valued for
+   <html data-theme="dark"> from the theme tokens: lifted warm surfaces,
+   tinted status chips with their *-ink text, low-contrast borders.
+   Night-only (one extra type selector of weight, so state rules still win);
+   day mode is untouched. */
+html:where([data-theme="dark"]) .ia-err .ia-bubble { border-color: color-mix(in srgb, var(--warn) 38%, var(--panel)); }

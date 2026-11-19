@@ -56,8 +56,10 @@ function validRange(from, to) {
 
 // A block booked outside the portal whose booking the portal only guessed
 // (block-review.js, migration 086) is not invoiced until a person confirms it.
+// A block made outside the portal bills only once a person has reviewed it
+// (19 Nov 2026: needs_input is held too — it may carry a Splose client).
 const HELD_FOR_REVIEW =
-  `NOT EXISTS (SELECT 1 FROM event_block_reviews br WHERE br.event_id = e.id AND br.status = 'guessed')`;
+  `NOT EXISTS (SELECT 1 FROM event_block_reviews br WHERE br.event_id = e.id AND br.status IN ('guessed', 'needs_input'))`;
 
 async function loadCandidateEvents(q, orgId, { from, to, practitionerIds, clientIds, eventIds, tz }) {
   const params = [orgId, from, to, tz];

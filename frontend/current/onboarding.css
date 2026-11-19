@@ -595,3 +595,41 @@
   .ob-review-row { flex-direction: column; align-items: stretch; }
   .ob-review-actions { justify-content: flex-start; }
 }
+
+/* ── Night mode ──────────────────────────────────────────────────────────
+   The light washes, pale chips and dark inks above, re-valued for
+   <html data-theme="dark"> from the theme tokens: lifted warm surfaces,
+   tinted status chips with their *-ink text, low-contrast borders.
+   Night-only (one extra type selector of weight, so state rules still win);
+   day mode is untouched. */
+html:where([data-theme="dark"]) .ob-chip.in_progress { border-color: color-mix(in srgb, var(--info) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .ob-chip.submitted,
+html:where([data-theme="dark"]) .ob-chip.awaiting_verification { border-color: color-mix(in srgb, var(--warn) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .ob-chip.correction_required { border-color: color-mix(in srgb, var(--danger) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .ob-chip.verified,
+html:where([data-theme="dark"]) .ob-chip.complete { border-color: color-mix(in srgb, var(--ok) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .ob-chip.expired { border-color: color-mix(in srgb, var(--danger) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .ob-chip.waived { border-color: color-mix(in srgb, var(--warn) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .ob-chip.invite_accepted { border-color: color-mix(in srgb, var(--info) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .ob-chip.employee_actions_complete,
+html:where([data-theme="dark"]) .ob-chip.employer_review { border-color: color-mix(in srgb, var(--warn) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .ob-chip.corrections_required { border-color: color-mix(in srgb, var(--danger) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .ob-chip.ready_to_activate { border-color: color-mix(in srgb, var(--accent) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .ob-chip.activated,
+html:where([data-theme="dark"]) .ob-chip.completed { border-color: color-mix(in srgb, var(--ok) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .ob-basis.LEGAL_REQUIREMENT { border-color: color-mix(in srgb, var(--danger) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .ob-basis.REGULATORY_STANDARD { border-color: color-mix(in srgb, var(--info) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .ob-basis.CONTRACTUAL_REQUIREMENT { border-color: color-mix(in srgb, var(--warn) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .ob-basis.OPAL_POLICY_REQUIREMENT { border-color: color-mix(in srgb, var(--accent) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .ob-req.is-action-required:hover { background: var(--danger-soft); }
+html:where([data-theme="dark"]) .ob-correction { border-color: color-mix(in srgb, var(--danger) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .ob-sensitive-note { border-color: color-mix(in srgb, var(--accent) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .ob-note.is-info { border-color: color-mix(in srgb, var(--info) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .ob-note.is-warn { border-color: color-mix(in srgb, var(--warn) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .ob-note.is-danger { border-color: color-mix(in srgb, var(--danger) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .ob-note.is-ok { border-color: color-mix(in srgb, var(--ok) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .ob-welcome { border-color: color-mix(in srgb, var(--accent) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .ob-step.is-complete { border-color: color-mix(in srgb, var(--ok) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .ob-step.is-action { border-color: color-mix(in srgb, var(--danger) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .ob-review-row.is-decided { border-color: color-mix(in srgb, var(--ok) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .ob-chip.is-sensitive { border-color: color-mix(in srgb, var(--warn) 38%, var(--panel)); }

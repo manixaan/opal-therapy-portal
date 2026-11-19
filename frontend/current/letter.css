@@ -459,3 +459,28 @@ textarea.ltr-input { resize: vertical; min-height: 62px; }
 @media (prefers-reduced-motion: reduce) {
   .ltr-btn { transition: none; }
 }
+
+/* ── Night mode ──────────────────────────────────────────────────────────
+   The light washes, pale chips and dark inks above, re-valued for
+   <html data-theme="dark"> from the theme tokens: lifted warm surfaces,
+   tinted status chips with their *-ink text, low-contrast borders.
+   Night-only (one extra type selector of weight, so state rules still win);
+   day mode is untouched. */
+html:where([data-theme="dark"]) .ltr-status-draft { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 38%, var(--panel)); color: var(--warn-ink); }
+html:where([data-theme="dark"]) .ltr-status-generated { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 38%, var(--panel)); color: var(--accent-ink); }
+html:where([data-theme="dark"]) .ltr-step-done .ltr-stepnum { background: var(--accent-soft); color: var(--accent-ink); }
+html:where([data-theme="dark"]) .ltr-saveind.ltr-saved { color: var(--accent-ink); }
+html:where([data-theme="dark"]) .ltr-req { background: var(--danger-soft); color: var(--danger-ink); border-color: color-mix(in srgb, var(--danger) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .ltr-note-warn { background: var(--warn-soft); }
+html:where([data-theme="dark"]) .ltr-note-ok { background: var(--panel-soft); }
+html:where([data-theme="dark"]) .ltr-note-block { background: var(--danger-soft); }
+html:where([data-theme="dark"]) .ltr-profilechip { background: var(--accent-soft); color: var(--accent-ink); border-color: color-mix(in srgb, var(--accent) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .ltr-srcchip { background: var(--info-soft); border-color: color-mix(in srgb, var(--info) 38%, var(--panel)); color: var(--info-ink); }
+html:where([data-theme="dark"]) .ltr-badge-splose { background: var(--info-soft); border-color: color-mix(in srgb, var(--info) 38%, var(--panel)); color: var(--info-ink); }
+html:where([data-theme="dark"]) .ltr-badge-client_profile { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 38%, var(--panel)); color: var(--accent-ink); }
+html:where([data-theme="dark"]) .ltr-badge-portal_therapist { background: var(--info-soft); border-color: color-mix(in srgb, var(--info) 38%, var(--panel)); color: var(--info-ink); }
+html:where([data-theme="dark"]) .ltr-badge-portal_organisation { background: var(--violet-soft); border-color: color-mix(in srgb, var(--violet) 38%, var(--panel)); color: var(--violet-ink); }
+html:where([data-theme="dark"]) .ltr-badge-report_override { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 38%, var(--panel)); color: var(--warn-ink); }
+html:where([data-theme="dark"]) .ltr-badge-missing { background: var(--danger-soft); border-color: color-mix(in srgb, var(--danger) 38%, var(--panel)); color: var(--danger-ink); }
+html:where([data-theme="dark"]) .ltr-field-missing { background: var(--panel); }
+html:where([data-theme="dark"]) .ltr-missing { color: var(--danger-ink); }

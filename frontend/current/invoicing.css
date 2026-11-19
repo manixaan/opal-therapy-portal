@@ -165,3 +165,20 @@
   .inv-detail-head h2 { font-size: 21px; }
   .inv-paper .pad { padding: 16px; }
 }
+
+/* ── Night mode ──────────────────────────────────────────────────────────
+   The light washes, pale chips and dark inks above, re-valued for
+   <html data-theme="dark"> from the theme tokens: lifted warm surfaces,
+   tinted status chips with their *-ink text, low-contrast borders.
+   Night-only (one extra type selector of weight, so state rules still win);
+   day mode is untouched. */
+html:where([data-theme="dark"]) .inv-paper { background: var(--panel); color: var(--info-ink); border-color: var(--border); }
+html:where([data-theme="dark"]) .inv-paper h2 { color: var(--info-ink); }
+html:where([data-theme="dark"]) .inv-paper td { border-bottom-color: var(--border); }
+html:where([data-theme="dark"]) .inv-paper .code { color: var(--ink-soft); }
+html:where([data-theme="dark"]) .inv-paper .totals .strong { border-top-color: var(--border); }
+html:where([data-theme="dark"]) .inv-paper .mini { border-color: var(--border); color: var(--ink-soft); }
+html:where([data-theme="dark"]) .inv-paper .mini:hover { color: var(--accent-ink); }
+html:where([data-theme="dark"]) .inv-paper .calc { background: var(--panel); border-color: var(--border); color: var(--ink-soft); }
+html:where([data-theme="dark"]) .inv-paper .src { color: var(--accent-ink); }
+html:where([data-theme="dark"]) .inv-paper .draft-mark { color: var(--danger-ink); }

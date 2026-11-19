@@ -36,7 +36,7 @@
 }
 .sys-notes { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; }
 .sys-note { font-size: 11.5px; color: var(--muted, #99928a); }
-.sys-note.warn { color: #8a5a14; }
+.sys-note.warn { color: var(--warn-ink, #8a5a14); }
 
 /* Off · Sync now only · Automatic — one choice per direction */
 .sys-seg { display: inline-flex; border: 1px solid var(--border, #e6e1d9); border-radius: 9px; overflow: hidden; flex-shrink: 0; }
@@ -62,9 +62,9 @@
 .sys-everything { margin: 0; font-weight: 500; }
 .sys-item-top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
 .sys-status { font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 999px; background: var(--bg, #f4f1ec); color: var(--ink, #241f1a); white-space: nowrap; }
-.sys-status.s-create, .sys-status.s-update { background: #e8e1f6; color: #4b3590; }
-.sys-status.s-delete { background: #f8e4e1; color: #7a2a22; }
-.sys-status.s-review { background: #f7ecd6; color: #7a5212; }
+.sys-status.s-create, .sys-status.s-update { background: var(--info-soft, #e8e1f6); color: var(--info-ink, #4b3590); }
+.sys-status.s-delete { background: var(--danger-soft, #f8e4e1); color: var(--danger-ink, #7a2a22); }
+.sys-status.s-review { background: var(--warn-soft, #f7ecd6); color: var(--warn-ink, #7a5212); }
 .sys-list.is-disabled { opacity: .55; pointer-events: none; }
 
 /* Sync now preview */
@@ -87,8 +87,8 @@
 .sys-p-head { margin: 16px 0 4px; font-size: 14px; font-weight: 600; }
 .sys-p-meta { margin: 0 0 8px; font-size: 12px; color: var(--muted, #99928a); }
 .sys-p-empty { margin: 4px 0 8px; color: var(--muted, #99928a); }
-.sys-p-err { margin: 4px 0 8px; padding: 8px 10px; border-radius: 8px; background: #f8e4e1; color: #7a2a22; font-size: 12.5px; }
-.sys-p-ok { margin: 4px 0 8px; padding: 8px 10px; border-radius: 8px; background: #e2f1e6; color: #1f5a34; font-size: 12.5px; }
+.sys-p-err { margin: 4px 0 8px; padding: 8px 10px; border-radius: 8px; background: var(--danger-soft, #f8e4e1); color: var(--danger-ink, #7a2a22); font-size: 12.5px; }
+.sys-p-ok { margin: 4px 0 8px; padding: 8px 10px; border-radius: 8px; background: var(--ok-soft, #e2f1e6); color: var(--ok-ink, #1f5a34); font-size: 12.5px; }
 .sys-group { margin: 10px 0; }
 .sys-group-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 8px; margin-bottom: 6px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--ink, #241f1a); }
 .sys-group-head .n { background: var(--bg, #f4f1ec); border-radius: 999px; padding: 1px 8px; font-size: 11px; letter-spacing: 0; }

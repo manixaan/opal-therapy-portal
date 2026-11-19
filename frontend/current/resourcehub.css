@@ -1885,3 +1885,41 @@ button.rh2-learn-tile:focus-visible { outline: none; box-shadow: var(--focus-rin
 .rh2-player-chapter.is-locked .rh2-player-chead { cursor: default; }
 .rh2-player-chapter.is-locked .rh2-player-ctick { display: inline-flex; align-items: center; justify-content: center; }
 .rh2-cb-seq { margin-top: 14px; font-size: 13.5px; font-weight: 600; }
+
+/* ── Night mode ──────────────────────────────────────────────────────────
+   The light washes, pale chips and dark inks above, re-valued for
+   <html data-theme="dark"> from the theme tokens: lifted warm surfaces,
+   tinted status chips with their *-ink text, low-contrast borders.
+   Night-only (one extra type selector of weight, so state rules still win);
+   day mode is untouched. */
+html:where([data-theme="dark"]) .rh2-chip-warn { border-color: color-mix(in srgb, var(--warn) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .rh2-chip-ok { border-color: color-mix(in srgb, var(--ok) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .rh2-auth-opal { border-color: color-mix(in srgb, var(--accent) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .rh2-auth-official { color: var(--info-ink); border-color: color-mix(in srgb, var(--info) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .rh2-auth-profbody { background: var(--violet-soft); color: var(--violet-ink); border-color: color-mix(in srgb, var(--violet) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .rh2-auth-external { background: var(--panel-soft); color: var(--ink-soft); }
+html:where([data-theme="dark"]) .rh2-status-submitted_for_review { border-color: color-mix(in srgb, var(--info) 38%, var(--panel)); color: var(--info-ink); }
+html:where([data-theme="dark"]) .rh2-status-approved { border-color: color-mix(in srgb, var(--ok) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .rh2-status-needs_update { border-color: color-mix(in srgb, var(--warn) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .rh2-status-rejected { border-color: color-mix(in srgb, var(--danger) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .rh2-src-current { border-color: color-mix(in srgb, var(--ok) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .rh2-src-review_due { border-color: color-mix(in srgb, var(--info) 38%, var(--panel)); color: var(--info-ink); }
+html:where([data-theme="dark"]) .rh2-src-source_changed { border-color: color-mix(in srgb, var(--warn) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .rh2-src-outdated { border-color: color-mix(in srgb, var(--danger) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .rh2-gov-published { background: var(--info-soft); color: var(--info-ink); border-color: color-mix(in srgb, var(--info) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .rh2-file-tier { background: var(--warn-soft); color: var(--warn-ink); border-color: color-mix(in srgb, var(--warn) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .rh2-gov-item.is-done { background: var(--panel); border-color: color-mix(in srgb, var(--ok) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .rh2-sr-warn { background: var(--warn-soft); color: var(--warn-ink); }
+html:where([data-theme="dark"]) .rh2-inst-unresolved { background: var(--warn-soft); color: var(--warn-ink); }
+html:where([data-theme="dark"]) .rh2-avail { background: var(--panel-soft); }
+html:where([data-theme="dark"]) .rh2-avail--electronic-and-pdf,
+html:where([data-theme="dark"]) .rh2-avail--electronic { background: var(--ok-soft); color: var(--ok-ink); border-color: color-mix(in srgb, var(--ok) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .rh2-avail--pdf { background: var(--info-soft); color: var(--info-ink); border-color: color-mix(in srgb, var(--info) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .rh2-avail--source-required { background: var(--warn-soft); color: var(--warn-ink); border-color: color-mix(in srgb, var(--warn) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .rh2-avail--temporarily-unavailable { background: var(--danger-soft); color: var(--danger-ink); border-color: color-mix(in srgb, var(--danger) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .rh2-ing-total-bad { color: var(--danger-ink); }
+html:where([data-theme="dark"]) button.rh2-ing-tile.active { background: var(--panel-sunk); }
+html:where([data-theme="dark"]) .rh2-ing-n { color: var(--accent-ink); }
+html:where([data-theme="dark"]) .rh2-ing-l { color: var(--ink-soft); }
+html:where([data-theme="dark"]) .rh2-course-pick { background: rgba(255, 255, 255, 0.08); }
+html:where([data-theme="dark"]) .rh2-cb-setcard-danger { border-color: color-mix(in srgb, var(--danger) 38%, var(--panel)); }

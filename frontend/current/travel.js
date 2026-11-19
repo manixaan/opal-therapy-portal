@@ -806,6 +806,14 @@ function sessionTravelOverride(s, side) {
   const v = t && t[side];
   return (v && typeof v === 'object' && v.kind) ? v : null;
 }
+/* An answer that may be handed on to another session (chain inheritance):
+   a before/after answered in "Blocks to review" belongs to that block alone —
+   between two stops it means a trip home / a stop, so passing it on would
+   change another gap (19 Nov 2026). */
+function inheritableAfter(s) {
+  const v = sessionTravelOverride(s, 'after');
+  return v && v.source !== 'block_review' ? v : null;
+}
 function resolveTravelPoint(spec, day) {
   if (!spec) return null;
   // "Return Home" (purpose 'home') means the day's home, whichever it is now:
@@ -1050,7 +1058,7 @@ async function travelReplanAfterDelete(ctx) {
     const tag = (mode) => plan.mode === mode ? ' (suggested)' : '';
     const opts = [{ key: 'direct', label: 'Go direct to ' + _stopName(next) + (direct ? ' · ' + direct + ' min' : ' · same place, no drive') + tag('direct') }];
     if (plan.homeAvailable && baseKey) opts.push({ key: 'home', label: 'Go home in between · ' + travelMinutes(fromKey, baseKey) + ' min home, ' + travelMinutes(baseKey, toKey) + ' min out' + tag('home') });
-    if (plan.placeAvailable) opts.push({ key: 'place', label: 'Go to ' + ((resolveTravelPoint(sessionTravelOverride(prev, 'after'), ctx.day) || {}).label || 'the saved place') + ' in between' + tag('elsewhere') });
+    if (plan.placeAvailable) opts.push({ key: 'place', label: 'Go to ' + (plan.placeLabel || 'the saved place') + ' in between' + tag('elsewhere') });
     const key = await travelChooser(title, at(prev) + ' and ' + at(next) + ' are now back to back. How do you travel between them?', opts);
     if (key === 'direct' || key === 'home') await setBetweenTravel(prev.id, key);
     return key;
@@ -1123,7 +1131,7 @@ function travelInheritSpecFor(day, startMin) {
   if (!sessions.length) return null;
   const last = sessions[sessions.length - 1];
   if (startMin < sessionEndMin(last)) return null;      // not going to be the last
-  return sessionTravelOverride(last, 'after');
+  return inheritableAfter(last);
 }
 
 /* After a booking is saved: write the inherited `after` onto the new event. */
@@ -1143,7 +1151,7 @@ async function travelChainInherit(newDbId, spec) {
 function travelGapClosingFor(sessionId) {
   const s = window.SESSIONS && window.SESSIONS[sessionId];
   if (!s) return null;
-  const spec = sessionTravelOverride(s, 'after');
+  const spec = inheritableAfter(s);
   if (!spec) return null;
   const sessions = sessionsForDay(s.day);
   const idx = sessions.findIndex(x => x.id === sessionId);
@@ -1161,7 +1169,7 @@ function travelChainAfterMove(sessionId) {
   const sessions = sessionsForDay(s.day);
   if (!sessions.length || sessions[sessions.length - 1].id !== sessionId || sessions.length < 2) return;
   const prevLast = sessions[sessions.length - 2];
-  const spec = sessionTravelOverride(prevLast, 'after');
+  const spec = inheritableAfter(prevLast);
   if (spec) setTravelOverride(sessionId, 'after', spec);
 }
 
@@ -2033,7 +2041,7 @@ document.addEventListener('click', e => {
 async function applyTravelChainAfterBooking(newDbId, ctx) {
   if (!newDbId || !ctx) return;
   const pred = (ctx.sessionId && window.SESSIONS ? window.SESSIONS[ctx.sessionId] : null) || _sessionByDbId(ctx.dbId);
-  const inherit = pred ? sessionTravelOverride(pred, 'after') : null;
+  const inherit = pred ? inheritableAfter(pred) : null;
   if (!inherit) return; // the day default carries over on its own
   try {
     await fetch('/api/events/' + encodeURIComponent(newDbId) + '/travel', {
@@ -2118,8 +2126,22 @@ function placeTravelLeg(input) {
    shows what is invoiced. Returns { mode, auto, home|null, toBase, fromBase,
    homeAvailable }. */
 const TRAVEL_HOME_MIN_STAY = 30;
+/* A before/after answered in "Blocks to review" (source 'block_review',
+   19 Nov 2026) also holds between two stops, not only at the day's ends:
+   "after: Home" on the earlier stop or "before: Home" on the later one means
+   a trip home in that gap, and an address on either is the place gone to.
+   Answers saved by Smart Booking keep their old meaning (day ends only). */
+function reviewTravelBetween(curr, next) {
+  const pick = (s, side) => { const v = sessionTravelOverride(s, side); return v && v.source === 'block_review' ? v : null; };
+  const a = curr ? pick(curr, 'after') : null, b = next ? pick(next, 'before') : null;
+  const home = (a && a.purpose === 'home') || (b && b.purpose === 'home');
+  const place = (a && a.purpose === 'elsewhere' && a) || (b && b.purpose === 'elsewhere' && b) || null;
+  return { home: !!home && !place, place };
+}
 function betweenTravelPlan(curr, next, base) {
-  const choice = curr && curr.travel && (curr.travel.next === 'direct' || curr.travel.next === 'home') ? curr.travel.next : null;
+  const review = reviewTravelBetween(curr, next);
+  const choice = curr && curr.travel && (curr.travel.next === 'direct' || curr.travel.next === 'home') ? curr.travel.next
+    : (review.home ? 'home' : null);
   const out = { mode: 'direct', auto: !choice, home: null, toBase: 0, fromBase: 0, homeAvailable: false,
                 place: null, toPlace: 0, fromPlace: 0, placeAvailable: false };
   const fromKey = locTravelKey(sessionLocation(curr)), toKey = locTravelKey(sessionLocation(next));
@@ -2127,8 +2149,10 @@ function betweenTravelPlan(curr, next, base) {
   // "after" is where the therapist goes next — between two sessions too, not
   // only at the end of the day. It is the way unless Direct / Home has been
   // chosen since (Go Somewhere Else clears that choice when it is saved).
-  const placeSpec = curr ? sessionTravelOverride(curr, 'after') : null;
+  const ownAfter = curr ? sessionTravelOverride(curr, 'after') : null;
+  const placeSpec = ownAfter && ownAfter.purpose === 'elsewhere' ? ownAfter : review.place;
   const place = placeSpec && placeSpec.purpose === 'elsewhere' ? resolveTravelPoint(placeSpec, curr.day) : null;
+  if (place) out.placeLabel = place.label || null;
   const placeKey = place ? (place.addr || place.suburb) : null;
   if (place && fromKey && toKey && placeKey) {
     const toPlace = canonAddr(placeKey) === canonAddr(fromKey) ? 0 : travelMinutes(fromKey, placeKey);
@@ -2466,7 +2490,7 @@ function renderSegmentOverlay(col, seg) {
     col.appendChild(el);
     return;
   }
-  if (seg.tight) el.style.borderLeftColor = '#9c3322';
+  if (seg.tight) el.style.borderLeftColor = 'var(--danger, #9c3322)';
   const overlaps = (typeof SESSIONS !== 'undefined') && sessionsForDay(seg.day).some(x => !isTravelBlock(x) && sessionStartMin(x) < seg.endMin && sessionEndMin(x) > seg.startMin);
   if (overlaps) el.classList.add('overlaps');
   const icon = seg.kind === 'start' ? 'Start' : seg.kind === 'end' ? 'End'
@@ -2742,7 +2766,7 @@ function renderTravelOverlay(col, day, curr, next, from, to, gapStart, gapMin, t
   const legacySlotPx = gapMin / 60 * HOUR_PX;
   el.style.height = Math.min(Math.max(12, legacySlotPx - 4), Math.max(4, legacySlotPx - 2)) + 'px';
   const tight = gapMin < travel + 5;
-  el.style.borderLeftColor = tight ? '#9c3322' : '#0f7c6c';
+  el.style.borderLeftColor = tight ? 'var(--danger, #9c3322)' : 'var(--accent, #0f7c6c)';
   el.innerHTML = `<span class="t-ico" style="font-size: 10px; font-weight: 600; opacity: 0.7;">Travel</span>
     <span class="t-label">${travel} min · ${from.suburb} → ${to.suburb}</span>`;
   el.title = `Google Maps travel ${from.suburb} → ${to.suburb} ≈ ${travel} min. Gap is ${gapMin} min. Click for directions.`;
@@ -2989,7 +3013,7 @@ function _renderTravelPanel(seg) {
   } else if (gapFrom && gapTo) {
     var plan = betweenTravelPlan(gapFrom, gapTo, dayAnchorBase(seg.day));
     var goingHome = !!plan.home;
-    var placeName = plan.placeAvailable ? (resolveTravelPoint(sessionTravelOverride(gapFrom, 'after'), seg.day) || {}).label || 'the saved place' : '';
+    var placeName = plan.placeAvailable ? plan.placeLabel || 'the saved place' : '';
     var why = plan.mode === 'elsewhere' ? 'Going to ' + placeName + ' in between (chosen with Go Somewhere Else).'
       : !plan.homeAvailable ? 'No home base set for this day (or a stop is at home), so it is a direct drive.'
       : plan.auto ? (goingHome ? 'Suggested: there is time to go home (' + plan.toBase + ' min home, ' + TRAVEL_HOME_MIN_STAY + ' min there, ' + plan.fromBase + ' min out).'

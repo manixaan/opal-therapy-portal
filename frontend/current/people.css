@@ -68,3 +68,12 @@
   .ppl-panel { width: 100vw; }
   .ppl-table th:nth-child(4), .ppl-table td:nth-child(4), .ppl-table th:nth-child(5), .ppl-table td:nth-child(5) { display: none; }
 }
+
+/* ── Night mode ──────────────────────────────────────────────────────────
+   The light washes, pale chips and dark inks above, re-valued for
+   <html data-theme="dark"> from the theme tokens: lifted warm surfaces,
+   tinted status chips with their *-ink text, low-contrast borders.
+   Night-only (one extra type selector of weight, so state rules still win);
+   day mode is untouched. */
+html:where([data-theme="dark"]) .ppl-attention { border-color: color-mix(in srgb, var(--warn) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .ppl-pill-ok { color: var(--ok-ink); }

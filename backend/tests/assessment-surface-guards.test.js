@@ -588,7 +588,7 @@ describe('changed assets are cache-busted', () => {
     // staging proxy does not — a stale resourcehub.js there would serve the
     // old Assessments tab against the new API.
     for (const [file, version] of [
-      ['assessment.js', 3], ['assessment.css', 3],
+      ['assessment.js', 3], ['assessment.css', 4],
       ['whodas.js', 5], ['whodas.css', 3],
       // r17/r11: the Service Agreement joined the library grid as a workflow
       // tool, which changed both the renderer and the card styles.
@@ -635,13 +635,13 @@ describe('changed assets are cache-busted', () => {
       // SharePoint-style document library); the old folder grid, owner bar,
       // right-click menu and upload code left this file. A removed resource
       // reads "This resource was removed" in Detail and in the learner player.
-      ['resourcehub.js', 'r57'], ['resourcehub.css', 'r32'],
+      ['resourcehub.js', 'r57'], ['resourcehub.css', 'r33'],
       // resourcelibrary 1: the document library — folder tree, breadcrumbs,
       // list/tiles, command bar, menus, drag-and-drop, recycle bin, versions.
       // 3: a privacy-refused upload shows a tickable checklist of why — kind,
       // count, PDF pages, what to change — and "Upload anyway" when every
       // finding is a bare email/date/phone (25 Oct 2026).
-      ['resourcelibrary.js', 3], ['resourcelibrary.css', 3],
+      ['resourcelibrary.js', 3], ['resourcelibrary.css', 4],
       // 2: the Resource Hub walkthrough lost the step that spotlighted the
       // Home collections grid, because the grid it pointed at is gone.
       // 3: the Splose induction — eight screenshot-led lessons in module
@@ -652,7 +652,7 @@ describe('changed assets are cache-busted', () => {
       // people 1: Settings → Users & Roles redesigned — one row per person
       // (accounts + open invites from /api/admin/people), a side panel per
       // person, and the Splose practitioner chosen from a dropdown of names.
-      ['people.js', 2], ['people.css', 2],
+      ['people.js', 2], ['people.css', 3],
       // 2: the dashboard renders one card per module group (portal, then
       // Splose), and every step screenshot links to its full-size image. The
       // CSS carries the figure link and the stacked-card spacing.
@@ -670,7 +670,7 @@ describe('changed assets are cache-busted', () => {
       // and a sign-here recorded against the published wording. Neither can
       // be paged, arrowed or skipped past. The CSS carries the quoted
       // statement and its tick.
-      ['induction.js', 12], ['induction.css', 4],
+      ['induction.js', 12], ['induction.css', 5],
       // 1: the walkthrough workshop — the shelf, the author dock, the block
       // palette and the live target picker (docs/INDUCTION_WORKSHOP.md).
       // 2: the palette offers Page, Checkpoint and Sign here, and the editor
@@ -681,7 +681,7 @@ describe('changed assets are cache-busted', () => {
       // 4: recording notices when a click OPENS a pop-up — that step becomes
       // a real click-through and the steps inside carry route.open, so a
       // recorded tour no longer points at a panel it never opened.
-      ['workshop.js', 15], ['workshop.css', 8],
+      ['workshop.js', 15], ['workshop.css', 9],
       // 1: themed confirm/alert/prompt dialogs — every native browser dialog
       // in the portal goes through dialog.js so it reads as the portal.
       // dialog.css 2: the confirm/alert layer moved above the Splose sync
@@ -702,13 +702,13 @@ describe('changed assets are cache-busted', () => {
       // the consolidation reuses the existing ob-* styles unchanged.
       // 10: the management surface is delegated to onboarding-journey.js;
       // open()/nav() carry a record id. The CSS stays at 8.
-      ['onboarding.js', 17], ['onboarding.css', 8],
+      ['onboarding.js', 17], ['onboarding.css', 9],
       // 5: the one screen — six summary lines, Payroll Setup review and
       // approval, Phase 3 readiness/blockers, the induction pack and Email 3.
       // 6: the record screen decluttered — documents and emails only.
-      ['onboarding-journey.js', 81], ['onboarding-journey.css', 42],
+      ['onboarding-journey.js', 81], ['onboarding-journey.css', 43],
       // Employees: a first pin is still a pin.
-      ['employees.js', 1], ['employees.css', 1],
+      ['employees.js', 1], ['employees.css', 2],
       // 1: profile.js is new — the My Profile domain lifted out of the shell.
       // A first pin is still a pin: the proxy caches by URL, so the shell that
       // introduces the file has to name a version it can bump later.
@@ -737,9 +737,9 @@ describe('changed assets are cache-busted', () => {
       // Via home switch; the panel names the real next stop (28 Oct 2026).
       // 52: drives priced at their own departure time; right-click › Not driving
       // this; the traffic-alert hook; Make room's apply shared (29 Oct 2026).
-      ['travel.js', 52],
+      ['travel.js', 54],
       // 1: traffic alerts — a re-priced drive running into a client session.
-      ['travel-alerts.js', 1], ['travel-alerts.css', 1],
+      ['travel-alerts.js', 1], ['travel-alerts.css', 2],
       // 1: booking-route.js/.css are new — client location selector, the
       // work-location notice and the "What next?" continuation.
       // 6: a time re-pick with the panel open (keepState) keeps the chosen address.
@@ -755,7 +755,7 @@ describe('changed assets are cache-busted', () => {
       // 4 (js): each client's share shows m:ss, not rounded minutes.
       // 5 (js) / 3 (css): Allocate billing takes any typed number; warns over 100%.
       // js 6 / css 4: Allocate billing takes a time as well as a % (14 Nov 2026).
-      ['nf2f.js', 6], ['nf2f.css', 4],
+      ['nf2f.js', 7], ['nf2f.css', 4],
       // 1: travel-block.js is new — the billable Travel block in Smart Booking
       // (start + end location, length from Google Maps).
       // 2: no 4-hour cap — a priced drive may fill up to 12 h (14 Nov 2026).
@@ -779,34 +779,34 @@ describe('changed assets are cache-busted', () => {
       // 8: chips written only on change (no observer loop); the move toast names the Outlook status.
       // 9 (js) / 2 (css): match, link or ignore — each queued new appointment shows
       // whether Splose already holds it, with Link / Send / Ignore and bulk actions.
-      ['splose-sync.js', 11], ['splose-sync.css', 2],
+      ['splose-sync.js', 13], ['splose-sync.css', 4],
       // 1: Settings → Calendar sync — per-direction Outlook/Splose choices, the
       // Owner's practice limits and the Sync now preview (migration 081).
-      ['sync-settings.js', 2], ['sync-settings.css', 2],
+      ['sync-settings.js', 4], ['sync-settings.css', 3],
       // 1: Calendar → Blocks to review — outside-the-portal blocks classified
       // and settled (migration 086).
-      ['block-review.js', 1], ['block-review.css', 1],
+      ['block-review.js', 3], ['block-review.css', 3],
       // 2: Opa chat streams — answers arrive over /api/opa/chat/stream as
       // SSE deltas rendered incrementally, with the JSON route kept as the
       // fallback. Stale JS here would post to the old route and lose the
       // streamed UX the new backend exists for.
       ['opa.js', 4],
       // 1: the Finance portal — dashboard, payroll and invoicing over Xero.
-      ['finance.js', 1], ['finance.css', 1],
+      ['finance.js', 1], ['finance.css', 2],
       // 1: Invoicing — calendar-driven NDIS invoices, travel and rural trip billing.
       // 4 (js): the session's MMM zone selector in the calendar billing box.
       // 5 (js): Complete invoicing counts non-face-to-face shares.
-      ['invoicing.js', 5], ['invoicing.css', 2],
-      ['induction-assistant.js', 3], ['induction-assistant.css', 3],
+      ['invoicing.js', 5], ['invoicing.css', 3],
+      ['induction-assistant.js', 3], ['induction-assistant.css', 4],
       // js 5: two-step editor panel, contents-mirroring outline with
       // drag-to-reorder, multi-article A4 pagination fix. css 5: the
       // stepper and outline styles.
       // 8: the toast wrapper forwards kind; failures pass 'warn' (10 Oct 2026).
-      ['templates.js', 10], ['templates.css', 7],
+      ['templates.js', 10], ['templates.css', 8],
       // 1: day / night mode — theme.js stamps data-theme before first paint
       // (auto follows the clock), theme.css re-values the shell tokens.
       // css 5: month chips take the category colour by night too (14 Nov 2026).
-      ['theme.js', 2], ['theme.css', 5],
+      ['theme.js', 2], ['theme.css', 6],
     ]) {
       const ext = file.endsWith('.css') ? 'href' : 'src';
       expect(`${file}:${SHELL.includes(`${ext}="/${file}?v=${version}"`)}`).toBe(`${file}:true`);
@@ -899,6 +899,15 @@ describe('calendar move persistence — the shell state splose-sync.js depends o
     expect(sync).toMatch(/global\.pendingMove/);
     expect(sync).toMatch(/global\.SESSIONS/);
     expect(SHELL).toMatch(/^window\.SESSIONS = SESSIONS;/m);
+  });
+
+  // 19 Nov 2026: Case Management (and Resource Preparation, reports) share the
+  // broad type 'report'; the event drawer must name the booking, not the type.
+  test('the event drawer and move dialog label a block by its booking leaf, not its broad type', () => {
+    expect(SHELL).toMatch(/function sessionKindLabel\(s\)/);
+    expect(SHELL).toMatch(/rows\.push\(row\('Session type', escapeHtml\(sessionKindLabel\(s\)\)\)\);/);
+    expect(SHELL).not.toMatch(/rows\.push\(row\('Session type', TYPE_LABEL\[s\.type\]/);
+    expect(SHELL).toMatch(/'case-management': \{[^}]*label: 'Case Management'/);
   });
 
   test('booking types mirror Splose appointment services, each leaf carrying its service id', () => {

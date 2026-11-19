@@ -61,3 +61,16 @@
   .emp-toolbar { flex-direction: column; align-items: stretch; }
   .emp-table th:nth-child(4), .emp-table td:nth-child(4), .emp-table th:nth-child(5), .emp-table td:nth-child(5) { display: none; }
 }
+
+/* ── Night mode ──────────────────────────────────────────────────────────
+   The light washes, pale chips and dark inks above, re-valued for
+   <html data-theme="dark"> from the theme tokens: lifted warm surfaces,
+   tinted status chips with their *-ink text, low-contrast borders.
+   Night-only (one extra type selector of weight, so state rules still win);
+   day mode is untouched. */
+html:where([data-theme="dark"]) .emp-chip.is-active { background: var(--ok-soft); color: var(--ok-ink); border-color: color-mix(in srgb, var(--ok) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .emp-chip.is-onboarding { background: var(--warn-soft); color: var(--warn-ink); border-color: color-mix(in srgb, var(--warn) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .emp-chip.is-inactive { background: var(--danger-soft); color: var(--danger-ink); border-color: color-mix(in srgb, var(--danger) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .emp-flag { background: var(--warn-soft); color: var(--warn-ink); }
+html:where([data-theme="dark"]) .emp-flag.is-danger { background: var(--danger-soft); color: var(--danger-ink); }
+html:where([data-theme="dark"]) .emp-creds li.is-danger { color: var(--danger-ink); }

@@ -4,7 +4,10 @@
  * BLOCK REVIEW ROUTES (migration 086) — blocks booked outside the portal.
  *
  *   GET  /api/block-review?since=YYYY-MM-DD     classify new outside blocks, list the open ones
- *   POST /api/block-review/:eventId/confirm     { kind, clientId?, location? }
+ *   POST /api/block-review/:eventId/confirm     { kind, clientId?, location?, travel?: { before, after } }
+ *                                               travel is required for a block at a real place:
+ *                                               each side { mode: 'home' } or { mode: 'address', address, placeId?, lat?, lng? }
+ *                                               location '' clears the block's own place (desk / online)
  *   POST /api/block-review/:eventId/dismiss     leave the block as it came in
  *   POST /api/block-review/confirm-guessed      { eventIds: [] } accept applied guesses as they stand
  *
@@ -20,7 +23,7 @@ const db = require('./database');
 const { requireAuth } = require('./permissions');
 const caseload = require('./splose-caseload');
 const { bookingGroup, CLIENT_RULE } = require('./booking-rules');
-const { createBlockReview } = require('./block-review');
+const { createBlockReview, travelFrom } = require('./block-review');
 
 const DEFAULT_LOOKBACK_DAYS = 30;
 const MAX_LOOKBACK_DAYS = 366;
@@ -96,7 +99,7 @@ router.get('/api/block-review', safe(async (req, res) => {
         clientId: g.clientId || null, clientName: g.clientName || null,
         location: g.location || null, virtual: !!g.virtual,
         fields: g.fields || {}, missing: g.missing || [], unsure: g.unsure || [],
-        clientCandidates: cands,
+        needsTravel: !!g.needsTravel, clientCandidates: cands,
       },
     };
   });
@@ -110,7 +113,7 @@ router.post('/api/block-review/confirm-guessed', safe(async (req, res) => {
   const ids = Array.isArray(req.body && req.body.eventIds) ? req.body.eventIds.filter(id => UUID_RE.test(String(id))).slice(0, 300) : [];
   if (!ids.length) return res.status(400).json({ error: 'No blocks named' });
   const out = await svc().confirmAllGuessed(String(req.session.userId), ids);
-  await audit(req, 'block_review.confirm_guessed', { requested: ids.length, confirmed: out.confirmed });
+  await audit(req, 'block_review.confirm_guessed', { requested: ids.length, confirmed: out.confirmed, needTravel: out.needTravel || 0 });
   res.json(out);
 }));
 
@@ -138,13 +141,23 @@ router.post('/api/block-review/:eventId/confirm', safe(async (req, res) => {
     return res.status(400).json({ error: group === 'direct' ? 'Choose the client for this service' : 'Choose the client this report is for', code: 'client_required' });
   }
   const location = typeof b.location === 'string' ? b.location.trim().slice(0, 300) || null : null;
+  // An explicit empty place means "at my desk / online": the block's own place is cleared.
+  const clearPlace = typeof b.location === 'string' && !b.location.trim();
+  let travel = null;
+  if (b.travel != null) {
+    const t = travelFrom(b.travel);
+    if (t.error) return res.status(400).json({ error: `Say where you were ${t.error === 'before' ? 'before' : 'after'} this — Home or an address`, code: 'travel_invalid', side: t.error });
+    travel = t.travel;
+  }
 
   const out = await svc().confirm(String(req.session.userId), eventId, {
-    kind, client: client ? { id: String(client.id), fullName: client.fullName || null } : null, location,
+    kind, client: client ? { id: String(client.id), fullName: client.fullName || null } : null, location, travel, clearPlace,
   });
   if (out.error === 'not_found') return res.status(404).json({ error: 'No such block' });
+  if (out.error === 'travel_required') return res.status(400).json({ error: 'Say where you were before and after this — Home or an address — so travel can be worked out', code: 'travel_required' });
   if (out.error === 'already_resolved') return res.status(409).json({ error: 'This block has already been settled', code: 'already_resolved' });
-  await audit(req, 'block_review.confirm', { kind, group, withClient: !!client, withLocation: !!location }, eventId);
+  await audit(req, 'block_review.confirm', { kind, group, withClient: !!client, withLocation: !!location,
+    travel: travel ? { before: travel.before.purpose, after: travel.after.purpose } : null }, eventId);
   res.json({ ok: true });
 }));
 

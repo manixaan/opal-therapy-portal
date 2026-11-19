@@ -227,3 +227,18 @@
   .ind-card-reader .ind-title { font-size: 22px; }
   .ind-card-reader .ind-body { font-size: 16px; }
 }
+
+/* ── Night mode ──────────────────────────────────────────────────────────
+   The light washes, pale chips and dark inks above, re-valued for
+   <html data-theme="dark"> from the theme tokens: lifted warm surfaces,
+   tinted status chips with their *-ink text, low-contrast borders.
+   Night-only (one extra type selector of weight, so state rules still win);
+   day mode is untouched. */
+html:where([data-theme="dark"]) .ind-flag-warn { background: var(--warn-soft); color: var(--warn-ink); }
+html:where([data-theme="dark"]) .ind-q-right { background: var(--ok-soft); }
+html:where([data-theme="dark"]) .ind-q-wrong { background: var(--danger-soft); }
+html:where([data-theme="dark"]) .ind-q-explain.ok { color: var(--ok-ink); }
+html:where([data-theme="dark"]) .ind-q-explain.no { color: var(--danger-ink); }
+html:where([data-theme="dark"]) .ind-chip-blue { background: var(--info-soft); color: var(--info-ink); }
+html:where([data-theme="dark"]) .ind-chip-ok { background: var(--ok-soft); color: var(--ok-ink); }
+html:where([data-theme="dark"]) .ind-chip-warn { background: var(--warn-soft); color: var(--warn-ink); }

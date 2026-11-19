@@ -30,7 +30,7 @@
 </script>
 <link rel="stylesheet" href="/dialog.css?v=2" />
 <script src="/dialog.js?v=1"></script>
-<link rel="stylesheet" href="/scheduler.css?v=p9" />
+<link rel="stylesheet" href="/scheduler.css?v=p10" />
 <script src="/scheduler.js?v=p10" defer></script>
 <script>
 /* Development-only load profiler. On localhost, records long main-thread
@@ -82,37 +82,37 @@
   });
 })();
 </script>
-<link rel="stylesheet" href="/resourcehub.css?v=r32" />
-<link rel="stylesheet" href="/resourcelibrary.css?v=3" />
+<link rel="stylesheet" href="/resourcehub.css?v=r33" />
+<link rel="stylesheet" href="/resourcelibrary.css?v=4" />
 <link rel="stylesheet" href="/opa.css?v=4" />
-<link rel="stylesheet" href="/finance.css?v=1" />
-<link rel="stylesheet" href="/invoicing.css?v=2" />
-<link rel="stylesheet" href="/induction-assistant.css?v=3" />
-<link rel="stylesheet" href="/supportpop.css?v=1" />
+<link rel="stylesheet" href="/finance.css?v=2" />
+<link rel="stylesheet" href="/invoicing.css?v=3" />
+<link rel="stylesheet" href="/induction-assistant.css?v=4" />
+<link rel="stylesheet" href="/supportpop.css?v=2" />
 <link rel="stylesheet" href="/casenotes.css?v=3" />
 <link rel="stylesheet" href="/casenotes-workspace.css?v=1" />
-<link rel="stylesheet" href="/fca.css?v=6" />
-<link rel="stylesheet" href="/letter.css?v=1" />
-<link rel="stylesheet" href="/templates.css?v=7" />
+<link rel="stylesheet" href="/fca.css?v=7" />
+<link rel="stylesheet" href="/letter.css?v=2" />
+<link rel="stylesheet" href="/templates.css?v=8" />
 <link rel="stylesheet" href="/whodas.css?v=3" />
-<link rel="stylesheet" href="/assessment.css?v=3" />
-<link rel="stylesheet" href="/induction.css?v=4" />
-<link rel="stylesheet" href="/workshop.css?v=8">
+<link rel="stylesheet" href="/assessment.css?v=4" />
+<link rel="stylesheet" href="/induction.css?v=5" />
+<link rel="stylesheet" href="/workshop.css?v=9">
 <link rel="stylesheet" href="/interview.css?v=1" />
-<link rel="stylesheet" href="/onboarding.css?v=8" />
-<link rel="stylesheet" href="/splose-sync.css?v=2" />
-<link rel="stylesheet" href="/onboarding-journey.css?v=42" />
-<link rel="stylesheet" href="/employees.css?v=1" />
-<link rel="stylesheet" href="/people.css?v=2" />
-<link rel="stylesheet" href="/travel-alerts.css?v=1" />
-<link rel="stylesheet" href="/sync-settings.css?v=2" />
-<link rel="stylesheet" href="/block-review.css?v=1" />
+<link rel="stylesheet" href="/onboarding.css?v=9" />
+<link rel="stylesheet" href="/splose-sync.css?v=4" />
+<link rel="stylesheet" href="/onboarding-journey.css?v=43" />
+<link rel="stylesheet" href="/employees.css?v=2" />
+<link rel="stylesheet" href="/people.css?v=3" />
+<link rel="stylesheet" href="/travel-alerts.css?v=2" />
+<link rel="stylesheet" href="/sync-settings.css?v=3" />
+<link rel="stylesheet" href="/block-review.css?v=3" />
 <link rel="stylesheet" href="/booking-route.css?v=6" />
 <link rel="stylesheet" href="/recurrence.css?v=1" />
 <link rel="stylesheet" href="/nf2f.css?v=4" />
 <link rel="stylesheet" href="/flights.css?v=1" />
 <!-- Last stylesheet: night-mode token overrides must win over every feature sheet. -->
-<link rel="stylesheet" href="/theme.css?v=5" />
+<link rel="stylesheet" href="/theme.css?v=6" />
 <!-- The Library's document library (folders, list/tiles, bin, versions). Before
      resourcehub.js, which mounts it into #rhl-root inside the Library view. -->
 <script src="/resourcelibrary.js?v=3" defer></script>
@@ -171,7 +171,7 @@
      store and computeDayTravelSegments(), the calendar leg overlays and the
      travel details panel. Deferred and loaded ahead of profile.js and
      reports.js, both of which reach into it. -->
-<script src="/travel.js?v=52" defer></script>
+<script src="/travel.js?v=54" defer></script>
 <!-- Traffic alerts: a re-priced drive that now runs into a client session —
      point at it, offer Make room, Acknowledge or Ignore (today and tomorrow). -->
 <script src="/travel-alerts.js?v=1" defer></script>
@@ -180,7 +180,7 @@
      booking panel; the route maths live in travel.js, loaded just above. -->
 <script src="/booking-route.js?v=12" defer></script>
 <script src="/recurrence.js?v=1" defer></script>
-<script src="/nf2f.js?v=6" defer></script>
+<script src="/nf2f.js?v=7" defer></script>
 <!-- Travel block: a billable start → end drive, priced by Google Maps. -->
 <script src="/travel-block.js?v=2" defer></script>
 <!-- Add a flight: flight lookup (AeroDataBox, server-side key), the drive /
@@ -189,13 +189,13 @@
 <!-- Splose draft-and-publish sync: Sync Splose button, review panel, unsynced
      tiles, tab-leave prompt, and "changed inside Splose" alerts. Wraps
      switchTab and commitMove once the shell has defined them. -->
-<script src="/splose-sync.js?v=11" defer></script>
+<script src="/splose-sync.js?v=13" defer></script>
 <!-- Settings → Calendar sync: Off / Sync now only / Automatic for Outlook both
      ways, and the three-tab Sync now review (migration 081, 19 Nov 2026). -->
-<script src="/sync-settings.js?v=2" defer></script>
+<script src="/sync-settings.js?v=4" defer></script>
 <!-- Calendar → Blocks to review: blocks booked straight into Outlook/Splose,
      guessed by the server and settled here (migration 086). -->
-<script src="/block-review.js?v=1" defer></script>
+<script src="/block-review.js?v=3" defer></script>
 <!-- My Profile: leave, CPD, professional-development documents, credentials,
      work schedule and notification preferences. Deferred, so it runs after
      the shell's inline scripts and keeps the same globals they expect. -->
@@ -2707,8 +2707,8 @@ window.opIcon = function (name, size) {
   }
   .session:hover { box-shadow: 0 2px 8px rgba(15, 23, 42, 0.18); z-index: 3; }
   /* Outlook-style text: the title wraps onto as many lines as the tile has room
-     for (the tile clips, it never grows). Titles read name-first
-     (nameFirstTitle) so a clipped tile still says who it is. */
+     for (the tile clips, it never grows). Titles read type first
+     (typeFirstTitle): "Client Appointment - Name". */
   .session .s-title {
     font-weight: 600; display: block; color: var(--tile-fg);
     white-space: normal; overflow-wrap: anywhere;
@@ -10097,21 +10097,23 @@ function paintMonthEvent(el) {
   else clearCategoryColour(el);
 }
 
-// "Client Appointment - Stephen Brown" → "Stephen Brown - Client Appointment",
-// so a narrow or clipped tile still says who it is. Only flips when the first
-// part names an activity and the second reads as a person's name; anything
-// else ("Travel Perth to Cunderdin", "Catch up with Hui Hui") is untouched.
+// Session type first, then who (19 Nov 2026, owner's call — reverses the
+// 14 Nov name-first tiles): "Stephen Brown - Client Appointment" →
+// "Client Appointment - Stephen Brown"; "Client Appointment - Stephen Brown"
+// stays as it is. Only flips when one part names an activity and the other
+// reads as a person's name; anything else ("Travel Perth to Cunderdin",
+// "Catch up with Hui Hui") is untouched.
 const _ACTIVITY_WORD_RE = /\b(appointment|appt|session|report|plan|assessment|review|meeting|notes?|letter|visit|call|consult(?:ation)?|therapy|fca|whodas|intake|supervision|case|conference|telehealth|check[- ]?in|catch[- ]?up)\b/i;
 const _PERSON_NAME_RE = /^[A-Z][A-Za-z'’.\-]*(?:\s+[A-Z(][A-Za-z'’.()\-]*){1,3}$/;
-function nameFirstTitle(title) {
+function typeFirstTitle(title) {
   if (typeof title !== 'string' || title.indexOf('<') !== -1) return title;
   const parts = title.split(/\s+[-–—]\s+/);
   if (parts.length < 2) return title;
-  const kind = parts[0].trim();
-  const who = parts[1].trim();
+  const who = parts[0].trim();
+  const kind = parts[1].trim();
   if (!_ACTIVITY_WORD_RE.test(kind) || kind.split(/\s+/).length > 5) return title;
   if (!_PERSON_NAME_RE.test(who) || _ACTIVITY_WORD_RE.test(who)) return title;
-  return [who, kind].concat(parts.slice(2).map(p => p.trim())).join(' - ');
+  return [kind, who].concat(parts.slice(2).map(p => p.trim())).join(' - ');
 }
 
 // ─── Calendar legend: one row per category; click a row to recolour it ────
@@ -13821,7 +13823,7 @@ function addSession(col, opts) {
   const _typeLabel = { therapy: 'Client Appointment', travel: 'Travel', meeting: 'Meeting', admin: 'Admin' }[opts.type] || null;
   const displayTitle = noSubject
     ? (_noSubFallback
-        ? _noSubFallback
+        ? (_typeLabel && opts.patient ? _typeLabel + ' - ' + _noSubFallback : _noSubFallback)
         : _noSubCats
           ? '<em style="opacity:0.65">' + _noSubCats + '</em>'
           : _typeLabel
@@ -13829,7 +13831,7 @@ function addSession(col, opts) {
             : (window.__titleRecoveryDone
                 ? '<em style="opacity:0.5">Untitled event</em>'
                 : '<em style="opacity:0.55">Syncing title…</em>'))
-    : nameFirstTitle(opts.title);
+    : typeFirstTitle(opts.title);
   // Tile content: wrapping title, then location. The time span is kept for
   // move/resize bookkeeping but hidden by CSS — the time lives in the tooltip
   // and the detail panel.
@@ -14858,6 +14860,18 @@ async function performDeleteEvent(id, cascadeIds) {
   }
 }
 
+/* What the block IS, by the booking it was made as (19 Nov 2026). Several
+   booking kinds share one broad type — Case Management, Resource Preparation
+   and the reports are all type 'report' (a support activity, for billing) —
+   so labelling by type alone called a Case Management block "Report writing".
+   The booking leaf names it; the type label is the fallback. */
+function sessionKindLabel(s) {
+  const k = s && s.booking && s.booking.kind;
+  const leaf = k && typeof BOOKING_LEAVES === 'object' ? BOOKING_LEAVES[k] : null;
+  if (leaf && leaf.label) return leaf.label;
+  return TYPE_LABEL[s && s.type] || (s && s.type) || 'Session';
+}
+
 /* ---------- Detail drawer ---------- */
 function openBlockDetail(id) {
   const s = SESSIONS[id];
@@ -14871,7 +14885,8 @@ function openBlockDetail(id) {
 
   const _titleClients = bdClientNames(s);
   const _titleWho = _titleClients.length > 1 ? `${_titleClients.length} clients` : (_titleClients[0] || '');
-  document.getElementById('bd-title').textContent = (_titleWho ? `${TYPE_LABEL[s.type]||'Session'} · ${_titleWho}` : (TYPE_LABEL[s.type] || s.title));
+  const _kindLabel = (s.booking && s.booking.kind) ? sessionKindLabel(s) : (TYPE_LABEL[s.type] || null);
+  document.getElementById('bd-title').textContent = (_titleWho ? `${_kindLabel || 'Session'} · ${_titleWho}` : (_kindLabel || s.title));
   document.getElementById('bd-subtitle').textContent =
     `${DAY_FULL[s.day] || s.day} · ${fmtTime(s.startH, s.startM)} – ${fmtTime(s.endH, s.endM)} AWST · ${durMin(s)} min`;
 
@@ -14881,7 +14896,7 @@ function openBlockDetail(id) {
   if (s.cancelled) tags.push('<span class="detail-tag" style="background:var(--danger-soft);color:var(--danger-ink);">Cancelled</span>');
 
   const rows = [];
-  rows.push(row('Session type', TYPE_LABEL[s.type] || s.type));
+  rows.push(row('Session type', escapeHtml(sessionKindLabel(s))));
   rows.push(row('Day',   DAY_FULL[s.day] + ' · ' + DAY_LABEL[s.day]));
   // Editable time row for movable sessions — change duration or shift start in place
   const _movableTime = MOVABLE_TYPES.has(s.type) && !s.cancelled;
@@ -16111,7 +16126,7 @@ function openMoveImpact(id, newDay, newStartMin, durationMin, impact) {
   }
 
   const newEnd = newStartMin + durationMin;
-  document.getElementById('im-what').textContent = s.patient ? `${TYPE_LABEL[s.type]} · ${s.patient}` : (TYPE_LABEL[s.type] || 'Session');
+  document.getElementById('im-what').textContent = s.patient ? `${sessionKindLabel(s)} · ${s.patient}` : sessionKindLabel(s);
   document.getElementById('im-from').textContent = `${DAY_LABEL[s.day]} · ${fmtTime(s.startH, s.startM)}–${fmtTime(s.endH, s.endM)}`;
   document.getElementById('im-to').textContent = `${DAY_LABEL[newDay]} · ${fmtMin(newStartMin)}–${fmtMin(newEnd)}`;
 
@@ -18103,7 +18118,7 @@ function __buildMonthSectionHTML(anchor, eventsByDate, todayKey, selectedKey) {
         hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Australia/Perth'
       });
       const _esc = v => String(v).replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'})[c]);
-      const title = _esc(nameFirstTitle(e.title || 'Untitled'));
+      const title = _esc(typeFirstTitle(e.title || 'Untitled'));
       const _cats = Array.isArray(e.categories) ? e.categories : [];
       const _cat = _cats.find(c => colourForCategoryName(c)) || '';
       const _col = colourForCategoryName(_cat) || colourForType(e.event_type || 'outlook');
@@ -21684,6 +21699,16 @@ body.bsp-open #impact-modal    { z-index: 1201; }
   flex: 1; overflow-y: auto; overflow-x: hidden;
   padding: 0;
 }
+/* Create appointment, pinned below the form: content reflow above it can
+   never move it out from under the pointer mid-click. */
+.bsp-footer {
+  flex-shrink: 0;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+  background: var(--panel);
+  border-top: 1px solid var(--border);
+}
+.bsp-footer .step-actions { margin: 0; padding: 0; border-top: 0; justify-content: flex-end; }
+.bsp-footer #create-booking-btn { user-select: none; -webkit-user-select: none; min-width: 180px; justify-content: center; }
 /* Make the booking grid fill the panel */
 .bsp-body .booking-grid {
   display: block !important;
@@ -21997,6 +22022,20 @@ function initBookingPanel() {
   if (grid && body) {
     body.appendChild(grid);
     // Leave #view-book shell so existing tab code doesn't break
+  }
+  // Create appointment lives in a footer pinned under the scrolling form
+  // (19 Nov 2026). Inside the form it moved: leaving the address field (which
+  // a press on the button does) fills in the route line and MMM zone above
+  // it, the button dropped ~116 px between mouse-down and mouse-up, the
+  // release landed on that text (an I-beam) and the click never happened.
+  const panel = document.getElementById('booking-side-panel');
+  const actions = grid && grid.querySelector('#create-booking-btn') && grid.querySelector('#create-booking-btn').closest('.step-actions');
+  if (panel && actions && !document.getElementById('bsp-footer')) {
+    const foot = document.createElement('div');
+    foot.className = 'bsp-footer';
+    foot.id = 'bsp-footer';
+    foot.appendChild(actions);
+    panel.appendChild(foot);
   }
 }
 

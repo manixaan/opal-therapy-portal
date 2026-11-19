@@ -33,3 +33,11 @@
 .travel-overlay.tr-flash { animation: tr-pulse 1s ease-in-out 4; outline: 2px solid #b5563a; outline-offset: 1px; }
 @keyframes tr-pulse { 50% { outline-color: transparent; } }
 @media (prefers-reduced-motion: reduce) { .travel-overlay.tr-flash { animation: none; } }
+
+/* ── Night mode ──────────────────────────────────────────────────────────
+   The light washes, pale chips and dark inks above, re-valued for
+   <html data-theme="dark"> from the theme tokens: lifted warm surfaces,
+   tinted status chips with their *-ink text, low-contrast borders.
+   Night-only (one extra type selector of weight, so state rules still win);
+   day mode is untouched. */
+html:where([data-theme="dark"]) .tr-eyebrow { color: var(--danger-ink); }

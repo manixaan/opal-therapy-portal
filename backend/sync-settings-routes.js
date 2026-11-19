@@ -4,7 +4,7 @@
  * SYNC SETTINGS ROUTES (migration 081)
  *
  *   GET  /api/sync-settings                       my effective settings
- *   PUT  /api/sync-settings                       { directions: { portal_to_outlook|outlook_to_portal: { enabled?, auto?, syncFrom? } } }
+ *   PUT  /api/sync-settings                       { directions: { portal_to_outlook|outlook_to_portal|portal_to_splose|splose_to_portal: { enabled?, auto?, syncFrom? } } }
  *   POST /api/sync-settings/:direction/plan       what "Sync now" would do — reads only, writes nothing
  *   POST /api/sync-settings/:direction/apply      { decisions: [{ key, action, counterpartId? }] }
  *   POST /api/sync-settings/outlook/pull          run the Outlook → portal catch-up now (this calendar)
@@ -12,8 +12,7 @@
  * Guards: signed in, not read-only / pre-employee. Everything is the caller's
  * own calendar; an Owner or Admin may name another person with ?userId= (the
  * way reception drives a week in Sync Splose). The Owner's practice defaults
- * and limits were retired on 19 Nov 2026. Sync now plans only the three live
- * directions (Outlook both ways, portal → Splose). Every save and every apply is audited with ids and
+ * and limits were retired on 19 Nov 2026; Splose → Outlook has no Sync now. Every save and every apply is audited with ids and
  * counts only — never titles, client names or times.
  */
 
@@ -24,8 +23,8 @@ const { requireAuth } = require('./permissions');
 const prefs = require('./sync-preferences');
 const backfillMod = require('./sync-backfill');
 
-// Splose → portal and Splose → Outlook were retired: no Sync now for them.
-const DIR_RE = /^(portal_to_outlook|outlook_to_portal|portal_to_splose)$/;
+// Splose → Outlook was retired: no Sync now for it.
+const DIR_RE = /^(portal_to_outlook|outlook_to_portal|portal_to_splose|splose_to_portal)$/;
 
 function denyReadOnly(req, res, next) {
   if (!req.user || req.user.role === 'read_only' || req.user.role === 'pre_employee') {

@@ -232,9 +232,18 @@ describe('compact calendar week view', () => {
     expect(fn).toContain('__bdLocationRows(rows, s, id);'); // the location itself stays
   });
 
-  test('tile titles read name-first so a clipped tile still names the client', () => {
-    expect(HTML).toContain('function nameFirstTitle(title)');
-    expect(HTML).toContain(': nameFirstTitle(opts.title);');
+  // 19 Nov 2026 — owner's call: session type first, then the client.
+  test('tile titles read type first: "Client Appointment - Name"', () => {
+    expect(HTML).toContain('function typeFirstTitle(title)');
+    expect(HTML).toContain(': typeFirstTitle(opts.title);');
+    expect(HTML).not.toContain('nameFirstTitle');
+    const src = ['_ACTIVITY_WORD_RE', '_PERSON_NAME_RE'].map(n => HTML.match(new RegExp('const ' + n + ' = .*;'))[0]).join('\n')
+      + '\n' + HTML.match(/function typeFirstTitle\(title\) \{[\s\S]*?\n\}/)[0];
+    const typeFirstTitle = new Function(src + '\nreturn typeFirstTitle;')();
+    expect(typeFirstTitle('Stephen Brown - Client Appointment')).toBe('Client Appointment - Stephen Brown');
+    expect(typeFirstTitle('Client Appointment - Stephen Brown')).toBe('Client Appointment - Stephen Brown');
+    expect(typeFirstTitle('Travel Perth to Cunderdin')).toBe('Travel Perth to Cunderdin');
+    expect(typeFirstTitle('Catch up with Hui Hui')).toBe('Catch up with Hui Hui');
   });
 
   test('tiles keep a hidden time span and duration-aware density classes', () => {
@@ -900,7 +909,7 @@ describe('master scheduler phase 1', () => {
   const SCHED_CSS = fs.readFileSync(path.join(FRONTEND, 'scheduler.css'), 'utf8');
 
   test('scheduler assets are linked and the root container exists', () => {
-    expect(HTML).toContain('<link rel="stylesheet" href="/scheduler.css?v=p9" />');
+    expect(HTML).toContain('<link rel="stylesheet" href="/scheduler.css?v=p10" />');
     expect(HTML).toContain('<script src="/scheduler.js?v=p10" defer></script>');
     expect(HTML).toContain('id="scheduler-root"');
   });
@@ -1025,15 +1034,27 @@ describe('grouped booking-type picker', () => {
     expect(TRAVEL).not.toContain('firstClientLeaf');
   });
 
+  // 19 Nov 2026 — leaving the address field fills the route line / MMM zone
+  // above the button; inside the scrolling form it dropped ~116 px mid-click
+  // and the release landed on text. It is pinned in a footer now.
+  test('Create appointment is pinned in a footer outside the scrolling booking form', () => {
+    const init = HTML.slice(HTML.indexOf('function initBookingPanel() {'), HTML.indexOf('function openBookingPanel('));
+    expect(init).toContain("foot.id = 'bsp-footer';");
+    expect(init).toMatch(/closest\('\.step-actions'\)/);
+    expect(init).toContain('panel.appendChild(foot);');
+    expect(HTML).toMatch(/\.bsp-footer \{\s*flex-shrink: 0;/);
+    expect(HTML).toMatch(/\.bsp-footer #create-booking-btn \{ user-select: none;/);
+  });
+
   test('a move that can happen applies at once — only a blocked move opens the review', () => {
     const src = HTML.slice(HTML.indexOf('function openMoveImpact('), HTML.indexOf('function closeImpactModal()'));
     const run = (impact) => {
       const calls = { commit: 0, toasts: [], modal: false };
       const doc = { getElementById: () => ({ style: {}, classList: { add: () => { calls.modal = true; } }, set textContent(v) {}, set innerHTML(v) {}, set className(v) {} }) };
-      const fn = new Function('SESSIONS', 'commitMove', 'showToast', 'document', 'window', 'TYPE_LABEL', 'DAY_LABEL', 'fmtTime', 'fmtMin',
+      const fn = new Function('SESSIONS', 'commitMove', 'showToast', 'document', 'window', 'TYPE_LABEL', 'DAY_LABEL', 'fmtTime', 'fmtMin', 'sessionKindLabel',
         'var pendingMove, drag;' + src + '; return openMoveImpact;');
       const open = fn({ s1: { day: 'thu', startH: 20, startM: 0, endH: 20, endM: 19, type: 'therapy' } },
-        () => { calls.commit++; }, (t, sub) => calls.toasts.push([t, sub]), doc, {}, {}, {}, () => '', () => '');
+        () => { calls.commit++; }, (t, sub) => calls.toasts.push([t, sub]), doc, {}, {}, {}, () => '', () => '', () => 'Therapy Session');
       open('s1', 'thu', 1200, 30, impact);
       return calls;
     };
@@ -1455,7 +1476,7 @@ describe('support popup', () => {
   const SP_CSS = fs.readFileSync(path.join(FRONTEND, 'supportpop.css'), 'utf8');
 
   test('assets are linked next to the Opa assets', () => {
-    expect(HTML).toContain('<link rel="stylesheet" href="/supportpop.css?v=1" />');
+    expect(HTML).toContain('<link rel="stylesheet" href="/supportpop.css?v=2" />');
     expect(HTML).toContain('<script src="/supportpop.js?v=1" defer></script>');
   });
 

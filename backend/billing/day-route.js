@@ -134,13 +134,29 @@ function viaBase(base, from, to, gapMin, minutesFor, choice) {
 }
 
 /**
+ * Before/after answered in "Blocks to review" (source 'block_review', 19 Nov
+ * 2026) also hold between two stops — the twin of travel.js
+ * reviewTravelBetween: "after: Home" on the earlier stop or "before: Home" on
+ * the later one is a trip home; an address on either is the place gone to.
+ * Smart Booking's own answers keep their day-ends-only meaning.
+ */
+function reviewBetween(aTravel, bTravel) {
+  const pick = (t, side) => { const v = t && t[side]; return v && v.kind && v.source === 'block_review' ? v : null; };
+  const a = pick(aTravel, 'after'), b = pick(bTravel, 'before');
+  const place = (a && a.purpose === 'elsewhere' && a) || (b && b.purpose === 'elsewhere' && b) || null;
+  const home = !place && ((a && a.purpose === 'home') || (b && b.purpose === 'home'));
+  return { home: !!home, place };
+}
+
+/**
  * The place a session goes to before the next one ("Go somewhere else in
  * between"), or null. A Direct / Home choice made since wins, as on the calendar.
  */
-function viaPlace(travel, user) {
-  if (!travel || travel.next === 'direct' || travel.next === 'home') return null;
-  const spec = travel.after;
-  if (!spec || spec.purpose !== 'elsewhere') return null;
+function viaPlace(travel, user, nextTravel) {
+  if (travel && (travel.next === 'direct' || travel.next === 'home')) return null;
+  const own = travel && travel.after && travel.after.purpose === 'elsewhere' ? travel.after : null;
+  const spec = own || reviewBetween(travel, nextTravel).place;
+  if (!spec) return null;
   const pt = resolveSpec(spec, user);
   return pt && !pt.remote && pt.address ? pt : null;
 }
@@ -174,7 +190,7 @@ function buildDayLegs({ user, date, sessions, minutesFor }) {
     const from = eventAddress(a), to = eventAddress(b);
     if (!from || !to) continue;
     const gapMin = Math.round((new Date(b.start_time) - new Date(a.end_time)) / 60000);
-    const place = viaPlace(meta(a), user);
+    const place = viaPlace(meta(a), user, meta(b));
     if (place) {
       if (canonAddr(from) !== canonAddr(place.address)) {
         legs.push({ id: `return:${a.id}`, kind: 'RETURN', fromEventId: a.id, toEventId: null, midday: true,
@@ -186,7 +202,8 @@ function buildDayLegs({ user, date, sessions, minutesFor }) {
       }
       continue;
     }
-    const home = viaBase(base, from, to, gapMin, minutesFor, meta(a).next);
+    const choice = meta(a).next || (reviewBetween(meta(a), meta(b)).home ? 'home' : null);
+    const home = viaBase(base, from, to, gapMin, minutesFor, choice);
     if (home) {
       legs.push({ id: `return:${a.id}`, kind: 'RETURN', fromEventId: a.id, toEventId: null, midday: true,
         origin: from, destination: base.address, destinationLabel: base.label });
@@ -211,4 +228,4 @@ function buildDayLegs({ user, date, sessions, minutesFor }) {
   return { legs, base, baseUnset: !base && !explicitStart };
 }
 
-module.exports = { TRAVEL_HOME_MIN_STAY, weekKeyForDate, dayKeyForDate, dayBase, resolveSpec, eventAddress, candidatePairs, viaPlace, buildDayLegs };
+module.exports = { TRAVEL_HOME_MIN_STAY, weekKeyForDate, dayKeyForDate, dayBase, resolveSpec, eventAddress, candidatePairs, viaPlace, reviewBetween, buildDayLegs };

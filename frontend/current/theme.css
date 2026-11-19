@@ -16,7 +16,7 @@
   --ink: #efe9e0;
   --ink-soft: #c4bcb1;
   --ink-faint: #a69e93;
-  --muted: #8e867c;
+  --muted: #9d958a;   /* ≥4.5:1 on --bg, --panel and --panel-soft */
   --border: #3f3a34;
   --border-soft: #322e2a;
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
@@ -42,6 +42,10 @@
   --info: #6a9be0;
   --info-soft: #1d2b42;
   --info-ink: #a5c4f2;
+  /* Violet — chips that are lilac by day (GP, ready-to-test, organisation). */
+  --violet: #9d8ef0;
+  --violet-soft: #2c2745;
+  --violet-ink: #c8bff5;
 
   /* Calendar tiles: the pastel washes become rich washes of the same hue, far
      enough from the grid to stand out, with text still comfortably readable
@@ -162,3 +166,145 @@ html:root[data-theme="dark"] select:not([multiple]) {
 :root[data-theme="dark"] .travel-overlay .t-ico { opacity: 1 !important; }
 :root[data-theme="dark"] .travel-overlay:hover { filter: brightness(1.18); }
 :root[data-theme="dark"] .travel-overlay .t-switch:hover { background: rgba(255, 255, 255, 0.14); }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Shell surfaces (mockup_v3.html <style> blocks). Pale washes, pastel chips
+   and dark inks written for the day theme, re-valued for night from the
+   tokens: lifted warm surfaces, tinted chips with their *-ink text, never a
+   light card on the dark page. Night-only — day mode is untouched.
+   ───────────────────────────────────────────────────────────────────────── */
+html:where([data-theme="dark"]) .outlook-connect-banner { border-bottom-color: color-mix(in srgb, var(--warn) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .notif-item.unread { background: var(--panel-soft); }
+html:where([data-theme="dark"]) .notif-item.unread:hover { background: var(--info-soft); }
+html:where([data-theme="dark"]) .help-role-badge.owner { background: var(--danger-soft); color: var(--danger-ink); }
+html:where([data-theme="dark"]) .help-role-badge.admin { background: var(--info-soft); color: var(--info-ink); }
+html:where([data-theme="dark"]) .help-tour-card--done { border-color: color-mix(in srgb, var(--ok) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .help-setup-item { border-color: color-mix(in srgb, var(--warn) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .tp-warn-block { border-color: color-mix(in srgb, var(--warn) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .tp-source-chip.outlook { color: var(--info-ink); }
+html:where([data-theme="dark"]) .tp-source-chip.algo { background: var(--info-soft); color: var(--info-ink); }
+html:where([data-theme="dark"]) #report-close-btn:hover { color: var(--danger-ink); border-color: color-mix(in srgb, var(--danger) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .rpt-warn-box { border-color: color-mix(in srgb, var(--warn) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .rpt-day-card.has-issues { border-color: color-mix(in srgb, var(--warn) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .rpt-gantt-block.gap { background: var(--info-soft); border-color: color-mix(in srgb, var(--violet) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .case-noting-detail { background: var(--panel); }
+html:where([data-theme="dark"]) .cn-venue-chip { background: var(--info-soft); border-color: color-mix(in srgb, var(--info) 38%, var(--panel)); color: var(--info-ink); }
+html:where([data-theme="dark"]) .cn-venue-chip.cn-chip-top { border-color: color-mix(in srgb, var(--ok) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .cn-venue-chip.cn-chip-warn { border-color: color-mix(in srgb, var(--warn) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .confirm-summary { background: var(--panel-soft); }
+html:where([data-theme="dark"]) .api-preview .n { color: var(--info-ink); }
+html:where([data-theme="dark"]) .btn:hover { border-color: var(--border); }
+html:where([data-theme="dark"]) .cat-badge.stale { color: var(--accent-ink); }
+html:where([data-theme="dark"]) .cat-badge.near { color: var(--danger-ink); }
+html:where([data-theme="dark"]) .month-cell.selected-day { background: var(--panel-soft); }
+html:where([data-theme="dark"]) .view-tab:hover { background: rgba(255, 255, 255, 0.07); }
+html:where([data-theme="dark"]) .btn-today:hover { border-color: var(--border); }
+html:where([data-theme="dark"]) .cal-col.on-leave { background: var(--panel-soft); }
+html:where([data-theme="dark"]) .cal-head.on-leave .day-name,
+html:where([data-theme="dark"]) .cal-head.on-leave .day-num { color: var(--ink-soft); }
+html:where([data-theme="dark"]) .allday-cell { border-left-color: color-mix(in srgb, var(--warn) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .alert-card { background: var(--panel); }
+html:where([data-theme="dark"]) .splose-confirm { color: var(--warn-ink); }
+html:where([data-theme="dark"]) .splose-confirm strong { color: var(--warn-ink); }
+html:where([data-theme="dark"]) .tl-item::before { border-color: var(--border); }
+html:where([data-theme="dark"]) .session:hover .resize-handle::before,
+html:where([data-theme="dark"]) .session.resizing .resize-handle::before { background: rgba(255, 255, 255, 0.08); }
+html:where([data-theme="dark"]) .gap-opt .g-tag { color: var(--info-ink); }
+html:where([data-theme="dark"]) .impact-verdict.blocker { border-color: color-mix(in srgb, var(--danger) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .impact-list li.i-blocker { border-color: color-mix(in srgb, var(--danger) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .impact-list li.i-info { border-color: color-mix(in srgb, var(--accent) 38%, var(--panel)); color: var(--accent-ink); }
+html:where([data-theme="dark"]) .alarm-banner { border-color: color-mix(in srgb, var(--warn) 38%, var(--panel)); color: var(--warn-ink); }
+html:where([data-theme="dark"]) .status-pill.draft { color: var(--warn-ink); }
+html:where([data-theme="dark"]) .cred-card.expired { background: var(--panel); }
+html:where([data-theme="dark"]) .cred-card.expiring-soon { background: var(--warn-soft); }
+html:where([data-theme="dark"]) .cred-card .cred-scan.missing { background: var(--warn-soft); }
+html:where([data-theme="dark"]) .cred-card .cred-scan.present { background: var(--ok-soft); color: var(--ok-ink); }
+html:where([data-theme="dark"]) .cred-scan-thumb { background: var(--panel-soft); }
+html:where([data-theme="dark"]) .cred-proposed { background: var(--panel); }
+html:where([data-theme="dark"]) .cred-proposal-note .conf.high { color: var(--ok-ink); }
+html:where([data-theme="dark"]) .cred-read-status.warn { background: var(--warn-soft); }
+html:where([data-theme="dark"]) .cred-read-status.err { background: var(--danger-soft); }
+html:where([data-theme="dark"]) .session .travel-badge.tb-on { color: var(--accent-ink); }
+html:where([data-theme="dark"]) .sup-chip.st-new { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 38%, var(--panel)); color: var(--warn-ink); }
+html:where([data-theme="dark"]) .sup-chip.st-triaged { background: var(--info-soft); border-color: color-mix(in srgb, var(--info) 38%, var(--panel)); color: var(--info-ink); }
+html:where([data-theme="dark"]) .sup-chip.st-in_progress { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 38%, var(--panel)); color: var(--accent-ink); }
+html:where([data-theme="dark"]) .sup-chip.st-ready_to_test { background: var(--violet-soft); border-color: color-mix(in srgb, var(--violet) 38%, var(--panel)); color: var(--violet-ink); }
+html:where([data-theme="dark"]) .sup-chip.st-resolved,
+html:where([data-theme="dark"]) .sup-chip.st-closed { background: var(--ok-soft); border-color: color-mix(in srgb, var(--ok) 38%, var(--panel)); color: var(--ok-ink); }
+html:where([data-theme="dark"]) .sup-chip.st-wont_fix,
+html:where([data-theme="dark"]) .sup-chip.st-duplicate { background: var(--panel-soft); }
+html:where([data-theme="dark"]) .sup-chip.pr-critical,
+html:where([data-theme="dark"]) .sup-chip.pr-p1 { background: var(--danger-soft); border-color: color-mix(in srgb, var(--danger) 38%, var(--panel)); color: var(--danger-ink); }
+html:where([data-theme="dark"]) .sup-chip.pr-high,
+html:where([data-theme="dark"]) .sup-chip.pr-p2 { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 38%, var(--panel)); color: var(--warn-ink); }
+html:where([data-theme="dark"]) .sup-comment { background: var(--panel); }
+html:where([data-theme="dark"]) .rh-soon { background: var(--panel-soft); }
+html:where([data-theme="dark"]) .rh-err { border-color: color-mix(in srgb, var(--danger) 38%, var(--panel)); color: var(--danger-ink); }
+html:where([data-theme="dark"]) .acct-flag.on { color: var(--ok-ink); }
+html:where([data-theme="dark"]) .b-stat.ok .bs-val { color: var(--ok-ink); }
+html:where([data-theme="dark"]) .status-partial { color: var(--info-ink); }
+html:where([data-theme="dark"]) .amount-paid { color: var(--ok-ink); }
+html:where([data-theme="dark"]) .payment-item .p-amt { color: var(--ok-ink); }
+html:where([data-theme="dark"]) .ndis-stat.ok .stat-val { color: var(--ok-ink); }
+html:where([data-theme="dark"]) .fund-plan { color: var(--info-ink); }
+html:where([data-theme="dark"]) .fund-self { background: var(--info-soft); color: var(--info-ink); }
+html:where([data-theme="dark"]) .lb-type { color: var(--info-ink); }
+html:where([data-theme="dark"]) .lb-src { background: var(--panel-soft); }
+html:where([data-theme="dark"]) .type-pm { color: var(--info-ink); }
+html:where([data-theme="dark"]) .type-gp { background: var(--info-soft); color: var(--info-ink); }
+html:where([data-theme="dark"]) .type-other { color: var(--ink-soft); }
+html:where([data-theme="dark"]) .bsp-prefill-clear:hover { color: var(--danger-ink); }
+html:where([data-theme="dark"]) .booking-cat-chip:hover { background: var(--panel); }
+html:where([data-theme="dark"]) .bcat-icon--client { background: var(--ok-soft); }
+html:where([data-theme="dark"]) .bcat-icon--email { background: var(--info-soft); }
+html:where([data-theme="dark"]) .bcat-icon--noting { background: var(--panel-soft); }
+html:where([data-theme="dark"]) .bcat-icon--custom { background: var(--danger-soft); }
+html:where([data-theme="dark"]) .booking-cat-chip.active .bcat-icon--email { background: var(--info-soft); }
+html:where([data-theme="dark"]) .booking-cat-chip.active .bcat-icon--admin { background: var(--warn-soft); }
+html:where([data-theme="dark"]) .booking-cat-chip.active .bcat-icon--noting { background: var(--violet-soft); }
+html:where([data-theme="dark"]) .booking-cat-chip.active .bcat-icon--custom { background: var(--danger-soft); }
+html:where([data-theme="dark"]) .bsp-dur-slider::-webkit-slider-thumb { border-color: var(--border); }
+html:where([data-theme="dark"]) .bsp-dur-slider::-moz-range-thumb { border-color: var(--border); }
+html:where([data-theme="dark"]) .sa-cell.common { background: var(--info-soft); }
+html:where([data-theme="dark"]) .sa-cell.common.busy { background: var(--danger-soft); }
+html:where([data-theme="dark"]) .sup-privacy-note { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .sup-verify-bar { background: var(--violet-soft); border-color: color-mix(in srgb, var(--violet) 38%, var(--panel)); }
+
+/* Hand-tuned shell pieces the sweep above leaves alone. */
+:root[data-theme="dark"] .icon-btn .badge { border-color: var(--panel); }
+:root[data-theme="dark"] .settings-toggle-slider { background: #4d4740; }
+:root[data-theme="dark"] .settings-toggle-slider:before { background: var(--ink-soft); }
+:root[data-theme="dark"] input:checked + .settings-toggle-slider:before { background: #ffffff; }
+:root[data-theme="dark"] .pat-tag.central { background: var(--violet-soft); color: var(--violet-ink); }
+:root[data-theme="dark"] .pat-tag.south { background: var(--info-soft); color: var(--info-ink); }
+:root[data-theme="dark"] .pat-tag.east { background: var(--warn-soft); color: var(--warn-ink); }
+:root[data-theme="dark"] .pat-tag.west { background: var(--accent-soft); color: var(--accent-ink); }
+:root[data-theme="dark"] .mm-cell.mm-out { color: var(--ink-faint); opacity: 0.7; }
+/* Contact avatars take a per-type pastel inline; by night they sit on a lifted disc. */
+:root[data-theme="dark"] .cc-avatar { background: var(--panel-sunk) !important; color: var(--ink) !important; }
+:root[data-theme="dark"] #cp-avatar { background: var(--accent-soft) !important; color: var(--accent-ink) !important; }
+
+/* Inline styles written into the shell and JS-built markup. */
+:root[data-theme="dark"] [style*="color:#c2412e"]:not([style*="background-color:#c2412e"]) { color: var(--danger-ink) !important; }
+:root[data-theme="dark"] [style*="color:#3d6cae"]:not([style*="background-color:#3d6cae"]) { color: var(--info-ink) !important; }
+:root[data-theme="dark"] [style*="color:#2f7d4f"]:not([style*="background-color:#2f7d4f"]) { color: var(--ok-ink) !important; }
+:root[data-theme="dark"] [style*="color:#555"]:not([style*="background-color:#555"]) { color: var(--ink-soft) !important; }
+:root[data-theme="dark"] [style*="color:#7a868a"]:not([style*="background-color:#7a868a"]) { color: var(--muted) !important; }
+:root[data-theme="dark"] [style*="border:1px solid #eeb3a4"] { border-color: color-mix(in srgb, var(--danger) 38%, var(--panel)) !important; }
+:root[data-theme="dark"] [style*="border:1px solid #c3d4ec"] { border-color: color-mix(in srgb, var(--info) 38%, var(--panel)) !important; }
+:root[data-theme="dark"] [style*="background: #ece7df"] { background: var(--panel-sunk) !important; }
+:root[data-theme="dark"] [style*="background:#fff4e5"] { background: var(--warn-soft) !important; color: var(--warn-ink) !important; }
+:root[data-theme="dark"] [style*="background:#eaf7ef"] { background: var(--ok-soft) !important; color: var(--ok-ink) !important; }
+/* "Untitled event" is dimmed inline for the day theme; by night that sinks it. */
+:root[data-theme="dark"] .s-title em[style*="opacity"] { opacity: 0.8 !important; }
+/* Snapshot rings: the track is a baked-in light stroke on an inline SVG. */
+:root[data-theme="dark"] circle[stroke="#e9e3d9"] { stroke: var(--border); }
+/* Settings › Security role badge: painted inline from JS with the day washes. */
+:root[data-theme="dark"] #stg-sec-role-badge[style*="250, 240, 218"] { background: var(--warn-soft) !important; color: var(--warn-ink) !important; }
+:root[data-theme="dark"] #stg-sec-role-badge[style*="232, 239, 249"] { background: var(--info-soft) !important; color: var(--info-ink) !important; }
+:root[data-theme="dark"] #stg-sec-role-badge[style*="229, 242, 232"] { background: var(--ok-soft) !important; color: var(--ok-ink) !important; }
+/* Day colours set from JS (element.style.*), which serialise as rgb(). */
+:root[data-theme="dark"] [style*="background: rgb(251, 233, 229)"] { background: var(--danger-soft) !important; }
+:root[data-theme="dark"] [style*="color: rgb(156, 51, 34)"],
+:root[data-theme="dark"] [style*="color: rgb(194, 65, 46)"]:not([style*="background-color: rgb(194, 65, 46)"]) { color: var(--danger-ink) !important; }
+:root[data-theme="dark"] [style*="color: rgb(39, 106, 67)"] { color: var(--ok-ink) !important; }

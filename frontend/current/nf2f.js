@@ -205,13 +205,15 @@
     if (!s || !s.element || !blockOf(s)) return;
     var el = s.element;
     var bar = el.querySelector('.nf2f-bar');
-    if (!bar) { bar = document.createElement('div'); bar.className = 'nf2f-bar'; el.appendChild(bar); }
     var clients = clientsOf(s);
     if (!clients.length) {
-      bar.innerHTML = '<span class="nf2f-nonbill">Non-billable</span>';
+      // No clients: nothing to show on the tile. The "Non-billable" pill was
+      // removed on request (19 Nov 2026) — the drawer still says so.
+      if (bar) bar.remove();
       el.classList.add('nf2f-nonbillable');
       return;
     }
+    if (!bar) { bar = document.createElement('div'); bar.className = 'nf2f-bar'; el.appendChild(bar); }
     el.classList.remove('nf2f-nonbillable');
     var r = s.dbId ? runningFor(s.dbId) : null;
     // Start / Stop live in the right-click menu and the calendar chip

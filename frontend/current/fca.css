@@ -624,3 +624,25 @@
 /* Nothing in the builder may make the PAGE scroll sideways. */
 .fca-shell, .fca-body, .fca-main { max-width: 100%; overflow-x: hidden; }
 .fca-preview-stage { overflow: auto; }
+
+/* ── Night mode ──────────────────────────────────────────────────────────
+   The light washes, pale chips and dark inks above, re-valued for
+   <html data-theme="dark"> from the theme tokens: lifted warm surfaces,
+   tinted status chips with their *-ink text, low-contrast borders.
+   Night-only (one extra type selector of weight, so state rules still win);
+   day mode is untouched. */
+html:where([data-theme="dark"]) .fca-status-draft { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 38%, var(--panel)); color: var(--warn-ink); }
+html:where([data-theme="dark"]) .fca-status-generated { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 38%, var(--panel)); color: var(--accent-ink); }
+html:where([data-theme="dark"]) .fca-step-done .fca-stepnum { background: var(--accent-soft); color: var(--accent-ink); }
+html:where([data-theme="dark"]) .fca-saveind.fca-saved { color: var(--accent-ink); }
+html:where([data-theme="dark"]) .fca-note-warn { background: var(--warn-soft); }
+html:where([data-theme="dark"]) .fca-note-ok { background: var(--panel-soft); }
+html:where([data-theme="dark"]) .fca-profilechip { background: var(--accent-soft); color: var(--accent-ink); border-color: color-mix(in srgb, var(--accent) 38%, var(--panel)); }
+html:where([data-theme="dark"]) .fca-badge-splose { background: var(--info-soft); border-color: color-mix(in srgb, var(--info) 38%, var(--panel)); color: var(--info-ink); }
+html:where([data-theme="dark"]) .fca-badge-client_profile { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 38%, var(--panel)); color: var(--accent-ink); }
+html:where([data-theme="dark"]) .fca-badge-report_override { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 38%, var(--panel)); color: var(--warn-ink); }
+html:where([data-theme="dark"]) .fca-badge-missing { background: var(--danger-soft); border-color: color-mix(in srgb, var(--danger) 38%, var(--panel)); color: var(--danger-ink); }
+html:where([data-theme="dark"]) .fca-field-missing { background: var(--panel); }
+html:where([data-theme="dark"]) .fca-missing { color: var(--danger-ink); }
+html:where([data-theme="dark"]) .fca-preview-stage { background: var(--panel-sunk); }
+html:where([data-theme="dark"]) .fca-preview-error { border-color: color-mix(in srgb, var(--warn) 38%, var(--panel)); color: var(--warn-ink); }

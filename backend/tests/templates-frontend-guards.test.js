@@ -69,7 +69,7 @@ describe('the shell wires the surface', () => {
     // js v=5: two-step editor panel, contents-mirroring outline with
     // drag-to-reorder, multi-article A4 pagination fix.
     // css v=5: the stepper and outline styles.
-    expect(SHELL).toContain('<link rel="stylesheet" href="/templates.css?v=7" />');
+    expect(SHELL).toContain('<link rel="stylesheet" href="/templates.css?v=8" />');
     expect(SHELL).toContain('<script src="/templates.js?v=10" defer></script>');
   });
 

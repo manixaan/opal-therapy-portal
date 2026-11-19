@@ -571,3 +571,45 @@ describe('the travel panel names the real next stop (28 Oct 2026)', () => {
   });
 });
 
+
+describe('before / after answered in "Blocks to review" (19 Nov 2026)', () => {
+  const home = { kind: 'address', address: '', label: 'Home', purpose: 'home', source: 'block_review' };
+  const school = { kind: 'address', address: SCHOOL, label: 'School', purpose: 'elsewhere', source: 'block_review' };
+
+  test('"before: Home" on the later stop sends a short gap home', () => {
+    const c = load();
+    add(c, { at: '09:00', to: '10:00', s: { address: OSBORNE, patient: 'A' } });
+    add(c, { at: '11:30', to: '12:30', s: { address: JOONDALUP, patient: 'B', travel: { before: home } } });   // too short to go home by itself
+    expect(legs(c).filter((x) => x.kind === 'between').map((x) => x.via)).toEqual(['home-return', 'home-out']);
+  });
+
+  test('"after: Home" on the earlier stop does the same', () => {
+    const c = load();
+    add(c, { at: '09:00', to: '10:00', s: { address: OSBORNE, patient: 'A', travel: { after: home } } });
+    add(c, { at: '11:30', to: '12:30', s: { address: JOONDALUP, patient: 'B' } });
+    expect(legs(c).filter((x) => x.kind === 'between').map((x) => x.via)).toEqual(['home-return', 'home-out']);
+  });
+
+  test('"before: an address" on the later stop routes through that place', () => {
+    const c = load();
+    add(c, { at: '09:00', to: '10:00', s: { address: OSBORNE, patient: 'A' } });
+    add(c, { at: '14:00', to: '15:00', s: { address: JOONDALUP, patient: 'B', travel: { before: school } } });
+    const L = legs(c).filter((x) => x.kind === 'between');
+    expect(L.map((x) => x.via)).toEqual(['place-in', 'place-out']);
+    expect(L[0].toLoc.label).toBe('School');
+  });
+
+  test('a Smart Booking "after: home" mid-day keeps its old meaning (day ends only)', () => {
+    const c = load();
+    add(c, { at: '09:00', to: '10:00', s: { address: OSBORNE, patient: 'A', travel: { after: { kind: 'base', id: 'home-1', purpose: 'home' } } } });
+    add(c, { at: '11:30', to: '12:30', s: { address: JOONDALUP, patient: 'B' } });
+    expect(legs(c).filter((x) => x.kind === 'between').map((x) => x.via)).toEqual([null]);
+  });
+
+  test('an explicit Direct choice made later still wins', () => {
+    const c = load();
+    add(c, { at: '09:00', to: '10:00', s: { address: OSBORNE, patient: 'A', travel: { after: home, next: 'direct' } } });
+    add(c, { at: '11:30', to: '12:30', s: { address: JOONDALUP, patient: 'B' } });
+    expect(legs(c).filter((x) => x.kind === 'between').map((x) => x.via)).toEqual([null]);
+  });
+});

@@ -962,7 +962,7 @@ describe('the shell', () => {
     // pin lives in THREE files: here, assessment-surface-guards.test.js and
     // templates-frontend-guards.test.js — bump all of them together, or CI
     // fails on whichever was forgotten.
-    expect(SHELL).toContain('/resourcehub.css?v=r32');
+    expect(SHELL).toContain('/resourcehub.css?v=r33');
     expect(SHELL).toContain('/resourcehub.js?v=r57');
   });
 

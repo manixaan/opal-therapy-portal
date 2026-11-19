@@ -68,7 +68,7 @@ describe('Smart Booking: several clients, or none', () => {
 });
 
 describe('the block and the running timer', () => {
-  test('a block with clients lists them with Start; with none it says Non-billable', async () => {
+  test('a block with clients lists them with Start; with none the tile carries no pill (removed 19 Nov 2026)', async () => {
     const { w, $, flush } = env();
     w.addSession($('day-mon'), { id: 'A', dbId: 'db-1', booking: { group: 'nf2f', clients: [{ clientId: '1', clientName: 'Al A' }, { clientId: '2', clientName: 'Bo B' }] } });
     w.addSession($('day-mon'), { id: 'B', dbId: 'db-2', booking: { group: 'nf2f', clientId: null } });
@@ -78,7 +78,8 @@ describe('the block and the running timer', () => {
     expect(w.SESSIONS.A.element.querySelector('.nf2f-btn')).toBeNull();
     expect(w.Nf2f.menuItems(w.SESSIONS.A)).toMatch(/data-nf2f-start="db-1".*Start billable time.*data-nf2f-alloc="db-1".*Allocate billing/);
     expect(w.Nf2f.menuItems(w.SESSIONS.B)).toBe('');
-    expect(w.SESSIONS.B.element.querySelector('.nf2f-nonbill').textContent).toBe('Non-billable');
+    expect(w.SESSIONS.B.element.querySelector('.nf2f-nonbill')).toBeNull();
+    expect(w.SESSIONS.B.element.querySelector('.nf2f-bar')).toBeNull();
   });
   test('Start (right-click menu) → the chip appears on the calendar with Stop; Stop from the chip clears it', async () => {
     const { w, $, log, flush } = env();

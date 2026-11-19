@@ -363,6 +363,22 @@ describe('day route mirrors the calendar\'s travel rules', () => {
     expect(legs([a({ after: { ...place, address: '2 B St, Riverton' } }), b]).map(l => l.kind)).toEqual(['OUTBOUND', 'RETURN', 'RETURN']);
   });
 
+  // 19 Nov 2026 — before/after answered in "Blocks to review" bill the route the calendar draws.
+  test('review answers between two stops: "Home" bills a trip home, an address bills a stop there', () => {
+    const home = { kind: 'address', address: '', label: 'Home', purpose: 'home', source: 'block_review' };
+    const school = { kind: 'address', address: '9 School Rd, Como WA', label: 'School', purpose: 'elsewhere', source: 'block_review' };
+    const a = (travel) => ({ ...ev('a', '1 A St, Willetton', 1), end_time: '2026-09-25T02:00:00Z', custom_metadata: { travel } });
+    const b = (travel) => ({ ...ev('b', '2 B St, Riverton', 2), start_time: '2026-09-25T02:45:00Z', custom_metadata: { travel } });
+    const kinds = s => DR.buildDayLegs({ user, date: '2026-09-25', sessions: s }).legs.map(l => l.kind);
+    const legs = s => DR.buildDayLegs({ user, date: '2026-09-25', sessions: s }).legs;
+    expect(kinds([a({}), b({ before: home })])).toEqual(['OUTBOUND', 'RETURN', 'OUTBOUND', 'RETURN']);
+    expect(kinds([a({ after: home }), b({})])).toEqual(['OUTBOUND', 'RETURN', 'OUTBOUND', 'RETURN']);
+    expect(legs([a({}), b({ before: school })]).map(l => l.destination).slice(1, 2)).toEqual([school.address]);
+    // Direct chosen since wins; Smart Booking's own "after: home" mid-day stays a direct drive.
+    expect(kinds([a({ after: home, next: 'direct' }), b({})])).toEqual(['OUTBOUND', 'BETWEEN', 'RETURN']);
+    expect(kinds([a({ after: { kind: 'base', id: 'x', purpose: 'home' } }), b({})])).toEqual(['OUTBOUND', 'BETWEEN', 'RETURN']);
+  });
+
   test('Return Home (purpose home) ends at the day\'s base, not the base saved with the answer', () => {
     const u = { ...user, default_work_location: { homes: [...user.default_work_location.homes,
       { id: 'parents', label: "Parent's Home", kind: 'local', addr: '11 Rostrata Ave, Willetton WA 6155' }] } };

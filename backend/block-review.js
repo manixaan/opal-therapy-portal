@@ -253,20 +253,64 @@ function classifyBlock(ev, ctx = {}) {
     if (!place) missing.push('location');
     else if (fields.location.confidence !== 'high') unsure.push('location');
   }
-  let status;
-  if (missing.length || unsure.length) status = 'needs_input';
-  else {
-    // Settled by Splose's own records (and the block's own place) alone: there
-    // is nothing for a person to check.
-    const authoritative = Object.values(fields).every(f => !f.value || ['splose', 'event'].includes(f.source));
-    status = authoritative ? 'confirmed' : 'guessed';
-  }
+  // Every block made outside the portal waits for a person (19 Nov 2026):
+  // even one Splose fully describes still needs where the clinician came from
+  // and went to, so nothing is settled outright any more. A confident guess is
+  // applied (and held out of invoicing); anything short asks first.
+  const status = (missing.length || unsure.length) ? 'needs_input' : 'guessed';
 
   return {
     status, kind, group, eventType: kind ? eventTypeFor(kind) : null,
     client: client && clientRule !== 'none' ? client : null,
     location: place, virtual, fields, missing, unsure,
+    needsTravel: needsTravel(place, virtual),
   };
+}
+
+/** PURE — a block at a real place (not online) moves the clinician, so travel needs before/after. */
+function needsTravel(location, virtual) {
+  const l = String(location || '').trim();
+  return !!l && !virtual && !VIRTUAL_PLACE.test(l);
+}
+
+const TRAVEL_SIDES = ['before', 'after'];
+/**
+ * PURE — validate one before/after answer from the review and turn it into
+ * the travel spec Smart Booking stores (custom_metadata.travel.before/after,
+ * read by travel.js sessionTravelOverride / resolveTravelPoint):
+ *   { mode: 'home', homeAddress? }              → purpose 'home' (the day's home base)
+ *   { mode: 'address', address, placeId?, lat?, lng?, label? } → purpose 'elsewhere'
+ * Returns { spec } or { error }.
+ */
+function travelSpecFrom(raw) {
+  if (!raw || typeof raw !== 'object') return { error: 'missing' };
+  const str = (v, n) => (typeof v === 'string' ? v.trim().slice(0, n) : '');
+  const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
+  if (raw.mode === 'home') {
+    const spec = { kind: 'address', address: str(raw.homeAddress, 300), label: 'Home', purpose: 'home', source: 'block_review' };
+    return { spec };
+  }
+  if (raw.mode === 'address') {
+    const address = str(raw.address, 300);
+    if (address.length < 3) return { error: 'address' };
+    const spec = { kind: 'address', address, label: str(raw.label, 120) || address.split(',')[0], purpose: 'elsewhere', source: 'block_review' };
+    const placeId = str(raw.placeId, 300); if (placeId) spec.placeId = placeId;
+    const lat = num(raw.lat), lng = num(raw.lng);
+    if (lat !== undefined && lng !== undefined && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) { spec.lat = lat; spec.lng = lng; }
+    return { spec };
+  }
+  return { error: 'mode' };
+}
+
+/** PURE — { before, after } answers → { travel } or { error: side }. Both sides required. */
+function travelFrom(raw) {
+  const out = {};
+  for (const side of TRAVEL_SIDES) {
+    const r = travelSpecFrom(raw && raw[side]);
+    if (r.error) return { error: side };
+    out[side] = r.spec;
+  }
+  return { travel: out };
 }
 
 /** PURE — what a guess was made from; a change means look again. */
@@ -297,12 +341,13 @@ function createBlockReview({ db, sploseApi, log = () => {} }) {
    * only for a direct service — a report/nf2f client lives in `booking`, as a
    * portal booking's does (routes.js): client_id marks a Splose appointment.
    */
-  async function applyToEvent(q, ev, { kind, client, location }) {
+  async function applyToEvent(q, ev, { kind, client, location, travel = null, clearPlace = false }) {
     const booking = bookingFor(kind, client);
     const group = booking.group;
     const before = {
       event_type: ev.event_type, client_id: ev.client_id ?? null, client_name: ev.client_name ?? null,
       booking: (ev.custom_metadata && ev.custom_metadata.booking) || null,
+      travel: (ev.custom_metadata && ev.custom_metadata.travel) || null,
       location: ev.location ?? null, manual_location: ev.manual_location ?? null,
       is_manual_location_override: !!ev.is_manual_location_override,
     };
@@ -322,6 +367,23 @@ function createBlockReview({ db, sploseApi, log = () => {} }) {
       [ev.id, eventTypeFor(kind), JSON.stringify(booking),
         setClient ? String(client.id) : null, setClient ? (client.fullName || null) : null,
         setPlace ? location : null]);
+    if (clearPlace && !location) {
+      // The person cleared the place ("at my desk / online"): the block stops
+      // being a stop on the day's route. Its Outlook text is kept in `before`.
+      await q.query(
+        `UPDATE events SET location = '', manual_location = NULL, is_manual_location_override = TRUE, updated_at = NOW() WHERE id = $1`, [ev.id]);
+    }
+    if (travel) {
+      // Where the clinician came from and went to: merged into the event's
+      // travel the way Smart Booking stores it, so the day's legs and trip
+      // billing are worked out from it. A between-stops choice made earlier
+      // (travel.next) and moved legs stay as they were.
+      await q.query(
+        `UPDATE events SET custom_metadata = COALESCE(custom_metadata, '{}'::jsonb)
+            || jsonb_build_object('travel', COALESCE(custom_metadata->'travel', '{}'::jsonb) || $2::jsonb)
+          WHERE id = $1`,
+        [ev.id, JSON.stringify({ before: travel.before, after: travel.after })]);
+    }
     return before;
   }
 
@@ -432,7 +494,7 @@ function createBlockReview({ db, sploseApi, log = () => {} }) {
   function storedGuess(g) {
     return { kind: g.kind, group: g.group, clientId: g.client ? g.client.id : null,
       clientName: g.client ? g.client.fullName : null, location: g.location, virtual: g.virtual,
-      fields: g.fields, missing: g.missing, unsure: g.unsure };
+      fields: g.fields, missing: g.missing, unsure: g.unsure, needsTravel: !!g.needsTravel };
   }
 
   /** The caller's open reviews (guessed + needs_input), oldest first. */
@@ -465,7 +527,7 @@ function createBlockReview({ db, sploseApi, log = () => {} }) {
    * A person settles a block: { kind, client?, location? }. A guessed block's
    * earlier guess is undone first, so the event ends up exactly as chosen.
    */
-  async function confirm(userId, eventId, { kind, client, location }) {
+  async function confirm(userId, eventId, { kind, client, location, travel = null, clearPlace = false }) {
     const q = await pool.connect();
     try {
       await q.query('BEGIN');
@@ -477,7 +539,12 @@ function createBlockReview({ db, sploseApi, log = () => {} }) {
         await restoreEvent(q, ev.id, ev.review_before);
         base = (await q.query('SELECT * FROM events WHERE id = $1', [ev.id])).rows[0];
       }
-      const before = await applyToEvent(q, base, { kind, client, location });
+      // In person at a real place: where the clinician was before and after is required.
+      // Same rule as the review panel: online kinds and Teams meetings never travel.
+      const virtual = /^telehealth/.test(kind) || NO_DEFAULT_ADDRESS.has(kind) || !!base.is_teams_meeting || base.event_type === 'teams_meeting';
+      const place = clearPlace ? location : (location || base.location);
+      if (needsTravel(place, virtual) && !travel) { await q.query('ROLLBACK'); return { error: 'travel_required' }; }
+      const before = await applyToEvent(q, base, { kind, client, location, travel, clearPlace });
       await q.query(
         `UPDATE event_block_reviews SET status = 'confirmed', resolved_by = $2, resolved_at = NOW(),
                 before = COALESCE(before, $3::jsonb),
@@ -504,13 +571,32 @@ function createBlockReview({ db, sploseApi, log = () => {} }) {
     } catch (err) { await q.query('ROLLBACK').catch(() => {}); throw err; } finally { q.release(); }
   }
 
-  /** Accept every applied guess as it stands. */
+  /**
+   * Accept every applied guess as it stands — except blocks at a real place:
+   * those need the before/after answers, one at a time.
+   */
   async function confirmAllGuessed(userId, eventIds) {
-    const { rows } = await pool.query(
-      `UPDATE event_block_reviews SET status = 'confirmed', resolved_by = $1, resolved_at = NOW()
-        WHERE user_id = $1 AND status = 'guessed' AND event_id = ANY($2::uuid[]) RETURNING event_id`,
-      [userId, eventIds]);
-    return { confirmed: rows.length };
+    const q = await pool.connect();
+    try {
+      await q.query('BEGIN');
+      const { rows } = await q.query(
+        `SELECT br.event_id, br.guess, e.location, e.is_teams_meeting, e.event_type FROM event_block_reviews br JOIN events e ON e.id = br.event_id
+          WHERE br.user_id = $1 AND br.status = 'guessed' AND br.event_id = ANY($2::uuid[]) FOR UPDATE OF br`, [userId, eventIds]);
+      const ok = rows.filter(r => {
+        const g = r.guess || {};
+        const virtual = !!g.virtual || /^telehealth/.test(g.kind || '') || NO_DEFAULT_ADDRESS.has(g.kind) || !!r.is_teams_meeting || r.event_type === 'teams_meeting';
+        return !needsTravel(g.location || r.location, virtual);
+      }).map(r => r.event_id);
+      let confirmed = 0;
+      if (ok.length) {
+        const upd = await q.query(
+          `UPDATE event_block_reviews SET status = 'confirmed', resolved_by = $1, resolved_at = NOW()
+            WHERE user_id = $1 AND status = 'guessed' AND event_id = ANY($2::uuid[]) RETURNING event_id`, [userId, ok]);
+        confirmed = upd.rows.length;
+      }
+      await q.query('COMMIT');
+      return { confirmed, needTravel: rows.length - ok.length };
+    } catch (err) { await q.query('ROLLBACK').catch(() => {}); throw err; } finally { q.release(); }
   }
 
   return { sweep, list, confirm, dismiss, confirmAllGuessed };
@@ -519,5 +605,5 @@ function createBlockReview({ db, sploseApi, log = () => {} }) {
 module.exports = {
   CLASSIFIER_VERSION,
   classifyBlock, kindFromText, clientFromText, leafForServiceName, eventTypeFor,
-  fingerprintOf, bookingFor, createBlockReview,
+  fingerprintOf, bookingFor, createBlockReview, needsTravel, travelSpecFrom, travelFrom,
 };

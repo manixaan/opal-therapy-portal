@@ -6,8 +6,10 @@
  *
  * Proves: an Outlook block is classified and its confident guess applied but
  * held out of invoicing; a block with gaps is left untouched until a person
- * fills them; confirm releases the hold; dismiss puts a guess back exactly as
- * it came in; a client off the caller's caseload cannot be attached; nobody
+ * fills them (and is held from invoicing too); confirm releases the hold; a
+ * block at a real place needs where the clinician was before and after, stored
+ * as Smart Booking's travel answers; even a Splose appointment Splose fully
+ * describes waits for a person; dismiss puts a guess back exactly as it came in; a client off the caller's caseload cannot be attached; nobody
  * else's blocks are visible; read-only accounts are refused.
  */
 
@@ -94,8 +96,28 @@ test('a confident Outlook guess is applied, flagged, and held out of invoicing u
   // Held: a guess is never invoiced.
   expect(await candidates([ev.id])).toHaveLength(0);
 
-  const ok = await post(me, `/api/block-review/${ev.id}/confirm`, { kind: 'assessment', clientId: '9001', location: '12 Example Street, Applecross WA 6153' });
+  expect(res.body.blocks[0].guess.needsTravel).toBe(true);
+  // At a real place: before/after are required.
+  const noTravel = await post(me, `/api/block-review/${ev.id}/confirm`, { kind: 'assessment', clientId: '9001', location: '12 Example Street, Applecross WA 6153' });
+  expect(noTravel.status).toBe(400);
+  expect(noTravel.body.code).toBe('travel_required');
+  const badSide = await post(me, `/api/block-review/${ev.id}/confirm`, { kind: 'assessment', clientId: '9001', location: '12 Example Street, Applecross WA 6153',
+    travel: { before: { mode: 'home' }, after: { mode: 'address', address: '' } } });
+  expect(badSide.status).toBe(400);
+  expect(badSide.body).toMatchObject({ code: 'travel_invalid', side: 'after' });
+  expect((await reviewRow(ev.id)).status).toBe('guessed');
+
+  const ok = await post(me, `/api/block-review/${ev.id}/confirm`, { kind: 'assessment', clientId: '9001', location: '12 Example Street, Applecross WA 6153',
+    travel: { before: { mode: 'home' }, after: { mode: 'address', address: '1 Bespoke Lane, Perth WA 6000', placeId: 'pl-1', lat: -31.95, lng: 115.86 } } });
   expect(ok.status).toBe(200);
+  const travelled = await eventRow(ev.id);
+  expect(travelled.custom_metadata.travel).toEqual({
+    before: { kind: 'address', address: '', label: 'Home', purpose: 'home', source: 'block_review' },
+    after: { kind: 'address', address: '1 Bespoke Lane, Perth WA 6000', label: '1 Bespoke Lane', purpose: 'elsewhere', source: 'block_review', placeId: 'pl-1', lat: -31.95, lng: 115.86 },
+  });
+  const audit = await db.pool.query(`SELECT metadata FROM audit_logs WHERE action = 'block_review.confirm' AND target_id = $1`, [ev.id]);
+  expect(audit.rows[0].metadata.travel).toEqual({ before: 'home', after: 'elsewhere' });
+  expect(JSON.stringify(audit.rows)).not.toMatch(/Bespoke|Example Street|Harper/);
   expect((await reviewRow(ev.id)).status).toBe('confirmed');
   expect(await candidates([ev.id])).toHaveLength(1);
 
@@ -113,11 +135,30 @@ test('a block with gaps is left untouched until a person fills them', async () =
   expect(after.event_type).toBe('outlook');
   expect(after.client_id).toBeNull();
   expect(after.custom_metadata && after.custom_metadata.booking).toBeFalsy();
+  // Needs info is held from invoicing too.
+  expect(await candidates([ev.id])).toHaveLength(0);
 
-  const done = await post(me, `/api/block-review/${ev.id}/confirm`, { kind: 'therapy', clientId: '9002', location: '4 Sample Road, Como WA 6152' });
+  const done = await post(me, `/api/block-review/${ev.id}/confirm`, { kind: 'therapy', clientId: '9002', location: '4 Sample Road, Como WA 6152',
+    travel: { before: { mode: 'address', address: '9 Earlier Client St, Como WA' }, after: { mode: 'home' } } });
   expect(done.status).toBe(200);
   const fin = await eventRow(ev.id);
   expect(fin).toMatchObject({ event_type: 'therapy', client_id: '9002', location: '4 Sample Road, Como WA 6152' });
+});
+
+test('a desk block with an Outlook address: clearing the place needs no travel; an online kind never does', async () => {
+  const ev = await outlookBlock(me.id, { title: 'Emails', location: '4 Sample Road, Como WA 6152' });
+  await get(me);
+  // Kept place → it is a stop on the route → before/after required.
+  expect((await post(me, `/api/block-review/${ev.id}/confirm`, { kind: 'emails' })).body.code).toBe('travel_required');
+  // Cleared ('') → at the desk: no travel, and the block's place is cleared.
+  await post(me, `/api/block-review/${ev.id}/confirm`, { kind: 'emails', location: '' }).expect(200);
+  const fin = await eventRow(ev.id);
+  expect(fin.location).toBe('');
+  expect(fin.custom_metadata.travel).toBeUndefined();
+
+  const mdt = await outlookBlock(me.id, { title: 'MDT – Harper Testwell', location: '12 Example Street, Applecross WA 6153', start: '2026-10-22T01:00:00Z', end: '2026-10-22T02:00:00Z' });
+  await get(me);
+  await post(me, `/api/block-review/${mdt.id}/confirm`, { kind: 'mdt', clientId: '9001' }).expect(200);
 });
 
 test('a report client lives in booking, not client_id (the Splose reconciler must not offer it)', async () => {
@@ -142,28 +183,33 @@ test('dismissing a guess puts the block back exactly as it came in', async () =>
   await post(me, `/api/block-review/${ev.id}/dismiss`).expect(409);
 });
 
-test('a Splose appointment with a known service and its own place settles itself', async () => {
+test('a Splose appointment Splose fully describes still waits for a person (before/after)', async () => {
   const { rows: [ev] } = await db.pool.query(
     `INSERT INTO events (user_id, title, start_time, end_time, location, event_type, splose_id, client_id, source, created_by_source, sync_status, last_modified_by)
      VALUES ($1, 'Client Appointment (booked in Splose)', '2026-10-21T01:00:00Z', '2026-10-21T02:00:00Z', '4 Sample Road, Como WA 6152', 'therapy', '5551', '9002', 'splose', 'splose', 'synced', 'splose') RETURNING *`,
     [me.id]);
   const res = await get(me);
-  expect(res.body.blocks).toHaveLength(0);
-  const r = await reviewRow(ev.id);
-  expect(r.status).toBe('confirmed');
+  expect(res.body.blocks).toHaveLength(1);
+  expect(res.body.blocks[0]).toMatchObject({ status: 'guessed', origin: 'splose', guess: { kind: 'assessment', clientId: '9002', needsTravel: true } });
   const fin = await eventRow(ev.id);
   expect(fin.custom_metadata).toMatchObject({ splose_service_id: '131003', booking: { kind: 'assessment' } });
+  expect(await candidates([ev.id])).toHaveLength(0);
+  await post(me, `/api/block-review/${ev.id}/confirm`, { kind: 'assessment', clientId: '9002',
+    travel: { before: { mode: 'home' }, after: { mode: 'home' } } }).expect(200);
   expect(await candidates([ev.id])).toHaveLength(1);
 });
 
-test('confirm-guessed accepts applied guesses only', async () => {
+test('confirm-guessed accepts applied guesses only, never one at a place (it needs before/after)', async () => {
   const a = await outlookBlock(me.id, { title: 'Lunch' });
   const b = await outlookBlock(me.id, { title: 'Session' });
+  const c = await outlookBlock(me.id, { title: 'Assessment – Harper Testwell' });
   await get(me);
-  const r = await post(me, '/api/block-review/confirm-guessed', { eventIds: [a.id, b.id] });
-  expect(r.body.confirmed).toBe(1);
+  expect((await reviewRow(c.id)).status).toBe('guessed');
+  const r = await post(me, '/api/block-review/confirm-guessed', { eventIds: [a.id, b.id, c.id] });
+  expect(r.body).toEqual({ confirmed: 1, needTravel: 1 });
   expect((await reviewRow(a.id)).status).toBe('confirmed');
   expect((await reviewRow(b.id)).status).toBe('needs_input');
+  expect((await reviewRow(c.id)).status).toBe('guessed');
 });
 
 test('a client off the caller’s caseload cannot be attached', async () => {

@@ -317,3 +317,15 @@
   .rhl-icon-xlsx { background: #173324; color: #86efac; }
   .rhl-icon-pptx { background: #46261a; color: #fdba74; }
 }
+
+/* ── Night mode ──────────────────────────────────────────────────────────
+   The light washes, pale chips and dark inks above, re-valued for
+   <html data-theme="dark"> from the theme tokens: lifted warm surfaces,
+   tinted status chips with their *-ink text, low-contrast borders.
+   Night-only (one extra type selector of weight, so state rules still win);
+   day mode is untouched. */
+html:where([data-theme="dark"]) .rhl-icon-pdf { background: var(--danger-soft); color: var(--danger-ink); }
+html:where([data-theme="dark"]) .rhl-icon-docx { background: var(--info-soft); color: var(--info-ink); }
+html:where([data-theme="dark"]) .rhl-icon-xlsx { background: var(--ok-soft); color: var(--ok-ink); }
+html:where([data-theme="dark"]) .rhl-icon-pptx { background: var(--warn-soft); color: var(--danger-ink); }
+html:where([data-theme="dark"]) .rhl-undo-btn { border-color: var(--border); }

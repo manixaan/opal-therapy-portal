@@ -119,11 +119,12 @@ describe('classifyBlock', () => {
     expect(g.location).toBeNull();
   });
 
-  test('a Splose appointment with its service and own place is settled outright', () => {
+  test('a Splose appointment with its service and own place is still only guessed — a person checks before/after', () => {
     const g = BR.classifyBlock(ev({ title: 'Client Appointment (booked in Splose)', splose_id: '77', client_id: '9002',
       event_type: 'therapy', location: '4 Sample Road, Como WA' }), { clients: CLIENTS, serviceId: '131003' });
     expect(g.kind).toBe('assessment');
-    expect(g.status).toBe('confirmed');
+    expect(g.status).toBe('guessed');
+    expect(g.needsTravel).toBe(true);
   });
 
   test('a Splose appointment whose service is unknown is only a medium guess', () => {
@@ -160,5 +161,32 @@ describe('fingerprintOf', () => {
     const a = BR.fingerprintOf(ev({ title: 'Assessment – Harper' }));
     expect(BR.fingerprintOf(ev({ title: 'assessment harper' }))).toBe(a);
     expect(BR.fingerprintOf(ev({ title: 'Therapy Harper' }))).not.toBe(a);
+  });
+});
+
+describe('travel answers (before / after)', () => {
+  test('a real place needs travel; online, a meeting link or no place does not', () => {
+    expect(BR.needsTravel('4 Sample Road, Como WA', false)).toBe(true);
+    expect(BR.needsTravel('4 Sample Road, Como WA', true)).toBe(false);
+    expect(BR.needsTravel('Microsoft Teams Meeting', false)).toBe(false);
+    expect(BR.needsTravel('https://zoom.us/j/1', false)).toBe(false);
+    expect(BR.needsTravel('', false)).toBe(false);
+  });
+  test('Home and an address become Smart Booking travel specs, marked as from the review', () => {
+    expect(BR.travelFrom({ before: { mode: 'home' }, after: { mode: 'address', address: ' 1 Bespoke Lane, Perth WA ', lat: -31.9, lng: 115.8, placeId: 'p' } })).toEqual({ travel: {
+      before: { kind: 'address', address: '', label: 'Home', purpose: 'home', source: 'block_review' },
+      after: { kind: 'address', address: '1 Bespoke Lane, Perth WA', label: '1 Bespoke Lane', purpose: 'elsewhere', source: 'block_review', placeId: 'p', lat: -31.9, lng: 115.8 },
+    } });
+  });
+  test('both sides are required and validated', () => {
+    expect(BR.travelFrom({ before: { mode: 'home' } })).toEqual({ error: 'after' });
+    expect(BR.travelFrom({ before: { mode: 'address', address: 'x' }, after: { mode: 'home' } })).toEqual({ error: 'before' });
+    expect(BR.travelFrom({ before: { mode: 'teleport' }, after: { mode: 'home' } })).toEqual({ error: 'before' });
+    expect(BR.travelFrom(null)).toEqual({ error: 'before' });
+  });
+  test('out-of-range coordinates are dropped, long text is clipped', () => {
+    const r = BR.travelSpecFrom({ mode: 'address', address: 'a'.repeat(400), lat: 200, lng: 10 });
+    expect(r.spec.address).toHaveLength(300);
+    expect(r.spec.lat).toBeUndefined();
   });
 });
