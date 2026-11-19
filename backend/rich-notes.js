@@ -19,7 +19,7 @@ const MAX_LEN = 20000;
 
 function sanitizeNotesHtml(input) {
   if (typeof input !== 'string') return '';
-  let s = input.slice(0, MAX_LEN * 2).replace(DROP_WITH_CONTENT, '');
+  let s = input.replace(DROP_WITH_CONTENT, '');
   // Unclosed dangerous openers: drop from the opener to the end.
   s = s.replace(/<(script|style|iframe|object|embed|template|noscript|svg|math)\b[\s\S]*$/i, '');
   s = s.replace(/<!--[\s\S]*?(-->|$)/g, '');
@@ -38,7 +38,8 @@ function sanitizeNotesHtml(input) {
     i = tagRe.lastIndex;
   }
   out += escapeText(s.slice(i));
-  return out.slice(0, MAX_LEN);
+  // Never cut here — a cut can split an entity ("&l"); the route refuses over-length notes instead.
+  return out;
 }
 
 /** Text between tags: keep existing entities, escape anything that could open a tag. */

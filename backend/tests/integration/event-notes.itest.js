@@ -80,6 +80,14 @@ describe('PATCH /api/events/:dbId/notes', () => {
     const { agent: me } = await agentFor(app);
     expect((await me.patch('/api/events/not-a-uuid/notes').send({ notes: 'x' })).status).toBe(404);
     expect((await other.patch(`/api/events/${ev.id}/notes`).send({ notes: { html: 'x' } })).status).toBe(400);
+    // Over the limit: refused whole, never cut (a cut once left "&l" and said Saved).
+    const { agent: mine2, user: u2 } = await agentFor(app);
+    const ev2 = await seedEvent(u2.id);
+    const long = await mine2.patch(`/api/events/${ev2.id}/notes`).send({ notes: 'x'.repeat(19990) + '&lt;&lt;&lt;' });
+    expect(long.status).toBe(400);
+    expect(long.body.code).toBe('too_long');
+    const after = await db.pool.query(`SELECT custom_metadata FROM events WHERE id = $1`, [ev2.id]);
+    expect((after.rows[0].custom_metadata || {}).notes).toBeUndefined();
     expect((await request(app).patch(`/api/events/${ev.id}/notes`).send({ notes: 'x' })).status).toBe(401);
   });
 });

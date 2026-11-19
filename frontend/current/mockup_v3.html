@@ -15561,13 +15561,33 @@ async function pushAppEventToOutlook(dbId, data) {
 
 // ===== Notes (side panel) =====
 // Saved on the event itself (PATCH /api/events/:dbId/notes → custom_metadata.notes),
-// 19 Nov 2026. They used to go to localStorage under the tile's per-load id
-// (S-MON-xxxx), so every reload lost them; and a save still pending when
-// another event was opened landed on THAT event. Now each save carries the
-// event it was typed into, and a pending save is flushed before switching.
+// 19 Nov 2026. They used to go to localStorage under the tile's per-load id,
+// so every reload lost them. Hardened the same day after an end-to-end check:
+//  • every save also updates the calendar's cached copy (__outlookEventsCache),
+//    so a week/view switch can't bring an older note back and have the next
+//    keystroke overwrite the saved one; the tile copy is updated at once;
+//  • saves run one after another (an older one can never land last);
+//  • a failed save is kept (and backed up in this browser under the event's
+//    id) and retried on the next save / open / close — never dropped;
+//  • pending typing is sent on page hide (keepalive);
+//  • over 20,000 characters is refused visibly, never cut short.
 window.__notesCurrentId = null;
 let __notesSaveTimer = null;
-let __notesPending = null;   // { sessionId, dbId, html }
+let __notesPending = null;          // { sessionId, dbId, html } waiting to be sent
+let __notesChain = Promise.resolve();
+const NOTES_MAX = 20000;
+const __notesBackupKey = (dbId) => 'notes_unsaved_' + dbId;
+
+function __notesSetLocal(dbId, html) {
+  // Tile(s) and the raw cache the calendar re-renders from.
+  Object.values(window.SESSIONS || {}).forEach(x => { if (x && x.dbId === dbId) x.notesHtml = html; });
+  (window.__outlookEventsCache || []).forEach(e => {
+    if (!e || e.id !== dbId) return;
+    e.custom_metadata = Object.assign({}, e.custom_metadata || {});
+    if (html) e.custom_metadata.notes = Object.assign({}, e.custom_metadata.notes || {}, { html });
+    else delete e.custom_metadata.notes;
+  });
+}
 
 function notesLoadForSession(id) {
   notesFlush();                                   // finish the previous event's save first
@@ -15575,48 +15595,61 @@ function notesLoadForSession(id) {
   const s = SESSIONS[id];
   const editor = document.getElementById('notes-editor');
   if (!editor) return;
-  // Server copy first; an old browser-only note (pre-19 Nov) is picked up once and saved properly.
   let html = (s && s.notesHtml) || '';
-  let legacy = '';
-  try { legacy = localStorage.getItem(`session_note_${id}`) || ''; } catch (_) {}
-  if (!html && legacy && s && s.dbId) { html = legacy; __notesQueue(id, legacy); notesFlush(); }
+  // A save that failed earlier in this browser wins until it reaches the server.
+  let backup = null;
+  if (s && s.dbId) { try { backup = localStorage.getItem(__notesBackupKey(s.dbId)); } catch (_) {} }
+  if (backup != null) { html = backup; __notesQueue(id, backup); }
   editor.innerHTML = html;
   editor.contentEditable = (s && s.dbId) ? 'true' : 'false';
   __notesUpdateCount();
   document.getElementById('notes-save-status').textContent = !(s && s.dbId)
     ? 'Notes can be added once the appointment is saved'
+    : backup != null ? 'Not saved yet — retrying…'
     : (html ? 'Saved' : 'Notes save automatically');
+  if (backup != null) notesFlush();
 }
 
 function __notesQueue(sessionId, html) {
   const s = SESSIONS[sessionId];
   if (!s || !s.dbId) return;
   __notesPending = { sessionId, dbId: s.dbId, html };
+  __notesSetLocal(s.dbId, html);                  // what you typed is what reopening shows
 }
 
-async function notesFlush() {
+function notesFlush() {
   clearTimeout(__notesSaveTimer);
   const p = __notesPending;
   __notesPending = null;
-  if (!p) return;
+  if (!p) return __notesChain;
   const status = document.getElementById('notes-save-status');
   const mine = () => window.__notesCurrentId === p.sessionId;
-  try {
-    const r = await fetch('/api/events/' + encodeURIComponent(p.dbId) + '/notes', {
-      method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ notes: p.html }),
-    });
-    const j = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(j.error || 'Could not save');
-    // Keep the tile's copy in step (cleaned by the server).
-    const s = SESSIONS[p.sessionId];
-    if (s) s.notesHtml = (j.notes && j.notes.html) || '';
-    try { localStorage.removeItem(`session_note_${p.sessionId}`); } catch (_) {}
-    if (mine() && status) status.textContent = 'Saved · ' + new Date().toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' });
-  } catch (err) {
-    if (mine() && status) status.textContent = 'Not saved — ' + (err.message || 'check your connection');
-    showToast('Notes not saved', err.message || 'Check your connection and try again.', 'warn');
+  if (p.html.length > NOTES_MAX) {
+    if (mine() && status) status.textContent = 'Too long to save — shorten to ' + NOTES_MAX.toLocaleString('en-AU') + ' characters';
+    try { localStorage.setItem(__notesBackupKey(p.dbId), p.html); } catch (_) {}
+    return __notesChain;
   }
+  __notesChain = __notesChain.then(async () => {
+    try {
+      const r = await fetch('/api/events/' + encodeURIComponent(p.dbId) + '/notes', {
+        method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notes: p.html }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || 'Could not save');
+      try { localStorage.removeItem(__notesBackupKey(p.dbId)); } catch (_) {}
+      // A newer edit already queued for this event keeps its own text locally.
+      if (!(__notesPending && __notesPending.dbId === p.dbId)) __notesSetLocal(p.dbId, (j.notes && j.notes.html) || '');
+      if (mine() && status) status.textContent = 'Saved · ' + new Date().toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' });
+    } catch (err) {
+      // Keep it: back it up here and retry with the next save / open / close.
+      try { localStorage.setItem(__notesBackupKey(p.dbId), p.html); } catch (_) {}
+      if (!__notesPending) __notesPending = p;
+      if (mine() && status) status.textContent = 'Not saved — ' + (err.message || 'check your connection') + ' (will retry)';
+      showToast('Notes not saved yet', (err.message || 'Check your connection.') + ' They are kept and will be saved on the next try.', 'warn');
+    }
+  });
+  return __notesChain;
 }
 
 function notesSave() { return notesFlush(); }
@@ -15632,12 +15665,27 @@ function notesAutoSave() {
   __notesUpdateCount();
 }
 
+// Typing not yet sent goes out as the page is left or reloaded.
+window.addEventListener('pagehide', () => {
+  const p = __notesPending;
+  if (!p || p.html.length > NOTES_MAX) return;
+  try { localStorage.setItem(__notesBackupKey(p.dbId), p.html); } catch (_) {}
+  try {
+    fetch('/api/events/' + encodeURIComponent(p.dbId) + '/notes', {
+      method: 'PATCH', credentials: 'include', keepalive: true,
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ notes: p.html }),
+    });
+  } catch (_) { /* the backup above is retried on the next open */ }
+});
+
 function __notesUpdateCount() {
   const editor = document.getElementById('notes-editor');
   const cc     = document.getElementById('notes-char-count');
   if (editor && cc) {
     const len = editor.innerText.trim().length;
-    cc.textContent = len ? len + ' chars' : '';
+    const over = editor.innerHTML.length > NOTES_MAX;
+    cc.textContent = len ? len.toLocaleString('en-AU') + ' / ' + NOTES_MAX.toLocaleString('en-AU') + (over ? ' — too long' : '') : '';
+    cc.style.color = over ? 'var(--danger-ink, #b23a28)' : '';
   }
 }
 

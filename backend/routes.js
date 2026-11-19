@@ -2629,6 +2629,8 @@ router.patch('/api/events/:dbId/notes', requireAuth, async (req, res) => {
     const { sanitizeNotesHtml, textLength, MAX_LEN } = require('./rich-notes');
     if (typeof raw === 'string' && raw.length > MAX_LEN * 2) return res.status(400).json({ error: 'Notes are too long' });
     const html = sanitizeNotesHtml(raw || '');
+    // Refused, never truncated (a cut garbled the end and still said "Saved").
+    if (html.length > MAX_LEN) return res.status(400).json({ error: `Notes are too long — keep them under ${MAX_LEN.toLocaleString('en-AU')} characters`, code: 'too_long' });
     const empty = !textLength(html);
     const r = await db.pool.query(
       `UPDATE events
