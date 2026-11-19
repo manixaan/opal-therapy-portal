@@ -202,7 +202,7 @@ describe('alertDecision() — the Splose watcher', () => {
   const r = (userRows) => prefs.resolve({ userRows, env: ALL_ON_ENV() });
   const created = (start) => ({ kind: 'created', details: { start } });
 
-  test('default (Sync now only): new Splose appointments are asked about', () => {
+  test('default (Sync manually): new Splose appointments are asked about', () => {
     expect(prefs.alertDecision(r([]), created('2026-11-10T01:00:00Z'))).toBe('keep');
   });
   test('Splose → portal off, or before its date → not recorded', () => {

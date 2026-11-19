@@ -190,9 +190,9 @@
      tiles, tab-leave prompt, and "changed inside Splose" alerts. Wraps
      switchTab and commitMove once the shell has defined them. -->
 <script src="/splose-sync.js?v=13" defer></script>
-<!-- Settings → Calendar sync: Off / Sync now only / Automatic for Outlook both
+<!-- Settings → Calendar sync: Off / Sync manually / Automatic for Outlook both
      ways, and the three-tab Sync now review (migration 081, 19 Nov 2026). -->
-<script src="/sync-settings.js?v=4" defer></script>
+<script src="/sync-settings.js?v=5" defer></script>
 <!-- Calendar → Blocks to review: blocks booked straight into Outlook/Splose,
      guessed by the server and settled here (migration 086). -->
 <script src="/block-review.js?v=3" defer></script>
@@ -6795,7 +6795,7 @@ window.opIcon = function (name, size) {
       <!-- Calendar sync (081, simplified 19 Nov 2026): Outlook both ways + a three-tab Sync now. -->
       <div class="settings-section" id="settings-sync-settings">
         <h2>Calendar sync</h2>
-        <p class="section-desc">Choose how your calendar syncs with Outlook, and bring Outlook, Splose and the portal in line with Sync now. Sync now always shows what it will do before anything is written.</p>
+        <p class="section-desc">Choose how your calendar syncs with Outlook, and bring Outlook, Splose and the portal in line with the Sync button on the Calendar. Sync always shows what it will do before anything is written.</p>
         <!-- Rendered by sync-settings.js -->
         <div id="sync-settings-root"><p class="sys-quiet">Loading…</p></div>
       </div>

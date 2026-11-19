@@ -782,7 +782,7 @@ describe('changed assets are cache-busted', () => {
       ['splose-sync.js', 13], ['splose-sync.css', 4],
       // 1: Settings → Calendar sync — per-direction Outlook/Splose choices, the
       // Owner's practice limits and the Sync now preview (migration 081).
-      ['sync-settings.js', 4], ['sync-settings.css', 3],
+      ['sync-settings.js', 5], ['sync-settings.css', 3],
       // 1: Calendar → Blocks to review — outside-the-portal blocks classified
       // and settled (migration 086).
       ['block-review.js', 3], ['block-review.css', 3],

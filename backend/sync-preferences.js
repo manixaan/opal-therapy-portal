@@ -5,13 +5,13 @@
  * calendar sync runs, from when, and whether it runs on its own.
  *
  * A person chooses for four directions — Portal → Outlook, Outlook → Portal,
- * Portal → Splose and Splose → Portal: Off, "Sync now only" (the calendar's
+ * Portal → Splose and Splose → Portal: Off, "Sync manually" (the calendar's
  * Sync button) or Automatic, plus a "sync events from" date (anything starting
  * earlier is left alone in that direction).
  *
  *   portal_to_splose   client bookings queue for Sync Splose; Automatic lets
  *                      the server publish them (as ENABLE_SPLOSE_AUTO_SYNC allows)
- *   splose_to_portal   Splose appointments come into the portal; Sync now only
+ *   splose_to_portal   Splose appointments come into the portal; Sync manually
  *                      asks about each one, Automatic brings them in — either
  *                      way they land in "Blocks to review" to be checked
  *   splose_to_outlook  retired (off) — not a setting

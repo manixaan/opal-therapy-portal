@@ -8,7 +8,7 @@
  * only, or Automatic — plus a "sync events from" date when it is on:
  *   Outlook   Outlook → Portal, Portal → Outlook
  *   Splose    Splose → Portal, Portal → Splose
- * "Sync now only" means it runs when you press Sync on the Calendar.
+ * "Sync manually" means it runs when you press Sync on the Calendar.
  *
  * The Calendar's Sync button opens ONE popup (splose-sync.js owns the shell)
  * with three tabs, each listing what that system is missing:
@@ -41,7 +41,7 @@
   ];
   var MODES = [
     { key: 'off', label: 'Off', help: 'Nothing is copied this way.' },
-    { key: 'manual', label: 'Sync now only' },
+    { key: 'manual', label: 'Sync manually' },
     { key: 'auto', label: 'Automatic' },
   ];
   var BLOCKED = {
@@ -162,7 +162,7 @@
     if (!root || !state.effective) return;
     root.innerHTML = '' +
       '<div class="settings-group sys-card" data-card="sync-now">' +
-        '<div class="settings-group-header sys-card-head"><span>Sync now</span>' +
+        '<div class="settings-group-header sys-card-head"><span>Sync manually</span>' +
           '<button type="button" class="sys-btn primary" id="sys-syncnow">Open Sync</button></div>' +
         '<p class="sys-help sys-pad sys-pad-b">The <strong>Sync</strong> button on the Calendar opens this too: three tabs — Outlook, Splose and Portal — each listing what that calendar is missing. Tick what you want, or Select all, and sync it. Nothing is written until you do.</p>' +
       '</div>' +
