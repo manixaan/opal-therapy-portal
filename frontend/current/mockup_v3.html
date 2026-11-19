@@ -12684,6 +12684,9 @@ function selectBookingLeaf(id) {
     return;
   }
   document.querySelectorAll('.bk-item').forEach(function (b) { b.classList.toggle('active', b.dataset.leaf === id); });
+  // The chosen type's group is open, so the choice is visible (the panel opens with every group folded).
+  var chosen = document.querySelector('.bk-item[data-leaf="' + id + '"]');
+  var grp = chosen && chosen.closest('details.bk-group'); if (grp) grp.open = true;
   var prev = BOOKING_STATE.serviceType && BOOKING_LEAVES[BOOKING_STATE.serviceType];
   BOOKING_STATE.serviceType = id;
   BOOKING_STATE.serviceLabel = leaf.label;
@@ -22131,11 +22134,25 @@ function openBookingPanel(opts = {}) {
 
   // Reset the form for a fresh booking
   if (!opts.keepState && typeof resetWizard === 'function') resetWizard();
+  // A fresh booking opens fresh (19 Nov 2026): at the top, every booking-type
+  // group folded. The panel used to come back scrolled to where the last
+  // booking left it, with whichever groups were open still open.
+  if (!opts.keepState) bspOpenFresh();
 
   // Dirty-tracking: mark dirty on any input change inside the panel
   setTimeout(() => {
     document.getElementById('bsp-body')?.addEventListener('input', () => { _bspDirty = true; }, { once: false });
   }, 200);
+}
+
+function bspOpenFresh() {
+  document.querySelectorAll('#booking-cat-chips details.bk-group').forEach(d => { d.open = false; });
+  const body = document.getElementById('bsp-body');
+  const top = () => { if (body) body.scrollTop = 0; };
+  top();
+  // Again once the panel has laid out (route preview / right context fill in after open).
+  requestAnimationFrame(top);
+  setTimeout(top, 120);
 }
 
 function closeBookingPanel(confirmIfDirty = false) {
