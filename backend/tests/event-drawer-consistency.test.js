@@ -230,3 +230,20 @@ describe('side panel: change the day', () => {
     expect(fn('2026-11-17T01:00:00Z')).toBe('2026-11-17');
   });
 });
+
+describe('drawer layout: notes sit under the details, actions pinned (21 Nov 2026)', () => {
+  test('details and notes share one scroll area; the footer comes after it', () => {
+    const start = HTML.indexOf('id="detail-drawer"');
+    const drawer = HTML.slice(start, HTML.indexOf('</aside>', start));
+    const scroll = drawer.indexOf('id="bd-scroll"');
+    const body = drawer.indexOf('id="bd-body"');
+    const notes = drawer.indexOf('class="bd-notes-box"');
+    const footer = drawer.indexOf('id="bd-footer"');
+    expect(scroll).toBeGreaterThan(-1);
+    expect(scroll < body && body < notes && notes < footer).toBe(true);
+  });
+  test('the notes card fills the space left instead of leaving a gap', () => {
+    expect(HTML).toMatch(/\.bd-scroll\s*\{[^}]*overflow-y:\s*auto/);
+    expect(HTML).toMatch(/\.bd-notes-box\s*\{[^}]*flex:\s*1 0 auto/);
+  });
+});

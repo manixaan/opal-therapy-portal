@@ -3188,9 +3188,16 @@ window.opIcon = function (name, size) {
   .bd-day-edit { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
   .bd-day-edit input[type=date] { height: 30px; padding: 0 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); color: var(--ink); font: inherit; font-size: 13px; }
   .bd-day-note { flex-basis: 100%; font-size: 12px; color: var(--muted); }
+  /* Details + notes scroll together; the notes card fills whatever is left
+     below the details, so the panel has no empty middle (21 Nov 2026). */
+  .bd-scroll { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; }
+  .bd-scroll > .detail-body { flex: 0 0 auto; overflow: visible; padding-bottom: 8px; }
   .bd-notes-box {
-    border-top: 1px solid var(--border); background: var(--panel-soft); flex-shrink: 0;
+    margin: 4px 20px 16px; border: 1px solid var(--border); border-radius: 10px;
+    background: var(--panel-soft); overflow: hidden;
+    flex: 1 0 auto; display: flex; flex-direction: column; min-height: 220px;
   }
+  .bd-notes-box .notes-editor { flex: 1 1 auto; max-height: none; resize: none; }
   .bd-notes-header {
     display: flex; align-items: center; justify-content: space-between;
     padding: 6px 10px 4px; gap: 8px;
@@ -7588,12 +7595,13 @@ window.opIcon = function (name, size) {
     <button class="detail-close" onclick="closeBlockDetail()" aria-label="Close">×</button>
   </header>
 
-  <!-- Single scrollable panel: details + notes box at bottom -->
+  <!-- One scroll area: details, then the notes card right under them (it
+       stretches to fill the space left, so there is no empty gap); the action
+       buttons stay pinned at the bottom. (21 Nov 2026) -->
   <div class="detail-panel active" id="bd-panel-details" style="display:flex;flex-direction:column;flex:1;overflow:hidden;">
-    <div class="detail-body" id="bd-body" style="flex:1;overflow-y:auto;"></div>
-    <footer class="detail-footer" id="bd-footer"></footer>
+    <div class="bd-scroll" id="bd-scroll">
+    <div class="detail-body" id="bd-body"></div>
 
-    <!-- Notes box pinned at bottom of the panel -->
     <div class="bd-notes-box">
       <div class="bd-notes-header">
         <span class="bd-notes-label">Notes</span>
@@ -7617,6 +7625,8 @@ window.opIcon = function (name, size) {
         <span id="notes-char-count" style="font-size:11.5px;color:var(--muted);"></span>
       </div>
     </div>
+    </div>
+    <footer class="detail-footer" id="bd-footer"></footer>
   </div>
 </aside>
 
