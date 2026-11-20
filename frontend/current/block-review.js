@@ -26,6 +26,11 @@
  * until confirmed; a needs-info block is held too. Nothing is written to
  * Outlook or Splose.
  *
+ * Where it lives (21 Nov 2026): the "To check" tab of the Calendar's one
+ * Sync popup (splose-sync.js calls renderInto). The old separate toolbar
+ * button is gone; the Sync button's count includes these blocks. The
+ * standalone overlay remains only as a fallback when the Sync popup is absent.
+ *
  * Globals on window (no modules): window.BlockReview. Reuses the shell's
  * escapeHtml / showToast / BOOKING_LEAVES / attachPlacesAutocomplete /
  * loadOutlookEventsToCalendar / SESSIONS.
@@ -47,7 +52,8 @@
   var VIRTUAL_PLACE = /\b(teams|zoom|google meet|webex|skype|telehealth|online|virtual|phone)\b|https?:\/\//i;
   var FIELD_LABEL = { kind: 'what it is', client: 'client', location: 'where', before: 'where you were before', after: 'where you went after' };
 
-  var state = { blocks: [], clients: null, since: null, open: false, busy: {}, edits: {}, focusId: null };
+  var state = { blocks: [], clients: null, since: null, open: false, inline: false, busy: {}, edits: {}, focusId: null };
+  function sync() { return window.SploseSync && typeof window.SploseSync.paint === 'function' ? window.SploseSync : null; }
 
   var esc = function (s) { return window.escapeHtml ? window.escapeHtml(String(s == null ? '' : s)) : String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
   var toast = function (msg, isError) { if (window.showToast) window.showToast(msg, !!isError); };
@@ -119,6 +125,7 @@
   // ── Toolbar button ────────────────────────────────────────────────────────
   function button() {
     var btn = document.getElementById('cal-block-review-btn');
+    if (sync()) { if (btn) btn.remove(); return null; } // the Sync button carries the count
     if (btn) return btn;
     var add = document.querySelector('#view-calendar .btn-add-event');
     if (!add || !add.parentNode) return null;
@@ -133,6 +140,7 @@
     return btn;
   }
   function paintButton() {
+    if (sync()) { button(); sync().paint(); return; }
     var btn = button();
     if (!btn) return;
     var n = state.blocks.length;
@@ -239,7 +247,7 @@
       '<div class="br-panel" role="dialog" aria-modal="true" aria-labelledby="br-title">' +
         '<header class="br-head">' +
           '<div><h2 id="br-title">Blocks created outside the portal</h2>' +
-          '<p class="br-sub">These came in from Outlook or Splose. Check each one so it bills and routes like a portal booking: what it is, the client, where it was, and where you were before and after. Nothing is changed in Outlook or Splose.</p></div>' +
+          '<p class="br-sub">Bookings made straight in Outlook or Splose. Check what each one is, the client, where it was, and where you were before and after, so it bills and routes like a portal booking. Nothing is changed in Outlook or Splose.</p></div>' +
           '<button type="button" class="br-x" data-br="close" aria-label="Close">×</button>' +
         '</header>' +
         '<div class="br-bar">' +
@@ -266,6 +274,12 @@
   }
 
   function openPanel(focusId) {
+    if (sync()) {
+      state.focusId = typeof focusId === 'string' ? focusId : null;
+      if (sync().isReviewOpen()) { render(); return; }
+      sync().open('review');
+      return;
+    }
     var el = shell();
     state.open = true;
     state.focusId = typeof focusId === 'string' ? focusId : null;
@@ -277,7 +291,36 @@
     loadClients().then(render);
     refresh();
   }
+  /** Mount the review inside the Sync popup's "To check" tab. Re-renders of
+   *  the tab (the popup repaints on its own polls) only repaint the cards. */
+  function renderInto(body, foot) {
+    var el = shell();
+    var first = el.parentNode !== body;
+    el.classList.add('br-inline');
+    el.hidden = false;
+    var panel = el.querySelector('.br-panel');
+    if (panel) { panel.removeAttribute('role'); panel.removeAttribute('aria-modal'); }
+    if (first) { body.innerHTML = ''; body.appendChild(el); }
+    state.open = true; state.inline = true;
+    if (foot) {
+      foot.innerHTML = '<button type="button" class="btn" data-br-foot="close">Close</button>';
+      foot.querySelector('[data-br-foot=close]').addEventListener('click', function () { if (sync()) sync().close(); });
+    }
+    if (!first) { render(); return; }
+    document.getElementById('br-since').value = state.since || defaultSince();
+    render();
+    loadClients().then(render);
+    refresh();
+  }
+  /** The Sync popup closed or moved to another tab. */
+  function detach() {
+    if (!state.inline) return;
+    state.open = false; state.inline = false;
+    hideLists();
+  }
+
   function closePanel() {
+    if (state.inline) { if (sync()) sync().close(); return; }
     var el = document.getElementById('br-overlay');
     if (el) el.hidden = true;
     state.open = false;
@@ -571,6 +614,7 @@
     if (e.key === 'Escape') {
       // The Google address helper closes its own suggestion list on Escape.
       if (e.__brPacOpen) return;
+      if (state.inline) return; // the Sync popup's own Escape closes it
       closePanel();
     }
   }
@@ -595,7 +639,7 @@
   function onClick(e) {
     var t = e.target.closest ? e.target.closest('[data-br]') : null;
     if (!e.target.closest || !e.target.closest('.br-ta')) hideLists();
-    if (!t) { if (e.target.id === 'br-overlay') closePanel(); return; }
+    if (!t) { if (e.target.id === 'br-overlay' && !state.inline) closePanel(); return; }
     var act = t.getAttribute('data-br');
     var id = t.getAttribute('data-id');
     if (act === 'close') return closePanel();
@@ -646,13 +690,15 @@
   }
 
   function start() {
-    if (!button()) return; // not the authenticated shell
+    if (!document.getElementById('view-calendar')) return; // not the authenticated shell
+    button();
     watchGrid();
     refresh();
     setInterval(function () { if (!document.hidden) refresh(); }, POLL_MS);
   }
 
-  window.BlockReview = { open: openPanel, refresh: refresh, _outcome: outcome, _state: state };
+  window.BlockReview = { open: openPanel, refresh: refresh, renderInto: renderInto, detach: detach,
+    count: function () { return state.blocks.length; }, _outcome: outcome, _state: state };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { setTimeout(start, 2500); });
   else setTimeout(start, 2500);
 })();

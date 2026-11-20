@@ -18,7 +18,7 @@
  *   Portal   in Outlook / in Splose, not in the portal  (outlook_to_portal + splose_to_portal plans)
  * Tick (or Select all) and sync that tab. Nothing is written before that; the
  * server re-plans before applying, so a stale list cannot write anything
- * unexpected. Anything brought into the portal lands in "Blocks to review".
+ * unexpected. Anything brought into the portal lands in Sync › "To check".
  *
  * Globals on window (no modules): window.SyncSettings. Reuses the shell's
  * escapeHtml / showToast, window.SploseSync (open / rerender / refresh) and
@@ -30,7 +30,7 @@
       modes: { manual: 'Only when you press Sync on the Calendar.', auto: 'Runs by itself as things change.' } },
     portal_to_outlook: { from: 'Portal', to: 'Outlook', help: 'Bookings and edits made in the portal are written to your Outlook calendar.',
       modes: { manual: 'Only when you press Sync on the Calendar.', auto: 'Runs by itself as things change.' } },
-    splose_to_portal: { from: 'Splose', to: 'Portal', help: 'Appointments booked in Splose come into the portal, where they wait under Blocks to review.',
+    splose_to_portal: { from: 'Splose', to: 'Portal', help: 'Appointments booked in Splose come into the portal, where they wait under Sync › To check.',
       modes: { manual: 'Asks about each new Splose appointment, or bring them in with Sync on the Calendar.', auto: 'New Splose appointments come in by themselves.' } },
     portal_to_splose: { from: 'Portal', to: 'Splose', help: 'Client bookings made in the portal are queued for Splose.',
       modes: { manual: 'Queued — you send them with Sync on the Calendar.', auto: 'Queued and sent by themselves after a quiet moment.' } },
@@ -349,7 +349,7 @@
     }
     var intro = tab === 'outlook'
       ? '<p class="ssp-intro">What Outlook is missing from the portal. Tick what to copy across, or Select all.</p>'
-      : '<p class="ssp-intro">What Outlook and Splose have that the portal does not. Anything brought in waits under <strong>Blocks to review</strong> so you can say what it is, the client and where you were before and after.</p>';
+      : '<p class="ssp-intro">What Outlook and Splose have that the portal does not. Anything brought in waits under the <strong>To check</strong> tab so you can say what it is, the client and where you were before and after.</p>';
     var html = resultHtml(tab) + intro + pull + g.dirs.map(function (d) { return sectionHtml(d, g.dirs.length > 1); }).join('');
     if (!rv.loading && countFor(g.dirs) === 0 && g.dirs.every(function (d) { return rv.plans[d] && rv.plans[d].state === 'ok'; })) {
       html = resultHtml(tab) + intro + pull + '<div class="ssp-empty">' + esc(g.empty) + '</div>';
@@ -465,7 +465,7 @@
     }, Promise.resolve());
     return chain.then(function () {
       rv.applying = null;
-      var extra = broughtIn ? '<br>' + broughtIn + ' brought in — check them under <strong>Blocks to review</strong> on the Calendar.' : '';
+      var extra = broughtIn ? '<br>' + broughtIn + ' brought in — check them in the <strong>To check</strong> tab.' : '';
       if (queued) extra += '<br>' + queued + ' queued — they are listed above to send to Splose.';
       rv.results[tab] = { err: anyErr, html: lines.join('<br>') + extra };
       if (typeof window.loadOutlookEventsToCalendar === 'function') { try { window.loadOutlookEventsToCalendar(); } catch (_) { /* best effort */ } }

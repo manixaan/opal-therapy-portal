@@ -52,10 +52,15 @@
     ignored: [], ignoredCanUndo: false, showIgnored: false,
     picked: {},             // queueId → ticked (survives re-renders)
     svcChoice: {},          // queueId → chosen service id
-    tab: 'splose',          // Sync popup tab: 'outlook' | 'splose' | 'portal'
+    tab: 'splose',          // Sync popup tab: 'outlook' | 'splose' | 'portal' | 'review'
   };
-  var TABS = [{ key: 'outlook', label: 'Outlook' }, { key: 'splose', label: 'Splose' }, { key: 'portal', label: 'Portal' }];
+  // 'review' (21 Nov 2026): bookings made straight in Outlook or Splose, to be
+  // checked before they bill or route. It was its own Calendar button and
+  // modal (block-review.js); now one Sync button holds everything.
+  var TABS = [{ key: 'outlook', label: 'Outlook' }, { key: 'splose', label: 'Splose' }, { key: 'portal', label: 'Portal' }, { key: 'review', label: 'To check' }];
   function review() { return global.SyncSettings && global.SyncSettings.review; }
+  function blocks() { return global.BlockReview && typeof global.BlockReview.renderInto === 'function' ? global.BlockReview : null; }
+  function reviewCount() { var br = blocks(); return br ? br.count() : 0; }
 
   function esc(s) {
     return String(s === undefined || s === null ? '' : s)
@@ -195,15 +200,20 @@
     var btn = doc.getElementById('splose-sync-btn');
     if (!btn) return;
     btn.hidden = !canOpen();
-    var n = S.pending.filter(function (c) { return c.status !== 'publishing'; }).length;
+    var waiting = canUse() ? S.pending.filter(function (c) { return c.status !== 'publishing'; }).length : 0;
+    var toCheck = reviewCount();
+    var n = waiting + toCheck;
     var cnt = btn.querySelector('.cnt');
-    cnt.textContent = String(n);
+    if (cnt.textContent !== String(n)) cnt.textContent = String(n);
     cnt.hidden = n === 0;
     btn.classList.toggle('has-pending', n > 0);
     btn.classList.toggle('publishing', !!S.publishing);
     var lbl = S.publishing ? 'Syncing…' : 'Sync';
     if (btn.querySelector('.lbl').textContent !== lbl) btn.querySelector('.lbl').textContent = lbl;
-    cnt.title = n ? n + ' change' + (n === 1 ? '' : 's') + ' waiting to be written to Splose' : '';
+    var parts = [];
+    if (waiting) parts.push(waiting + ' change' + (waiting === 1 ? '' : 's') + ' waiting to be written to Splose');
+    if (toCheck) parts.push(toCheck + ' booking' + (toCheck === 1 ? '' : 's') + ' made in Outlook or Splose to check');
+    cnt.title = parts.join(' · ');
   }
 
   // ── Tile decoration ───────────────────────────────────────────────────────
@@ -265,7 +275,11 @@
     p.querySelector('.ssp-close').addEventListener('click', closePanel);
     p.querySelector('.ssp-backdrop').addEventListener('click', closePanel);
     p.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape') { closePanel(); return; }
+      if (e.key === 'Escape') {
+        // Block review's client list / Google address list close on Escape first.
+        if (e.defaultPrevented || e.__brPacOpen) return;
+        closePanel(); return;
+      }
       if (e.target.classList && e.target.classList.contains('ssp-tab') && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) {
         var keys = TABS.map(function (t) { return t.key; });
         var i = keys.indexOf(S.tab) + (e.key === 'ArrowRight' ? 1 : -1);
@@ -281,6 +295,7 @@
   }
 
   function switchTab(key, focus) {
+    if (S.tab === 'review' && key !== 'review' && blocks()) blocks().detach();
     S.tab = key;
     renderPanel();
     if (focus) { var b = doc.getElementById('ssp-tab-' + key); if (b) b.focus(); }
@@ -297,6 +312,7 @@
       var plan = rv.count('splose');
       if (typeof plan === 'number' && counts.splose != null) counts.splose += plan;
     }
+    counts.review = blocks() ? reviewCount() : null;
     TABS.forEach(function (t) {
       var b = doc.getElementById('ssp-tab-' + t.key);
       if (!b) return;
@@ -316,20 +332,24 @@
     var p = ensurePanel();
     p.hidden = false;
     var waiting = canUse() && S.pending.some(function (c) { return c.status !== 'publishing'; });
-    S.tab = (typeof tab === 'string' && TABS.some(function (t) { return t.key === tab; })) ? tab : (waiting ? 'splose' : 'outlook');
-    if (review()) review().load({ fresh: true }); // fresh plans (and no old results) every time the popup opens
+    S.tab = (typeof tab === 'string' && TABS.some(function (t) { return t.key === tab; })) ? tab
+      : waiting ? 'splose' : reviewCount() ? 'review' : 'outlook';
+    // The placeholder goes in first: load() can repaint the tab synchronously.
     p.querySelector('.ssp-body').innerHTML = '<div class="ssp-empty">Loading…</div>';
+    if (review()) review().load({ fresh: true }); // fresh plans (and no old results) every time the popup opens
     paintTabs();
     var jobs = canUse() ? [refreshPending(), refreshStatus(), loadReference(), loadIgnored()] : [];
     Promise.all(jobs).then(function () {
       renderPanel();
       var first = doc.getElementById('ssp-tab-' + S.tab);
-      if (first) first.focus();
+      // A tile chip opens "To check" on its own card — keep focus there.
+      if (first && !p.querySelector('.ssp-body').contains(doc.activeElement)) first.focus();
       if (canUse()) loadMatches();
     });
   }
   function closePanel() {
     S.panelOpen = false;
+    if (blocks()) blocks().detach();
     var p = doc.getElementById('splose-sync-panel');
     if (p) p.hidden = true;
   }
@@ -496,6 +516,11 @@
     var foot = p.querySelector('.ssp-foot');
     paintTabs();
     body.onchange = null; body.onclick = null; foot.onchange = null; foot.onclick = null;
+    if (S.tab === 'review') {
+      if (blocks()) blocks().renderInto(body, foot);
+      else { body.innerHTML = '<div class="ssp-empty">Still loading — try again in a moment.</div>'; foot.innerHTML = ''; }
+      return;
+    }
     if (S.tab !== 'splose') {
       if (review()) review().renderTab(S.tab, body, foot);
       else { body.innerHTML = '<div class="ssp-empty">Sync is still loading — try again in a moment.</div>'; foot.innerHTML = ''; }
@@ -1030,6 +1055,9 @@
   global.SploseSync = {
     open: openPanel, close: closePanel, refresh: refreshPending, publishAll: function () { return openPanel('splose'); },
     rerender: function () { if (S.panelOpen) renderPanel(); },
+    /** Repaint the Sync button's count and the tab badges (block review calls this). */
+    paint: function () { renderButton(); paintTabs(); },
+    isReviewOpen: function () { return S.panelOpen && S.tab === 'review'; },
     _state: S,
   };
 })(window);

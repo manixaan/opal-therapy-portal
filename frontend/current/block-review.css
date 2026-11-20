@@ -95,6 +95,16 @@
 .br-miss { font-size: 12px; color: var(--danger-ink, #8f2f22); }
 .br-ready { font-size: 12px; color: var(--ok-ink, #2f7a46); font-weight: 600; }
 
+/* Inside the Sync popup's "To check" tab (21 Nov 2026): no overlay, no
+   second card, no own close button — the popup provides all three. */
+.br-overlay.br-inline { position: static; inset: auto; z-index: auto; background: none; padding: 0; display: block; overflow: visible; }
+.br-inline .br-panel { width: auto; box-shadow: none; border-radius: 0; max-height: none; background: transparent; }
+.br-inline .br-head { padding: 0 0 8px; }
+.br-inline .br-head h2, .br-inline .br-x { display: none; }
+.br-inline .br-sub { margin: 0; }
+.br-inline .br-bar { padding: 0 0 12px; }
+.br-inline .br-body { padding: 12px 0 4px; overflow: visible; }
+
 /* Calendar tile: created outside the portal */
 .br-outside { box-shadow: inset 0 0 0 1.5px #d9a441; }
 .br-tile-chip { position: absolute; top: 2px; right: 2px; z-index: 3; width: 16px; height: 16px; border-radius: 50%; border: 0; padding: 0; background: #d9a441; color: #2a1d05; font: 700 11px/16px inherit; font-family: inherit; text-align: center; cursor: pointer; }
