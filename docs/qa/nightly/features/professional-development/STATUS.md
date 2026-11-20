@@ -3,7 +3,7 @@
 - Tracker stage: **idea**
 - Tracker environment: **none**
 - Evidence label: **built-untested**
-- Addressed since the last audit (2026-11-18..2026-11-19): **no**
+- Addressed since the last audit (2026-11-19..2026-11-20): **no**
 - Created (any located code): **yes**
 
 ## Located files
@@ -25,7 +25,7 @@ OK — backend/profile-routes.js is requireAuth router-wide + inline canApprove(
 Resource Hub has E2E proof (portal.spec.js) but that is a different subsystem; there is still no dedicated "Professional Development" tab/page proof under its real home (My Profile).
 
 ## Recency
-Not touched since the last audit (2026-11-18); tonight's 10 commits were all in the calendar/booking/travel/notes/sync subsystem, outside this feature's located files.
+Not touched since the last audit (2026-11-19) — zero commits landed in `backend/` or `frontend/current/` anywhere in the repository between 18:39 UTC 2026-11-19 and tonight's audit.
 
 ## Open tasks (from the tracker)
 (no tasks recorded on this card)

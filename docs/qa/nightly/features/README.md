@@ -16,4 +16,4 @@ One row per tracker idea. Rewritten nightly. See scripts/nightly-audit/PROMPT.md
 | Inductions | idea | needs-refinement | no | [inductions/START.md](inductions/START.md) |
 | Clinical resources | idea | proven | no | [clinical-resources/START.md](clinical-resources/START.md) |
 | Portal Onboarding Workflow | idea | needs-refinement | no | [portal-onboarding-workflow/START.md](portal-onboarding-workflow/START.md) |
-| Portal - Splose - Outlook \| Integration Works | idea | needs-refinement | **yes** | [portal-splose-outlook-integration-works/START.md](portal-splose-outlook-integration-works/START.md) |
+| Portal - Splose - Outlook \| Integration Works | idea | needs-refinement | no | [portal-splose-outlook-integration-works/START.md](portal-splose-outlook-integration-works/START.md) |

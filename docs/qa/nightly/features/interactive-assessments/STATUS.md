@@ -3,7 +3,7 @@
 - Tracker stage: **idea**
 - Tracker environment: **none**
 - Evidence label: **tab-unproven**
-- Addressed since the last audit (2026-11-18..2026-11-19): **no**
+- Addressed since the last audit (2026-11-19..2026-11-20): **no**
 - Created (any located code): **yes**
 
 ## Located files
@@ -14,14 +14,14 @@
 OK — requireClinicalRead/Write throughout, re-confirmed.
 
 ## Tests run
-- unit: `assessment-catalogue.test.js, assessment-surface-guards.test.js, whodas-external-completion.test.js, whodas-frontend-guards.test.js, whodas-scoring.test.js, whodas-templates.test.js` — **pass** (6 files / 482 tests — one more than last night's 481; net new passing test, no failures, no regression)
+- unit: `assessment-catalogue.test.js, assessment-surface-guards.test.js, whodas-external-completion.test.js, whodas-frontend-guards.test.js, whodas-scoring.test.js, whodas-templates.test.js` — **pass** (6 files / 482 tests — re-run fresh tonight, identical to last night)
 - integration: `assessments.itest.js, whodas.itest.js` — **pass** (2 files / 81 tests)
 
 ## Tab / browser proof
 None found — no dedicated Assessment tab banner (re-confirmed tonight), no E2E, no browser QA entry.
 
 ## Recency
-Not touched since the last audit (2026-11-18); tonight's 10 commits were all in the calendar/booking/travel/notes/sync subsystem, outside this feature's located files.
+Not touched since the last audit (2026-11-19) — zero commits landed in `backend/` or `frontend/current/` anywhere in the repository between 18:39 UTC 2026-11-19 and tonight's audit.
 
 ## Open tasks (from the tracker)
 - Assessment Review — todo

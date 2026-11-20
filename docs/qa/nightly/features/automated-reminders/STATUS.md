@@ -3,7 +3,7 @@
 - Tracker stage: **idea**
 - Tracker environment: **none**
 - Evidence label: **needs-refinement**
-- Addressed since the last audit (2026-11-18..2026-11-19): **no**
+- Addressed since the last audit (2026-11-19..2026-11-20): **no**
 - Created (any located code): **yes**
 
 ## Located files
@@ -12,7 +12,7 @@
 
 ## Could not locate / notable gaps
 - Automated Client Appt Reminders: NOTHING located again tonight — no appointment-reminder send code anywhere in backend/ (fresh grep for appointment/appt reminder, 24-hour reminder sends).
-- Therapist Snapshot: no snapshot-specific minimise function found again tonight (only the unrelated minimise on the separate Opa AI assistant chat widget, frontend/current/opa.js) — the tracker checklist still marks "Create minimise function on snapshot" as done, but no matching code exists. This disagreement persists unchanged.
+- Therapist Snapshot: no snapshot-specific minimise function found again tonight (only the unrelated minimise on the separate Opa AI assistant chat widget, frontend/current/opa.js) — the tracker checklist still marks "Create minimise function on snapshot" as done, but no matching code exists. This disagreement persists unchanged, now confirmed across six audit nights (2026-11-15 through 2026-11-20).
 
 ## Guard check
 OK (snapshot-routes.js) — self-scoped by design, re-confirmed.
@@ -25,7 +25,7 @@ OK (snapshot-routes.js) — self-scoped by design, re-confirmed.
 Today report tab exists (reports.js); no E2E/browser QA entry for it.
 
 ## Recency
-Not touched since the last audit (2026-11-18); tonight's 10 commits were all in the calendar/booking/travel/notes/sync subsystem, outside this feature's located files.
+Not touched since the last audit (2026-11-19) — zero commits landed in `backend/` or `frontend/current/` anywhere in the repository between 18:39 UTC 2026-11-19 and tonight's audit.
 
 ## Open tasks (from the tracker)
 - Automated Client Appt Reminders — todo
