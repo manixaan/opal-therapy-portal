@@ -11710,9 +11710,11 @@ function _calColPointerUp(e) {
     // notes). Passed explicitly so the open hooks see it too (10 Oct 2026).
     const startH = Math.floor(pending.startMinutes / 60);
     const startM = pending.startMinutes % 60;
+    // An hour by default, but never past the end of the day (same-day rule, C-08).
+    const endMin = Math.min(pending.startMinutes + 60, 24 * 60 - 1);
     const date = (typeof DAY_DATES !== 'undefined' && DAY_DATES) ? DAY_DATES[pending.day] : null;
     if (typeof openBookingPanel === 'function') {
-      openBookingPanel({ day: pending.day, date, startH, startM, endH: startH + 1, endM: startM, keepState: _bspOpen });
+      openBookingPanel({ day: pending.day, date, startH, startM, endH: Math.floor(endMin / 60), endM: endMin % 60, keepState: _bspOpen });
     }
   }
 }
@@ -22789,6 +22791,7 @@ function _applyPanelPrefill(opts) {
     : '';
   const pad = n => String(n).padStart(2,'0');
   const fmtT = (h, m) => {
+    h = h % 24;   // never read 24:45 as "12:45 PM"
     const ampm = h < 12 ? 'AM' : 'PM';
     const h12  = h % 12 || 12;
     return `${h12}:${pad(m)} ${ampm}`;

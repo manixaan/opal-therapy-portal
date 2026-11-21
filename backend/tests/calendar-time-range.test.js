@@ -77,3 +77,16 @@ describe('event drawer uses the same rule', () => {
     expect(HTML).toContain('if (selEnd - selStart > MAX_APPT_MIN)');
   });
 });
+
+describe('slot click near midnight (C-08)', () => {
+  test('the default hour stops at the end of the day', () => {
+    expect(HTML).toContain('const endMin = Math.min(pending.startMinutes + 60, 24 * 60 - 1);');
+    expect(HTML).not.toContain('endH: startH + 1, endM: startM, keepState: _bspOpen');
+  });
+  test('the prefill strip never reads an hour past 23 as PM of the same day', () => {
+    const src = fnSrc('_applyPanelPrefill');
+    const fmtT = new Function(src.slice(src.indexOf('const pad'), src.indexOf('let timeStr')) + '; return fmtT;')();
+    expect(fmtT(23, 59)).toBe('11:59 PM');
+    expect(fmtT(24, 45)).toBe('12:45 AM');
+  });
+});
