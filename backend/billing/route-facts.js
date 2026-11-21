@@ -14,7 +14,12 @@
 
 const { getMapsProvider } = require('./maps-adapter');
 
-function canonAddr(input) {
+/* Before 21 Nov 2026 a Splose "Street, Suburb, WA, 6108" or a Google
+   "…, Suburb WA 6108, Australia" kept the empty segments state/postcode/country
+   left behind ("street, suburb, ,"), so one place had several keys. Facts
+   already stored under such a key — an owner's manual fact included — are
+   still found through legacyRouteKey. Never change this function. */
+function legacyCanonAddr(input) {
   if (input == null) return '';
   return String(input)
     .toLowerCase()
@@ -26,8 +31,22 @@ function canonAddr(input) {
     .trim();
 }
 
+/* Identical to travel.js canonAddr — travel-address-suburb.test.js runs both
+   over the same strings. */
+function canonAddr(input) {
+  if (input == null) return '';
+  return legacyCanonAddr(input)
+    .replace(/\s*,(\s*,)+/g, ',')
+    .replace(/^[\s,]+|[\s,]+$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function routeKey(origin, destination) {
   return `${canonAddr(origin)}|${canonAddr(destination)}|driving`;
+}
+function legacyRouteKey(origin, destination) {
+  return `${legacyCanonAddr(origin)}|${legacyCanonAddr(destination)}|driving`;
 }
 
 // A failed lookup is retried on a later run, but not more than this often.
@@ -48,12 +67,22 @@ async function resolveRouteFacts(q, orgId, pairs) {
   }
   const out = new Map();
   if (!wanted.size) return out;
+  const legacy = new Map();
+  for (const [key, p] of wanted) {
+    const old = legacyRouteKey(p.origin, p.destination);
+    if (old !== key) legacy.set(key, old);
+  }
   const { rows } = await q.query(
     `SELECT route_key, minutes, km, provider, status, fetched_at FROM travel_route_facts
-      WHERE organisation_id = $1 AND route_key = ANY($2::text[])`, [orgId, [...wanted.keys()]]);
+      WHERE organisation_id = $1 AND route_key = ANY($2::text[])`, [orgId, [...wanted.keys(), ...legacy.values()]]);
   const cached = new Map(rows.map(r => [r.route_key, r]));
   for (const [key, pair] of wanted) {
-    const hit = cached.get(key);
+    let hit = cached.get(key);
+    // A fact stored under the pre-21-Nov key still counts when it is good.
+    if ((!hit || hit.status !== 'ok') && legacy.has(key)) {
+      const old = cached.get(legacy.get(key));
+      if (old && old.status === 'ok') hit = old;
+    }
     if (hit && hit.status === 'ok') {
       out.set(key, { minutes: Number(hit.minutes), km: hit.km == null ? null : Number(hit.km), provider: hit.provider, status: 'ok', cached: true });
       continue;
@@ -106,4 +135,4 @@ async function setManualRouteFact(q, orgId, userId, { origin, destination, minut
   return { key, before: before || null };
 }
 
-module.exports = { canonAddr, routeKey, resolveRouteFacts, setManualRouteFact };
+module.exports = { canonAddr, routeKey, legacyRouteKey, resolveRouteFacts, setManualRouteFact };

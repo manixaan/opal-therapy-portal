@@ -131,6 +131,14 @@ function canonAddr(input) {
     .replace(/\b(wa|western australia|australia)\b/g, '')
     .replace(/\s*\d{4}\b/g, '')        // strip postcodes
     .replace(/[^\w ,\-]/g, '')
+    // Splose writes "7 Mock St, Thornlie, WA, 6108" and Google appends
+    // ", Australia": once state, postcode and country are gone, drop the empty
+    // segments they leave, so every spelling of one place is one key (T-02).
+    // The server twin (backend/billing/route-facts.js) is kept identical by
+    // travel-address-suburb.test.js.
+    .replace(/\s*,(\s*,)+/g, ',')
+    .replace(/^[\s,]+|[\s,]+$/g, '')
+    .replace(/\s+/g, ' ')
     .trim();
 }
 
@@ -238,6 +246,10 @@ function addrSuburb(addr) {
   // drop the trailing country first, or "Australia" is read as the suburb
   // (7 Sep 2026 — every estimate for such an address came out as 0).
   let a = String(addr).trim().replace(/,\s*(Australia|AU)\s*$/i, '').trim();
+  // Splose's "7 Mock St, Thornlie, WA, 6108" puts state and postcode in
+  // segments of their own: drop them too, or the suburb reads as "" and the
+  // street becomes the label (21 Nov 2026 audit T-02).
+  a = a.replace(/,\s*\d{4}\s*$/, '').replace(/,\s*(WA|Western Australia)(\s+\d{4})?\s*$/i, '').trim();
   // If it looks like a bare suburb, return it.
   if (!/,/.test(a) && a.split(/\s+/).length <= 3) return a.replace(/\s+(WA|Western Australia)\s*\d{0,4}$/i, '').trim();
   const m = a.match(/,\s*([A-Za-z' ]+?)\s+(?:WA|Western Australia)?\s*\d{0,4}\s*$/i);
@@ -2747,6 +2759,10 @@ function _perthStamp(dateStr, min) {
   return dateStr + 'T' + _hhmm(m) + ':00+08:00';
 }
 /* PURE-ish — the request for a day, or null when there is nothing to say. */
+function _titlePlace(loc, fallback) {
+  const sub = loc && loc.suburb ? addrSuburb(loc.suburb) : '';
+  return sub && !/\d/.test(sub) ? sub : fallback;
+}
 function travelOutlookPayload(day, segs) {
   const date = (typeof DAY_DATES !== 'undefined' && DAY_DATES) ? DAY_DATES[day] : null;
   if (!date || !window.SESSIONS) return null;
@@ -2756,8 +2772,10 @@ function travelOutlookPayload(day, segs) {
     if (seg.kind === 'gap' || seg.skipped || !seg.ownerSessionId || !(seg.travelMin > 0)) return;
     const owner = window.SESSIONS[seg.ownerSessionId];
     if (!owner || !owner.dbId) return;
-    const from = seg.fromLoc.suburb || seg.fromLoc.label || 'previous stop';
-    const to = seg.toLoc.suburb || seg.toLoc.label || 'next stop';
+    // Suburbs only — an Outlook title is visible through calendar sharing, so
+    // a client's street never goes in it (T-02). A label is never used.
+    const from = _titlePlace(seg.fromLoc, 'previous stop');
+    const to = _titlePlace(seg.toLoc, 'next stop');
     const what = seg.via === 'place-in' ? 'Travel to ' + to : seg.via === 'place-out' ? 'Travel from ' + from
       : seg.via === 'home-return' || (seg.kind === 'end') ? 'Travel home' : seg.via === 'home-out' || seg.kind === 'start' ? 'Travel from home' : 'Travel';
     const start = Math.max(0, seg.startMin), end = Math.min(24 * 60 - 1, seg.endMin);
