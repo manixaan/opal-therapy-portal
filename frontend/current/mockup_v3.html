@@ -189,7 +189,7 @@
 <!-- Splose draft-and-publish sync: Sync Splose button, review panel, unsynced
      tiles, tab-leave prompt, and "changed inside Splose" alerts. Wraps
      switchTab and commitMove once the shell has defined them. -->
-<script src="/splose-sync.js?v=15" defer></script>
+<script src="/splose-sync.js?v=16" defer></script>
 <!-- Settings → Calendar sync: Off / Sync manually / Automatic for Outlook both
      ways, and the three-tab Sync now review (migration 081, 19 Nov 2026). -->
 <script src="/sync-settings.js?v=6" defer></script>
@@ -9586,6 +9586,10 @@ function switchTab(name) {
     resetWizard();
     WIZARD_BOOKED = false;
   }
+  // Extension point (P-08): code that loads a tab's data listens for
+  // 'opal:tab-changed' instead of wrapping switchTab. detail.name is the tab
+  // the core actually showed (a 'book' request arrives as 'calendar').
+  try { window.dispatchEvent(new CustomEvent('opal:tab-changed', { detail: { name } })); } catch (e) { /* old browsers */ }
 }
 // Launcher-style .tab buttons without data-tab (e.g. #tab-support-pop, which
 // opens the floating Support popup) carry their own onclick and must never
@@ -19933,6 +19937,10 @@ async function loadOutlookEventsToCalendar() {
     console.log('✅ Events loaded! Use ‹ / › to step through other weeks.');
   } catch (error) {
     console.error('Error loading events:', error);
+  } finally {
+    // Extension point (P-08): fires after every load, ok or not (a refused or
+    // failed fetch too), for code that follows the calendar — Splose's count.
+    try { window.dispatchEvent(new CustomEvent('opal:events-loaded')); } catch (e) { /* old browsers */ }
   }
 }
 
@@ -20142,7 +20150,14 @@ function calculateDuration(startTime, endTime) {
  *
  * This runs async after initial render so it never blocks calendar load.
  */
+// Extension point (P-08): 'opal:addresses-enriched' fires once the
+// enrichment has finished (whatever it found), so follow-up checks listen
+// instead of wrapping this function.
 async function enrichOutlookTilesWithSploseAddresses() {
+  await __enrichOutlookTilesCore();
+  try { window.dispatchEvent(new CustomEvent('opal:addresses-enriched')); } catch (e) { /* old browsers */ }
+}
+async function __enrichOutlookTilesCore() {
   const mon = window.__currentWeekMonday;
   if (!mon) return;
 
@@ -21831,19 +21846,16 @@ function computeCancellationStats(appointments, patientId) {
 //  The individual load functions use SploseSync stale-while-revalidate:
 //  they show cached data immediately and only re-fetch if stale.
 // ═══════════════════════════════════════════════════════
-if (typeof switchTab === 'function') {
-  const __st = switchTab;
-  window.switchTab = function(name) {
-    __st(name);
-    if (name === 'ndis')     loadNDISData();
-    if (name === 'billing')  loadBillingData();
-    if (name === 'logbook')  loadLogbookData();
-    if (name === 'activity') loadActivityFeed();
-    if (name === 'contacts') loadContactsData();
-    if (name === 'profile')  loadProfileView();
-    if (name === 'master' && window.OpalScheduler) window.OpalScheduler.open();
-  };
-}
+window.addEventListener('opal:tab-changed', function (e) {
+  const name = e.detail && e.detail.name;
+  if (name === 'ndis')     loadNDISData();
+  if (name === 'billing')  loadBillingData();
+  if (name === 'logbook')  loadLogbookData();
+  if (name === 'activity') loadActivityFeed();
+  if (name === 'contacts') loadContactsData();
+  if (name === 'profile')  loadProfileView();
+  if (name === 'master' && window.OpalScheduler) window.OpalScheduler.open();
+});
 
 // ═══════════════════════════════════════════════════════
 //  MASTER SCHEDULER (Phase 1) — the view itself lives in /scheduler.js
@@ -24439,16 +24451,8 @@ function schedAssistantRender() {
   grid.innerHTML = html;
 }
 
-// ── Wire into tab switch ──────────────────────────────
-(function patchSATabSwitch() {
-  const _prev = window.switchTab;
-  window.switchTab = function(name) {
-    _prev && _prev(name);
-    if (name === 'autofit') {
-      // featureFlags.autoFitClients = false — tab hidden; no-op
-    }
-  };
-})();
+// (The autofit tab is hidden — featureFlags.autoFitClients = false — so it
+// needs no 'opal:tab-changed' listener.)
 </script>
 
 <!-- ============================================================
@@ -27344,12 +27348,8 @@ var HELP_TOURS = {
 
 // After Splose address enrichment, re-check tiles that have gained an address
 // and remove stale missing-addr class. Also count how many remain missing.
-(function patchEnrichOutlookTilesWithAddressRecheckBadge() {
-  var _orig = window.enrichOutlookTilesWithSploseAddresses;
-  if (typeof _orig !== 'function') return;
-
-  window.enrichOutlookTilesWithSploseAddresses = async function() {
-    await _orig.apply(this, arguments);
+(function addressRecheckBadgeAfterEnrichment() {
+  window.addEventListener('opal:addresses-enriched', function() {
     // After enrichment, re-run conflict + rural detection (address data may affect sub labels)
     requestAnimationFrame(function() {
       detectAndMarkCalendarConflicts();
@@ -27372,7 +27372,7 @@ var HELP_TOURS = {
         updateNotificationBadge();
       }
     });
-  };
+  });
 })();
 
 </script>

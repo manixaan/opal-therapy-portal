@@ -779,7 +779,7 @@ describe('changed assets are cache-busted', () => {
       // 8: chips written only on change (no observer loop); the move toast names the Outlook status.
       // 9 (js) / 2 (css): match, link or ignore — each queued new appointment shows
       // whether Splose already holds it, with Link / Send / Ignore and bulk actions.
-      ['splose-sync.js', 15], ['splose-sync.css', 7],
+      ['splose-sync.js', 16], ['splose-sync.css', 7],
       // 1: Settings → Calendar sync — per-direction Outlook/Splose choices, the
       // Owner's practice limits and the Sync now preview (migration 081).
       ['sync-settings.js', 6], ['sync-settings.css', 3],
@@ -916,6 +916,26 @@ describe('calendar move persistence — the shell state splose-sync.js depends o
     // No success line before the server has answered.
     expect(SHELL).not.toContain("showToast('Moved on the calendar')");
     expect(SHELL).not.toContain('Splose write queued.`);');
+  });
+
+  // P-08 (21 Nov 2026): optional code follows the shell through documented
+  // CustomEvents instead of replacing shell globals. Harness fix/tech/p08.js:
+  // tab loaders, Splose pending after an ok AND a failed reload, the address
+  // recheck and 'book' → calendar behave identically before and after.
+  test('the shell emits opal:tab-changed, opal:events-loaded and opal:addresses-enriched; nobody wraps those functions', () => {
+    const sw = SHELL.slice(SHELL.indexOf('function switchTab(name) {'), SHELL.indexOf('\n}\n', SHELL.indexOf('function switchTab(name) {')));
+    expect(sw).toContain("new CustomEvent('opal:tab-changed', { detail: { name } })");
+    const load = SHELL.slice(SHELL.indexOf('async function loadOutlookEventsToCalendar() {'));
+    expect(load.slice(0, load.indexOf('\n}\n'))).toMatch(/\} finally \{[\s\S]*new CustomEvent\('opal:events-loaded'\)/);
+    expect(SHELL).toMatch(/async function enrichOutlookTilesWithSploseAddresses\(\) \{\n  await __enrichOutlookTilesCore\(\);\n  try \{ window\.dispatchEvent\(new CustomEvent\('opal:addresses-enriched'\)\)/);
+    expect(SHELL).toContain("window.addEventListener('opal:tab-changed', function (e) {");
+    expect(SHELL).toContain("window.addEventListener('opal:addresses-enriched', function() {");
+    expect(SHELL).not.toMatch(/window\.enrichOutlookTilesWithSploseAddresses = /);
+    expect(SHELL).not.toContain('const __st = switchTab;');
+    expect(SHELL).not.toContain('patchSATabSwitch');
+    const sync = fs.readFileSync(path.join(FRONTEND, 'splose-sync.js'), 'utf8');
+    expect(sync).not.toMatch(/global\.loadOutlookEventsToCalendar = function/);
+    expect(sync).toContain("global.addEventListener('opal:events-loaded', function () { refreshPending(); });");
   });
 
   // 19 Nov 2026: Case Management (and Resource Preparation, reports) share the

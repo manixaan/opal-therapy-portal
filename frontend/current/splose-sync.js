@@ -824,17 +824,12 @@
   // Every booking, cancellation or Splose-side answer ends by reloading the
   // calendar. Refresh the queue right after, so the Sync Splose count and the
   // tile markers change with the calendar instead of on the next 60 s poll.
+  // The shell's loader fires 'opal:events-loaded' after every load, ok or
+  // not (P-08: this used to wrap window.loadOutlookEventsToCalendar).
   function installReloadHook() {
     if (global.__sploseSyncReloadHook) return;
     global.__sploseSyncReloadHook = true;
-    var orig = global.loadOutlookEventsToCalendar;
-    if (typeof orig !== 'function') return;
-    global.loadOutlookEventsToCalendar = function () {
-      var out = orig.apply(this, arguments);
-      var after = function () { refreshPending(); };
-      if (out && typeof out.then === 'function') out.then(after, after); else setTimeout(after, 0);
-      return out;
-    };
+    global.addEventListener('opal:events-loaded', function () { refreshPending(); });
   }
 
   // ── Making a move real ────────────────────────────────────────────────────
