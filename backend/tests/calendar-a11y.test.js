@@ -97,3 +97,48 @@ describe('tiles and toasts are announced (Q-08)', () => {
     expect(HTML).toMatch(/if \(document\.body\) showToast\(\); else document\.addEventListener\('DOMContentLoaded'/);
   });
 });
+
+describe('Skip to calendar (Q-07, 21 Nov 2026)', () => {
+  test('first in the shell, hidden until focused, Calendar tab only, teal focus ring', () => {
+    const body = HTML.slice(HTML.indexOf('<body>'), HTML.indexOf('<header data-help="app-header">'));
+    expect(body).toContain('<a class="skip-link" id="skip-to-calendar" href="#cal-grid">Skip to calendar</a>');
+    const css = HTML.slice(HTML.indexOf('.skip-link:not(:focus) {'), HTML.indexOf('body:not(:has(#view-calendar.active)) .skip-link { display: none; }') + 80);
+    expect(css).toMatch(/clip-path: inset\(50%\)/);
+    expect(css).toMatch(/\.skip-link:focus \{[\s\S]*box-shadow: var\(--shadow-md\), var\(--focus-ring\);/);
+    expect(css).toContain('body:not(:has(#view-calendar.active)) .skip-link { display: none; }');
+  });
+
+  function env(cols) {
+    const dom = new JSDOM('<section id="view-calendar" class="view active"><div class="cal-view" id="cal-view-week"><div id="cal-grid">' +
+      cols.map(([day, tops]) => '<div class="cal-col" id="day-' + day + '" data-day="' + day + '">' +
+        tops.map((t, i) => '<div class="session" tabindex="0" data-id="' + day + i + '" data-top="' + t + '"></div>').join('') + '</div>').join('') +
+      '</div></div></section>', { runScripts: 'outside-only' });
+    const w = dom.window;
+    w.Element.prototype.getClientRects = function () { return [1]; };
+    w.Element.prototype.getBoundingClientRect = function () { const t = Number(this.dataset.top || 0); return { top: t, bottom: t + 20 }; };
+    w.eval(fnSrc('function focusCalendarStart('));
+    return w;
+  }
+
+  test('Enter lands on the earliest tile of the first day that has one', () => {
+    const w = env([['mon', []], ['tue', [600, 300, 450]], ['wed', [100]]]);
+    w.eval('focusCalendarStart()');
+    expect(w.document.activeElement.dataset.id).toBe('tue1');
+  });
+
+  test('an empty week lands on today\'s column, else the first visible one', () => {
+    const w = env([['mon', []], ['tue', []]]);
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Perth' }).format(new Date());
+    w.eval('var DAY_DATES = { mon: "2001-01-01", tue: "' + today + '" };');
+    w.eval('focusCalendarStart()');
+    expect(w.document.activeElement.id).toBe('day-tue');
+    expect(w.document.activeElement.getAttribute('tabindex')).toBe('-1');
+    const w2 = env([['mon', []], ['tue', []]]);
+    w2.eval('focusCalendarStart()');
+    expect(w2.document.activeElement.id).toBe('day-mon');
+  });
+
+  test('the link is wired to it and does not jump the page', () => {
+    expect(HTML).toContain("link.addEventListener('click', (e) => { e.preventDefault(); focusCalendarStart(); });");
+  });
+});

@@ -1195,6 +1195,19 @@ window.opIcon = function (name, size) {
   :where(button, a, input, select, textarea, [tabindex]):focus-visible {
     outline: none; box-shadow: var(--focus-ring);
   }
+  /* Skip link (Q-07): off-screen and unclickable until it holds keyboard
+     focus, then a small sheet at the top left. Only on the Calendar tab. */
+  .skip-link:not(:focus) {
+    position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0;
+    overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+  }
+  .skip-link:focus {
+    position: fixed; top: 8px; left: 16px; z-index: 10001;
+    padding: 8px 14px; border-radius: var(--radius-sm);
+    background: var(--panel); color: var(--accent); font-size: 13px; font-weight: 600;
+    text-decoration: none; outline: none; box-shadow: var(--shadow-md), var(--focus-ring);
+  }
+  body:not(:has(#view-calendar.active)) .skip-link { display: none; }
   /* Gentle press feedback on chrome controls (reduced-motion collapses it). */
   .icon-btn, .help-qa-btn, .pf-card { transition: background var(--t-fast), border-color var(--t-fast), box-shadow var(--t-fast); }
   .icon-btn:active, .help-qa-btn:active, .pf-card:active { transform: translateY(0.5px); }
@@ -4364,6 +4377,8 @@ window.opIcon = function (name, size) {
 </style>
 </head>
 <body>
+<!-- Keyboard users' first stop on the Calendar tab: hidden until focused (Q-07, 21 Nov 2026). -->
+<a class="skip-link" id="skip-to-calendar" href="#cal-grid">Skip to calendar</a>
 
 <header data-help="app-header">
   <span class="opa-greet-wrap">
@@ -13854,6 +13869,47 @@ rebuildCalendarGrid();
   } else {
     wire();
   }
+})();
+
+/* Skip to calendar (Q-07): Enter puts focus on the first appointment of the
+   visible day/week — earliest day, then earliest start — or, with none, on
+   today's column (else the first visible one). Month and Scheduler land on
+   their first focusable control. Tiles keep their own Tab stops. */
+function focusCalendarStart() {
+  const view = Array.from(document.querySelectorAll('#view-calendar .cal-view')).find(v => v.getClientRects().length);
+  const shown = (el) => el.getClientRects().length > 0;
+  if (view && view.id === 'cal-view-week') {
+    const grid = document.getElementById('cal-grid');
+    const cols = Array.from(view.querySelectorAll('.cal-col')).filter(shown);
+    const reveal = (el) => {
+      if (!grid) return;
+      const g = grid.getBoundingClientRect(), r = el.getBoundingClientRect();
+      if (r.top < g.top + 40 || r.top > g.bottom - 40) grid.scrollTop += r.top - g.top - 100;
+    };
+    for (const col of cols) {
+      const tiles = Array.from(col.querySelectorAll('.session[data-id]')).filter(shown);
+      if (!tiles.length) continue;
+      const first = tiles.reduce((a, b) => (b.getBoundingClientRect().top < a.getBoundingClientRect().top ? b : a));
+      first.focus({ preventScroll: true }); reveal(first);
+      return first;
+    }
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Perth' }).format(new Date());
+    const dates = (typeof DAY_DATES !== 'undefined' && DAY_DATES) || {};
+    const col = cols.find(c => dates[c.dataset.day] === today) || cols[0];
+    if (col) {
+      if (!col.hasAttribute('tabindex')) col.setAttribute('tabindex', '-1');
+      col.focus({ preventScroll: true });
+      return col;
+    }
+  }
+  const target = (view && view.querySelector('[tabindex="0"], button:not([disabled])')) || document.getElementById('cal-grid');
+  if (target) target.focus();
+  return target;
+}
+(function initSkipToCalendar() {
+  const link = document.getElementById('skip-to-calendar');
+  if (!link) return;
+  link.addEventListener('click', (e) => { e.preventDefault(); focusCalendarStart(); });
 })();
 
 function paintHourLines(col) {
