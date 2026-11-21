@@ -100,7 +100,7 @@
     el.dataset.ready = '1';
     el.innerHTML =
       '<div class="inv-head"><div><h1>Invoicing</h1><div class="inv-sub" id="inv-sub">Calendar sessions and travel become NDIS invoice drafts.</div></div>' +
-      '<div class="inv-head-actions"><button class="btn" data-inv="new-trip">Invoice a trip</button><button class="btn primary" data-inv="complete">Complete invoicing</button></div></div>' +
+      '<div class="inv-head-actions"><button class="btn" data-inv="new-trip">Invoice a trip</button><button class="btn" data-inv="complete">Complete invoicing…</button><button class="btn primary" data-inv="complete-last" title="Draft every client\'s invoice for last Monday to Friday, all practitioners">Invoice last week</button></div></div>' +
       '<div id="inv-cards" class="inv-cards">' + skel(1) + '</div>' +
       '<nav class="inv-subnav" id="inv-subnav" aria-label="Invoicing sections">' + SECTIONS.map(function (s) {
         return '<button type="button" data-sec="' + s[0] + '"' + (s[0] === state.section ? ' class="active"' : '') + '>' + esc(s[1]) + (s[0] === 'attention' ? ' <span class="cnt" id="inv-attn-cnt"></span>' : '') + '</button>';
@@ -390,22 +390,30 @@
   }
 
   // ── Complete invoicing ───────────────────────────────────────────────────
-  function openCompleteInvoicing() {
+  function openCompleteInvoicing(opts) {
     var today = new Date();
     var mon = mondayOf(today);
     var ranges = {
       today: [ymdLocal(today), ymdLocal(today)],
       week: [ymdLocal(mon), ymdLocal(addDays(mon, 6))],
       last: [ymdLocal(addDays(mon, -7)), ymdLocal(addDays(mon, -1))],
+      // The Monday routine: the previous working week, every practitioner.
+      lastwork: [ymdLocal(addDays(mon, -7)), ymdLocal(addDays(mon, -3))],
     };
     var body =
-      '<div class="inv-seg" role="group" aria-label="Period"><button type="button" data-range="today">Today</button><button type="button" data-range="week" class="on">This week</button><button type="button" data-range="last">Last week</button><button type="button" data-range="custom">Custom</button></div>' +
-      '<div class="inv-field-row"><label class="inv-dim">From <input type="date" id="inv-run-from" value="' + ranges.week[0] + '"></label><label class="inv-dim">To <input type="date" id="inv-run-to" value="' + ranges.week[1] + '"></label>' +
+      '<div class="inv-seg" role="group" aria-label="Period"><button type="button" data-range="lastwork" class="on">Last Mon–Fri</button><button type="button" data-range="today">Today</button><button type="button" data-range="week">This week</button><button type="button" data-range="last">Last week</button><button type="button" data-range="custom">Custom</button></div>' +
+      '<div class="inv-field-row"><label class="inv-dim">From <input type="date" id="inv-run-from" value="' + ranges.lastwork[0] + '"></label><label class="inv-dim">To <input type="date" id="inv-run-to" value="' + ranges.lastwork[1] + '"></label>' +
       '<label class="inv-dim">Practitioner <select id="inv-run-prac"><option value="">All practitioners</option>' + state.practitioners.map(function (p) { return '<option value="' + esc(p.id) + '">' + esc(p.name) + '</option>'; }).join('') + '</select></label></div>' +
       '<div class="inv-note">Completed, billable sessions in this period are priced from each client\'s MMM zone and the rate card for the service date, travel is divided across each practitioner\'s day, and sessions are grouped into one draft per client and plan manager. Anything that cannot be billed safely goes to <b>Needs attention</b>. Running it again never duplicates a charge.</div>' +
       '<div id="inv-run-result"></div>';
     var bd = modal('Complete invoicing', body, '<button class="btn" data-inv="close-modal">Close</button><button class="btn primary" id="inv-run-go" data-inv="run-go">Create drafts</button>');
     bd.__ranges = ranges;
+    // One press on Monday: "Invoice last week" opens this and starts the run
+    // for the previous Mon–Fri across all practitioners straight away.
+    if (opts && opts.autorun) {
+      var go = document.getElementById('inv-run-go');
+      if (go) runInvoicing(go);
+    }
     if (!state.practitioners.length) get('/practitioners').then(function (r) {
       state.practitioners = r.practitioners || [];
       var sel = document.getElementById('inv-run-prac');
@@ -913,6 +921,7 @@
       switch (a) {
         case 'close-modal': closeModal(); break;
         case 'complete': openCompleteInvoicing(); break;
+        case 'complete-last': openCompleteInvoicing({ autorun: true }); break;
         case 'run-go': await runInvoicing(btn); break;
         case 'card': state.filters.status = btn.dataset.status; go('invoices'); break;
         case 'chip': state.filters.status = btn.dataset.status; go('invoices'); break;
