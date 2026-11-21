@@ -1523,9 +1523,16 @@ function _previewLeg(col, startMin, endMin, cls, html, title) {
   const el = document.createElement('div');
   el.className = cls === 'placeholder' ? 'travel-overlay between preview placeholder' : 'travel-overlay between preview' + (cls ? ' ' + cls : '');
   el.style.top = tToY(Math.floor(startMin / 60), startMin % 60) + 'px';
-  const px = Math.max(0, endMin - startMin) / 60 * HOUR_PX;
-  el.style.height = (endMin > startMin ? Math.min(Math.max(12, px - 4), Math.max(4, px - 2)) : 16) + 'px';
+  const h = endMin > startMin ? _legHeightPx(startMin, endMin) : 16;
+  el.style.height = h + 'px';
+  // A proposed leg too short for words is a bar; the panel's status line and
+  // the title carry the details (T-15).
   el.innerHTML = html;
+  if (h < 14) {
+    el.classList.add('t-bar');
+    if (!title) title = (el.textContent || '').replace(/\s+/g, ' ').trim();
+    el.innerHTML = '';
+  }
   if (title) el.title = title;
   col.appendChild(el);
   return el;
@@ -2666,11 +2673,11 @@ function renderSegmentOverlay(col, seg) {
   const el = document.createElement('div');
   el.className = 'travel-overlay ' + seg.kind + (seg.moved ? ' moved' : '') + (seg.tight ? ' tight' : '');
   el.style.top    = tToY(Math.floor(seg.startMin/60), seg.startMin%60) + 'px';
-  // Floor for readability, but NEVER cross the slot boundary — a sub-15-min
-  // leg renders as a thin strip inside its own gap instead of overrunning
-  // the neighbouring session tile.
-  const segSlotPx = (seg.endMin - seg.startMin) / 60 * HOUR_PX;
-  el.style.height = Math.min(Math.max(12, segSlotPx - 4), Math.max(4, segSlotPx - 2)) + 'px';
+  // Always 4 px short of its slot, like a tile, so the gap to the appointment
+  // is the same 4 px for every leg (21 Nov 2026 audit T-15). A tiny leg is a
+  // bar; it never grows over the neighbouring tile.
+  const legH = _legHeightPx(seg.startMin, seg.endMin);
+  el.style.height = legH + 'px';
   el.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); showTravelLegMenu(e.clientX, e.clientY, seg); });
   if (seg.skipped) {
     // Not driving this: a slim marker where the drive was, to bring it back.
@@ -2692,10 +2699,17 @@ function renderSegmentOverlay(col, seg) {
     : seg.via === 'place-in' ? 'To ' + (seg.toLoc.label || 'stop') : seg.via === 'place-out' ? 'From ' + (seg.fromLoc.label || 'stop') : 'Travel';
   const from = seg.fromLoc.label || seg.fromLoc.suburb || 'Base';
   const to   = seg.toLoc.label   || seg.toLoc.suburb   || 'Base';
+  // Size tiers (T-15/T-20): under 14 px a bar only; 14–20 px the minutes;
+  // from 20 px "8 min → Suburb". The origin is the tile above, so the
+  // destination is what the leg names; everything else is in the title and
+  // the panel. _fitLegText drops parts that do not fit — never the minutes.
+  const tier = seg.via === 'stay' ? '' : _legTier(legH);
+  if (tier) el.classList.add(tier);
   el.innerHTML = seg.via === 'stay'
     ? `<span class="t-ico" style="font-size: 10px; font-weight: 600; opacity: 0.7;">Same place</span><span class="t-label">no drive</span>`
-    : `<span class="t-ico" style="font-size: 10px; font-weight: 600; opacity: 0.7;">${icon}</span>
-    <span class="t-label">${seg.travelMin} min · ${_tpEsc(seg.fromLoc.suburb || from)} → ${_tpEsc(seg.toLoc.suburb || to)}</span>`;
+    : tier === 't-bar' ? ''
+    : tier === 't-mins' ? `<span class="t-label"><span class="t-min">${seg.travelMin} min</span></span>`
+    : `<span class="t-ico">${_tpEsc(icon)}</span><span class="t-label"><span class="t-min">${seg.travelMin} min</span><span class="t-dest"> → ${_tpEsc(seg.toLoc.suburb || to)}</span></span>`;
   if (seg.via === 'stay') el.classList.add('stay');
   const kindLabel = seg.kind === 'start' ? 'Morning drive from' :
                     seg.kind === 'end'   ? 'Evening drive to'    :
@@ -2723,7 +2737,8 @@ function renderSegmentOverlay(col, seg) {
   const gapFrom = seg.kind === 'between' && seg.via !== 'home-out' && seg.via !== 'place-out' && seg.gapFromSessionId && window.SESSIONS
     ? window.SESSIONS[seg.gapFromSessionId] : null;
   // Never on a drive whose next stop IS home: both ways would be the same drive.
-  if (gapFrom && gapFrom.dbId && !seg.toHome && (seg.via === 'home-return' || seg.via === 'place-in' || seg.homeAvailable)) {
+  // Not on a leg too short to hold it — the panel offers the same choice.
+  if (tier !== 't-bar' && tier !== 't-mins' && gapFrom && gapFrom.dbId && !seg.toHome && (seg.via === 'home-return' || seg.via === 'place-in' || seg.homeAvailable)) {
     // Via home or via a saved place flips to Direct; Direct flips to home.
     const viaHome = seg.via === 'home-return' || seg.via === 'place-in';
     const viaName = seg.via === 'place-in' ? 'Via ' + (seg.toLoc.label || 'stop') : 'Via home';
@@ -2745,6 +2760,26 @@ function renderSegmentOverlay(col, seg) {
   };
   if (canMove) attachTravelLegDrag(el, seg);
   col.appendChild(el);
+  if (tier === 't-full') _fitLegText(el);
+}
+/* A leg's drawn height: its slot less the 4 px gap every tile keeps, never
+   below a 2 px bar (T-15). Shared by every place that sizes a leg. */
+function _legHeightPx(startMin, endMin) {
+  return Math.max(2, (endMin - startMin) / 60 * HOUR_PX - 4);
+}
+function _legTier(h) { return h < 14 ? 't-bar' : h < 20 ? 't-mins' : 't-full'; }
+/* A narrow column cannot hold "Start 8 min → Canning Vale Direct ⇄". Rather
+   than an ellipsis eating the destination, drop whole parts in order — the
+   Start/End word, then the switch (the panel has it), then the destination —
+   so what remains is always readable and the minutes always show (T-20). */
+function _fitLegText(el) {
+  const over = () => el.scrollWidth > el.clientWidth + 0.5;
+  if (!over()) return;
+  el.classList.add('t-no-ico');
+  if (!over()) return;
+  el.classList.add('t-no-switch');
+  if (!over()) return;
+  el.classList.add('t-no-dest');
 }
 
 /* ---------- Travel legs mirrored to Outlook (5 Oct 2026) ----------

@@ -171,7 +171,7 @@
      store and computeDayTravelSegments(), the calendar leg overlays and the
      travel details panel. Deferred and loaded ahead of profile.js and
      reports.js, both of which reach into it. -->
-<script src="/travel.js?v=61" defer></script>
+<script src="/travel.js?v=62" defer></script>
 <!-- Traffic alerts: a re-priced drive that now runs into a client session —
      point at it, offer Make room, Acknowledge or Ignore (today and tomorrow). -->
 <script src="/travel-alerts.js?v=1" defer></script>
@@ -3279,6 +3279,17 @@ window.opIcon = function (name, size) {
   .travel-overlay:hover { filter: brightness(0.97); box-shadow: 0 2px 6px rgba(15,118,110,0.2); }
   .travel-overlay .t-ico { font-size: 11px; }
   .travel-overlay .t-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* Size tiers (travel.js _legTier, 21 Nov 2026 audit T-15/T-20): a leg under
+     14 px is a clean bar (details in its title and panel); 14–20 px shows the
+     minutes; from 20 px "8 min → Suburb". Parts are dropped whole
+     (_fitLegText) rather than cut, so no leg shows half a word. */
+  .travel-overlay.t-bar { padding: 0; gap: 0; }
+  .travel-overlay.t-mins { padding: 1px 6px; line-height: 12px; }
+  .travel-overlay.t-mins .t-label, .travel-overlay.t-full .t-label,
+  .travel-overlay.t-full .t-ico { flex-shrink: 0; overflow: visible; }
+  .travel-overlay.t-full .t-ico { font-size: 10px; font-weight: 500; opacity: .75; white-space: nowrap; }
+  .travel-overlay.t-no-ico .t-ico, .travel-overlay.t-no-switch .t-switch,
+  .travel-overlay.t-no-dest .t-dest { display: none; }
   /* Idle-gap overlay CSS REMOVED (2026-08-09): the free-time/gap overlay no
      longer renders on the calendar — travel-leg indicators below remain. */
   /* Start-of-day / end-of-day travel (base → first session, last session → base).

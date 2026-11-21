@@ -182,6 +182,17 @@ async function chooseLocation(env, addr) {
 const start = (env) => env.$('bsp-start').value;
 const end = (env) => env.$('bsp-end').value;
 const status = (env) => env.$('bsp-route-status');
+// Warm the route cache as if the Routes API had answered these pairs.
+async function warmRoutes(env, pairs) {
+  const real = env.win.fetch;
+  env.win.fetch = async (url, o) => {
+    const b = JSON.parse(o.body);
+    const hit = pairs.find((p) => p[0] === b.origin && p[1] === b.destination);
+    return { ok: true, status: 200, json: async () => ({ routes: [{ duration: (hit[2] * 60) + 's', distanceMeters: 1 }] }) };
+  };
+  for (const [a, b] of pairs) await env.ev(`fetchRoute(${JSON.stringify(a)}, ${JSON.stringify(b)}, 'driving')`);
+  env.win.fetch = real;
+}
 const legs = (env) => Array.from(env.win.document.querySelectorAll('#day-mon .travel-overlay.preview:not(.placeholder)'));
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -378,8 +389,11 @@ describe('Smart Booking: straight on from the last client, or home in between', 
     const env = makeEnv(Object.assign({ routes }, HOME));
     env.ev(`SESSIONS.A = { id: 'A', day: 'mon', type: 'therapy', startH: 9, startM: 0, endH: 10, endM: 0,
       address: ${JSON.stringify(A_ADDR)}, patient: 'Ada Client', dbId: 'db-A' };
-      SESSIONS.B = { id: 'B', day: 'mon', type: 'therapy', startH: 10, startM: 30, endH: 11, endM: 30,
+      SESSIONS.B = { id: 'B', day: 'mon', type: 'therapy', startH: 12, startM: 0, endH: 13, endM: 0,
       address: ${JSON.stringify(CV_ADDR)}, patient: 'Ben Client', dbId: 'db-B' };`);
+    // Routed drives of 20+ min: tall enough for the switch (a leg under 20 px
+    // is a bar or minutes only, and the panel holds the choice — T-15).
+    await warmRoutes(env, [[A_ADDR, CV_ADDR, 25], [A_ADDR, HOME_ADDR, 20], [HOME_ADDR, CV_ADDR, 20]]);
     env.ev("refreshDayOverlays('mon')");
     const sw = () => env.win.document.querySelector('#day-mon .travel-overlay .t-switch');
     expect(sw().textContent).toBe('Direct ⇄');
@@ -504,7 +518,10 @@ describe('Book Another Client — Client A → travel → proposed Client B', ()
     expect([start(env), end(env)]).toEqual(['10:35', '11:35']);
     await chooseLocation(env, NEAR_ADDR);
     expect([start(env), end(env)]).toEqual(['10:08', '11:08']);
-    expect(legs(env)[0].textContent).toMatch(/8 min/);
+    // 8 min is under 14 px: a bar, its words in the title (T-15).
+    expect(legs(env)[0].classList.contains('t-bar')).toBe(true);
+    expect(legs(env)[0].textContent).toBe('');
+    expect(legs(env)[0].title).toMatch(/8 min/);
   });
 
   test('a cached route is not asked for again', async () => {
@@ -1262,6 +1279,7 @@ describe('same place twice in a day: the choice stays visible (6 Oct 2026)', () 
     const env = makeEnv(HOME);
     env.ev(`SESSIONS.N1 = { id: 'N1', day: 'mon', type: 'therapy', startH: 7, startM: 45, endH: 8, endM: 45, address: ${JSON.stringify(A_ADDR)}, patient: 'Noah Mathew', dbId: 'db-N1', travel: { next: 'direct' } };
       SESSIONS.N2 = { id: 'N2', day: 'mon', type: 'therapy', startH: 16, startM: 0, endH: 17, endM: 0, address: ${JSON.stringify(A_ADDR)}, patient: 'Noah Mathew', dbId: 'db-N2' };`);
+    await warmRoutes(env, [[A_ADDR, HOME_ADDR, 20], [HOME_ADDR, A_ADDR, 20]]);   // tall enough to carry the switch
     env.ev("refreshDayOverlays('mon')");
     const stay = env.win.document.querySelector('#day-mon .travel-overlay.stay');
     expect(stay.textContent).toMatch(/Same place/);
@@ -1945,5 +1963,48 @@ describe('travel earlier, do the block there', () => {
     day(env, REPORT);
     await chooseLocation(env, CV_ADDR);
     expect(status(env).querySelector('[data-route="relocate"]')).toBeNull();
+  });
+});
+
+// 21 Nov 2026 audit T-15/T-20: a leg is always 4 px short of its slot, and
+// shows only what fits — a bar, the minutes, or "N min → Suburb".
+describe('travel leg size tiers', () => {
+  const HOME = { week: { mon: 'home-1' }, homes: [{ id: 'home-1', label: 'Home', addr: HOME_ADDR, suburb: 'Bull Creek', kind: 'local' }] };
+  async function between(min) {
+    const env = makeEnv(HOME);
+    env.ev(`SESSIONS.A = { id: 'A', day: 'mon', type: 'therapy', startH: 9, startM: 0, endH: 10, endM: 0, address: ${JSON.stringify(A_ADDR)}, patient: 'Ada Client', dbId: 'db-A' };
+      SESSIONS.B = { id: 'B', day: 'mon', type: 'therapy', startH: 12, startM: 0, endH: 13, endM: 0, address: ${JSON.stringify(CV_ADDR)}, patient: 'Ben Client', dbId: 'db-B' };`);
+    await warmRoutes(env, [[A_ADDR, CV_ADDR, min], [HOME_ADDR, A_ADDR, 30], [CV_ADDR, HOME_ADDR, 30]]);
+    env.ev("refreshDayOverlays('mon')");
+    return env.win.document.querySelector('#day-mon .travel-overlay.between');
+  }
+  test('height is the slot less 4 px, never below a 2 px bar', () => {
+    const env = makeEnv(HOME);
+    expect(env.ev('_legHeightPx(600, 608)')).toBeCloseTo(8 * 1.2 - 4);
+    expect(env.ev('_legHeightPx(600, 630)')).toBeCloseTo(30 * 1.2 - 4);
+    expect(env.ev('_legHeightPx(600, 602)')).toBe(2);
+  });
+  test('under 14 px: a bar — no words, no switch; the details stay in the title', async () => {
+    const el = await between(8);
+    expect(el.classList.contains('t-bar')).toBe(true);
+    expect(el.textContent).toBe('');
+    expect(el.querySelector('.t-switch')).toBeNull();
+    expect(el.title).toMatch(/8 min/);
+  });
+  test('14–20 px: the minutes only', async () => {
+    const el = await between(15);
+    expect(el.classList.contains('t-mins')).toBe(true);
+    expect(el.textContent.trim()).toBe('15 min');
+    expect(el.querySelector('.t-switch')).toBeNull();
+  });
+  test('20 px and up: "N min → Suburb" (the destination, not the origin) and the switch', async () => {
+    const el = await between(25);
+    expect(el.classList.contains('t-full')).toBe(true);
+    expect(el.querySelector('.t-label').textContent).toBe('25 min → Canning Vale');
+    expect(el.querySelector('.t-switch').textContent).toBe('Direct ⇄');
+  });
+  test('the CSS hides dropped parts whole — never an ellipsis through the destination', () => {
+    expect(SHELL).toMatch(/\.travel-overlay\.t-no-ico \.t-ico, \.travel-overlay\.t-no-switch \.t-switch,\s*\.travel-overlay\.t-no-dest \.t-dest \{ display: none; \}/);
+    expect(TRAVEL).toMatch(/el\.classList\.add\('t-no-ico'\);[\s\S]{0,80}el\.classList\.add\('t-no-switch'\);[\s\S]{0,80}el\.classList\.add\('t-no-dest'\);/);
   });
 });
