@@ -219,6 +219,21 @@ describe('5-minute snapping for calendar drags; clicks book the quarter-hour; Sm
     expect(ctx.calYToMinutes(col, at(10, 22), 'floor')).toBe(615);
   });
 
+  // C-19 (21 Nov 2026): a drag-create's press snaps to 5 like its release, so a
+  // press at 10:52 can anchor 10:50 — the old 15-minute floor made :50/:55 impossible.
+  test('drag-create: the press anchor snaps to 5 minutes; a plain click still floors to 15', () => {
+    expect(ctx.calYToMinutes(col, at(10, 52))).toBe(650);
+    expect(ctx.calYToMinutes(col, at(10, 53))).toBe(655);
+    expect(ctx.calYToMinutes(col, at(10, 52), 'floor')).toBe(645);
+    const down = SHELL.slice(SHELL.indexOf('function _calColPointerDown(e)'), SHELL.indexOf('function _calColPointerMove(e)'));
+    expect(down).toContain('const dragAnchorMinutes = calYToMinutes(col, e.clientY);');
+    const move = SHELL.slice(SHELL.indexOf('function _calColPointerMove(e)'), SHELL.indexOf('function _calColPointerUp(e)'));
+    expect(move).toContain('dragState.anchorMinutes = _calDragPending.dragAnchorMinutes;');
+    expect(move).toContain('createDragBlock(_calDragPending.col, _calDragPending.dragAnchorMinutes, SLOT_SNAP_MIN);');
+    const up = SHELL.slice(SHELL.indexOf('function _calColPointerUp(e)'), SHELL.indexOf('function initCalColInteractions()'));
+    expect(up).toContain('const startH = Math.floor(pending.startMinutes / 60);');
+  });
+
   test('move and resize go through the same snap, and drag-to-create ignores proposed blocks', () => {
     expect(SHELL).toContain('Math.min(END_H * 60 - drag.durationMin, calSnapMin(rawMinutes))');
     expect(SHELL).toContain('let target = calSnapMin(resize.origStartMin + dMin);');

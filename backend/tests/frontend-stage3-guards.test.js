@@ -659,7 +659,7 @@ describe('calendar drag-selection coordinate fix', () => {
   });
 
   test('upward drags produce the reversed range from the anchor slot', () => {
-    expect(HTML).toContain('dragState.anchorMinutes = _calDragPending.startMinutes;');
+    expect(HTML).toContain('dragState.anchorMinutes = _calDragPending.dragAnchorMinutes;');
     expect(HTML).toContain('let selStart = Math.min(anchor, hover);');
     expect(HTML).toContain('let selEnd   = Math.max(anchor, hover);');
   });
