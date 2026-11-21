@@ -210,14 +210,22 @@ describe('compact calendar week view', () => {
     expect(HTML).toContain("const days = ['mon','tue','wed','thu','fri','sat','sun'];"); // drag onto a weekend column
     expect(HTML).not.toContain("ttl: 'Outside working hours'");
     expect(HTML).toContain('min="1" max="720" step="1" value="60"');
-    // A booking that runs past midnight ends on the next day's date.
-    const src = HTML.slice(HTML.indexOf('function _getBspTiming()'));
-    const body = src.slice(0, src.indexOf('\n}\n') + 2);
-    const field = { 'bsp-start': { value: '23:00' }, 'bsp-dur-slider': { value: '90' }, 'bsp-location': { value: '' } };
-    const doc = { querySelector: () => ({ dataset: { day: 'sat' } }), getElementById: (id) => field[id] };
-    const timing = new Function('document', 'DAY_DATES', body + '; return _getBspTiming();')(doc, { sat: '2026-11-14' });
-    expect(timing.startISO).toBe('2026-11-14T23:00:00+08:00');
-    expect(timing.endISO).toBe('2026-11-15T00:30:00+08:00');
+    // Owner rule 21 Nov 2026: one appointment is the same day — a range past
+    // midnight is invalid (it used to save on the next day's date).
+    const src = HTML.slice(HTML.indexOf('const MAX_APPT_MIN'));
+    const fnStart = src.indexOf('function _getBspTiming()');
+    const body = src.slice(0, fnStart + src.slice(fnStart).indexOf('\n}\n') + 2);
+    const run = (start, end) => {
+      const field = { 'bsp-start': { value: start }, 'bsp-end': { value: end }, 'bsp-location': { value: '' } };
+      const doc = { querySelector: () => ({ dataset: { day: 'sat' } }), getElementById: (id) => field[id] };
+      return new Function('document', 'DAY_DATES', body + '; return _getBspTiming();')(doc, { sat: '2026-11-14' });
+    };
+    const late = run('22:00', '23:30');
+    expect(late.invalid).toBe('');
+    expect(late.endISO).toBe('2026-11-14T23:30:00+08:00');
+    const overnight = run('23:00', '00:30');
+    expect(overnight.invalid).toMatch(/same day/);
+    expect(overnight.endISO).toBeNull();
   });
 
   test('the event detail panel is decluttered (14 Nov 2026)', () => {

@@ -4853,9 +4853,10 @@ window.opIcon = function (name, size) {
             </div>
             <div class="bsp-time-field">
               <label class="bsp-field-label">End</label>
-              <input type="time" id="bsp-end" step="60" value="10:00" oninput="bspOnEndChange()">
+              <input type="time" id="bsp-end" step="60" value="10:00" oninput="bspOnEndChange()" aria-describedby="bsp-time-error">
             </div>
           </div>
+          <div class="bsp-time-error" id="bsp-time-error" role="alert" hidden></div>
 
           <!-- Duration slider -->
           <div class="bsp-dur-section">
@@ -10473,7 +10474,8 @@ function renderSlotSuggestions() {
   // The slider/time inputs are the truth; _bspPrefill only holds the original open data.
   const _liveDay   = document.querySelector('.bsp-day-chip.active')?.dataset.day;
   const _liveStart = document.getElementById('bsp-start')?.value; // "HH:MM" 24-h
-  const _liveDur   = parseInt(document.getElementById('bsp-dur-slider')?.value);
+  const _liveT     = (typeof _getBspTiming === 'function') ? _getBspTiming() : null;
+  const _liveDur   = _liveT && !_liveT.invalid ? _liveT.durationMin : 0;
   if (_liveDay && _liveStart) {
     const parts = _liveStart.split(':');
     prefillDay    = _liveDay;
@@ -11753,8 +11755,8 @@ function handleDragMove(event) {
     let selStart = Math.min(anchor, hover);
     let selEnd   = Math.max(anchor, hover);
     if (selEnd - selStart < SLOT_SNAP_MIN) selEnd = selStart + SLOT_SNAP_MIN;
-    if (selEnd - selStart > 480) { // cap at 8 hours from the anchor
-      if (hover > anchor) selEnd = selStart + 480; else selStart = selEnd - 480;
+    if (selEnd - selStart > MAX_APPT_MIN) { // cap at 12 hours from the anchor
+      if (hover > anchor) selEnd = selStart + MAX_APPT_MIN; else selStart = selEnd - MAX_APPT_MIN;
     }
     dragState.startMinutes   = selStart;
     dragState.currentMinutes = selEnd - selStart;
@@ -11794,8 +11796,8 @@ function handleDragEnd(event) {
     let selStart = Math.min(anchor, hover);
     let selEnd   = Math.max(anchor, hover);
     if (selEnd - selStart < SLOT_SNAP_MIN) selEnd = selStart + SLOT_SNAP_MIN;
-    if (selEnd - selStart > 480) {
-      if (hover > anchor) selEnd = selStart + 480; else selStart = selEnd - 480;
+    if (selEnd - selStart > MAX_APPT_MIN) {
+      if (hover > anchor) selEnd = selStart + MAX_APPT_MIN; else selStart = selEnd - MAX_APPT_MIN;
     }
     dragState.startMinutes   = selStart;
     dragState.currentMinutes = selEnd - selStart;
@@ -12810,36 +12812,63 @@ function pickBusyTimeTypeId(cat) {
   return types[0].id; // fallback: first available type
 }
 
-/* ---------- Read live BSP panel timing fields ---------- */
+/* ---------- One appointment's time range (owner rule, 21 Nov 2026) ----------
+   Same day, end after start, at most 12 hours. Used by the booking panel
+   (create) and the event drawer (edit). Returns '' when the range is fine,
+   otherwise the message shown beside the End field. */
+const MAX_APPT_MIN = 720;
+function validateTimeRange(startMin, endMin) {
+  if (!Number.isFinite(startMin) || !Number.isFinite(endMin)) return 'Set a start and an end time.';
+  if (endMin <= startMin) return 'The end must be after the start, on the same day.';
+  if (endMin > 1440) return 'An appointment must end on the same day.';
+  if (endMin - startMin > MAX_APPT_MIN) return 'An appointment can be up to 12 hours.';
+  return '';
+}
+function _hhmmToMin(v) {
+  if (!v || !/^\d{1,2}:\d{2}/.test(v)) return NaN;
+  const [h, m] = v.split(':').map(Number);
+  return h * 60 + m;
+}
+
+/* ---------- Read live BSP panel timing fields ----------
+   The visible Start and End are the truth: what is saved is exactly what the
+   fields show. `invalid` carries the reason when the range breaks the rule. */
 function _getBspTiming() {
   const day   = document.querySelector('.bsp-day-chip.active')?.dataset.day;
   const start = document.getElementById('bsp-start')?.value;   // "HH:MM" 24-h
-  const dur   = parseInt(document.getElementById('bsp-dur-slider')?.value) || 60;
+  const end   = document.getElementById('bsp-end')?.value;
   const loc   = (document.getElementById('bsp-location')?.value || '').trim();
   if (!day || !start) return null;
-  const parts  = start.split(':');
-  const startH = parseInt(parts[0], 10);
-  const startM = parseInt(parts[1], 10) || 0;
-  const endTot = startH * 60 + startM + dur;
-  const endH   = Math.floor(endTot / 60) % 24;
-  const endM   = endTot % 60;
+  const startMin = _hhmmToMin(start);
+  const endMin   = _hhmmToMin(end);
+  const invalid  = validateTimeRange(startMin, endMin);
+  const startH = Math.floor(startMin / 60), startM = startMin % 60;
+  const endH   = Number.isFinite(endMin) ? Math.floor(endMin / 60) : startH;
+  const endM   = Number.isFinite(endMin) ? endMin % 60 : startM;
   const pad    = n => String(n).padStart(2, '0');
   const dateStr  = DAY_DATES[day] || null;
-  // No working hours: a booking may run past midnight, and then it ends on
-  // the next day's date (it used to save an end before its start).
-  let endDateStr = dateStr;
-  if (dateStr && endTot >= 1440) {
-    const d = new Date(dateStr + 'T00:00:00Z');
-    d.setUTCDate(d.getUTCDate() + Math.floor(endTot / 1440));
-    endDateStr = d.toISOString().slice(0, 10);
-  }
   return {
-    day, startH, startM, startMin: startH * 60 + startM,
-    endH, endM, endMin: endTot, durationMin: dur, location: loc,
+    day, startH, startM, startMin,
+    endH, endM, endMin, durationMin: invalid ? 0 : endMin - startMin, location: loc,
+    invalid,
     startISO: dateStr ? `${dateStr}T${pad(startH)}:${pad(startM)}:00+08:00` : null,
-    endISO:   endDateStr ? `${endDateStr}T${pad(endH)}:${pad(endM)}:00+08:00` : null,
+    endISO:   dateStr && !invalid ? `${dateStr}T${pad(endH)}:${pad(endM)}:00+08:00` : null,
     dateStr,
   };
+}
+
+/* Show the time-range rule on the panel: inline message, aria-invalid on End,
+   Create disabled while the range is invalid. */
+function _bspValidateTiming() {
+  const endEl = document.getElementById('bsp-end');
+  const errEl = document.getElementById('bsp-time-error');
+  const btn   = document.getElementById('create-booking-btn');
+  const sv = document.getElementById('bsp-start')?.value;
+  const msg = sv ? validateTimeRange(_hhmmToMin(sv), _hhmmToMin(endEl?.value)) : '';
+  if (endEl) { if (msg) endEl.setAttribute('aria-invalid', 'true'); else endEl.removeAttribute('aria-invalid'); }
+  if (errEl) { errEl.textContent = msg; errEl.hidden = !msg; }
+  if (btn && !(window.BOOKING_STATE && BOOKING_STATE.submitting)) btn.disabled = !!msg;
+  return msg;
 }
 
 /* ---------- Step 1: Capture form data and advance ---------- */
@@ -12871,6 +12900,7 @@ async function createBookingNow() {
     showToast('Set a time', 'Please choose a day and start time in the "When & Where" section.', 'warn');
     return;
   }
+  if (timing.invalid) { _bspValidateTiming(); return; }
   if (!timing.startISO) {
     showToast('Week not loaded', 'Calendar week dates are not ready yet — try again in a moment.', 'warn');
     return;
@@ -12917,6 +12947,7 @@ async function createBookingNow() {
     BOOKING_STATE.submitting = false;
     BOOKING_STATE.requestId = null;
     if (btn) btn.disabled = false;
+    _bspValidateTiming();
   }
 }
 
@@ -13194,7 +13225,7 @@ async function confirmBooking() {
   const patient = getSelectedPatient();
   const type    = getSelectedType();
   const _t      = _getBspTiming();
-  const slot    = (_t && _t.day) ? { day: _t.day, startH: _t.startH, startM: _t.startM, durationMin: _t.durationMin } : null;
+  const slot    = (_t && _t.day && !_t.invalid) ? { day: _t.day, startH: _t.startH, startM: _t.startM, durationMin: _t.durationMin } : null;
 
   if (!slot) {
     showToast('Set a time', 'Choose a day and start time in the "When & Where" section.', 'warn');
@@ -15834,15 +15865,20 @@ function bdRecalc(id) {
   const origStart = s.startH * 60 + (s.startM || 0);
   const origDur   = durMin(s);
 
-  // duration pill
+  // duration pill + the shared time-range rule (same day, end after start, ≤ 12 h)
+  const rangeErr = validateTimeRange(startMin, endMin);
   durEl.textContent = dur > 0 ? `${dur} min` : 'invalid';
-  durEl.style.background = dur > 0 && dur <= 480 ? '' : '#fbe9e5';
-  durEl.style.color      = dur > 0 && dur <= 480 ? '' : '#9c3322';
+  durEl.style.background = rangeErr ? '#fbe9e5' : '';
+  durEl.style.color      = rangeErr ? '#9c3322' : '';
+  if (rangeErr) endEl.setAttribute('aria-invalid', 'true'); else endEl.removeAttribute('aria-invalid');
 
   // delta caption
   const startChanged = startMin !== origStart;
   const durChanged   = dur !== origDur;
-  if (startChanged || durChanged) {
+  if (rangeErr) {
+    delta.textContent = rangeErr;
+    delta.classList.add('warn');
+  } else if (startChanged || durChanged) {
     const parts = [];
     if (durChanged)   parts.push(`${dur > origDur ? '+' : ''}${dur - origDur} min duration`);
     if (startChanged) parts.push(`start shifts ${startMin > origStart ? '+' : ''}${startMin - origStart} min`);
@@ -15853,7 +15889,7 @@ function bdRecalc(id) {
   }
 
   // apply button
-  const valid = dur > 0 && dur <= 480 && (startChanged || durChanged);
+  const valid = !rangeErr && (startChanged || durChanged);
   apply.disabled = !valid;
   apply.style.opacity = valid ? '1' : '0.55';
   apply.style.cursor  = valid ? 'pointer' : 'not-allowed';
@@ -15883,7 +15919,7 @@ function bdApplyEdit(id) {
   const startMin = sh * 60 + sm;
   const endMin   = eh * 60 + em;
   const dur      = endMin - startMin;
-  if (dur <= 0 || dur > 480) return;
+  if (validateTimeRange(startMin, endMin)) { bdRecalc(id); return; }
 
   // Single timing pipeline: evaluateMove → commitMove. commitMove is the only
   // writer of startH/startM/endH/endM on SESSIONS[id], so drag, edge-resize, and
@@ -22351,6 +22387,8 @@ body.bsp-open #impact-modal    { z-index: 1201; }
   margin-bottom: 14px;
 }
 .bsp-time-field { flex: 1; }
+.bsp-time-error { margin-top: 6px; font-size: 12px; color: var(--danger, #c2412e); }
+.bsp-time-field input[type="time"][aria-invalid="true"] { border-color: var(--danger, #c2412e); }
 .bsp-time-field input[type="time"] {
   width: 100%; padding: 8px 10px;
   font-size: 15px; font-weight: 600; color: var(--info);
@@ -22887,10 +22925,10 @@ function bspOnEndChange() {
   if (!sv || !ev) return;
   const [sh, sm] = sv.split(':').map(Number);
   const [eh, em] = ev.split(':').map(Number);
-  // An end at or before the start runs past midnight into the next day.
-  let dur = (eh * 60 + em) - (sh * 60 + sm);
-  if (dur <= 0) dur += 1440;
-  if (dur > 0 && dur <= 720) {
+  // Same day only: an end at or before the start is invalid (shown inline by
+  // _bspValidateTiming), never wrapped into the next day.
+  const dur = (eh * 60 + em) - (sh * 60 + sm);
+  if (dur > 0 && dur <= MAX_APPT_MIN) {
     _bspDurManual = true;
     const slider = document.getElementById('bsp-dur-slider');
     if (slider) slider.value = dur;
@@ -22930,11 +22968,12 @@ function bspSelectDay(day) {
 
 /* Show/update a single live preview block on the calendar while panel is open */
 function _bspUpdateLivePreview() {
+  const bad = _bspValidateTiming();
   const day = document.querySelector('.bsp-day-chip.active')?.dataset.day;
-  if (!day) { clearPreviewBlocks(); return; }
+  if (!day || bad) { clearPreviewBlocks(); return; }
   const sv  = document.getElementById('bsp-start')?.value || '09:00';
-  const dur = parseInt(document.getElementById('bsp-dur-slider')?.value || '60');
   const [sh, sm] = sv.split(':').map(Number);
+  const dur = _hhmmToMin(document.getElementById('bsp-end')?.value) - (sh * 60 + sm);
   renderCalendarPreviewBlocks([{
     day, dayLabel: day,
     startH: sh, startM: sm,
