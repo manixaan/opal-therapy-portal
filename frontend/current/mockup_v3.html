@@ -282,6 +282,11 @@ window.opIcon = function (name, size) {
     --t-fast: 140ms;          /* hover / press */
     --t-med: 190ms;           /* menus / tooltips */
     --t-panel: 260ms;         /* panels / drawers */
+    --t-panel-close: 200ms;   /* panels / drawers closing */
+    --ease-close: cubic-bezier(0.4, 0, 0.2, 1);
+    /* One side-sheet spec: the event drawer and the booking panel (U-07). */
+    --sheet-w: 440px;
+    --shadow-sheet: -6px 0 24px rgba(36, 31, 26, 0.13);
     --accent: #0f7c6c;        /* deep opal teal */
     --accent-deep: #0a5d51;
     --accent-soft: #e4f2ec;
@@ -3135,13 +3140,17 @@ window.opIcon = function (name, size) {
   }
 
   /* ── Block detail drawer ── */
+  /* Side sheet (U-07): slides by transform and its backdrop fades by opacity,
+     in AND out — never display or right. Opening uses --t-panel/--ease-out;
+     closing the shorter --t-panel-close. The booking panel shares this. */
   .detail-backdrop {
     position: fixed; inset: 0;
     background: rgba(15, 23, 42, 0.35);
-    display: none; z-index: 1090;
-    animation: fadeIn 120ms ease;
+    z-index: 1090;
+    opacity: 0; pointer-events: none;
+    transition: opacity var(--t-panel-close) var(--ease-close);
   }
-  .detail-backdrop.show { display: block; }
+  .detail-backdrop.show { opacity: 1; pointer-events: auto; transition: opacity var(--t-panel) var(--ease-out); }
   /* While the drawer is open the week grid stays above its backdrop, so one
      click on another tile opens that tile (C-10). An empty-grid press closes
      the drawer (calGridDrawerGuard), as the backdrop did. */
@@ -3150,16 +3159,17 @@ window.opIcon = function (name, size) {
   body.dd-open #impact-modal    { z-index: 1201; }
   @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
   .detail-drawer {
-    position: fixed; top: 0; right: -480px; bottom: 0;
-    width: 440px; max-width: 92vw;
+    position: fixed; top: 0; right: 0; bottom: 0;
+    width: var(--sheet-w); max-width: 92vw;
     background: var(--panel);
-    box-shadow: -6px 0 24px rgba(0,0,0,0.18);
+    box-shadow: var(--shadow-sheet);
     /* above the sticky app header (z 1000) so the drawer top is never hidden */
     z-index: 1100;
-    transition: right 220ms ease;
+    transform: translateX(102%);
+    transition: transform var(--t-panel-close) var(--ease-close);
     display: flex; flex-direction: column;
   }
-  .detail-drawer.show { right: 0; }
+  .detail-drawer.show { transform: none; transition: transform var(--t-panel) var(--ease-out); }
   .detail-header {
     display: flex; align-items: center; gap: 10px;
     padding: 16px 20px 12px;
@@ -3443,9 +3453,12 @@ window.opIcon = function (name, size) {
     box-shadow: 0 30px 60px rgba(0,0,0,0.25);
     display: none; flex-direction: column;
     z-index: 90; overflow: hidden;
-    opacity: 0; transition: transform 200ms ease, opacity 200ms ease;
+    opacity: 0; transition: transform var(--t-med) var(--ease-out), opacity var(--t-med) var(--ease-out);
   }
   .impact-modal.show { display: flex; opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  /* A transition cannot start from display:none, so give the first shown frame
+     its start values (U-08). Browsers without @starting-style just show it. */
+  @starting-style { .impact-modal.show { opacity: 0; transform: translate(-50%, -48%) scale(0.96); } }
   .impact-head {
     padding: 16px 20px;
     background: linear-gradient(135deg, var(--accent-soft), var(--panel));
@@ -22300,9 +22313,9 @@ window.showQuickAdd = function(...args) {
   background: rgba(10,20,40,0.18);
   z-index: 1090;
   opacity: 0; pointer-events: none;
-  transition: opacity 0.28s ease;
+  transition: opacity var(--t-panel-close) var(--ease-close);
 }
-#booking-panel-backdrop.open { opacity: 1; pointer-events: auto; }
+#booking-panel-backdrop.open { opacity: 1; pointer-events: auto; transition: opacity var(--t-panel) var(--ease-out); }
 /* While the panel is open the week grid stays live above the backdrop, so a
    click or drag on the calendar picks a new time instead of hitting the
    backdrop (which closed the panel and wiped the preview — 30 Sep 2026). */
@@ -22318,17 +22331,17 @@ body.bsp-open #impact-modal    { z-index: 1201; }
 #booking-side-panel {
   position: fixed;
   right: 0; top: 0; bottom: 0;
-  width: 480px; max-width: 100vw;
+  width: var(--sheet-w); max-width: 100vw;
   background: var(--bg);
-  box-shadow: -6px 0 32px rgba(0,0,0,0.13);
+  box-shadow: var(--shadow-sheet);
   /* above the sticky app header (z 1000) so the panel top is never clipped */
   z-index: 1100;
   transform: translateX(102%);
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform var(--t-panel-close) var(--ease-close);
   display: flex; flex-direction: column;
   overflow: hidden;
 }
-#booking-side-panel.open { transform: translateX(0); }
+#booking-side-panel.open { transform: none; transition: transform var(--t-panel) var(--ease-out); }
 
 /* ── Panel header ── */
 .bsp-header {
@@ -22592,8 +22605,9 @@ body.bsp-open #impact-modal    { z-index: 1201; }
   display: flex; gap: 6px; flex-wrap: wrap;
 }
 .bsp-day-chip {
-  flex: 1; min-width: 44px;
-  padding: 6px 8px; font-size: 12px; font-weight: 600;
+  /* 40 px so all seven days stay on one row in the 440 px sheet */
+  flex: 1; min-width: 40px;
+  padding: 6px 2px; font-size: 12px; font-weight: 600;
   border: 1.5px solid var(--border); border-radius: 7px;
   background: var(--panel-soft); cursor: pointer; color: var(--ink-soft);
   transition: all 0.15s; text-align: center;
@@ -22667,7 +22681,8 @@ body.bsp-open #impact-modal    { z-index: 1201; }
   display: flex; gap: 5px; flex-wrap: wrap;
 }
 .bsp-dur-preset {
-  padding: 4px 9px; font-size: 11px; font-weight: 600;
+  /* share the row evenly so all eight fit the 440 px sheet on one line */
+  flex: 1 1 0; min-width: 0; padding: 4px 2px; font-size: 11px; font-weight: 600;
   border: 1.5px solid var(--border); border-radius: 6px;
   background: var(--panel-soft); color: var(--ink-faint);
   cursor: pointer; transition: all 0.12s;
