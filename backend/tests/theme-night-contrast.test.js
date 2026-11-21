@@ -23,9 +23,11 @@ test.each(TILES)('%s tile: text is readable and the tile stands off the grid', (
   expect(contrast(bg, GRID)).toBeGreaterThanOrEqual(1.5);
 });
 
-test('every family of travel block has bright text on stripes that show against the grid', () => {
+test('the travel block has bright text on stripes that show against the grid', () => {
   const blocks = [...css.matchAll(/\.travel-overlay[^{]*\{\s*--tr:\s*(\d+),\s*(\d+),\s*(\d+);\s*color:\s*(#[0-9a-f]{6})/gi)];
-  expect(blocks).toHaveLength(3); // between sessions, start of day, end of day
+  // One travel family (VD-11): start/between/end share the legend's hue and
+  // differ by bar style in the day sheet, so the night sheet has one block.
+  expect(blocks).toHaveLength(1);
   blocks.forEach((m) => {
     const hue = [+m[1], +m[2], +m[3]];
     const light = over(hue, 0.20, GRID); const strong = over(hue, 0.32, GRID);

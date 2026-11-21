@@ -68,6 +68,7 @@
   --c-mdt: #5fd0dc;
   --c-report: #f08f84;
   --c-travel: #b3a8f5;
+  --c-travel-ink: #e0d9ff;
   --c-admin: #6fbdf0;
   --c-meeting: #6edb9c;
   --c-cpd: #92a8f2;
@@ -133,34 +134,21 @@ html:root[data-theme="dark"] select:not([multiple]) {
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.09), 0 1px 3px rgba(0, 0, 0, 0.45);
 }
 
-/* Travel blocks. Their day colours are fixed dark inks on faint stripes, which
-   vanish on charcoal: by night each family gets a bright ink, a bright bar and
-   stronger stripes of its own hue. */
+/* Travel blocks. Faint day stripes vanish on charcoal: by night the one travel
+   family (the legend's purple, VD-11) gets a bright ink, a bright bar and
+   stronger stripes. Start/end differ from between by bar style only. */
 :root[data-theme="dark"] .travel-overlay {
-  --tr: 64, 214, 186;
-  color: #a6f2e2;
-  border-left-color: rgb(var(--tr));
-  background: repeating-linear-gradient(45deg, rgba(var(--tr), 0.20), rgba(var(--tr), 0.20) 5px, rgba(var(--tr), 0.32) 5px, rgba(var(--tr), 0.32) 10px);
-  box-shadow: inset 0 0 0 1px rgba(var(--tr), 0.30);
-}
-:root[data-theme="dark"] .travel-overlay.start {
-  --tr: 106, 170, 245;
-  color: #c6e0ff;
-  border-left-color: rgb(var(--tr));
-  background: repeating-linear-gradient(45deg, rgba(var(--tr), 0.20), rgba(var(--tr), 0.20) 5px, rgba(var(--tr), 0.32) 5px, rgba(var(--tr), 0.32) 10px);
-}
-:root[data-theme="dark"] .travel-overlay.end,
-:root[data-theme="dark"] .travel-overlay.preview.home-after {
   --tr: 179, 162, 250;
   color: #e0d9ff;
   border-left-color: rgb(var(--tr));
   background: repeating-linear-gradient(45deg, rgba(var(--tr), 0.20), rgba(var(--tr), 0.20) 5px, rgba(var(--tr), 0.32) 5px, rgba(var(--tr), 0.32) 10px);
+  box-shadow: inset 0 0 0 1px rgba(var(--tr), 0.30);
 }
 :root[data-theme="dark"] .travel-overlay.tight { border-left-color: #ff7a63; }
 :root[data-theme="dark"] .travel-overlay.skipped { background: transparent; box-shadow: none; }
 :root[data-theme="dark"] .travel-overlay.preview.placeholder {
-  color: #c6e0ff;
-  background: repeating-linear-gradient(135deg, rgba(106, 170, 245, 0.22) 0 6px, transparent 6px 12px);
+  color: #e0d9ff;
+  background: repeating-linear-gradient(135deg, rgba(179, 162, 250, 0.22) 0 6px, transparent 6px 12px);
 }
 /* The labels carry an inline 0.7 opacity written for the day theme. */
 :root[data-theme="dark"] .travel-overlay .t-ico { opacity: 1 !important; }

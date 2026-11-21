@@ -81,3 +81,32 @@ describe('focus — one ring that follows the control’s shape (U-05)', () => {
     expect(r).toContain('outline: none; box-shadow: var(--focus-ring);');
   });
 });
+
+describe('teal is the only "selected" colour; travel matches its legend (U-06, VD-10, VD-11)', () => {
+  const ROUTE_CSS = fs.readFileSync(path.join(FE, 'booking-route.css'), 'utf8');
+  const REC_CSS = fs.readFileSync(path.join(FE, 'recurrence.css'), 'utf8');
+  const THEME = fs.readFileSync(path.join(FE, 'theme.css'), 'utf8');
+  test.each([
+    ['.bsp-day-chip.active', HTML], ['.bsp-dur-preset.active', HTML], ['.booking-cat-chip.active', HTML],
+    ['.bsp-t-chip.selected', HTML], ['.bsp-loc-chip.on', ROUTE_CSS], ['.rec-day.on', REC_CSS],
+  ])('%s uses the accent, never info blue', (sel, src) => {
+    const r = rule(src, sel);
+    expect(r).toContain('var(--accent');
+    expect(r).not.toMatch(/--info|#3d6cae|#2563eb|74,\s*127,\s*193/);
+  });
+  test('booking time inputs, slider and proposal are teal; the prefill note stays informational blue', () => {
+    expect(rule(HTML, '.bsp-time-field input[type="time"]')).toContain('background: var(--accent-soft);');
+    expect(rule(HTML, '.bsp-dur-slider')).toContain('var(--accent) var(--pct, 25%)');
+    expect(rule(HTML, '.cal-proposed')).toContain('border-left: 3px solid var(--accent);');
+    expect(rule(HTML, '.bsp-prefill-strip')).toContain('background: var(--info-soft);');
+    expect(HTML).not.toContain('.cal-head.today .day-num { background:#3d6cae');
+  });
+  test('travel legs are drawn from --c-travel, one hue for start/between/end', () => {
+    const base = rule(HTML, '  .travel-overlay');
+    expect(base).toContain('border-left: 3px solid var(--c-travel);');
+    expect(base).toContain('color: var(--c-travel-ink);');
+    expect(HTML).not.toMatch(/\.travel-overlay\.(start|end)\s*\{[^}]*border-left-color/);
+    expect(HTML).toContain('.travel-overlay.start:not(.estimate), .travel-overlay.end:not(.estimate) { border-left-style: double;');
+    expect(THEME).toContain('--c-travel-ink: #e0d9ff;');
+  });
+});

@@ -746,9 +746,9 @@ describe('changed assets are cache-busted', () => {
       // 7 (js) / 2 (css): the MMM zone under the session address, sent with Create appointment.
       // 8 (js): the typed start snaps to 15 min on blur, not per keystroke.
       // 9 (js): no Return Home when a no-address booking leaves you at home already.
-      ['booking-route.js', 14], ['booking-route.css', 6],
+      ['booking-route.js', 14], ['booking-route.css', 7],
       // 1: recurrence.js/.css are new — Repeat in Smart Booking, the event panel and delete scope.
-      ['recurrence.js', 1], ['recurrence.css', 1],
+      ['recurrence.js', 1], ['recurrence.css', 2],
       // 1: nf2f.js/.css are new — several clients on a non-face-to-face block, its billing timer and allocation.
       // 2 (js): Start billable time moves to the block's right-click menu.
       // 3 (js) / 2 (css): a running timer is a blinking dot on the block, not a clock.
@@ -806,7 +806,7 @@ describe('changed assets are cache-busted', () => {
       // 1: day / night mode — theme.js stamps data-theme before first paint
       // (auto follows the clock), theme.css re-values the shell tokens.
       // css 5: month chips take the category colour by night too (14 Nov 2026).
-      ['theme.js', 2], ['theme.css', 6],
+      ['theme.js', 2], ['theme.css', 7],
     ]) {
       const ext = file.endsWith('.css') ? 'href' : 'src';
       expect(`${file}:${SHELL.includes(`${ext}="/${file}?v=${version}"`)}`).toBe(`${file}:true`);

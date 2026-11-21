@@ -107,12 +107,12 @@
 <link rel="stylesheet" href="/travel-alerts.css?v=2" />
 <link rel="stylesheet" href="/sync-settings.css?v=3" />
 <link rel="stylesheet" href="/block-review.css?v=4" />
-<link rel="stylesheet" href="/booking-route.css?v=6" />
-<link rel="stylesheet" href="/recurrence.css?v=1" />
+<link rel="stylesheet" href="/booking-route.css?v=7" />
+<link rel="stylesheet" href="/recurrence.css?v=2" />
 <link rel="stylesheet" href="/nf2f.css?v=4" />
 <link rel="stylesheet" href="/flights.css?v=2" />
 <!-- Last stylesheet: night-mode token overrides must win over every feature sheet. -->
-<link rel="stylesheet" href="/theme.css?v=6" />
+<link rel="stylesheet" href="/theme.css?v=7" />
 <!-- The Library's document library (folders, list/tiles, bin, versions). Before
      resourcehub.js, which mounts it into #rhl-root inside the Library view. -->
 <script src="/resourcelibrary.js?v=3" defer></script>
@@ -335,6 +335,7 @@ window.opIcon = function (name, size) {
     /* Travel — Outlook Purple */
     --c-travel:        #7b6aea;
     --c-travel-bg:     #d7d1f9;
+    --c-travel-ink:    #4b3ca6;   /* leg text on its own hatch (VD-11) */
 
     /* Admin — Outlook Blue */
     --c-admin:         #2676c2;
@@ -2438,12 +2439,11 @@ window.opIcon = function (name, size) {
   /* Outlook-only validation mode: hide app-generated/support blocks */
   .cal-grid.outlook-only .session.support { display: none !important; }
   .cal-grid.outlook-only .travel-chip, .cal-grid.outlook-only .addr-chip { display: none !important; }
-  .cal-outlook-only-btn.active { background: #3d6cae; color: #fff; }
+  .cal-outlook-only-btn.active { background: var(--accent); color: #fff; }
   /* Visual refresh: calmer, more Outlook-like tiles */
   .session { border-radius: 4px; border-width: 1px; box-shadow: none; font-size: 11.5px; line-height: 1.25; padding: 2px 6px; border-left-width: 3px; }
   .session .session-title, .session b { font-weight: 600; }
   .cal-head { border-bottom: 1px solid var(--border); }
-  .cal-head.today .day-num { background:#3d6cae; color:#fff; border-radius:50%; display:inline-block; min-width:22px; text-align:center; }
   .cal-grid {
     display: grid;
     grid-template-columns: 50px repeat(7, 1fr);
@@ -3307,15 +3307,20 @@ window.opIcon = function (name, size) {
   .dur-delta { font-size: 11px; color: var(--accent-deep); font-weight: 600; }
   .dur-delta.warn { color: var(--warn-ink); }
   /* Travel overlay on calendar columns */
+  /* Travel is one family in the legend's colour (--c-travel, VD-11/T-21):
+     teal stays the app's "selected" accent. Start/between/end differ by bar
+     style, not hue. */
   .travel-overlay {
     position: absolute; left: 4px; right: 4px; z-index: 1;
-    border-left: 3px solid #0f7c6c;
-    background: repeating-linear-gradient(45deg, rgba(15,118,110,0.10), rgba(15,118,110,0.10) 5px, rgba(15,118,110,0.18) 5px, rgba(15,118,110,0.18) 10px);
-    border-radius: 4px; padding: 2px 6px; font-size: 10px; color: #0f7c6c; font-weight: 600;
+    border-left: 3px solid var(--c-travel);
+    background: repeating-linear-gradient(45deg,
+      color-mix(in srgb, var(--c-travel) 10%, transparent) 0 5px,
+      color-mix(in srgb, var(--c-travel) 18%, transparent) 5px 10px);
+    border-radius: 4px; padding: 2px 6px; font-size: 10px; color: var(--c-travel-ink); font-weight: 600;
     display: flex; align-items: center; gap: 4px; overflow: hidden;
     cursor: pointer; user-select: none;
   }
-  .travel-overlay:hover { filter: brightness(0.97); box-shadow: 0 2px 6px rgba(15,118,110,0.2); }
+  .travel-overlay:hover { box-shadow: var(--shadow-md); }
   /* A redrawn leg is the same element (travel.js _legElement): when its route
      lands it eases to the real size instead of jumping (audit T-14). Never
      while dragged — direct manipulation is 1:1. Reduced motion collapses it. */
@@ -3340,17 +3345,14 @@ window.opIcon = function (name, size) {
      longer renders on the calendar — travel-leg indicators below remain. */
   /* Start-of-day / end-of-day travel (base → first session, last session → base).
      Same visual family as between-session travel but with a subtle left bar tag. */
-  .travel-overlay.start { border-left-color: #315a91; color: #075985;
-    background: repeating-linear-gradient(45deg, rgba(3,105,161,0.09), rgba(3,105,161,0.09) 5px, rgba(3,105,161,0.17) 5px, rgba(3,105,161,0.17) 10px); }
-  .travel-overlay.end   { border-left-color: #8b80c8; color: #6d63a8;
-    background: repeating-linear-gradient(45deg, rgba(124,58,237,0.09), rgba(124,58,237,0.09) 5px, rgba(124,58,237,0.17) 5px, rgba(124,58,237,0.17) 10px); }
+  .travel-overlay.start:not(.estimate), .travel-overlay.end:not(.estimate) { border-left-style: double; border-left-width: 4px; }
   /* Movable travel (travel.js attachTravelLegDrag): the leg's time is the
      therapist's; dragging stores it on the owning appointment. */
   .travel-overlay.movable { cursor: grab; touch-action: none; }
   .travel-overlay.movable.dragging { cursor: grabbing; opacity: .85; z-index: 6; box-shadow: 0 4px 12px rgba(0,0,0,.18); }
   .travel-overlay.movable:focus-visible { outline: none; box-shadow: var(--focus-ring); }
   .travel-overlay.moved .t-ico::after { content: ' · moved'; font-weight: 500; }
-  .travel-overlay.tight { border-left-color: #9c3322; }
+  .travel-overlay.tight { border-left-color: var(--danger); }
   /* The one travel switch (travel.js renderSegmentOverlay, 6 Oct 2026): a leg
      between two clients shows what it does — Direct or Via home — and a
      click flips it. currentColor keeps it in the leg's own colour, day or night. */
@@ -4265,12 +4267,11 @@ window.opIcon = function (name, size) {
 .tp-addr { display: block; width: 100%; margin-top: 4px; font: inherit; font-size: 13px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--border, #d9e1dc); background: var(--panel, #fff); color: var(--ink); box-sizing: border-box; }
 .tp-addr:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px rgba(42,111,98,.15); }
 .tp-route-row .pac-panel { z-index: 5; }
-.travel-overlay.preview { outline: 1.5px dashed rgba(61,108,174,.7); pointer-events: none; z-index: 4; }
-.travel-overlay.preview.placeholder { background: repeating-linear-gradient(135deg, rgba(61,108,174,.10) 0 6px, transparent 6px 12px); color: #3d6cae; }
+.travel-overlay.preview { outline: 1.5px dashed color-mix(in srgb, var(--c-travel) 70%, transparent); pointer-events: none; z-index: 4; }
+.travel-overlay.preview.placeholder { background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--c-travel) 12%, transparent) 0 6px, transparent 6px 12px); color: var(--c-travel-ink); }
 .travel-overlay.suppressed { display: none !important; }
 /* The day's drive home, moved after a proposed last stop (travel.js _bspPreviewHomeAfter). */
-.travel-overlay.preview.home-after { border-left-color: #8b80c8; color: #6d63a8;
-  background: repeating-linear-gradient(45deg, rgba(124,58,237,0.09), rgba(124,58,237,0.09) 5px, rgba(124,58,237,0.17) 5px, rgba(124,58,237,0.17) 10px); }
+.travel-overlay.preview.home-after { border-left-style: double; border-left-width: 4px; }
 </style>
 </head>
 <body>
@@ -22642,7 +22643,7 @@ body.bsp-open #impact-modal    { z-index: 1201; }
   flex-shrink: 0;
 }
 .bsp-header-left { display: flex; align-items: center; gap: 8px; }
-.bsp-icon { width: 16px; height: 16px; stroke: var(--accent, #3d6cae); }
+.bsp-icon { width: 16px; height: 16px; stroke: var(--accent); }
 .bsp-title { font-size: 14px; font-weight: 600; color: var(--ink); }
 .bsp-close {
   width: 30px; height: 30px; border: none; background: transparent;
@@ -22659,7 +22660,7 @@ body.bsp-open #impact-modal    { z-index: 1201; }
   background: var(--info-soft); border-bottom: 1px solid var(--border);
   font-size: 12px; color: var(--info); flex-shrink: 0;
 }
-.bsp-prefill-strip svg { stroke: #4d79b3; flex-shrink: 0; }
+.bsp-prefill-strip svg { stroke: var(--info); flex-shrink: 0; }
 .bsp-prefill-clear {
   margin-left: auto; border: none; background: transparent;
   color: var(--ink-faint); cursor: pointer; font-size: 12px; padding: 0 2px;
@@ -22685,8 +22686,8 @@ body.bsp-open #impact-modal    { z-index: 1201; }
   font-size: 12px; font-weight: 500; cursor: pointer;
   transition: border-color 0.15s; line-height: 1.4;
 }
-.bsp-t-chip:hover { border-color: var(--brand); }
-.bsp-t-chip.selected { border-color: var(--brand); background: var(--info-soft); color: var(--brand); }
+.bsp-t-chip:hover { border-color: var(--accent); }
+.bsp-t-chip.selected { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-ink); }
 .bsp-t-dot { width: 13px; height: 13px; border-radius: 50%; flex-shrink: 0; }
 
 /* ── Scrollable body ── */
@@ -22735,10 +22736,10 @@ body.bsp-open #impact-modal    { z-index: 1201; }
   box-sizing: border-box;
   border-radius: 4px;
   padding: 2px 6px 2px 5px;
-  background: var(--info-soft, #eef3fa);
-  background: color-mix(in srgb, var(--info, #3d6cae) 9%, var(--panel, #fff));
-  border: 1px dashed var(--info, #3d6cae);
-  border-left: 3px solid var(--info, #3d6cae);
+  background: var(--accent-soft);
+  background: color-mix(in srgb, var(--accent) 9%, var(--panel));
+  border: 1px dashed var(--accent);
+  border-left: 3px solid var(--accent);
   color: var(--ink, #1f2933);
   font-size: 11px; line-height: 1.25; font-weight: 400;
   opacity: 0.92;
@@ -22750,7 +22751,7 @@ body.bsp-open #impact-modal    { z-index: 1201; }
 }
 .cal-proposed .cp-time { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; pointer-events: none; }
 .cal-proposed .cp-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; color: var(--ink-soft); pointer-events: none; }
-.cal-proposed .cp-tag { font-size: 10px; font-weight: 600; letter-spacing: .02em; color: var(--info, #3d6cae); pointer-events: none; }
+.cal-proposed .cp-tag { font-size: 10px; font-weight: 600; letter-spacing: .02em; color: var(--accent-ink); pointer-events: none; }
 .cal-preview-block { cursor: grab; transition: box-shadow 0.15s, opacity 0.15s; }
 .cal-preview-block:hover { opacity: 1; box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12); }
 .cal-preview-block.dragging { cursor: grabbing; opacity: 1; box-shadow: 0 6px 16px rgba(15, 23, 42, 0.18); }
@@ -22761,8 +22762,8 @@ body.bsp-open #impact-modal    { z-index: 1201; }
 .cal-drag-select {
   position: absolute;
   left: 3px; right: 3px;
-  background: rgba(74,127,193,0.15);
-  border: 1.5px solid rgba(74,127,193,0.5);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  border: 1.5px solid color-mix(in srgb, var(--accent) 50%, transparent);
   border-radius: 4px;
   pointer-events: none;
   display: flex; align-items: center; justify-content: center;
@@ -22815,14 +22816,14 @@ body.bsp-open #impact-modal    { z-index: 1201; }
 /* Force all click events to resolve at the button, not child elements */
 .booking-cat-chip > * { pointer-events: none; }
 .booking-cat-chip:hover {
-  border-color: var(--info);
-  background: #f5f9ff;
-  box-shadow: 0 1px 6px rgba(74,127,193,0.10);
+  border-color: var(--accent);
+  background: var(--panel-soft);
+  box-shadow: var(--shadow-sm);
 }
 .booking-cat-chip.active {
-  border-color: var(--info);
-  background: var(--info-soft);
-  box-shadow: 0 0 0 3px rgba(74,127,193,0.14);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
 /* Icon container with colour accent */
@@ -22857,7 +22858,7 @@ body.bsp-open #impact-modal    { z-index: 1201; }
 .bcat-desc {
   font-size: 11px; color: var(--ink-faint); line-height: 1.4;
 }
-.booking-cat-chip.active .bcat-name { color: var(--info); }
+.booking-cat-chip.active .bcat-name { color: var(--accent-ink); }
 
 /* Default duration badge */
 .bcat-dur {
@@ -22867,7 +22868,7 @@ body.bsp-open #impact-modal    { z-index: 1201; }
   padding: 2px 7px; white-space: nowrap; flex-shrink: 0;
 }
 .booking-cat-chip.active .bcat-dur {
-  background: var(--info-soft); color: var(--info);
+  background: var(--accent-soft); color: var(--accent-ink);
 }
 
 /* ── When & Where timing section ── */
@@ -22902,10 +22903,10 @@ body.bsp-open #impact-modal    { z-index: 1201; }
   background: var(--panel-soft); cursor: pointer; color: var(--ink-soft);
   transition: all 0.15s; text-align: center;
 }
-.bsp-day-chip:hover { border-color: var(--info); background: var(--info-soft); color: var(--info); }
+.bsp-day-chip:hover { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-ink); }
 .bsp-day-chip.active {
-  background: #3d6cae; border-color: #3d6cae;
-  color: white; box-shadow: 0 1px 4px rgba(74,127,193,0.3);
+  background: var(--accent); border-color: var(--accent);
+  color: white; box-shadow: var(--shadow-sm);
 }
 /* Selected chips carry their own shadow, which outranks the shell focus rule. */
 .bsp-day-chip.active:focus-visible, .booking-cat-chip.active:focus-visible { box-shadow: var(--focus-ring); }
@@ -22920,14 +22921,14 @@ body.bsp-open #impact-modal    { z-index: 1201; }
 .bsp-time-field input[type="time"][aria-invalid="true"] { border-color: var(--danger, #c2412e); }
 .bsp-time-field input[type="time"] {
   width: 100%; padding: 8px 10px;
-  font-size: 15px; font-weight: 600; color: var(--info);
-  background: var(--info-soft); border: 1.5px solid var(--border);
+  font-size: 15px; font-weight: 600; color: var(--accent-ink);
+  background: var(--accent-soft); border: 1.5px solid var(--border);
   border-radius: 8px; font-family: inherit;
   cursor: pointer; outline: none;
   transition: border-color 0.15s;
   box-sizing: border-box;
 }
-.bsp-time-field input[type="time"]:focus { border-color: var(--info); }
+.bsp-time-field input[type="time"]:focus { border-color: var(--accent); }
 .bsp-time-arrow {
   display: flex; align-items: center; padding-bottom: 9px;
   color: var(--muted);
@@ -22941,30 +22942,30 @@ body.bsp-open #impact-modal    { z-index: 1201; }
   margin-bottom: 8px;
 }
 .bsp-dur-value {
-  font-size: 13px; font-weight: 700; color: var(--info);
-  background: var(--info-soft); padding: 2px 8px; border-radius: 6px;
+  font-size: 13px; font-weight: 700; color: var(--accent-ink);
+  background: var(--accent-soft); padding: 2px 8px; border-radius: 6px;
 }
 
 /* Slider track & thumb */
 .bsp-dur-slider {
   -webkit-appearance: none; appearance: none;
   width: 100%; height: 4px;
-  background: linear-gradient(to right, #3d6cae var(--pct, 25%), var(--border) var(--pct, 25%));
+  background: linear-gradient(to right, var(--accent) var(--pct, 25%), var(--border) var(--pct, 25%));
   border-radius: 4px; outline: none; cursor: pointer;
   margin-bottom: 10px;
 }
 .bsp-dur-slider::-webkit-slider-thumb {
   -webkit-appearance: none; appearance: none;
   width: 18px; height: 18px; border-radius: 50%;
-  background: #3d6cae; border: 2.5px solid white;
-  box-shadow: 0 1px 6px rgba(74,127,193,0.45);
+  background: var(--accent); border: 2.5px solid white;
+  box-shadow: var(--shadow-sm);
   cursor: pointer; transition: transform 0.1s;
 }
 .bsp-dur-slider::-webkit-slider-thumb:hover { transform: scale(1.15); }
 .bsp-dur-slider::-moz-range-thumb {
   width: 18px; height: 18px; border-radius: 50%;
-  background: #3d6cae; border: 2.5px solid white;
-  box-shadow: 0 1px 6px rgba(74,127,193,0.45);
+  background: var(--accent); border: 2.5px solid white;
+  box-shadow: var(--shadow-sm);
   cursor: pointer;
 }
 
@@ -22979,9 +22980,9 @@ body.bsp-open #impact-modal    { z-index: 1201; }
   background: var(--panel-soft); color: var(--ink-faint);
   cursor: pointer; transition: all 0.12s;
 }
-.bsp-dur-preset:hover { border-color: var(--info); color: var(--info); background: var(--info-soft); }
+.bsp-dur-preset:hover { border-color: var(--accent); color: var(--accent-ink); background: var(--accent-soft); }
 .bsp-dur-preset.active {
-  background: #3d6cae; border-color: #3d6cae;
+  background: var(--accent); border-color: var(--accent);
   color: white;
 }
 
@@ -22993,7 +22994,7 @@ body.bsp-open #impact-modal    { z-index: 1201; }
   font-family: inherit; outline: none; background: var(--panel-soft);
   transition: border-color 0.15s; box-sizing: border-box;
 }
-.bsp-loc-field input[type="text"]:focus { border-color: var(--info); background: var(--panel); }
+.bsp-loc-field input[type="text"]:focus { border-color: var(--accent); background: var(--panel); }
 .bsp-loc-unsure { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 12px; color: var(--ink-soft, #5c554d); cursor: pointer; }
 .bsp-loc-unsure input { margin: 0; }
 

@@ -15,7 +15,7 @@
   border: 1px solid var(--border, #d9d4cc); background: var(--panel, #fff);
   font: inherit; font-size: 13px; font-weight: 600; color: var(--ink, #241f1a);
 }
-.rec-day.on { background: var(--info, #2563eb); border-color: var(--info, #2563eb); color: #fff; }
+.rec-day.on { background: var(--accent); border-color: var(--accent); color: #fff; }
 .rec-day:focus-visible { outline: none; box-shadow: var(--focus-ring, 0 0 0 3px rgba(37, 99, 235, 0.25)); }
 .rec-monthly { flex-direction: column; align-items: flex-start; gap: 6px; font-size: 13.5px; }
 .rec-end { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; font-size: 13.5px; }
