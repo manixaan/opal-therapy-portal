@@ -171,7 +171,7 @@
      store and computeDayTravelSegments(), the calendar leg overlays and the
      travel details panel. Deferred and loaded ahead of profile.js and
      reports.js, both of which reach into it. -->
-<script src="/travel.js?v=58" defer></script>
+<script src="/travel.js?v=59" defer></script>
 <!-- Traffic alerts: a re-priced drive that now runs into a client session —
      point at it, offer Make room, Acknowledge or Ignore (today and tomorrow). -->
 <script src="/travel-alerts.js?v=1" defer></script>
@@ -16245,7 +16245,7 @@ function onBlockResizeEnd(e) {
 function evaluateMove(id, newDay, newStartMin, durationMin) {
   const s = SESSIONS[id];
   const newEndMin = newStartMin + durationMin;
-  const others = Object.values(SESSIONS).filter(x => x.id !== id && x.day === newDay && !x.cancelled);
+  const others = Object.values(SESSIONS).filter(x => x.id !== id && x.day === newDay && !x.cancelled && !x.allDay);   // all-day items never block a time
   const impacts = [];
   let verdict = 'ok';  // ok | warn | blocker
 

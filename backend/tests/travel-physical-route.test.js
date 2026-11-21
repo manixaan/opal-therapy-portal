@@ -378,6 +378,23 @@ describe('travel mirror waits until the day is real', () => {
   });
 });
 
+// 21 Nov 2026 audit (T-01): an all-day item became a 00:00–23:59 stop.
+describe('all-day items are not stops', () => {
+  test('an all-day chip (with or without an address) leaves the day\'s legs unchanged', () => {
+    const plain = load();
+    add(plain, { at: '09:00', to: '10:00', s: { address: OSBORNE, patient: 'A' } });
+    add(plain, { at: '11:00', to: '12:00', s: { address: JOONDALUP, patient: 'B' } });
+    const want = legs(plain).map((x) => [x.kind, x.startMin, x.endMin]);
+    for (const extra of [{}, { address: SCHOOL }]) {
+      const c = load();
+      add(c, { at: '09:00', to: '10:00', s: { address: OSBORNE, patient: 'A' } });
+      add(c, { at: '11:00', to: '12:00', s: { address: JOONDALUP, patient: 'B' } });
+      add(c, { at: '00:00', to: '23:59', s: Object.assign({ allDay: true, title: 'Public holiday' }, extra) });
+      expect(legs(c).map((x) => [x.kind, x.startMin, x.endMin])).toEqual(want);
+    }
+  });
+});
+
 describe('travel badge on each event', () => {
   test('linked, no drive needed, or no address', () => {
     const c = load();

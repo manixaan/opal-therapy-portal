@@ -475,8 +475,11 @@ function mapsSearchLink(query) {
 
 /* ---------- Session helpers used by travel / gap engine ---------- */
 function sessionsForDay(day) {
+  // All-day items (holidays, leave, conferences) are not stops: as 00:00–23:59
+  // they pushed the start leg to midnight and blocked every gap (21 Nov 2026
+  // audit T-01). The server already leaves them out of a day's travel.
   return Object.values(SESSIONS)
-    .filter(s => s.day === day && !s.cancelled)
+    .filter(s => s.day === day && !s.cancelled && !s.allDay)
     .sort((a, b) => sessionStartMin(a) - sessionStartMin(b));
 }
 
