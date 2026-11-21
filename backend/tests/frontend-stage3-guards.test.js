@@ -1019,6 +1019,8 @@ describe('grouped booking-type picker', () => {
     // A create with no answer says it may have saved — never "not saved".
     expect(HTML).toContain("showToast('May not have saved', BOOKING_UNKNOWN_MSG, 'warn');");
     expect(HTML).not.toContain("showToast('Appointment not saved', oErr.message || 'network error', 'warn');");
+    // Q-03: an HTML error page is read as no body, never a parser error.
+    expect(HTML).not.toContain('const oResult = await oResp.json();');
     expect(body).toMatch(/if \(btn\) btn\.disabled = true;\s+try \{\s+await confirmBooking\(\);/);
     // Both save paths send the request id the server dedupes on.
     expect((HTML.match(/requestId: BOOKING_STATE\.requestId/g) || []).length).toBe(2);

@@ -13387,7 +13387,9 @@ async function confirmBooking() {
           } } : {}),
         }),
       });
-      const oResult = await oResp.json();
+      // A non-JSON answer (an HTML error page) is read as no body — the toast
+      // then says 'HTTP <status>', never a parser error (Q-03).
+      const oResult = await oResp.json().catch(() => ({}));
       if (oResp.ok) {
         outlookId   = oResult.outlookId;
         newDbId     = oResult.dbId || null;
