@@ -5308,15 +5308,15 @@ window.opIcon = function (name, size) {
 
   <!-- ── Smart Booking slide-over panel (lives inside calendar section) ── -->
   <div id="booking-panel-backdrop"></div>
-  <div id="booking-side-panel" data-help="booking-panel" role="dialog" aria-modal="true" aria-label="New Appointment">
+  <div id="booking-side-panel" data-help="booking-panel" role="dialog" aria-modal="true" aria-labelledby="bsp-title">
     <div class="bsp-header">
       <div class="bsp-header-left">
         <svg class="bsp-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>
         </svg>
-        <span class="bsp-title">New Appointment</span>
+        <span class="bsp-title" id="bsp-title" tabindex="-1">New Appointment</span>
       </div>
-      <button class="bsp-close" onclick="closeBookingPanel(true)" title="Close panel">
+      <button class="bsp-close" onclick="closeBookingPanel(true)" title="Close panel" aria-label="Close">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
           <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
         </svg>
@@ -7759,11 +7759,11 @@ window.opIcon = function (name, size) {
 
 <!-- ============ Block detail drawer ============ -->
 <div class="detail-backdrop" id="detail-backdrop" onpointerdown="closeBlockDetail()"></div>
-<aside class="detail-drawer" id="detail-drawer" data-help="detail-panel" role="dialog" aria-label="Session details">
+<aside class="detail-drawer" id="detail-drawer" data-help="detail-panel" role="dialog" aria-modal="true" aria-labelledby="bd-title">
   <header class="detail-header">
     <div class="detail-swatch" id="bd-swatch"></div>
     <div>
-      <div class="detail-title" id="bd-title">Session</div>
+      <div class="detail-title" id="bd-title" tabindex="-1">Session</div>
       <div class="detail-subtitle" id="bd-subtitle"></div>
     </div>
     <button class="detail-close" onclick="closeBlockDetail()" aria-label="Close">×</button>
@@ -13810,6 +13810,10 @@ rebuildCalendarGrid();
     if (!grid.hasAttribute('tabindex')) grid.setAttribute('tabindex', '-1');
     grid.style.outline = 'none';
     grid.addEventListener('mouseenter', function() {
+      // Only when nothing else holds focus: hovering must not pull keyboard
+      // focus off a tile or control it was just returned to (Q-06).
+      var a = document.activeElement;
+      if (a && a !== document.body && a !== document.documentElement) return;
       grid.focus({ preventScroll: true });
     });
   }
@@ -14166,6 +14170,10 @@ function addSession(col, opts) {
     baseTip += '\n Please enter a full address for this appointment so travel time can be calculated.';
   }
   el.title = baseTip;
+  // A tile is a button with a spoken name (Q-08): title, day, time, place.
+  el.setAttribute('role', 'button');
+  el.setAttribute('aria-label', [opts.title || '(No subject)', DAY_FULL[opts.day] || '', timeStr, locTip,
+    addrClass === ' missing-addr' ? 'address needed for travel' : ''].filter(Boolean).join(', '));
   el.dataset.id = id;
   // Resize handles — only for movable, non-cancelled blocks (added after attach so they're filtered there)
   const topH = document.createElement('div');
@@ -15100,20 +15108,36 @@ function openDeleteEventModal(label, cascadeCount, onConfirm) {
     if (typeof fn === 'function') fn();
   };
 
+  __delEventOpener = (document.activeElement && document.activeElement !== document.body) ? document.activeElement : null;
   backdrop.classList.add('show');
   document.addEventListener('keydown', __delEventEscape);
   document.getElementById('del-event-cancel').focus();
 }
 
+let __delEventOpener = null;
 function closeDeleteEventModal() {
   const backdrop = document.getElementById('modal-del-event');
   if (backdrop) backdrop.classList.remove('show');
   __delEventConfirmFn = null;
   document.removeEventListener('keydown', __delEventEscape);
+  // Focus goes back to what opened the confirm (Q-06) — never left on <body>.
+  // After a confirmed delete the drawer then closes and hands it to the next tile.
+  const a = document.activeElement;
+  const opener = __delEventOpener; __delEventOpener = null;
+  if ((!a || a === document.body || (backdrop && backdrop.contains(a))) && opener && opener.isConnected) {
+    try { opener.focus(); } catch (e) { /* gone */ }
+  }
 }
 
 function __delEventEscape(e) {
-  if (e.key === 'Escape') closeDeleteEventModal();
+  if (e.key === 'Escape') { closeDeleteEventModal(); return; }
+  // Tab stays on Cancel / Delete while the confirm is up.
+  if (e.key === 'Tab') {
+    const c = document.getElementById('del-event-cancel'), d = document.getElementById('del-event-confirm');
+    if (!c || !d) return;
+    e.preventDefault();
+    (document.activeElement === c ? d : c).focus();
+  }
 }
 
 /* Remove one tile from the canvas + SESSIONS; collects its column for reflow. */
@@ -15317,6 +15341,7 @@ function openBlockDetail(id) {
   // highlight selection
   document.querySelectorAll('.session.selected').forEach(x => x.classList.remove('selected'));
   if (s.element) s.element.classList.add('selected');
+  if (window.__sheetFocus) window.__sheetFocus.showing(s.element);
 
   const swatch = document.getElementById('bd-swatch');
   swatch.style.background = (s.element && (s.element.style.background || s.element.style.getPropertyValue('--cat-border'))) || '';
@@ -19396,7 +19421,29 @@ function renderMiniCal(keepAnchor) {
     if (ymd === todayKey) cls.push('mm-today');
     html += '<button type="button" class="' + cls.join(' ') + '" data-ymd="' + ymd + '" aria-label="' + ymd + '">' + d.getUTCDate() + '</button>';
   }
+  const hadFocus = grid.contains(document.activeElement) ? document.activeElement.dataset.ymd : null;
   grid.innerHTML = html;
+  // One Tab stop for the whole month (Q-07, roving tabindex): the shown
+  // week's first day in this month, else today, else the 1st. Arrow keys
+  // move between days (±1 / ±7), Enter or Space picks one.
+  const cells = Array.from(grid.querySelectorAll('.mm-cell'));
+  const stop = (hadFocus && cells.find(c => c.dataset.ymd === hadFocus)) ||
+    cells.find(c => c.classList.contains('mm-sel') && !c.classList.contains('mm-out')) ||
+    cells.find(c => c.classList.contains('mm-today') && !c.classList.contains('mm-out')) ||
+    cells.find(c => !c.classList.contains('mm-out')) || cells[0];
+  cells.forEach(c => { c.tabIndex = c === stop ? 0 : -1; });
+  if (hadFocus && stop) stop.focus();
+  grid.onkeydown = function (e) {
+    const step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }[e.key];
+    if (!step) return;
+    const all = Array.from(grid.querySelectorAll('.mm-cell'));
+    const i = all.indexOf(document.activeElement);
+    if (i < 0) return;
+    e.preventDefault();
+    const next = all[Math.max(0, Math.min(all.length - 1, i + step))];
+    all.forEach(c => { c.tabIndex = c === next ? 0 : -1; });
+    next.focus();
+  };
   grid.onclick = function (e) {
     const cell = e.target.closest('.mm-cell');
     if (!cell) return;
@@ -22742,6 +22789,8 @@ body.bsp-open #impact-modal    { z-index: 1201; }
 .bsp-header-left { display: flex; align-items: center; gap: 8px; }
 .bsp-icon { width: 16px; height: 16px; stroke: var(--accent); }
 .bsp-title { font-size: 15px; font-weight: 700; color: var(--ink); }
+/* The sheet titles take focus on open (Q-06) as a landing point, not a control: no ring. */
+#bsp-title:focus, #bd-title:focus { outline: none; box-shadow: none; }
 .bsp-close {
   width: 32px; height: 32px; padding: 0; box-sizing: border-box; border: none; background: transparent;
   border-radius: var(--radius-sm); cursor: pointer; display: flex; align-items: center; justify-content: center;
@@ -23263,6 +23312,118 @@ const SIDE_PANELS = [
   });
   obs.observe(document.documentElement, { subtree: true, attributes: true, attributeFilter: ['class', 'hidden'] });
   SIDE_PANELS.forEach(p => wasOpen.set(p.id, isOpen(p)));
+})();
+
+/* Sheet focus (Q-06 / QA-10, IA-16). The event drawer and the booking panel
+   are dialogs: opening one moves focus to its title, Tab and Shift+Tab stay
+   inside it, and closing it hands focus back to where it came from — the
+   tile (looked up again by its id, since a save may have redrawn it; after a
+   delete, the next tile in that day) or the control that opened the panel.
+   A closed sheet is `inert`, so it is never a hidden Tab stop. It watches the
+   sheets' own classes, so every opener and closer (wrapped or not) is
+   covered; openBlockDetail tells it which tile it is showing. */
+window.__sheetFocus = (function () {
+  const SHEETS = {
+    'detail-drawer':      { cls: 'show', title: 'bd-title' },
+    'booking-side-panel': { cls: 'open', title: 'bsp-title' },
+  };
+  const from = {};      // sheet id -> { tileId, day, top } | { el }
+  const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+  const sheetEl = (id) => document.getElementById(id);
+  const isOpen = (id) => { const el = sheetEl(id); return !!(el && el.classList.contains(SHEETS[id].cls)); };
+  const visible = (el) => !!(el && el.isConnected && el.getClientRects().length && getComputedStyle(el).visibility !== 'hidden');
+  function focusTitle(id) {
+    setTimeout(() => {
+      if (!isOpen(id)) return;
+      // Already on a control inside the sheet (a refresh redrew around it): stay there.
+      const a = document.activeElement;
+      if (a && a !== document.body && sheetEl(id).contains(a)) return;
+      const t = document.getElementById(SHEETS[id].title);
+      if (t) { try { t.focus({ preventScroll: true }); } catch (e) { /* gone */ } }
+    }, 0);
+  }
+  function tileRecord(el) {
+    if (!el || !el.dataset || !el.dataset.id) return null;
+    const col = el.closest('.cal-col, .allday-cell');
+    return { tileId: el.dataset.id, colId: col && col.id, top: el.offsetTop };
+  }
+  function returnTarget(rec) {
+    if (!rec) return null;
+    if (rec.el) return visible(rec.el) && !rec.el.closest('[inert]') ? rec.el : null;
+    const esc = (window.CSS && CSS.escape) ? CSS.escape(rec.tileId) : rec.tileId;
+    const same = document.querySelector('[data-id="' + esc + '"]');
+    if (visible(same)) return same;
+    // Deleted: the next tile in that day, else the one before it.
+    const col = rec.colId && document.getElementById(rec.colId);
+    if (!col) return null;
+    const tiles = Array.from(col.querySelectorAll('.session[data-id], .allday-chip')).filter(visible)
+      .sort((a, b) => a.offsetTop - b.offsetTop);
+    return tiles.find(t => t.offsetTop >= rec.top) || tiles[tiles.length - 1] || null;
+  }
+  function onOpen(id) {
+    const el = sheetEl(id);
+    el.removeAttribute('inert');
+    if (!from[id]) {
+      const a = document.activeElement;
+      if (id === 'detail-drawer') from[id] = tileRecord(document.querySelector('.session.selected, .allday-chip.selected')) || (a && a !== document.body ? { el: a } : null);
+      else from[id] = (a && a !== document.body && !el.contains(a)) ? { el: a } : null;
+    }
+    focusTitle(id);
+  }
+  function onClose(id) {
+    const el = sheetEl(id);
+    const rec = from[id]; from[id] = null;
+    const a = document.activeElement;
+    const focusWasInside = !a || a === document.body || el.contains(a);
+    el.setAttribute('inert', '');
+    if (!focusWasInside) return;            // focus already went somewhere on purpose (another sheet, a click)
+    const target = returnTarget(rec) || document.getElementById('cal-grid');
+    if (target) { try { target.focus({ preventScroll: false }); } catch (e) { /* gone */ } }
+  }
+  function boot() {
+    Object.keys(SHEETS).forEach(id => {
+      const el = sheetEl(id);
+      if (!el) return;
+      let was = isOpen(id);
+      if (!was) el.setAttribute('inert', '');
+      new MutationObserver(() => {
+        const now = isOpen(id);
+        if (now === was) return;
+        was = now;
+        if (now) onOpen(id); else onClose(id);
+      }).observe(el, { attributes: true, attributeFilter: ['class'] });
+    });
+    // Tab stays inside the open sheet (the booking panel if both somehow are).
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Tab' || e.defaultPrevented) return;
+      const id = isOpen('booking-side-panel') ? 'booking-side-panel' : (isOpen('detail-drawer') ? 'detail-drawer' : null);
+      if (!id) return;
+      const sheet = sheetEl(id);
+      const a = document.activeElement;
+      // A dialog above the sheet (delete confirm, global search…) keeps its own focus.
+      const other = a && a.closest && a.closest('[role="dialog"], [aria-modal="true"]');
+      if (other && other !== sheet) return;
+      const list = Array.from(sheet.querySelectorAll(FOCUSABLE)).filter(visible);
+      if (!list.length) return;
+      const first = list[0], last = list[list.length - 1];
+      const inside = sheet.contains(a);
+      if (!inside) { e.preventDefault(); (e.shiftKey ? last : first).focus(); return; }
+      const atTitle = a && a.id === SHEETS[id].title;
+      if (e.shiftKey && (a === first || atTitle)) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && a === last) { e.preventDefault(); first.focus(); }
+    });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
+  return {
+    // openBlockDetail: which tile the drawer now shows (also when it switches tiles while open).
+    showing(el) {
+      const rec = tileRecord(el);
+      // Also when the drawer is already open (switching tiles), or is being
+      // re-opened in the same task (history replay after a confirm closes).
+      if (rec) from['detail-drawer'] = rec;
+      focusTitle('detail-drawer');
+    },
+  };
 })();
 
 /* Right-click anywhere outside the open booking panel closes it (12 Oct
@@ -25403,11 +25564,20 @@ function showToast(msg, isErrorOrSub, kind) {
   var isError = kind === 'warn' || kind === 'error' || (typeof isErrorOrSub !== 'string' && !!isErrorOrSub);
   var toast = document.getElementById('admin-toast');
   if (!toast) {
+    // A live region (Q-08). showToast() with no message only creates it — done
+    // at boot, so a screen reader announces the first toast too.
     toast = document.createElement('div');
     toast.id = 'admin-toast';
-    toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#241f1a;color:#fff;padding:10px 20px;border-radius:10px;font-size:13.5px;font-weight:500;z-index:99999;box-shadow:0 4px 16px rgba(0,0,0,0.25);transition:opacity 0.3s;max-width:calc(100vw - 32px);';
+    toast.setAttribute('role', 'status');
+    toast.setAttribute('aria-live', 'polite');
+    toast.setAttribute('aria-atomic', 'true');
+    toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#241f1a;color:#fff;padding:10px 20px;border-radius:10px;font-size:13.5px;font-weight:500;z-index:99999;box-shadow:0 4px 16px rgba(0,0,0,0.25);transition:opacity 0.3s;max-width:calc(100vw - 32px);opacity:0;pointer-events:none;';
     document.body.appendChild(toast);
   }
+  if (msg === undefined) return;
+  // Announced (Q-08): a status line for news, an alert for a failure.
+  toast.setAttribute('role', isError ? 'alert' : 'status');
+  toast.setAttribute('aria-live', isError ? 'assertive' : 'polite');
   toast.textContent = msg;
   if (sub) {
     var line = document.createElement('div');
@@ -25420,6 +25590,7 @@ function showToast(msg, isErrorOrSub, kind) {
   clearTimeout(toast._timer);
   toast._timer = setTimeout(function() { toast.style.opacity = '0'; }, sub ? 4500 : 3000);
 }
+if (document.body) showToast(); else document.addEventListener('DOMContentLoaded', function () { showToast(); });
 
 // ── Global undo — Cmd+Z / Ctrl+Z (2026-08-09) ─────────────────
 // A small session-only stack of reversible app actions. Flows register an
