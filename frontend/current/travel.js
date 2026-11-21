@@ -1582,7 +1582,21 @@ function runBspRoutePreview(opts) {
   // top of them: until then it waits below the previous stop's own legs.
   const predS = pred.s;
   let legTop = pred.endMin;
-  const placeholder = (text) => { if (col) _previewLeg(col, legTop, legTop, 'placeholder', '<span class="t-ico">Travel</span><span class="t-label">' + text + '</span>'); };
+  // Never below the proposal (21 Nov 2026 audit T-18): the previous stop's
+  // own legs can end later than the new start (a leg the proposal replaces).
+  const placeholder = (text) => { if (col) { const t = Math.min(legTop, startMin); _previewLeg(col, t, t, 'placeholder', '<span class="t-ico">Travel</span><span class="t-label">' + text + '</span>'); } };
+  // While the drive is being calculated (or could not be), the placeholder is
+  // estimate-sized and ends at the proposal's start — where the real leg
+  // will land — in the provisional (estimate) style, so nothing jumps far.
+  const anchoredPlaceholder = (text, fromKey, toKey) => {
+    if (!col) return;
+    const est = Math.max(5, estimateTravelMinFromTable(fromKey, toKey) || 0);
+    const floor = legTop <= startMin ? legTop : Math.min(pred.endMin, startMin);
+    const top = Math.min(startMin, Math.max(floor, startMin - est));
+    const el = _previewLeg(col, top, startMin, 'placeholder', '<span class="t-ico">Travel</span><span class="t-label">' + text + '</span>');
+    el.classList.add('estimate');
+    if (!el.classList.contains('t-bar')) _fitLegText(el);
+  };
   const ownLegsEnd = _bspPredLegsEnd(day, predS);
 
   if (_bspUnsure()) {
@@ -1677,7 +1691,7 @@ function runBspRoutePreview(opts) {
     // Retry skips a cached failure; anything else fresh is reused (no new call).
     if (isFresh(cached) && !(o.fresh && cached.source !== 'routes-api')) route = cached;
     else {
-      placeholder('calculating travel…');
+      anchoredPlaceholder('calculating travel…', pred.fromKey, toKey);
       setBspRouteStatus('loading', '<span class="bsp-route-spin" aria-hidden="true"></span>Calculating travel from ' + fromName + '…');
       if (o.cachedOnly) {
         // A repaint never routes; make sure a full run is on its way.
@@ -1693,7 +1707,7 @@ function runBspRoutePreview(opts) {
   }
   if (route.source !== 'routes-api') {
     // A failed lookup: keep everything the clinician chose, invent nothing.
-    placeholder('travel not calculated');
+    anchoredPlaceholder('travel not calculated', pred.fromKey, toKey);
     setBspRouteStatus('error', '<strong>Unable to calculate travel right now.</strong> Retry or continue with manual timing. ' +
       '<button type="button" class="bsp-route-btn" data-route="retry">Retry</button> ' +
       '<button type="button" class="bsp-route-btn" data-route="manual">Continue with manual timing</button>');

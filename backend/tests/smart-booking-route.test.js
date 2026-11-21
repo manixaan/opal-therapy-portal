@@ -374,7 +374,26 @@ describe('Smart Booking: straight on from the last client, or home in between', 
     const env = makeEnv(Object.assign({ routes }, HOME));
     const ph = calculating(env, '10:30');
     expect(realLeg(env, '.end').classList.contains('suppressed')).toBe(true);
-    expect(ph.style.top).toBe(env.ev('tToY(10, 0)') + 'px');   // where the drive home began
+    // Estimate-sized and ending at the proposal's start, where the routed leg
+    // will land — never before A ends, never below the proposal (T-18).
+    const top = parseFloat(ph.style.top), bottom = top + parseFloat(ph.style.height) + 4;
+    expect(top).toBeGreaterThanOrEqual(env.ev('tToY(10, 0)'));
+    expect(bottom).toBeCloseTo(env.ev('tToY(10, 30)'));
+    expect(ph.classList.contains('estimate')).toBe(true);
+  });
+
+  test('while calculating, the placeholder never sits below the proposal (a replaced leg ending later)', () => {
+    const env = makeEnv(Object.assign({ routes }, HOME));
+    laterBooking(env, '10:30');
+    env.ev("BOOKING_ROUTE.viaMode = 'home'");
+    // Via home keeps A's own legs, and A's leg onward to Z ends later than
+    // the 10:30 proposal: the placeholder used to wait below it.
+    env.ev(`SESSIONS.Z = { id: 'Z', day: 'mon', type: 'therapy', startH: 12, startM: 30, endH: 13, endM: 0, address: '9 Far Rd, Joondalup WA 6027', patient: 'Zed', dbId: 'db-Z' }`);
+    env.ev("refreshDayOverlays('mon')");
+    env.$('bsp-location').value = CV_ADDR;
+    env.ev('runBspRoutePreview({ cachedOnly: true })');
+    const ph = env.win.document.querySelector('#day-mon .travel-overlay.preview.placeholder');
+    expect(parseFloat(ph.style.top) + parseFloat(ph.style.height)).toBeLessThanOrEqual(env.ev('tToY(10, 30)'));
   });
 
   test('Create left on the default saves nothing — no travel.next="home" the therapist never chose', async () => {
