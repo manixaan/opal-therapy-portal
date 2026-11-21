@@ -2765,8 +2765,13 @@ window.opIcon = function (name, size) {
     #app-user-chip { max-width: 96px !important; }
     header > div:last-child { margin-left: 0 !important; padding-left: 6px !important; }
     /* Nav: every tab but the open one shows its icon only. */
-    nav.tabs { padding: 5px 8px; gap: 2px; }
-    nav.tabs > .tab:not(.active) { font-size: 0; gap: 0; padding: 7px 9px; }
+    /* Tighter pads so the strip fits 360–390 px; if a long open-tab label
+       still does not fit, the strip wraps to a second row rather than
+       pushing the page sideways. */
+    nav.tabs { padding: 5px 6px; gap: 2px; flex-wrap: wrap; row-gap: 2px; }
+    nav.tabs > .tab:not(.active) { font-size: 0; gap: 0; padding: 7px 7px; }
+    nav.tabs > .tab.active { padding: 7px 10px; }
+    nav.tabs #nav-more-btn { padding: 7px 9px; gap: 4px; }
     nav.tabs .tab { flex-shrink: 0; }
     nav.tabs > .tab:not(.active) .tab-badge { font-size: 10px; margin-left: 2px; }
     /* Toolbar: two rows — view switch + Today / dates + actions. */
