@@ -12,6 +12,8 @@
   var state = {
     section: 'invoices', overview: null, practitioners: [], filters: { status: '', q: '', practitionerId: '', from: '', to: '', payer: '', trip: false, mmm: '', sort: 'issue', dir: 'desc' },
     invoiceId: null, tripId: null, tripTab: 'overview', settings: null,
+    // Send selected: every sendable row starts ticked; untick the ones to look into.
+    unticked: {}, listRows: [],
   };
 
   // ── Helpers ──────────────────────────────────────────────────────────────
@@ -179,6 +181,72 @@
     return '?' + q.join('&');
   }
 
+  /* Can this row go out with "Send selected"? A draft or final invoice that
+     is not sent yet, has a payer email and needs no attention. */
+  function sendable(i) {
+    return (i.status === 'DRAFT' || i.status === 'READY') && i.sent_status !== 'SENT' && i.sent_status !== 'SENDING' && !!i.payer_email && !i.is_stale;
+  }
+  function whyNotSendable(i) {
+    if (i.sent_status === 'SENT') return 'Already sent';
+    if (i.sent_status === 'SENDING') return 'Being sent';
+    if (i.status === 'NEEDS_ATTENTION') return 'Needs attention first';
+    if (i.is_stale) return 'Source changed — regenerate first';
+    if (!i.payer_email) return 'No payer email';
+    return 'Not sendable (' + String(i.status || '').toLowerCase().replace('_', ' ') + ')';
+  }
+  function selectedRows() { return state.listRows.filter(function (i) { return sendable(i) && !state.unticked[i.id]; }); }
+  function renderSendBar() {
+    var bar = document.getElementById('inv-send-bar');
+    if (!bar) return;
+    var rows = selectedRows(), all = state.listRows.filter(sendable);
+    if (!all.length) { bar.hidden = true; return; }
+    bar.hidden = false;
+    var total = rows.reduce(function (a, i) { return a + Math.round(Number(i.total) * 100); }, 0) / 100;
+    bar.innerHTML = '<span><b>' + rows.length + '</b> of ' + all.length + ' ready to send ticked · ' + money(total.toFixed(2)) + '</span>' +
+      '<button type="button" class="btn primary" data-inv="send-selected"' + (rows.length ? '' : ' disabled') + '>Finalise &amp; send selected (' + rows.length + ')</button>';
+    var head = document.getElementById('inv-sel-all');
+    if (head) { head.checked = rows.length === all.length; head.indeterminate = rows.length > 0 && rows.length < all.length; }
+  }
+
+  function openSendSelected() {
+    var rows = selectedRows();
+    if (!rows.length) return;
+    var total = rows.reduce(function (a, i) { return a + Math.round(Number(i.total) * 100); }, 0) / 100;
+    var body = '<p>Each ticked invoice is finalised (its number and PDF are locked), copied to Xero when that is switched on, and emailed with its PDF to:</p>' +
+      '<div class="inv-table-wrap" style="max-height:280px"><table class="inv-table"><thead><tr><th>Invoice #</th><th>Client</th><th>To</th><th class="num">Amount</th></tr></thead><tbody>' +
+      rows.map(function (i) { return '<tr><td>' + esc(i.invoice_number) + '</td><td>' + esc(i.client_name || '—') + '</td><td>' + esc(i.payer_email) + '</td><td class="num">' + money(i.total) + '</td></tr>'; }).join('') +
+      '</tbody></table></div><p class="inv-note">' + rows.length + ' invoice' + (rows.length === 1 ? '' : 's') + ', ' + money(total.toFixed(2)) + ' in total. Unticked invoices are left as they are. This cannot be unsent.</p><div id="inv-send-result"></div>';
+    modal('Send ' + rows.length + ' invoice' + (rows.length === 1 ? '' : 's'), body,
+      '<button class="btn" data-inv="close-modal">Cancel</button><button class="btn primary" id="inv-send-go" data-inv="send-go">Finalise &amp; send</button>', { wide: true });
+    document.getElementById('inv-backdrop').__ids = rows.map(function (i) { return i.id; });
+  }
+
+  async function sendSelected(btn) {
+    var bd = document.getElementById('inv-backdrop');
+    var ids = (bd && bd.__ids) || [];
+    var out = document.getElementById('inv-send-result');
+    btn.disabled = true; btn.textContent = 'Sending ' + ids.length + '…';
+    var cancel = bd.querySelector('[data-inv="close-modal"]');
+    if (cancel) cancel.disabled = true;
+    try {
+      var r = await post('/invoices/send-batch', { ids: ids });
+      var label = { sent: 'Sent', skipped: 'Skipped', failed: 'Not sent' };
+      out.innerHTML = '<div class="' + (r.failed ? 'inv-error' : 'inv-ok') + '">' + r.sent + ' sent' + (r.skipped ? ', ' + r.skipped + ' skipped' : '') + (r.failed ? ', ' + r.failed + ' not sent' : '') + '.</div>' +
+        '<table class="inv-table"><tbody>' + r.results.map(function (x) {
+          return '<tr><td>' + esc(x.number || '') + '</td><td>' + esc(x.client || '') + '</td><td><span class="inv-pill ' + (x.outcome === 'sent' ? 'SENT' : x.outcome === 'failed' ? 'NEEDS_ATTENTION' : 'DRAFT') + '">' + label[x.outcome] + '</span></td><td>' + esc(x.outcome === 'sent' ? (x.to || '') : (x.message || '')) + '</td></tr>';
+        }).join('') + '</tbody></table>';
+      var foot = document.getElementById('inv-modal-foot');
+      if (foot) foot.innerHTML = '<button class="btn primary" data-inv="close-modal">Done</button>';
+      state.unticked = {};
+      loadOverview();
+      loadInvoiceList();
+    } catch (e) {
+      out.innerHTML = '<div class="inv-error">' + esc(e.message) + '</div>';
+      btn.disabled = false; btn.textContent = 'Finalise & send';
+      if (cancel) cancel.disabled = false;
+    }
+  }
+
   var COLS = [['number', 'Invoice #'], [null, 'To'], ['client', 'Client'], [null, 'Location'], [null, 'Practitioner'], ['issue', 'Issue date'], ['due', 'Due date'], ['total', 'Amount', 'num'], [null, 'Outstanding', 'num'], [null, 'Status'], [null, 'Sent status']];
 
   async function loadInvoiceList() {
@@ -191,12 +259,17 @@
         return;
       }
       var f = state.filters;
-      el.innerHTML = '<div class="inv-table-wrap"><table class="inv-table"><thead><tr>' + COLS.map(function (c) {
+      state.listRows = r.invoices;
+      el.innerHTML = '<div class="inv-table-wrap"><table class="inv-table"><thead><tr><th class="inv-sel"><input type="checkbox" id="inv-sel-all" aria-label="Tick every invoice ready to send"></th>' + COLS.map(function (c) {
         var sorted = c[0] && f.sort === c[0];
         return '<th class="' + (c[2] || '') + (c[0] ? ' sortable' : '') + (sorted ? ' sorted' : '') + '"' + (c[0] ? ' data-inv="sort" data-sort="' + c[0] + '" tabindex="0" aria-sort="' + (sorted ? (f.dir === 'asc' ? 'ascending' : 'descending') : 'none') + '"' : '') + '>' + esc(c[1]) + (sorted ? (f.dir === 'asc' ? ' ▲' : ' ▼') : '') + '</th>';
       }).join('') + '</tr></thead><tbody>' + r.invoices.map(function (i) {
         var loc = (i.mmm_zones || []).filter(Boolean).map(function (z) { return 'MM' + z; }).join(', ');
+        var can = sendable(i);
         return '<tr class="clickable" data-inv="open" data-id="' + esc(i.id) + '">' +
+          '<td class="inv-sel">' + (can
+            ? '<input type="checkbox" class="inv-sel-row" data-id="' + esc(i.id) + '"' + (state.unticked[i.id] ? '' : ' checked') + ' aria-label="Send ' + esc(i.invoice_number) + '">'
+            : '<span class="inv-dim" title="' + esc(whyNotSendable(i)) + '" aria-label="' + esc(whyNotSendable(i)) + '">–</span>') + '</td>' +
           '<td><button type="button" class="inv-link" data-inv="open" data-id="' + esc(i.id) + '">' + esc(i.invoice_number) + '</button>' + (i.is_stale || i.source_changed_after_finalise ? '<div class="inv-dim" title="A source calendar event changed">⚠ source changed</div>' : '') + '</td>' +
           '<td>' + (i.payer_name ? esc(i.payer_name) : '<span class="inv-pill NEEDS_ATTENTION">Recipient missing</span>') + '</td>' +
           '<td>' + esc(i.client_name || '—') + (i.ndis_number ? '<div class="inv-dim">NDIS ' + esc(i.ndis_number) + '</div>' : '') + '</td>' +
@@ -205,10 +278,25 @@
           '<td>' + dmy(i.issue_date) + '</td><td>' + dmy(i.due_date) + '</td>' +
           '<td class="num">' + money(i.total) + '</td><td class="num">' + money(i.outstanding) + '</td>' +
           '<td>' + pill(i.display_status) + (i.open_issues ? ' <span class="inv-dim">' + i.open_issues + ' issue' + (i.open_issues === 1 ? '' : 's') + '</span>' : '') + '</td>' +
-          '<td>' + (i.sent_status === 'SENT' ? '<span class="inv-pill SENT">Sent</span>' : '<span class="inv-dim">Not sent</span>') + '</td></tr>';
-      }).join('') + '</tbody></table></div><div class="inv-dim" style="margin-top:6px">' + r.total + ' invoice' + (r.total === 1 ? '' : 's') + '</div>';
+          '<td>' + (i.sent_status === 'SENT' ? '<span class="inv-pill SENT">Sent</span>'
+            : i.sent_status === 'FAILED' ? '<span class="inv-pill NEEDS_ATTENTION" title="' + esc(i.email_last_error || '') + '">Send failed</span>'
+            : '<span class="inv-dim">Not sent</span>') + '</td></tr>';
+      }).join('') + '</tbody></table></div><div class="inv-send-bar" id="inv-send-bar" hidden></div><div class="inv-dim" style="margin-top:6px">' + r.total + ' invoice' + (r.total === 1 ? '' : 's') + '</div>';
+      renderSendBar();
     } catch (e) { denied(el, e); }
   }
+
+  document.addEventListener('change', function (e) {
+    var t = e.target;
+    if (t && t.classList && t.classList.contains('inv-sel-row')) {
+      if (t.checked) delete state.unticked[t.dataset.id]; else state.unticked[t.dataset.id] = true;
+      renderSendBar();
+    } else if (t && t.id === 'inv-sel-all') {
+      state.listRows.filter(sendable).forEach(function (i) { if (t.checked) delete state.unticked[i.id]; else state.unticked[i.id] = true; });
+      document.querySelectorAll('#inv-list .inv-sel-row').forEach(function (c) { c.checked = t.checked; });
+      renderSendBar();
+    }
+  });
 
   var searchTimer = null;
   document.addEventListener('input', function (e) {
@@ -968,11 +1056,15 @@
           if (to === null) return;
           await post('/invoices/' + id + '/mark-sent', { sentTo: to || null }); toast('Marked as sent'); refreshDetail(); break;
         }
+        case 'send-selected': openSendSelected(); break;
+        case 'send-go': await sendSelected(btn); break;
         case 'email': {
           var inv = state.detail && state.detail.invoice;
+          var resend = !!(inv && inv.sent_status === 'SENT');
+          if (resend && !(await confirmIt('This invoice was already sent' + (inv.sent_to ? ' to ' + inv.sent_to : '') + '. Send it again?'))) return;
           var addr = await ask('Email the final PDF to:', { value: (inv && inv.payer_email) || '' });
           if (!addr) return;
-          var er = await post('/invoices/' + id + '/email', { to: addr });
+          var er = await post('/invoices/' + id + '/email', { to: addr, resend: resend });
           toast(er.sent ? 'Invoice emailed' : 'Email is not configured', er.sent ? addr : 'Send it yourself and use Mark sent');
           refreshDetail(); break;
         }

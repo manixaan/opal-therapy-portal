@@ -144,6 +144,9 @@ router.get('/api/invoicing/runs', safe(async (req, res) => {
   res.json({ runs: rows });
 }));
 
+// Run before an invoice is emailed: the Xero copy (xero-invoice-push.js) when switched on.
+function sendHooks() { return {}; }
+
 // ── Invoices ──────────────────────────────────────────────────────────────
 
 router.get('/api/invoicing/invoices', safe(async (req, res) => {
@@ -201,7 +204,16 @@ router.post('/api/invoicing/invoices/:id/mark-sent', uuidParam('id'), safe(async
 }));
 
 router.post('/api/invoicing/invoices/:id/email', uuidParam('id'), safe(async (req, res) => {
-  res.json(await Life.emailInvoice({ pool, orgId: orgId(req), userId: req.user.id, invoiceId: req.params.id, to: (req.body || {}).to }));
+  const b = req.body || {};
+  res.json(await Life.emailInvoice({ pool, orgId: orgId(req), userId: req.user.id, invoiceId: req.params.id, to: b.to, resend: b.resend === true,
+    hooks: sendHooks() }));
+}));
+
+// "Send selected": finalise, copy to Xero (when on), email — each invoice once.
+router.post('/api/invoicing/invoices/send-batch', safe(async (req, res) => {
+  const ids = Array.isArray((req.body || {}).ids) ? req.body.ids : [];
+  if (!ids.length || ids.some(id => !UUID_RE.test(String(id)))) return res.status(400).json({ error: 'Choose at least one invoice' });
+  res.json(await Life.sendBatch({ pool, orgId: orgId(req), userId: req.user.id, ids, hooks: sendHooks() }));
 }));
 
 function sendPdf(req, res, bytes, fileName) {

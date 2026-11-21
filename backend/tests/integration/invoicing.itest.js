@@ -11,6 +11,15 @@
  * Acceptance scenarios A–L from the specification are labelled in the tests.
  */
 
+// Email: a fake transport so sending is observable and nothing leaves the process.
+const MAIL = { sent: [], fail: false, configured: true };
+jest.mock('../../email', () => {
+  const actual = jest.requireActual('../../email');
+  return { ...actual,
+    isEmailConfigured: () => MAIL.configured,
+    sendTemplated: async (m) => { if (MAIL.fail) { const e = new Error('boom'); e.status = 503; throw e; } MAIL.sent.push(m); return { messageId: 'm' + MAIL.sent.length }; },
+  };
+});
 const express = require('express');
 const session = require('express-session');
 const bodyParser = require('body-parser');
@@ -861,5 +870,88 @@ describe('non-face-to-face billable time (migration 076)', () => {
     expect(line).toMatchObject({ quantity: '0.5000', amount: '97.00' });
     const { rows: [t] } = await db.pool.query(`SELECT status, auto_stopped, accumulated_seconds FROM event_billing_timers WHERE event_id = $1`, [ev]);
     expect(t).toEqual({ status: 'STOPPED', auto_stopped: true, accumulated_seconds: 1800 });
+  });
+});
+
+describe('send selected — finalise and email each ticked invoice exactly once (migration 091)', () => {
+  beforeEach(() => { MAIL.sent.length = 0; MAIL.fail = false; MAIL.configured = true; });
+
+  async function threeDrafts() {
+    const app = buildApp();
+    const org = await seedOrganisation();
+    const { agent } = await login(app, 'owner', org.id);
+    await agent.put('/api/invoicing/settings').send({ abn: '49699791958' });
+    const pr = await practitioner(org.id, 'Send P', 'Base, Perth WA 6000', [day(0)]);
+    await profile(agent, 's1', planManaged('Send One', 1, 'Alpha PM'));
+    await profile(agent, 's2', planManaged('Send Two', 1, 'Beta PM'));
+    await profile(agent, 's3', { ...planManaged('Send Three', 1, 'Gamma PM'), payerEmail: '' });
+    await event(pr, { clientId: 's1', clientName: 'Send One', date: day(0), start: '09:00', location: 'Base, Perth WA 6000' });
+    await event(pr, { clientId: 's2', clientName: 'Send Two', date: day(0), start: '11:00', location: 'Base, Perth WA 6000' });
+    await event(pr, { clientId: 's3', clientName: 'Send Three', date: day(0), start: '13:00', location: 'Base, Perth WA 6000' });
+    await run(agent, day(0), day(0));
+    const list = await invoices(agent);
+    const by = Object.fromEntries(list.map((i) => [i.client_id, i]));
+    return { agent, app, org, by };
+  }
+
+  test('ticked drafts are finalised and emailed; no address is skipped; a second press sends nothing again', async () => {
+    const { agent, by } = await threeDrafts();
+    const ids = [by.s1.id, by.s2.id, by.s3.id];
+    const r = await agent.post('/api/invoicing/invoices/send-batch').send({ ids });
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ sent: 2, skipped: 1, failed: 0 });
+    expect(r.body.results.find((x) => x.id === by.s3.id)).toMatchObject({ outcome: 'skipped', code: 'NO_EMAIL' });
+    expect(MAIL.sent.map((m) => m.to).sort()).toEqual(['alpha@pm.test', 'beta@pm.test']);
+    expect(MAIL.sent[0].attachments[0].contentType).toBe('application/pdf');
+    const d1 = (await detail(agent, by.s1.id)).invoice;
+    expect(d1).toMatchObject({ status: 'SENT', sent_status: 'SENT', sent_to: 'alpha@pm.test' });
+
+    const again = await agent.post('/api/invoicing/invoices/send-batch').send({ ids });
+    expect(again.body).toMatchObject({ sent: 0 });
+    expect(again.body.results.filter((x) => x.code === 'ALREADY_SENT')).toHaveLength(2);
+    expect(MAIL.sent).toHaveLength(2);
+
+    // The single Email button refuses a second send unless it is a deliberate resend.
+    expect((await agent.post(`/api/invoicing/invoices/${by.s1.id}/email`).send({})).status).toBe(409);
+    const re = await agent.post(`/api/invoicing/invoices/${by.s1.id}/email`).send({ resend: true });
+    expect(re.body).toMatchObject({ sent: true });
+    expect(MAIL.sent).toHaveLength(3);
+  });
+
+  test('an unticked invoice is left alone; a failed send is recorded and can be retried', async () => {
+    const { agent, by } = await threeDrafts();
+    MAIL.fail = true;
+    const r = await agent.post('/api/invoicing/invoices/send-batch').send({ ids: [by.s1.id] });
+    expect(r.body).toMatchObject({ sent: 0, failed: 1 });
+    expect(r.body.results[0].message).toMatch(/could not be sent/);
+    let d = (await detail(agent, by.s1.id)).invoice;
+    expect(d).toMatchObject({ status: 'READY', sent_status: 'FAILED' });
+    expect((await detail(agent, by.s2.id)).invoice.status).toBe('DRAFT');      // not ticked: untouched
+
+    MAIL.fail = false;
+    const retry = await agent.post('/api/invoicing/invoices/send-batch').send({ ids: [by.s1.id] });
+    expect(retry.body).toMatchObject({ sent: 1 });
+    d = (await detail(agent, by.s1.id)).invoice;
+    expect(d.sent_status).toBe('SENT');
+  });
+
+  test('two sends at once email once; nothing is sent when email is not set up; guards hold', async () => {
+    const { agent, app, org, by } = await threeDrafts();
+    await agent.post(`/api/invoicing/invoices/${by.s1.id}/finalise`);
+    const [a, b] = await Promise.all([
+      agent.post(`/api/invoicing/invoices/${by.s1.id}/email`).send({}),
+      agent.post(`/api/invoicing/invoices/${by.s1.id}/email`).send({}),
+    ]);
+    expect([a.status, b.status].sort()).toEqual([200, 409]);
+    expect(MAIL.sent).toHaveLength(1);
+
+    MAIL.configured = false;
+    const off = await agent.post('/api/invoicing/invoices/send-batch').send({ ids: [by.s2.id] });
+    expect(off.status).toBe(409);
+    expect((await detail(agent, by.s2.id)).invoice.status).toBe('DRAFT');
+
+    expect((await agent.post('/api/invoicing/invoices/send-batch').send({ ids: ['nope'] })).status).toBe(400);
+    const { agent: therapist } = await login(app, 'therapist', org.id);
+    expect((await therapist.post('/api/invoicing/invoices/send-batch').send({ ids: [by.s2.id] })).status).toBe(403);
   });
 });
