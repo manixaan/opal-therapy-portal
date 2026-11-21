@@ -24,7 +24,8 @@
  *   Rule 11: MMM6–7 has no cap: T÷N.
  *   Rule 10 (owner, 21 Nov 2026): a day mixing MMM1–3 and MMM4–5 — each metro
  *           client gets the LESSER of the drive actually made into them and
- *           their normal commute from base (then the 30-min cap); the MMM4–5
+ *           their normal commute from base (then the 30-min cap), and the same
+ *           for their drive home (owner, 21 Nov 2026); the MMM4–5
  *           clients share the rest of T by the rule book. Every comparison is a
  *           reviewer note and the day is flagged for review. A day mixing
  *           MMM6–7 with capped zones uses the smallest cap and is flagged.
@@ -143,8 +144,18 @@ function allocateDay(day) {
       const commute = c.first.commuteMinutes != null ? e2(c.first.commuteMinutes) : null;
       const lesser = commute != null && commute < inbound ? commute : inbound;
       const capped = capA != null && lesser > capA * 100 ? capA * 100 : lesser;
-      per.set(String(c.clientId), { base: R(capped, 100), ret: R(0) });
-      reviewNotes.push(`${c.first.clientName || 'Metro client'} (MMM1–3): drive in ${inbound / 100} min${commute != null ? `, normal commute from base ${commute / 100} min` : ', no commute to compare'}; billed the lesser${capped < lesser ? `, capped at ${capA}` : ''} (${capped / 100} min).${away ? ` The drive home from this client (${away / 100} min) is not billed on a mixed day.` : ''}`);
+      // The drive home from a metro client is billed too (owner, 21 Nov 2026): the
+      // lesser of the drive actually made and their normal drive home to base,
+      // then the MMM1–3 cap — so at most CAP in + CAP home, as rule 7 allows one client.
+      let home = 0, homeNote = '';
+      if (away) {
+        const back = c.first.commuteHomeMinutes != null ? e2(c.first.commuteHomeMinutes) : null;
+        const lesserHome = back != null && back < away ? back : away;
+        home = capA != null && lesserHome > capA * 100 ? capA * 100 : lesserHome;
+        homeNote = ` Drive home ${away / 100} min${back != null ? `, normal drive home to base ${back / 100} min` : ''}; billed the lesser${home < lesserHome ? `, capped at ${capA}` : ''} (${home / 100} min).`;
+      }
+      per.set(String(c.clientId), { base: R(capped, 100), ret: R(home, 100) });
+      reviewNotes.push(`${c.first.clientName || 'Metro client'} (MMM1–3): drive in ${inbound / 100} min${commute != null ? `, normal commute from base ${commute / 100} min` : ', no commute to compare'}; billed the lesser${capped < lesser ? `, capped at ${capA}` : ''} (${capped / 100} min).${homeNote}`);
     }
     const poolB = R(T.n * metroTaken.d - metroTaken.n * T.d, T.d * metroTaken.d);
     const nb = rural.length;

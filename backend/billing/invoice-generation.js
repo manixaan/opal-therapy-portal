@@ -512,7 +512,7 @@ async function prepare(q, orgId, opts) {
     (route.detours || []).forEach(dt => dt.legs.forEach(l => pairs.push({ origin: l.origin, destination: l.destination })));
     // Each client's normal commute from the day's base (a mixed-zone day compares against it).
     if (route.base && !route.base.remote && route.base.address) {
-      for (const s of list) { const a = DR.eventAddress(s.ev); if (a) pairs.push({ origin: route.base.address, destination: a }); }
+      for (const s of list) { const a = DR.eventAddress(s.ev); if (a) pairs.push({ origin: route.base.address, destination: a }, { origin: a, destination: route.base.address }); }
     }
     dayPlans.push({ userId, date, list, route });
   }
@@ -585,7 +585,8 @@ async function prepare(q, orgId, opts) {
     d.allocation = T.allocateDay({
       practitionerId: d.userId, date: d.date, legs: d.route.legs,
       sessions: inOrder.map(s => ({ eventId: s.ev.id, clientId: s.ev.client_id, clientName: s.ev.client_name || null, mmm: s.mmm, address: DR.eventAddress(s.ev),
-        commuteMinutes: d.route.base && d.route.base.address && !d.route.base.remote ? minsOf(d.route.base.address, DR.eventAddress(s.ev)) : null, rule: {
+        commuteMinutes: d.route.base && d.route.base.address && !d.route.base.remote ? minsOf(d.route.base.address, DR.eventAddress(s.ev)) : null,
+        commuteHomeMinutes: d.route.base && d.route.base.address && !d.route.base.remote ? minsOf(DR.eventAddress(s.ev), d.route.base.address) : null, rule: {
         travelRateCents: s.rate.travelRateCents, travelCapMinutesEachWay: s.rate.travelCapMinutesEachWay,
         rateCardId: s.rate.card.id, rateCardVersion: s.rate.card.version } })),
     });

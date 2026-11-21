@@ -120,7 +120,8 @@ bill actual flights, hire car, accommodation and fuel ÷ clients through Trips a
 "Provider Travel – non-labour costs" (item 15_799_0128_1_3, $1 units). A day mixing MMM1–3
 and MMM4–5 (rule 10, owner answer): each metro client gets the **lesser** of the drive
 actually made into them and their normal commute from the day's base, then the 30-min
-cap (the drive home from a metro client is not billed that day); the MMM4–5 clients share
+cap; the drive home from a metro client is billed the same way (lesser of the actual drive
+home and their normal drive home to base, then the 30-min cap); the MMM4–5 clients share
 the rest of T by the rule book. Every comparison is a reviewer note and the day raises
 TRAVEL_MIXED_ZONE_DAY for review. A day mixing MMM6–7 with capped zones uses the
 smallest cap and is flagged. **Remote trips** (rule 11, migration 093): a trip's total

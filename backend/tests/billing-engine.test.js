@@ -182,6 +182,26 @@ describe('travel allocation — the owner\'s NDIS rule book (21 Nov 2026)', () =
     // Never more than T, never more than each zone's cap.
     expect(out.allocations.reduce((x, a) => x + a.claimableMinutes, 0)).toBeLessThanOrEqual(150);
   });
+  test('rule 10: a metro client seen last also carries their drive home — the lesser of actual and normal, capped', () => {
+    // 75 out to the wheatbelt client, 50 on to the metro client, 25 home from the metro client = 150.
+    const legs = [
+      { id: 'out', kind: 'OUTBOUND', toEventId: 'e1', minutes: 75 },
+      { id: 'mid', kind: 'BETWEEN', fromEventId: 'e1', toEventId: 'e2', minutes: 50 },
+      { id: 'home', kind: 'RETURN', fromEventId: 'e2', minutes: 25 }];
+    const sessions = (homeCommute) => [
+      { eventId: 'e1', clientId: 'b', clientName: 'Rural', mmm: 4, address: 'Y', rule: rule(rateFor(4)) },
+      { eventId: 'e2', clientId: 'a', clientName: 'Metro', mmm: 1, address: 'X', commuteMinutes: 20, commuteHomeMinutes: homeCommute, rule: rule(rateFor(1)) }];
+    let out = T.allocateDay({ legs, sessions: sessions(25) });
+    const metro = out.allocations.find(x => x.clientId === 'a'), rural = out.allocations.find(x => x.clientId === 'b');
+    // Metro: in = lesser(50, 20) = 20; home = lesser(25, 25) = 25 → 45. Rural pool 150 − 75 = 75 → 60 + 15.
+    expect(metro).toMatchObject({ cappedMinutes: 20, returnMinutes: 25, claimableMinutes: 45 });
+    expect(rural.claimableMinutes).toBe(75);
+    expect(out.report.unbilledMinutes).toBe(30);
+    expect(out.reviewNotes.join(' ')).toMatch(/Drive home 25 min, normal drive home to base 25 min; billed the lesser \(25 min\)/);
+    // A shorter normal drive home wins.
+    out = T.allocateDay({ legs, sessions: sessions(10) });
+    expect(out.allocations.find(x => x.clientId === 'a').returnMinutes).toBe(10);
+  });
   test('the trip home is always part of T; legs without route facts are excluded and reported', () => {
     const out = alloc(60, 1, 2);
     expect(out.legs.find(l => l.id === 'home')).toMatchObject({ included: true, reason: 'trip_home' });
