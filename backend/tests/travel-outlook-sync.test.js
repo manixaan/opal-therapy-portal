@@ -113,6 +113,32 @@ describe('syncDay — which events the calendar view may hold', () => {
   });
 });
 
+// 21 Nov 2026 audit (T-06): a page that drew a day before the work schedule
+// loaded sent legs:[] and the plan deleted every Outlook travel event on it.
+describe('syncDay — an empty list never wipes a day unless the calendar confirms it', () => {
+  const MIRROR = { id: 'row-1', outlook_id: 'ol-1', start_time: '2026-10-06T04:00:00Z', end_time: '2026-10-06T04:20:00Z',
+    title: 'Travel · 20 min', location: '', key: A + '|after', local_date: '2026-10-06' };
+  const deleteOutlookEvent = jest.fn(async () => {});
+  const day = (body) => S.syncDay({
+    pool: { query: jest.fn(async (sql) => (/AS drawn/.test(sql) ? { rows: [{ id: A, drawn: true }] }
+      : /travelLegKey/.test(sql) && /SELECT id, outlook_id/.test(sql) ? { rows: [MIRROR] } : { rows: [] })) },
+    outlook: { deleteOutlookEvent }, getAccessToken: async () => 'tok',
+  }, 'user-1', Object.assign({ date: '2026-10-06', seenEventIds: [A], legs: [] }, body), NOW);
+
+  test('legs:[] without confirmEmpty is refused and nothing is deleted', async () => {
+    const r = await day({});
+    expect([r.status, r.body.code]).toEqual([409, 'empty_day_unconfirmed']);
+    expect(deleteOutlookEvent).not.toHaveBeenCalled();
+  });
+
+  test('a day beyond today + 14 is never mirrored', () => {
+    const v = S.validateRequest({ date: '2026-10-20', seenEventIds: [], legs: [] }, NOW);
+    expect(v.beyond).toBe(true);
+    expect(S.validateRequest({ date: '2026-10-19', seenEventIds: [], legs: [] }, NOW).beyond).toBe(false);
+    expect(S.MIRROR_HORIZON_DAYS).toBe(14);
+  });
+});
+
 test('Outlook gets Perth wall-clock times', () => {
   expect(S.perthIso(new Date('2026-10-06T04:05:00Z'))).toBe('2026-10-06T12:05:00+08:00');
   expect(S.perthDate(new Date('2026-10-05T17:30:00Z'))).toBe('2026-10-06');

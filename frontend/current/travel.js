@@ -2779,12 +2779,32 @@ function scheduleTravelOutlookSync(day, segs) {
   clearTimeout(TRAVEL_OUTLOOK_SYNC.timers[day]);
   TRAVEL_OUTLOOK_SYNC.timers[day] = setTimeout(() => runTravelOutlookSync(day, segs), TRAVEL_OUTLOOK_SYNC.delayMs);
 }
+/* Is this day's travel real enough to write to Outlook? (21 Nov 2026 audit
+   T-06/T-07). Everything the legs depend on must have arrived: the work
+   schedule (start/end bases — before it loads a day has no start or end leg),
+   the calendar's events, every move saved (s.__unsaved), and every leg priced
+   by a real route rather than the suburb-table estimate. Until then the day is
+   simply not sent; the redraw that follows each arrival sends it. */
+function travelMirrorReady(day, segs) {
+  if (typeof window.workScheduleLoaded === 'function' && !window.workScheduleLoaded()) return false;
+  if (!window.__eventsLoadedOnce) return false;
+  if (sessionsForDay(day).some(s => s.__unsaved)) return false;
+  return !(segs || []).some(seg => seg.kind !== 'gap' && !seg.skipped && seg.travelMin > 0 && seg.routeReal === false);
+}
+const TRAVEL_MIRROR_HORIZON_DAYS = 14;   // today + 14 (owner decision 21 Nov 2026); the server enforces it too
 async function runTravelOutlookSync(day, segs) {
+  if (!travelMirrorReady(day, segs)) return null;
   const payload = travelOutlookPayload(day, segs);
   if (!payload) return null;
-  // Past days are history: the server leaves them alone, so don't ask.
+  // Past days are history: the server leaves them alone, so don't ask. Days
+  // beyond the horizon are only being browsed: nothing is written for them.
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Perth' }).format(new Date());
   if (payload.date < today) return null;
+  const horizon = new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Perth' }).format(new Date(Date.now() + TRAVEL_MIRROR_HORIZON_DAYS * 86400e3));
+  if (payload.date > horizon) return null;
+  // Ready and still no legs: the day really has no travel, so say so — the
+  // server refuses to clear a day's travel without this.
+  if (!payload.legs.length) payload.confirmEmpty = true;
   const sig = JSON.stringify(payload);
   if (TRAVEL_OUTLOOK_SYNC.sent[payload.date] === sig) return null;
   try {

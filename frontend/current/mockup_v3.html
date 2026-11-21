@@ -171,7 +171,7 @@
      store and computeDayTravelSegments(), the calendar leg overlays and the
      travel details panel. Deferred and loaded ahead of profile.js and
      reports.js, both of which reach into it. -->
-<script src="/travel.js?v=57" defer></script>
+<script src="/travel.js?v=58" defer></script>
 <!-- Traffic alerts: a re-priced drive that now runs into a client session —
      point at it, offer Make room, Acknowledge or Ignore (today and tomorrow). -->
 <script src="/travel-alerts.js?v=1" defer></script>
@@ -16612,6 +16612,10 @@ function __persistMove(pm, s, from) {
     .catch(() => ({ ok: false, status: 0, json: { error: 'The move could not be saved — check your connection.' } }))
     .then(res => {
       s.__unsaved = false;
+      // The travel mirror held this day back while the move was unsaved.
+      if (res.ok && typeof scheduleTravelOutlookSync === 'function' && typeof computeDayTravelSegments === 'function') {
+        [...new Set([s.day, from.day])].forEach(d => { try { scheduleTravelOutlookSync(d, computeDayTravelSegments(d)); } catch (e) { /* never break a save */ } });
+      }
       if (!res.ok) {
         showToast('Not moved', (res.json && res.json.error) || 'The move could not be saved.', 'error');
         reload();
@@ -18944,6 +18948,7 @@ async function loadOutlookEventsToCalendar() {
     // event feed; the calendar already draws them as travel legs, so a mirror
     // row is never a second tile.
     window.__outlookEventsCache = (data.events || []).filter(e => !(e && e.custom_metadata && e.custom_metadata.travelLegKey));
+    window.__eventsLoadedOnce = true;   // the travel mirror waits for this (travelMirrorReady)
 
     if (window.__outlookEventsCache.length === 0) {
       console.log('📭 No events to display yet — run an Outlook sync first.');

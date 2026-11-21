@@ -33,6 +33,9 @@ const KEY_RE = new RegExp('^(' + UUID + ')\\|(before|after)$', 'i');
 const UUID_RE = new RegExp('^' + UUID + '$', 'i');
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_LEGS = 40;
+// Only today and the next 14 days are mirrored (owner decision, 21 Nov 2026):
+// browsing further ahead never writes to Outlook.
+const MIRROR_HORIZON_DAYS = 14;
 const TZ = 'Australia/Perth';
 
 function isEnabled() {
@@ -75,7 +78,10 @@ function validateRequest(body, now = new Date()) {
     if (!title) return { ok: false, error: 'each leg needs a title' };
     legs.push({ key: l.key, ownerEventId: m[1].toLowerCase(), start, end, title, location: cleanText(l.location, 200) });
   }
-  return { ok: true, date: b.date, legs, seen: new Set(b.seenEventIds.map(x => x.toLowerCase())), past: b.date < perthDate(now) };
+  const today = perthDate(now);
+  const horizon = perthDate(new Date(now.getTime() + MIRROR_HORIZON_DAYS * 86400e3));
+  return { ok: true, date: b.date, legs, seen: new Set(b.seenEventIds.map(x => x.toLowerCase())), past: b.date < today,
+    beyond: b.date > horizon, confirmEmpty: b.confirmEmpty === true };
 }
 
 /**
@@ -151,6 +157,7 @@ async function syncDay(deps, userId, body, now = new Date()) {
   const v = validateRequest(body, now);
   if (!v.ok) return { status: 400, body: { error: v.error } };
   if (v.past) return { status: 200, body: { ok: true, skipped: 'past' } };
+  if (v.beyond) return { status: 200, body: { ok: true, skipped: 'beyond_horizon' } };
   return serialise(userId, () => syncValidated(deps, userId, v));
 }
 
@@ -189,6 +196,13 @@ async function syncValidated({ pool, outlook, getAccessToken }, userId, v) {
   const existing = ex.rows.map(r => ({ id: r.id, key: r.key, outlookId: r.outlook_id, start: asUtc(r.start_time), end: asUtc(r.end_time),
     title: r.title, location: r.location || '', date: r.local_date }));
   const plan = planSync(existing, legs, date);
+  // Never wipe a whole day's travel on an empty list unless the calendar says
+  // the day really is empty (21 Nov 2026 audit T-06): a page that drew the day
+  // before the work schedule loaded sent legs:[] and deleted every Outlook
+  // travel event for it.
+  if (!legs.length && plan.remove.some(r => r.date === date) && !v.confirmEmpty) {
+    return { status: 409, body: { error: 'Travel for this day was not cleared — the calendar did not confirm the day is empty', code: 'empty_day_unconfirmed' } };
+  }
   if (!plan.create.length && !plan.update.length && !plan.remove.length) return { status: 200, body: { ok: true, created: 0, updated: 0, removed: 0 } };
 
   const token = await getAccessToken();
@@ -281,4 +295,4 @@ function asUtc(v) {
   return new Date(String(v).replace(' ', 'T') + (/[zZ]|[+-]\d\d:?\d\d$/.test(String(v)) ? '' : 'Z'));
 }
 
-module.exports = { isEnabled, validateRequest, planSync, syncDay, perthIso, perthDate, asUtc, KEY_RE };
+module.exports = { MIRROR_HORIZON_DAYS, isEnabled, validateRequest, planSync, syncDay, perthIso, perthDate, asUtc, KEY_RE };

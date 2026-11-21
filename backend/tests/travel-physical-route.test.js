@@ -337,6 +337,47 @@ describe('travel legs mirrored to Outlook', () => {
   });
 });
 
+// 21 Nov 2026 audit (T-06/T-07): a day drawn before its inputs arrived sent a
+// partial or empty leg set, and the server deleted the missing Outlook travel.
+describe('travel mirror waits until the day is real', () => {
+  function ready() {
+    const c = load();
+    vm.runInContext("DAY_DATES = { mon: '2030-03-04' };", c);
+    c.workScheduleLoaded = () => true;
+    c.__eventsLoadedOnce = true;
+    add(c, { at: '10:00', to: '11:00', s: { address: OSBORNE, patient: 'A' } });
+    return c;
+  }
+  // The vm has no route cache, so mark the legs as routed (the real-route case).
+  const segs = (c) => c.computeDayTravelSegments('mon').map((x) => Object.assign({}, x, { routeReal: true }));
+
+  test('ready when schedule, events, saves and real routes are all in', () => {
+    const c = ready();
+    expect(c.travelMirrorReady('mon', segs(c))).toBe(true);
+  });
+  test('not ready before the work schedule or the events have loaded', () => {
+    const c = ready(); c.workScheduleLoaded = () => false;
+    expect(c.travelMirrorReady('mon', segs(c))).toBe(false);
+    const d = ready(); d.__eventsLoadedOnce = false;
+    expect(d.travelMirrorReady('mon', segs(d))).toBe(false);
+  });
+  test('not ready while a move on the day is unsaved', () => {
+    const c = ready();
+    Object.values(c.SESSIONS)[0].__unsaved = true;
+    expect(c.travelMirrorReady('mon', segs(c))).toBe(false);
+  });
+  test('not ready while any leg is still a suburb-table estimate', () => {
+    const c = ready();
+    const s = segs(c).map((x) => Object.assign({}, x, { routeReal: false }));
+    expect(c.travelMirrorReady('mon', s)).toBe(false);
+  });
+  test('nothing is sent when not ready', async () => {
+    const c = ready(); c.workScheduleLoaded = () => false;
+    expect(await c.runTravelOutlookSync('mon', segs(c))).toBe(null);
+    expect(c.fetch).not.toHaveBeenCalled();
+  });
+});
+
 describe('travel badge on each event', () => {
   test('linked, no drive needed, or no address', () => {
     const c = load();
