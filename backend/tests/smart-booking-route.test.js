@@ -258,31 +258,49 @@ describe('Smart Booking: straight on from the last client, or home in between', 
       document.getElementById('bsp-start').value = '${at}';`);
   }
 
-  test('a long gap after the last client: the proposal is routed from home', async () => {
+  // Direct unless the therapist picks Via home, however long the gap (owner
+  // rule 19 Nov 2026, applied to Smart Booking 21 Nov 2026 — audit T-03).
+  test('a long gap after the last client: still Direct — routed from the client, Via home one click away', async () => {
     const env = makeEnv(Object.assign({ routes }, HOME));
     laterBooking(env, '14:00');
     await chooseLocation(env, CV_ADDR);
+    const call = env.routeCalls().pop().body;
+    expect([call.origin, call.destination]).toEqual([A_ADDR, CV_ADDR]);
+    expect(status(env).textContent).not.toMatch(/Home after Ada Client/);
+    expect(status(env).textContent).toMatch(/25 min drive from Ada Client/);
+    expect(status(env).querySelector('.bsp-route-switch').textContent).toBe('Direct ⇄');
+    expect(status(env).querySelector('[data-route="home"]')).not.toBeNull();
+    expect(env.ev('BOOKING_ROUTE.shownMode')).toBe('direct');
+  });
+
+  test('choosing Via home routes from home, and Create keeps that choice on the earlier session', async () => {
+    const env = makeEnv(Object.assign({ routes }, HOME));
+    laterBooking(env, '14:00');
+    await chooseLocation(env, CV_ADDR);
+    status(env).querySelector('[data-route="home"]').click();
+    await flush();
     const call = env.routeCalls().pop().body;
     expect([call.origin, call.destination]).toEqual([HOME_ADDR, CV_ADDR]);
     expect(status(env).textContent).toMatch(/Home after Ada Client/);
     expect(status(env).textContent).toMatch(/20 min drive from Home/);
     expect(status(env).querySelector('[data-route="direct"]')).not.toBeNull();
+    await env.ev('bspCommitBetweenChoice()');
+    const patch = env.log.filter((c) => c.method === 'PATCH' && c.url === '/api/events/db-A/travel').pop();
+    expect(patch.body).toEqual({ next: 'home', afterOffsetMin: null });
+    expect(env.ev('BOOKING_ROUTE.viaMode')).toBe('auto');
   });
 
-  test('"Go direct instead" routes from the client, and Create keeps that choice on the earlier session', async () => {
+  test('Via home and back to Direct: Create keeps the Direct the therapist chose', async () => {
     const env = makeEnv(Object.assign({ routes }, HOME));
     laterBooking(env, '14:00');
     await chooseLocation(env, CV_ADDR);
+    status(env).querySelector('[data-route="home"]').click();
+    await flush();
     status(env).querySelector('[data-route="direct"]').click();
     await flush();
-    const call = env.routeCalls().pop().body;
-    expect([call.origin, call.destination]).toEqual([A_ADDR, CV_ADDR]);
-    expect(status(env).textContent).toMatch(/25 min drive from Ada Client/);
-    expect(status(env).querySelector('[data-route="home"]')).not.toBeNull();
     await env.ev('bspCommitBetweenChoice()');
     const patch = env.log.filter((c) => c.method === 'PATCH' && c.url === '/api/events/db-A/travel').pop();
     expect(patch.body).toEqual({ next: 'direct', afterOffsetMin: null });
-    expect(env.ev('BOOKING_ROUTE.viaMode')).toBe('auto');
   });
 
   // The day's drive home is never deleted, only moved (6 Oct 2026).
@@ -315,6 +333,7 @@ describe('Smart Booking: straight on from the last client, or home in between', 
     const env = makeEnv(Object.assign({ routes }, HOME));
     laterBooking(env, '14:00');
     env.ev("refreshDayOverlays('mon')");
+    env.ev("BOOKING_ROUTE.viaMode = 'home'");
     await chooseLocation(env, CV_ADDR);
     expect(status(env).querySelector('.bsp-route-switch').textContent).toBe('Via home ⇄');
     expect(realLeg(env, '.end').classList.contains('suppressed')).toBe(false);
@@ -322,9 +341,10 @@ describe('Smart Booking: straight on from the last client, or home in between', 
   });
 
   // The split moment while the route is still being calculated (6 Oct 2026).
-  const calculating = (env, at) => {
+  const calculating = (env, at, via) => {
     laterBooking(env, at);
     env.ev("refreshDayOverlays('mon')");
+    if (via) env.ev('BOOKING_ROUTE.viaMode = ' + JSON.stringify(via));
     env.$('bsp-location').value = CV_ADDR;              // chosen, not yet routed
     env.ev('runBspRoutePreview({ cachedOnly: true })');
     return env.win.document.querySelector('#day-mon .travel-overlay.preview.placeholder');
@@ -332,7 +352,7 @@ describe('Smart Booking: straight on from the last client, or home in between', 
 
   test('while calculating, via home: the drive home stays put and the new travel waits below it', () => {
     const env = makeEnv(Object.assign({ routes }, HOME));
-    const ph = calculating(env, '14:00');
+    const ph = calculating(env, '14:00', 'home');
     const home = realLeg(env, '.end');
     expect(home.classList.contains('suppressed')).toBe(false);
     expect(ph).not.toBeNull();
@@ -346,13 +366,12 @@ describe('Smart Booking: straight on from the last client, or home in between', 
     expect(ph.style.top).toBe(env.ev('tToY(10, 0)') + 'px');   // where the drive home began
   });
 
-  test('Create keeps what the preview showed, even when it was only the suggestion', async () => {
+  test('Create left on the default saves nothing — no travel.next="home" the therapist never chose', async () => {
     const env = makeEnv(Object.assign({ routes }, HOME));
     laterBooking(env, '14:00');
     await chooseLocation(env, CV_ADDR);
     await env.ev('bspCommitBetweenChoice()');
-    const patch = env.log.filter((c) => c.method === 'PATCH' && c.url === '/api/events/db-A/travel').pop();
-    expect(patch.body).toEqual({ next: 'home', afterOffsetMin: null });
+    expect(env.log.filter((c) => c.method === 'PATCH' && c.url === '/api/events/db-A/travel')).toEqual([]);
   });
 
   test('the calendar leg between two clients is the switch: Direct ⇄ flips to Via home ⇄', async () => {

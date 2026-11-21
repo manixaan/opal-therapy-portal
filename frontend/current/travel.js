@@ -2131,18 +2131,20 @@ function _bspHomePlan(day, pred, toKey, startMin) {
   out.available = true;
   out.toBase = travelMinutes(pred.fromKey, baseKey);
   out.fromBase = travelMinutes(baseKey, toKey);
-  if (mode === 'home') out.home = true;
-  else if (mode === 'auto' && !pred.explicit) out.home = (startMin - pred.endMin) >= out.toBase + out.fromBase + TRAVEL_HOME_MIN_STAY;
+  // Direct unless the therapist picks Via home — no automatic trip home, even
+  // for a long gap (owner rule 19 Nov 2026, applied to booking 21 Nov: T-03).
+  // Via home stays one click away on the status line's switch.
+  out.home = mode === 'home';
   return out;
 }
 /* After Create: an explicit "go direct" / "go home" becomes the previous
    stop's choice for the gap, so the calendar keeps showing what was booked. */
 function bspCommitBetweenChoice() {
-  // What the preview SHOWED is what gets kept — the clinician's pick, or the
-  // suggestion they saw — so the calendar never redraws the gap differently.
+  // Only the clinician's own pick is kept. Left alone the gap is Direct,
+  // which is what the calendar draws anyway, so nothing is saved (T-03).
   // A held "travel earlier, do it there" replaces the gap's Direct / Via home question.
   if (BOOKING_ROUTE.relocate) { BOOKING_ROUTE.viaMode = 'auto'; BOOKING_ROUTE.shownMode = null; return; }
-  const mode = BOOKING_ROUTE.viaMode !== 'auto' ? BOOKING_ROUTE.viaMode : BOOKING_ROUTE.shownMode;
+  const mode = BOOKING_ROUTE.viaMode !== 'auto' ? BOOKING_ROUTE.viaMode : null;
   const id = BOOKING_ROUTE.lastPredId;
   BOOKING_ROUTE.viaMode = 'auto';
   BOOKING_ROUTE.shownMode = null;
