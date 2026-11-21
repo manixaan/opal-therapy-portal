@@ -239,3 +239,32 @@ describe('traffic alerts', () => {
     expect(c2.TravelAlerts._roomFor({ seg: { travelMin: 45, toSessionId: b2.id }, session: b2, day: 'mon' }, {}).ok).toBe(false);
   });
 });
+
+// 21 Nov 2026 audit T-10: with the routing service down, every reload asked
+// again (135 Routes calls in 10 idle minutes). A failed key now backs off.
+describe('a failing route backs off', () => {
+  test('held 1, 2, 4, 8 then 10 minutes; a real answer resets; Retry (fresh) asks at once', async () => {
+    const c = load();
+    vm.runInContext('GOOGLE_MAPS_API_KEY = true;', c);
+    c.regionDistance = () => 20; c.suburbRegion = () => 'north';   // shell helpers the estimate reads
+    let ok = false;
+    c.fetch = jest.fn(async () => ({ ok: true, json: async () => (ok ? { routes: [{ duration: '600s', distanceMeters: 9000 }] } : {}) }));
+    const ttl = async () => {
+      await vm.runInContext(`fetchRoute(${JSON.stringify(OSBORNE)}, ${JSON.stringify(JOONDALUP)}, 'driving', { fresh: true })`, c);
+      return vm.runInContext(`ROUTE_CACHE.get(routeKey(${JSON.stringify(OSBORNE)}, ${JSON.stringify(JOONDALUP)}, 'driving'))`, c);
+    };
+    const holds = [];
+    for (let i = 0; i < 6; i++) holds.push((await ttl()).ttlMs / 60000);
+    expect(holds).toEqual([1, 2, 4, 8, 10, 10]);
+    // While held, a plain lookup is served from the cache — no new call.
+    const n = c.fetch.mock.calls.length;
+    await vm.runInContext(`fetchRoute(${JSON.stringify(OSBORNE)}, ${JSON.stringify(JOONDALUP)}, 'driving')`, c);
+    expect(c.fetch.mock.calls.length).toBe(n);
+    ok = true;
+    const real = await ttl();
+    expect(real.source).toBe('routes-api');
+    ok = false;
+    vm.runInContext('ROUTE_CACHE.clear();', c);                      // the real answer has aged out
+    expect((await ttl()).ttlMs / 60000).toBe(1);                  // a new failure starts again at a minute
+  });
+});

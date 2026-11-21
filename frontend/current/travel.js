@@ -112,6 +112,7 @@ const SUBURB_TRAVEL_FALLBACK = {
 const ROUTE_CACHE  = new Map(); // key → { durationMin, distanceMeters, fetchedAt, source }
 const PLACES_CACHE = new Map(); // key → { fetchedAt, places:[{ name, type, suburb, rating, reviews, lat, lng, placeId }] }
 const ROUTE_INFLIGHT = new Map(); // dedupe concurrent fetches per key
+const ROUTE_FAILS = new Map();    // key → consecutive failed lookups (back-off, T-10)
 const CACHE_TTL_MS = 10 * 60 * 1000; // 10 min — route conditions change throughout the day
 
 // API key removed from frontend — Maps calls are proxied through /api/maps/*.
@@ -200,14 +201,21 @@ async function fetchRoute(origin, destination, mode, opts) {
     }
     if (!result) {
       // Synchronous fallback via suburb table → caller still gets something useful.
-      // Held for a minute only: a failed or unroutable lookup (a half-typed
-      // base address, a network blip) must not pin a leg for 10 minutes.
+      // Held for a minute after the first failure (a half-typed base address,
+      // a network blip must not pin a leg for 10 minutes), then twice as long
+      // after each further failure, up to the normal 10 minutes: a routing
+      // service that is down is not asked again on every reload (21 Nov 2026
+      // audit T-10). Retry (fresh:true) still asks at once.
+      const fails = (ROUTE_FAILS.get(key) || 0) + 1;
+      ROUTE_FAILS.set(key, fails);
+      const holdMs = Math.min(CACHE_TTL_MS, 60 * 1000 * Math.pow(2, fails - 1));
       const estMin = estimateTravelMinFromTable(origin, destination);
       result = { durationMin: estMin, distanceMeters: estMin * 850, source: 'estimate',
-                 fetchedAt: Date.now() - (CACHE_TTL_MS - 60 * 1000) };
+                 fetchedAt: Date.now(), ttlMs: holdMs };
       ROUTE_CACHE.set(key, result);
       return result;
     }
+    ROUTE_FAILS.delete(key);
     result.fetchedAt = Date.now();
     if (bucket && Date.parse(o.departureTime) - Date.now() > 24 * 3600 * 1000) result.ttlMs = FAR_ROUTE_TTL_MS;
     ROUTE_CACHE.set(key, result);
