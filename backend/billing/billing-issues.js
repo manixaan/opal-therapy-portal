@@ -27,6 +27,7 @@ const ISSUE_TYPES = Object.freeze({
   RATE_UNAVAILABLE:          { severity: 'BLOCKING', label: 'Rate unavailable for service date' },
   TRAVEL_ROUTE_FAILED:       { severity: 'BLOCKING', label: 'Travel route failed' },
   TRAVEL_DAY_DEFERRED:       { severity: 'WARNING',  label: 'Travel for this day is waiting on another session' },
+  TRAVEL_MINUTES_IMPLAUSIBLE: { severity: 'BLOCKING', label: 'Calendar travel minutes far from the route' },
   TRAVEL_MINUTES_NOT_FROM_CALENDAR: { severity: 'WARNING', label: 'Travel minutes not recorded by the calendar' },
   TRAVEL_BLOCK_NOT_INVOICED: { severity: 'WARNING',  label: 'Travel block needs adding by hand' },
   WORK_LOCATION_NOT_SET:     { severity: 'WARNING',  label: 'Day work location not set (no start/end travel leg)' },

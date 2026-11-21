@@ -532,6 +532,15 @@
     setTimeout(function () { var first = dlg.querySelector('input[name="nf2f-u"]'); if (first) first.focus(); }, 0);
   }
   NF.checkUntimed = checkUntimed;
+  // Invoicing › Needs attention: the owner answers for any block (own or an employee's).
+  NF.openResolve = async function (eventId) {
+    if (UNTIMED.open) return;
+    try {
+      var v = await api('/api/events/' + encodeURIComponent(eventId) + '/nf2f');
+      if (!v.needsAnswer) { toast('Nothing to answer', 'This block already has its time.'); return; }
+      showUntimed({ eventId: v.eventId, title: v.title, start: v.start, end: v.end, blockMinutes: v.blockMinutes, clients: v.clients }, 1);
+    } catch (e) { toast('Could not open the block', e.message || '', 'warn'); }
+  };
 
   /* ───────────────────────────── Wiring ───────────────────────────── */
   function wrapGlobal(name, after) {

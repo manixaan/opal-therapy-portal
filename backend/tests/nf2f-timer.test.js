@@ -90,3 +90,24 @@ describe('a block that ended with no time entered (migration 089)', () => {
     expect(T.validateResolution({ mode: 'nope' }, two, 1800).ok).toBe(false);
   });
 });
+
+describe('an answer is judged against the block as it is now (review fixes)', () => {
+  const two = [{ clientId: '1', clientName: 'Al' }, { clientId: '2', clientName: 'Bo' }];
+  const past = new Date('2026-11-17T03:00:00Z'), now = new Date('2026-11-21T00:00:00Z');
+  test('full block follows a resize and the current clients', () => {
+    const row = { resolution: 'FULL_BLOCK', accumulated_seconds: 5400 };
+    expect(T.clientParts(row, two, 5400, 1800).map((p) => p.seconds)).toEqual([900, 900]);         // shrunk 90 → 30 min
+    expect(T.clientParts(row, [...two, { clientId: '3' }], 5400, 1800).map((p) => p.seconds)).toEqual([600, 600, 600]);
+  });
+  test('per client goes stale when the clients change or the block gets shorter than the minutes', () => {
+    const row = { resolution: 'PER_CLIENT', client_seconds: [{ clientId: '1', seconds: 600 }, { clientId: '2', seconds: 420 }] };
+    expect(T.needsResolution(row, two, past, now, 1800)).toBe(false);
+    expect(T.needsResolution(row, two, past, now, 900)).toBe(true);
+    expect(T.needsResolution(row, [two[0]], past, now, 1800)).toBe(true);
+    expect(T.needsResolution(row, [...two, { clientId: '3' }], past, now, 1800)).toBe(true);
+  });
+  test('a timer is capped at the block; under a minute counts as no time entered', () => {
+    expect(T.clientParts({ accumulated_seconds: 3600 }, two, 3600, 1800).reduce((a, p) => a + p.seconds, 0)).toBe(1800);
+    expect(T.needsResolution({ status: 'STOPPED', accumulated_seconds: 5 }, two, past, now, 1800)).toBe(true);
+  });
+});

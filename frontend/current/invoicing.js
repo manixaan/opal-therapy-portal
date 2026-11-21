@@ -478,6 +478,7 @@
     if (t.kind === 'rate_cards') return '<button class="btn btn-xs" data-inv="goto" data-sec="settings">Rate cards</button>';
     if (t.kind === 'trip') return '<button class="btn btn-xs" data-inv="open-trip" data-id="' + esc(t.tripId) + '" data-tab="' + esc(t.tab || 'costs') + '">Open trip</button>';
     if (t.kind === 'route') return '<button class="btn btn-xs" data-inv="manual-route" data-o="' + esc(t.origin) + '" data-d="' + esc(t.destination) + '">Enter route</button>';
+    if (t.kind === 'nf2f') return '<button class="btn btn-xs" data-inv="nf2f-resolve" data-id="' + esc(t.eventId) + '">Enter the time</button>';
     if (t.kind === 'event' || t.kind === 'work_location') return '<button class="btn btn-xs" data-inv="to-calendar" data-date="' + esc(t.date || '') + '">Open calendar</button>';
     return '';
   }
@@ -1065,6 +1066,9 @@
           await post('/invoices/' + id + '/mark-sent', { sentTo: to || null }); toast('Marked as sent'); refreshDetail(); break;
         }
         case 'send-selected': openSendSelected(); break;
+        case 'nf2f-resolve':
+          if (window.Nf2f && typeof window.Nf2f.openResolve === 'function') window.Nf2f.openResolve(id);
+          break;
         case 'xero-payments': {
           btn.disabled = true;
           try {

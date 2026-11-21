@@ -190,13 +190,16 @@ async function prepare(q, orgId, opts) {
       stopped_at: b.stopped_at, non_billable_percent: b.non_billable_percent, allocation: b.allocation,
       resolution: b.resolution, client_seconds: b.client_seconds }, now) : null;
     if (timer && timer.resolution === 'DID_NOT_HAPPEN') { skip('nf2f_did_not_happen'); continue; }
-    if (NF.needsResolution(timer, clients, b.end_time, now)) {
+    const blockSecs = NF.blockSeconds(b);
+    if (NF.needsResolution(timer, clients, b.end_time, now, blockSecs)) {
       // No time entered: hold each client's draft until the clinician says how to bill it.
       for (const c of clients) {
         if (opts.clientIds && opts.clientIds.length && !opts.clientIds.includes(c.clientId)) continue;
         issues.raise('NF2F_UNTIMED', { eventId: b.id, clientId: c.clientId, practitionerId: b.user_id, serviceDate: b.local_date,
-          message: `"${b.title || 'Non-face-to-face'}" on ${S.displayDate(b.local_date)} ended with no time entered. ${b.practitioner_name || 'The clinician'} must claim the block, enter each client's minutes, or mark it as not done.`,
-          fixTarget: { kind: 'event', eventId: b.id, date: b.local_date } });
+          message: timer && timer.resolution === 'PER_CLIENT'
+            ? `"${b.title || 'Non-face-to-face'}" on ${S.displayDate(b.local_date)} changed (clients or length) after each client's minutes were entered. Enter them again.`
+            : `"${b.title || 'Non-face-to-face'}" on ${S.displayDate(b.local_date)} ended with no time entered. ${b.practitioner_name || 'The clinician'} must claim the block, enter each client's minutes, or mark it as not done.`,
+          fixTarget: { kind: 'nf2f', eventId: b.id, date: b.local_date } });
       }
       continue;
     }
@@ -206,10 +209,11 @@ async function prepare(q, orgId, opts) {
         fixTarget: { kind: 'event', eventId: b.id, date: b.local_date } });
       continue;
     }
-    const timed = Number(timer && timer.accumulated_seconds) || 0;
+    // Never more than the block as it is now (a resized block, a FULL_BLOCK answer).
+    const timed = timer && timer.resolution === 'FULL_BLOCK' ? blockSecs : Math.min(Number(timer && timer.accumulated_seconds) || 0, blockSecs);
     if (timed <= 0) continue;
     const alloc = NF.allocationFor(timer, clients);
-    for (const part of NF.clientParts(timer, clients, timed)) {
+    for (const part of NF.clientParts(timer, clients, timed, blockSecs)) {
       if (part.seconds <= 0) continue;
       if (opts.clientIds && opts.clientIds.length && !opts.clientIds.includes(part.clientId)) continue;
       nf2fParts.push({ ev: { ...b, client_id: part.clientId, client_name: part.clientName }, block: b, part, timed, alloc,
@@ -473,7 +477,18 @@ async function prepare(q, orgId, opts) {
     for (const leg of d.route.legs) {
       const f = facts.get(RF.routeKey(leg.origin, leg.destination));
       const needed = leg.kind !== 'RETURN' || settings.returnTravelPayable;
-      const cal = CTM.minutesFor(dayCal, leg.origin, leg.destination);
+      let cal = CTM.minutesFor(dayCal, leg.origin, leg.destination);
+      // A calendar figure far from the route lookup is not trusted blindly (a bug or a tampered client).
+      if (cal != null && f && f.status === 'ok' && !CTM.plausible(cal, f.minutes)) {
+        if (needed) {
+          failed = true;
+          issues.raise('TRAVEL_MINUTES_IMPLAUSIBLE', { eventId: leg.toEventId || leg.fromEventId, practitionerId: d.userId, serviceDate: d.date, extraKey: leg.id,
+            clientId: (d.list.find(s => s.ev.id === (leg.toEventId || leg.fromEventId)) || {}).ev?.client_id || null,
+            message: `The calendar recorded ${cal} min for ${leg.origin} → ${leg.destination} on ${S.displayDate(d.date)}, but the route is about ${f.minutes} min. Check the day on the calendar, then reprocess.`,
+            fixTarget: { kind: 'event', eventId: leg.toEventId || leg.fromEventId, date: d.date } });
+        }
+        cal = null;
+      }
       if (f && f.status === 'ok') {
         leg.minutes = cal != null ? cal : f.minutes; leg.km = f.km; leg.provider = f.provider;
         leg.minutesSource = cal != null ? 'calendar' : 'route lookup';

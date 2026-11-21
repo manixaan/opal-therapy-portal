@@ -69,11 +69,19 @@ async function recordDay(q, userId, day) {
   const { rows: fin } = await q.query(
     `SELECT 1 FROM invoice_lines l JOIN invoices i ON i.id = l.invoice_id JOIN events e ON e.id = l.calendar_event_id
       WHERE e.user_id = $1 AND l.component IN ('TRAVEL_LABOUR','TRAVEL_KM') AND l.line_status = 'ACTIVE'
-        AND l.service_date = $2::date AND i.status NOT IN ('DRAFT','NEEDS_ATTENTION') LIMIT 1`, [userId, day.date]);
+        AND l.service_date = $2::date AND i.status NOT IN ('DRAFT','NEEDS_ATTENTION','VOID') LIMIT 1`, [userId, day.date]);
   if (fin.length) return { date: day.date, status: 200, body: { kept: true, reason: 'invoiced' } };
   if (day.past) {
-    const { rows: had } = await q.query(`SELECT 1 FROM calendar_travel_legs WHERE user_id = $1 AND local_date = $2 LIMIT 1`, [userId, day.date]);
-    if (had.length) return { date: day.date, status: 200, body: { kept: true, reason: 'past' } };
+    // A past day keeps what was recorded — unless one of its events changed
+    // since (a session moved or edited later), then the calendar's new figure wins.
+    const { rows: [had] } = await q.query(
+      `SELECT MAX(recorded_at) AS at FROM calendar_travel_legs WHERE user_id = $1 AND local_date = $2`, [userId, day.date]);
+    if (had && had.at) {
+      const { rows: changed } = await q.query(
+        `SELECT 1 FROM events WHERE user_id = $1 AND updated_at > $3
+            AND ((start_time AT TIME ZONE 'UTC') AT TIME ZONE '${TZ}')::date = $2::date LIMIT 1`, [userId, day.date, had.at]);
+      if (!changed.length) return { date: day.date, status: 200, body: { kept: true, reason: 'past' } };
+    }
   }
   await q.query(`DELETE FROM calendar_travel_legs WHERE user_id = $1 AND local_date = $2`, [userId, day.date]);
   for (const l of day.legs) {
@@ -83,7 +91,8 @@ async function recordDay(q, userId, day) {
        ON CONFLICT (user_id, local_date, origin_canon, destination_canon) DO NOTHING`,
       [userId, day.date, l.originCanon, l.destinationCanon, l.origin, l.destination, l.minutes, l.ownerEventId, l.side]);
   }
-  await q.query(`SELECT billing_flag_event_change_for($1, $2)`, [day.legs[0] ? day.legs[0].ownerEventId : null, 'calendar travel minutes changed']).catch(() => {});
+  // Travel is divided across the whole day: every session's draft that day is recalculated.
+  for (const id of owners) await q.query(`SELECT billing_flag_event_change_for($1, $2)`, [id, 'calendar travel minutes changed']);
   return { date: day.date, status: 200, body: { recorded: day.legs.length } };
 }
 
@@ -127,10 +136,20 @@ async function loadForDays(q, keys) {
   return out;
 }
 
+/**
+ * Is a calendar figure believable next to the route lookup (no traffic)?
+ * Traffic can double a drive; it does not make it 3x, nor halve it.
+ */
+function plausible(calendarMinutes, lookupMinutes) {
+  const c = Number(calendarMinutes), l = Number(lookupMinutes);
+  if (!(l > 0)) return true;
+  return c <= l * 2.5 + 20 && c >= l * 0.4 - 5;
+}
+
 function minutesFor(dayMap, origin, destination) {
   if (!dayMap) return null;
   const v = dayMap.get(`${canonAddr(origin)}|${canonAddr(destination)}`);
   return Number.isInteger(v) && v > 0 ? v : null;
 }
 
-module.exports = { validateDay, recordDays, loadForDays, minutesFor, perthDate };
+module.exports = { validateDay, recordDays, loadForDays, minutesFor, plausible, perthDate };

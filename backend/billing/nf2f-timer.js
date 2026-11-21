@@ -139,33 +139,57 @@ function validateResolution(input, clients, blockSecs) {
   return { ok: false, error: 'Choose how to bill this block' };
 }
 
+/** A timer shorter than this is treated as no time entered (an accidental tap). */
+const MIN_TIMED_SECONDS = 60;
+
 /**
- * Each client's billable seconds for a block. A PER_CLIENT resolution bills
- * exactly the minutes entered; otherwise the timed total is split by the
- * allocation (splitSeconds). DID_NOT_HAPPEN bills nothing.
+ * Does a PER_CLIENT answer still fit the block as it is now? It does not once
+ * the block's clients changed or the block got shorter than the minutes
+ * entered — then the clinician is asked again rather than the time re-split.
  */
-function clientParts(row, clients, timedSeconds) {
-  if (row && row.resolution === 'DID_NOT_HAPPEN') return [];
-  if (row && row.resolution === 'PER_CLIENT' && Array.isArray(row.client_seconds)) {
-    const ids = new Set(clients.map(c => String(c.clientId)));
-    const names = new Map(clients.map(c => [String(c.clientId), c.clientName || null]));
-    const saved = row.client_seconds.filter(c => c && ids.has(String(c.clientId)));
-    if (saved.length === ids.size) {
-      const total = saved.reduce((a, c) => a + (Number(c.seconds) || 0), 0);
-      return saved.map(c => ({ clientId: String(c.clientId), clientName: names.get(String(c.clientId)),
-        seconds: Number(c.seconds) || 0, percent: total ? round2((Number(c.seconds) || 0) * 100 / total) : 0 }));
-    }
-  }
-  return splitSeconds(timedSeconds, allocationFor(row, clients));
+function perClientStale(row, clients, blockSecs) {
+  if (!row || row.resolution !== 'PER_CLIENT' || !Array.isArray(row.client_seconds)) return false;
+  const ids = clients.map(c => String(c.clientId)).sort();
+  const saved = row.client_seconds.map(c => String(c && c.clientId)).sort();
+  if (ids.length !== saved.length || ids.some((id, i) => id !== saved[i])) return true;
+  const total = row.client_seconds.reduce((a, c) => a + (Number(c && c.seconds) || 0), 0);
+  return blockSecs != null && total > blockSecs;
 }
 
-/** Ended, billable, no time entered and not yet resolved: the clinician must answer. */
-function needsResolution(row, clients, endTime, now = new Date()) {
+/**
+ * Each client's billable seconds for a block, judged against the block as it
+ * is now (blockSecs):
+ *   FULL_BLOCK     the block's CURRENT length, split evenly across its CURRENT clients;
+ *   PER_CLIENT     exactly the minutes entered (the caller has checked perClientStale);
+ *   DID_NOT_HAPPEN nothing;
+ *   timer          the timed seconds, never more than the block, split by the allocation.
+ */
+function clientParts(row, clients, timedSeconds, blockSecs = null) {
+  if (row && row.resolution === 'DID_NOT_HAPPEN') return [];
+  if (row && row.resolution === 'FULL_BLOCK' && blockSecs != null) {
+    return splitSeconds(blockSecs, { nonBillablePercent: 0, clients: equalSplit(clients, 100) });
+  }
+  if (row && row.resolution === 'PER_CLIENT' && Array.isArray(row.client_seconds) && !perClientStale(row, clients, blockSecs)) {
+    const names = new Map(clients.map(c => [String(c.clientId), c.clientName || null]));
+    const total = row.client_seconds.reduce((a, c) => a + (Number(c.seconds) || 0), 0);
+    return row.client_seconds.map(c => ({ clientId: String(c.clientId), clientName: names.get(String(c.clientId)),
+      seconds: Number(c.seconds) || 0, percent: total ? round2((Number(c.seconds) || 0) * 100 / total) : 0 }));
+  }
+  const capped = blockSecs != null ? Math.min(Number(timedSeconds) || 0, blockSecs) : timedSeconds;
+  return splitSeconds(capped, allocationFor(row, clients));
+}
+
+/**
+ * Must the clinician answer for this block? Ended, billable, and either no
+ * time entered (or under a minute, an accidental tap), or a per-client answer
+ * that no longer fits the block.
+ */
+function needsResolution(row, clients, endTime, now = new Date(), blockSecs = null) {
   if (!clients.length) return false;
   if (new Date(endTime) > now) return false;
-  if (row && row.resolution) return false;
   if (row && row.status === 'RUNNING') return false;
-  return !(row && Number(row.accumulated_seconds) > 0);
+  if (row && row.resolution) return perClientStale(row, clients, blockSecs);
+  return !(row && Number(row.accumulated_seconds) >= MIN_TIMED_SECONDS);
 }
 
 /** The clients a block names (custom_metadata.booking.clients), or []. */
@@ -195,5 +219,5 @@ async function settleRow(q, row, now = new Date()) {
 
 module.exports = {
   elapsedSeconds, settled, allocationFor, equalSplit, validateAllocation, splitSeconds,
-  blockClients, blockSeconds, settleRow, validateResolution, clientParts, needsResolution,
+  blockClients, blockSeconds, settleRow, validateResolution, clientParts, needsResolution, perClientStale, MIN_TIMED_SECONDS,
 };

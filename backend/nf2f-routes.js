@@ -57,7 +57,7 @@ async function finalised(q, eventId) {
   const { rows } = await q.query(
     `SELECT 1 FROM invoice_lines l JOIN invoices i ON i.id = l.invoice_id
       WHERE l.calendar_event_id = $1 AND l.component = 'NF2F' AND l.line_status IN ('ACTIVE','REMOVED')
-        AND i.status NOT IN ('DRAFT','NEEDS_ATTENTION') LIMIT 1`, [eventId]);
+        AND i.status NOT IN ('DRAFT','NEEDS_ATTENTION','VOID') LIMIT 1`, [eventId]);
   return rows.length > 0;
 }
 
@@ -68,6 +68,8 @@ function view(ev, row) {
   const elapsed = T.elapsedSeconds(row, now);
   return {
     eventId: ev.id, title: ev.title, start: ev.start_time, end: ev.end_time,
+    blockMinutes: Math.round(T.blockSeconds(ev) / 60),
+    needsAnswer: T.needsResolution(row, clients, ev.end_time, now, T.blockSeconds(ev)),
     billable: clients.length > 0, clients,
     timer: {
       status: row ? row.status : 'IDLE', elapsedSeconds: elapsed, limitSeconds: row ? Number(row.limit_seconds) : T.blockSeconds(ev),
@@ -209,13 +211,13 @@ router.get('/api/nf2f/untimed', safe(async (req, res) => {
         AND LOWER(COALESCE(e.status, '')) <> 'cancelled'
         AND COALESCE(ceb.attendance, '') NOT IN ('CANCELLED', 'NOT_BILLABLE', 'DID_NOT_ATTEND')
         AND e.custom_metadata->'booking'->>'group' = 'nf2f'
-        AND e.end_time <= NOW() AND e.end_time > NOW() - INTERVAL '31 days'
+        AND e.end_time <= NOW() AND e.end_time > NOW() - INTERVAL '62 days'
       ORDER BY e.start_time`, [req.session.userId]);
   const blocks = [];
   for (const ev of rows) {
     const clients = T.blockClients(ev);
     const row = await timerRow(db.pool, ev.id);
-    if (!T.needsResolution(row, clients, ev.end_time)) continue;
+    if (!T.needsResolution(row, clients, ev.end_time, new Date(), T.blockSeconds(ev))) continue;
     if (await finalised(db.pool, ev.id)) continue;
     const booking = (ev.custom_metadata && ev.custom_metadata.booking) || {};
     blocks.push({ eventId: ev.id, title: ev.title, kind: booking.kind || null, start: ev.start_time, end: ev.end_time,
@@ -251,7 +253,7 @@ router.post('/api/events/:dbId/nf2f/resolve', requireAuth, safe(async (req, res)
   if (await finalised(db.pool, ev.id)) return res.status(409).json({ error: 'This time is already on a finalised invoice' });
   const existing = await timerRow(db.pool, ev.id);
   if (existing && existing.status === 'RUNNING') return res.status(409).json({ error: 'Stop the timer first' });
-  if (existing && Number(existing.accumulated_seconds) > 0 && !existing.resolution) {
+  if (existing && !existing.resolution && Number(existing.accumulated_seconds) >= T.MIN_TIMED_SECONDS) {
     return res.status(409).json({ error: 'This block already has timed work' });
   }
   const v = T.validateResolution(req.body || {}, clients, T.blockSeconds(ev));
@@ -269,6 +271,7 @@ router.post('/api/events/:dbId/nf2f/resolve', requireAuth, safe(async (req, res)
      v.allocation ? JSON.stringify(v.allocation) : null, v.resolution,
      v.clientSeconds ? JSON.stringify(v.clientSeconds) : null, v.note, req.session.userId]);
   if (v.resolution === 'DID_NOT_HAPPEN') await notifyOwnersNotDone(db.pool, ev, req.session.userId, v.note);
+  else if (existing && existing.resolution === 'DID_NOT_HAPPEN') await notifyOwnersNotDone(db.pool, ev, req.session.userId, `changed from "not done" to billed (${v.resolution === 'FULL_BLOCK' ? 'full block' : 'minutes per client'})`);
   await flagDrafts(db.pool, ev.id, v.resolution === 'DID_NOT_HAPPEN' ? 'block marked as not done' : 'block time entered');
   res.json(view(ev, row));
 }));

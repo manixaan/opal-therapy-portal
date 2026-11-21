@@ -164,4 +164,26 @@ describe('non-face-to-face timer', () => {
     expect(plan2.issues.list().filter((i) => i.type === 'NF2F_UNTIMED')).toEqual([]);
     expect(plan2.nf2f.map((n) => n.part.seconds)).toEqual([600]);
   });
+
+  test('the owner can answer for an employee; a resize after "full block" bills the new length', async () => {
+    const G = require('../../billing/invoice-generation');
+    require('../../billing/splose-billing-source').setSploseSource({ isConfigured: () => false });
+    const app = buildApp();
+    const org = await seedOrganisation();
+    const { agent, user } = await agentFor(app, 'therapist', org.id);
+    const { agent: owner } = await agentFor(app, 'owner', org.id);
+    const end = new Date(Date.now() - 26 * 3600e3); end.setUTCSeconds(0, 0);
+    const start = new Date(end.getTime() - 90 * 60e3);
+    const id = (await agent.post('/api/outlook/events').send({ ...block(five.slice(0, 2)), startTime: start.toISOString(), endTime: end.toISOString() })).body.dbId;
+
+    const v = (await owner.get(`/api/events/${id}/nf2f`)).body;
+    expect(v).toMatchObject({ needsAnswer: true, blockMinutes: 90 });
+    expect((await owner.post(`/api/events/${id}/nf2f/resolve`).send({ mode: 'FULL_BLOCK' })).status).toBe(200);
+
+    // The block is shortened to 30 minutes afterwards: the invoice follows the block.
+    await db.pool.query(`UPDATE events SET end_time = start_time + interval '30 minutes' WHERE id = $1`, [id]);
+    const ymd = (d) => d.toLocaleDateString('en-CA', { timeZone: 'Australia/Perth' });
+    const plan = await G.prepare(db.pool, org.id, { from: ymd(new Date(end.getTime() - 2 * 86400e3)), to: ymd(new Date()), practitionerIds: [user.id] });
+    expect(plan.nf2f.map((n) => n.part.seconds)).toEqual([900, 900]);
+  });
 });

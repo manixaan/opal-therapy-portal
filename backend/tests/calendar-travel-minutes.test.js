@@ -37,3 +37,11 @@ test('minutesFor matches addresses canonically and returns null when unknown', (
   expect(C.minutesFor(day, '5 Main St, Joondalup WA 6027', '1 Hay St, Perth WA 6000')).toBeNull();
   expect(C.minutesFor(null, 'a', 'b')).toBeNull();
 });
+
+test('a calendar figure far from the route lookup is not believed', () => {
+  expect(C.plausible(34, 20)).toBe(true);    // traffic
+  expect(C.plausible(60, 20)).toBe(true);
+  expect(C.plausible(300, 20)).toBe(false);
+  expect(C.plausible(3, 40)).toBe(false);
+  expect(C.plausible(25, 0)).toBe(true);     // no lookup to compare against
+});
