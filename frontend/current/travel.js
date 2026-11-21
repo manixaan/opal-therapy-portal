@@ -2538,6 +2538,7 @@ function computeDayTravelSegments(day) {
         if (plan.homeAvailable) segs.push({
           day, kind: 'between', via: 'stay', plan: plan.mode, auto: plan.auto, homeAvailable: true,
           fromLoc: locOf(from), toLoc: locOf(to), startMin: sessionEndMin(curr), endMin: sessionEndMin(curr),
+          slotEndMin: sessionStartMin(next),
           travelMin: 0, freeMin: 0, moved: false, tight: false, autoStartMin: sessionEndMin(curr),
           fromSessionId: curr.id, toSessionId: next.id, gapFromSessionId: curr.id, gapToSessionId: next.id,
           ownerSessionId: null, ownerSide: null, anchorBaseId: null, cacheKey: ''
@@ -2678,6 +2679,21 @@ function renderSegmentOverlay(col, seg) {
   // bar; it never grows over the neighbouring tile.
   const legH = _legHeightPx(seg.startMin, seg.endMin);
   el.style.height = legH + 'px';
+  // Same place, no drive (T-16): a marker inside its own slot, up to 18 px and
+  // 4 px clear of the next tile. Back to back (no room) a short gutter bar
+  // centred on the boundary — never hidden under, or drawn over, a tile. There
+  // is no time for a trip home there, so it carries no switch (the panel has
+  // the choice).
+  let stayCompact = false;
+  if (seg.via === 'stay') {
+    const room = ((seg.slotEndMin != null ? seg.slotEndMin : seg.endMin) - seg.startMin) / 60 * HOUR_PX - 4;
+    if (room >= 14) el.style.height = Math.min(18, room) + 'px';
+    else {
+      stayCompact = true;
+      el.style.top = (tToY(Math.floor(seg.startMin / 60), seg.startMin % 60) - 8) + 'px';
+      el.style.height = '16px';
+    }
+  }
   el.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); showTravelLegMenu(e.clientX, e.clientY, seg); });
   if (seg.skipped) {
     // Not driving this: a slim marker where the drive was, to bring it back.
@@ -2692,8 +2708,12 @@ function renderSegmentOverlay(col, seg) {
     return;
   }
   if (seg.tight) el.style.borderLeftColor = 'var(--danger, #9c3322)';
-  const overlaps = (typeof SESSIONS !== 'undefined') && sessionsForDay(seg.day).some(x => !isTravelBlock(x) && sessionStartMin(x) < seg.endMin && sessionEndMin(x) > seg.startMin);
+  // A leg that overlaps an appointment (tight, or a telehealth taken before
+  // the drive home) is a slim bar in the column's right gutter: it never
+  // covers the tile, and its words are in the title and panel (T-17).
+  const overlaps = seg.via !== 'stay' && (typeof SESSIONS !== 'undefined') && sessionsForDay(seg.day).some(x => !isTravelBlock(x) && sessionStartMin(x) < seg.endMin && sessionEndMin(x) > seg.startMin);
   if (overlaps) el.classList.add('overlaps');
+  if (stayCompact) el.classList.add('stay-compact');
   const icon = seg.kind === 'start' ? 'Start' : seg.kind === 'end' ? 'End'
     : seg.via === 'home-return' ? 'Home' : seg.via === 'home-out' ? 'From home'
     : seg.via === 'place-in' ? 'To ' + (seg.toLoc.label || 'stop') : seg.via === 'place-out' ? 'From ' + (seg.fromLoc.label || 'stop') : 'Travel';
@@ -2703,10 +2723,10 @@ function renderSegmentOverlay(col, seg) {
   // from 20 px "8 min → Suburb". The origin is the tile above, so the
   // destination is what the leg names; everything else is in the title and
   // the panel. _fitLegText drops parts that do not fit — never the minutes.
-  const tier = seg.via === 'stay' ? '' : _legTier(legH);
+  const tier = seg.via === 'stay' ? '' : overlaps ? 't-bar' : _legTier(legH);
   if (tier) el.classList.add(tier);
   el.innerHTML = seg.via === 'stay'
-    ? `<span class="t-ico" style="font-size: 10px; font-weight: 600; opacity: 0.7;">Same place</span><span class="t-label">no drive</span>`
+    ? `<span class="t-ico">Same place</span>`
     : tier === 't-bar' ? ''
     : tier === 't-mins' ? `<span class="t-label"><span class="t-min">${seg.travelMin} min</span></span>`
     : `<span class="t-ico">${_tpEsc(icon)}</span><span class="t-label"><span class="t-min">${seg.travelMin} min</span><span class="t-dest"> → ${_tpEsc(seg.toLoc.suburb || to)}</span></span>`;
@@ -2716,7 +2736,7 @@ function renderSegmentOverlay(col, seg) {
                                            'Travel';
   const owner = seg.ownerSessionId && window.SESSIONS ? window.SESSIONS[seg.ownerSessionId] : null;
   const canMove = !!(owner && owner.dbId);
-  el.title = `${kindLabel} ${seg.fromLoc.suburb || from} → ${seg.toLoc.suburb || to} ≈ ${seg.travelMin} min.` +
+  el.title = seg.via === 'stay' ? 'Same place — no drive.' : `${kindLabel} ${seg.fromLoc.suburb || from} → ${seg.toLoc.suburb || to} ≈ ${seg.travelMin} min.` +
     (seg.moved ? ' Moved by you.' : '') + (seg.tight ? ' Tight — overlaps the appointment.' : '') +
     (canMove ? ' Drag to change when you travel. Click for travel details.' : ' Click for travel details.');
   el.dataset.segJson = JSON.stringify({
@@ -2760,7 +2780,8 @@ function renderSegmentOverlay(col, seg) {
   };
   if (canMove) attachTravelLegDrag(el, seg);
   col.appendChild(el);
-  if (tier === 't-full') _fitLegText(el);
+  if (stayCompact) { el.innerHTML = ''; }
+  else if (tier === 't-full' || seg.via === 'stay') _fitLegText(el);
 }
 /* A leg's drawn height: its slot less the 4 px gap every tile keeps, never
    below a 2 px bar (T-15). Shared by every place that sizes a leg. */

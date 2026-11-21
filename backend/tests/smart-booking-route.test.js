@@ -2008,3 +2008,37 @@ describe('travel leg size tiers', () => {
     expect(TRAVEL).toMatch(/el\.classList\.add\('t-no-ico'\);[\s\S]{0,80}el\.classList\.add\('t-no-switch'\);[\s\S]{0,80}el\.classList\.add\('t-no-dest'\);/);
   });
 });
+
+// 21 Nov 2026 audit T-16/T-17: travel markers never sit under or over a tile.
+describe('same-place marker and overlapping legs stay out of the tiles', () => {
+  const HOME = { week: { mon: 'home-1' }, homes: [{ id: 'home-1', label: 'Home', addr: HOME_ADDR, suburb: 'Bull Creek', kind: 'local' }] };
+  function stay(env, n2Start) {
+    env.ev(`SESSIONS.N1 = { id: 'N1', day: 'mon', type: 'therapy', startH: 9, startM: 0, endH: 10, endM: 0, address: ${JSON.stringify(A_ADDR)}, patient: 'Noah', dbId: 'db-N1' };
+      SESSIONS.N2 = { id: 'N2', day: 'mon', type: 'therapy', startH: ${n2Start[0]}, startM: ${n2Start[1]}, endH: 12, endM: 0, address: ${JSON.stringify(A_ADDR)}, patient: 'Noah', dbId: 'db-N2' };`);
+    env.ev("refreshDayOverlays('mon')");
+    return env.win.document.querySelector('#day-mon .travel-overlay.stay');
+  }
+  test('a 15-min slot: the marker fits inside it, 4 px clear of the next tile, one label', () => {
+    const env = makeEnv(HOME);
+    const el = stay(env, [10, 15]);
+    expect(el.style.top).toBe(env.ev('tToY(10, 0)') + 'px');
+    expect(parseFloat(el.style.height)).toBeCloseTo(15 * 1.2 - 4);
+    expect(el.querySelector('.t-ico').textContent).toBe('Same place');
+    expect(el.textContent).not.toMatch(/no drive/);
+  });
+  test('back to back: a gutter bar centred on the boundary, not a block under the next tile', () => {
+    const env = makeEnv(HOME);
+    const el = stay(env, [10, 0]);
+    expect(el.classList.contains('stay-compact')).toBe(true);
+    expect(el.style.top).toBe((env.ev('tToY(10, 0)') - 8) + 'px');
+    expect(el.textContent).toBe('');
+    expect(el.title).toBe('Same place — no drive.');
+    expect(SHELL).toMatch(/\.travel-overlay\.stay\.stay-compact \{ left: auto; right: 0; width: 3px;/);
+  });
+  test('a leg that overlaps an appointment is a bar in the right gutter with no words or switch', () => {
+    expect(SHELL).toMatch(/\.travel-overlay\.overlaps \{ left: auto; right: 0; width: 3px;/);
+    expect(SHELL).not.toMatch(/\.travel-overlay\.overlaps \{[^}]*width: 40%/);
+    expect(SHELL).not.toMatch(/\.travel-overlay\.stay \{ height: 18px !important/);
+    expect(TRAVEL).toMatch(/const tier = seg\.via === 'stay' \? '' : overlaps \? 't-bar' : _legTier\(legH\);/);
+  });
+});

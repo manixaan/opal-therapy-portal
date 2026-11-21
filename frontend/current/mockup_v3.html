@@ -171,7 +171,7 @@
      store and computeDayTravelSegments(), the calendar leg overlays and the
      travel details panel. Deferred and loaded ahead of profile.js and
      reports.js, both of which reach into it. -->
-<script src="/travel.js?v=62" defer></script>
+<script src="/travel.js?v=63" defer></script>
 <!-- Traffic alerts: a re-priced drive that now runs into a client session —
      point at it, offer Make room, Acknowledge or Ignore (today and tomorrow). -->
 <script src="/travel-alerts.js?v=1" defer></script>
@@ -3318,11 +3318,21 @@ window.opIcon = function (name, size) {
   /* Legs redrawn while a session is dragged (travel.js previewTravelForMove):
      they follow the session and never catch the pointer mid-drag. */
   .travel-overlay.drag-preview { pointer-events: none; }
-  /* Same place, no drive — a slim marker that only carries the switch. */
-  .travel-overlay.stay { height: 18px !important; background: transparent; border-left-style: dashed; opacity: .85; }
-  /* A leg that overlaps an appointment (a telehealth taken before driving
-     home) sits as a strip on the right, above the tile, so it can be grabbed. */
-  .travel-overlay.overlaps { left: auto; right: 2px; width: 40%; z-index: 3; }
+  /* Same place, no drive — a slim marker that only carries the switch. Its
+     height is its slot's (travel.js, max 18 px, 4 px clear of the next tile:
+     audit T-16). Back to back there is no room beside the tiles, so it is a
+     short bar in the column's right gutter on the boundary — never over a
+     tile's title; a click opens the panel. */
+  .travel-overlay.stay { background: transparent; border-left-style: dashed; opacity: .85; padding: 0 6px; line-height: 12px; }
+  .travel-overlay.stay .t-ico { font-size: 10px; font-weight: 500; white-space: nowrap; flex-shrink: 0; }
+  .travel-overlay.stay.stay-compact { left: auto; right: 0; width: 3px; padding: 0; border: 0; border-radius: 2px;
+    background: currentColor; opacity: .6; z-index: 3; }
+  /* A leg that overlaps an appointment (tight, or a telehealth taken before
+     driving home) is a slim bar in the column's right gutter — beside the
+     tile, never over it (T-17). Its words are in the title and the panel. */
+  .travel-overlay.overlaps { left: auto; right: 0; width: 3px; padding: 0; border-left: 0; border-radius: 2px;
+    background: currentColor; z-index: 3; }
+  .travel-overlay.overlaps.tight { color: var(--danger, #9c3322); }
   /* (.gap-overlay.smart green-hatch highlight removed with the gap overlay, 2026-08-09) */
   /* Option scoring visuals inside the ranked-options panel */
   .gap-opt .g-score {
