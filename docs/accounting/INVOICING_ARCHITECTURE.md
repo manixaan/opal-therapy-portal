@@ -91,18 +91,50 @@ sessions (Teams) are billed with no travel.
 - **Return:** to the last session's `travel.after` point, otherwise the base.
 - **Trip home between sessions:** when the gap between two sessions is at least *drive back to base + drive out again + 30 minutes*, the practitioner is taken to have gone back to the day's base. That gap becomes a Return leg and an Outbound leg instead of a direct drive. Shorter gaps chain. This is the calendar's own rule (`travel.js#midDayViaBase`); with no route facts to decide, it chains and never guesses a trip home.
 
-Only billable in-person sessions are stops.
+Only billable in-person sessions are stops. For billing the route is built with
+`clientToClient: true` (owner rule book, 21 Nov 2026): a mid-day trip home, desk work
+"at home" or a stop somewhere else becomes one leg between the two clients, billed at
+the **lesser** of the direct drive and the detour actually driven (owner answer, 21 Nov
+2026); the comparison is written as a reviewer note on the travel line (portal only —
+never on the PDF or in Xero). The calendar still draws the real route. A leg marked "Not driving this"
+(`travel.noDriveBefore` / `noDriveAfter`) is dropped on both sides. "Home" as where the
+day starts or ends follows that day's base. Leg minutes are the calendar's own
+(traffic-aware, `calendar_travel_legs`, migration 090) where recorded.
 
-**Allocation** (`billing/travel-billing.js`):
-1. Eligible legs are the outbound leg, every between leg, and the return leg **only if** Billing settings › "Return travel is paid to clinicians" is on. It is off by default (fail-closed). Each excluded leg records why.
-2. Day pool = Σ eligible minutes, and separately Σ eligible km.
-3. Each billable session on the route gets an equal share: pool ÷ sessions.
-4. The share is capped at *that participant's* cap. The cap is the rate card's per-direction cap × directions, where directions = 2 when a payable return leg is in the pool. MM1–3 is 30 min, MM4–5 is 60 min, MM6–7 has no cap. **Minutes removed by a cap are not redistributed.**
-5. Labour = capped hours × the participant's travel rate. Vehicle = equal km share × $/km. These are separate lines (item codes `_PT` and `15_799_…`); vehicle is not time-capped.
+**Allocation** (`billing/travel-billing.js`) — the owner's NDIS rule book, always from
+the day's **total** travel T (first drive + drives between clients + the trip home),
+never leg by leg. N = clients seen (a client seen twice counts once; its first session
+carries the line). CAP = the rate card cap: 30 min MMM1–3, 60 min MMM4–5.
+
+| Case | Each client | Return R |
+|---|---|---|
+| T ≤ N×CAP (rule 6) | T ÷ N | none |
+| T > N×CAP (rule 7) | CAP | R = min(T − N×CAP, CAP): MMM4–5 equally; MMM1–3 one address equally; MMM1–3 different addresses all to the LAST client (rule 8) |
+| MMM6–7 (rule 11) | T ÷ N, no cap | — |
+
+Daily ceiling (N×CAP)+CAP; anything above it is not billed and is reported (run summary,
+line snapshot `dayReport.unbilledMinutes`). Never more than T (rule 2). Travel is billed
+at the rate card's travel rate (50% of the session rate; MMM6–7 the remote rate) on its
+own "Provider Travel" line. **No non-labour (km) line in any zone**; remote MMM6–7 trips
+bill actual flights, hire car, accommodation and fuel ÷ clients through Trips as
+"Provider Travel – non-labour costs" (item 15_799_0128_1_3, $1 units). A day mixing MMM1–3
+and MMM4–5 (rule 10, owner answer): each metro client gets the **lesser** of the drive
+actually made into them and their normal commute from the day's base, then the 30-min
+cap (the drive home from a metro client is not billed that day); the MMM4–5 clients share
+the rest of T by the rule book. Every comparison is a reviewer note and the day raises
+TRAVEL_MIXED_ZONE_DAY for review. A day mixing MMM6–7 with capped zones uses the
+smallest cap and is flagged. **Remote trips** (rule 11, migration 093): a trip's total
+travel hours (flying + driving) ÷ clients seen on the trip, billed by Generate Trip
+Invoices; a weekly run leaves those sessions' travel to the trip. Blank hours = day by day. The old "Return travel is paid" setting no longer changes anything.
+
+Worked examples (tests in `tests/billing-engine.test.js`): metro 90/3 → 30/30/30;
+metro 120/2 different addresses → 30/60, 30 unbilled; metro 90/2 same address → 45/45;
+wheatbelt 250/3 → 80/80/80, 10 unbilled; wheatbelt 255/4 → 63.75 each; remote 20 h/20
+clients → 1 h each.
 
 The whole day is held back, with a TRAVEL_DAY_DEFERRED warning, while any session on it is blocked, so shares are never computed on a partial route. A leg with no route facts raises TRAVEL_ROUTE_FAILED, and travel is never estimated. The owner can enter a leg manually (audited) from the attention item.
 
-`travel_billing_allocations` stores, per session: day totals, share, cap, claimable minutes, rates, amounts and every leg with its inclusion reason. The invoice's "How calculated" view reads this.
+`travel_billing_allocations` stores, per client's line: day totals, share, cap, claimable minutes, rate, amount and every leg with its inclusion reason (`return_payable` now means "this client carries return minutes"). The invoice's "How calculated" view reads this.
 
 ## Session MMM zone (`billing/mmm-locality.js`, `billing/session-mmm-store.js`, migration 074)
 

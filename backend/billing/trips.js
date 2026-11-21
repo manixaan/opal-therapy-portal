@@ -47,6 +47,11 @@ function validateTrip(input, { partial = false } = {}) {
     if (z != null && !(z >= 1 && z <= 7)) errors.push('mmmContext must be 1–7'); else v.mmmContext = z;
   }
   if (has('allocationMethod')) { if (!TA.METHODS.includes(input.allocationMethod)) errors.push('allocationMethod is invalid'); else v.allocationMethod = input.allocationMethod; }
+  if (has('travelHours')) {
+    // Rule 11: the trip's total travel (flying + driving), divided by the clients seen on the trip.
+    const h = input.travelHours === '' || input.travelHours == null ? null : Number(input.travelHours);
+    if (h != null && !(h >= 0 && h <= 500 && Math.round(h * 100) === h * 100)) errors.push('travelHours must be 0–500 (2 decimals)'); else v.travelHours = h;
+  }
   if (has('notes')) v.notes = input.notes ? String(input.notes).slice(0, 4000) : null;
   if (has('routeNotes')) v.routeNotes = input.routeNotes ? String(input.routeNotes).slice(0, 4000) : null;
   if (has('practitionerIds')) {
@@ -105,10 +110,10 @@ async function listTrips(q, orgId) {
 
 async function createTrip(q, orgId, userId, v) {
   const { rows: [t] } = await q.query(
-    `INSERT INTO trips (organisation_id, name, destination, start_date, end_date, status, mmm_context, allocation_method, notes, route_notes, created_by_user_id)
-     VALUES ($1,$2,$3,$4,$5,COALESCE($6,'PLANNED'),$7,COALESCE($8,'EQUAL_PER_CLIENT'),$9,$10,$11) RETURNING *`,
+    `INSERT INTO trips (organisation_id, name, destination, start_date, end_date, status, mmm_context, allocation_method, notes, route_notes, created_by_user_id, travel_hours)
+     VALUES ($1,$2,$3,$4,$5,COALESCE($6,'PLANNED'),$7,COALESCE($8,'EQUAL_PER_CLIENT'),$9,$10,$11,$12) RETURNING *`,
     [orgId, v.name, v.destination || null, v.startDate, v.endDate, v.status || null, v.mmmContext ?? null,
-      v.allocationMethod || null, v.notes || null, v.routeNotes || null, userId || null]);
+      v.allocationMethod || null, v.notes || null, v.routeNotes || null, userId || null, v.travelHours ?? null]);
   await setPractitioners(q, orgId, t.id, v.practitionerIds || []);
   return t;
 }
@@ -125,7 +130,7 @@ async function setPractitioners(q, orgId, tripId, ids) {
 
 async function updateTrip(q, orgId, tripId, v) {
   const map = { name: 'name', destination: 'destination', startDate: 'start_date', endDate: 'end_date', status: 'status',
-    mmmContext: 'mmm_context', allocationMethod: 'allocation_method', notes: 'notes', routeNotes: 'route_notes' };
+    mmmContext: 'mmm_context', allocationMethod: 'allocation_method', notes: 'notes', routeNotes: 'route_notes', travelHours: 'travel_hours' };
   const sets = []; const params = [tripId, orgId];
   for (const [k, col] of Object.entries(map)) if (k in v) { params.push(v[k]); sets.push(`${col} = $${params.length}`); }
   if (sets.length) await q.query(`UPDATE trips SET ${sets.join(', ')}, updated_at = NOW() WHERE id = $1 AND organisation_id = $2`, params);
@@ -287,8 +292,9 @@ async function generateTripInvoices({ pool = defaultPool, orgId, userId, tripId,
         const line = {
           component: 'TRIP_COST',
           itemCode: rate ? (rate.rule.tripCostItemCode || rate.rule.vehicleItemCode) : null,
-          description: `Remote Trip Shared Travel Cost – ${trip.name}`,
-          serviceDate: to, durationMinutes: null, quantityE4: 10000, unitCents: a.amountCents, amountCents: a.amountCents,
+          // Rule 13 (owner rule book): "Provider Travel – non-labour costs", item 15_799_0128_1_3, in $1 units.
+          description: `Provider Travel – non-labour costs (${trip.name})`,
+          serviceDate: to, durationMinutes: null, quantityE4: a.amountCents * 100, unitCents: 100, amountCents: a.amountCents,
           mmm, rateCardId: rate ? rate.card.id : null, rateCardVersion: rate ? rate.card.version : null,
           calculation: { ...calc, tripId, tripName: trip.name, tripDates: { from, to } },
         };
@@ -297,7 +303,7 @@ async function generateTripInvoices({ pool = defaultPool, orgId, userId, tripId,
           if (!['DRAFT', 'NEEDS_ATTENTION'].includes(claim.invoice_status)) continue;
           if (claim.line_status === 'REMOVED' || claim.is_overridden) { book.touch(claim.invoice_id); continue; }
           await tx.query(
-            `UPDATE invoice_lines SET trip_allocation_id = $2, unit_price = $3, amount = $3, quantity = 1, description = $4,
+            `UPDATE invoice_lines SET trip_allocation_id = $2, unit_price = 1, amount = $3, quantity = $3, description = $4,
                     item_code = $5, calculation = $6, mmm_zone = $7, rate_card_id = $8, rate_card_version = $9, updated_at = NOW()
               WHERE id = $1`,
             [claim.id, ta.id, a.amount, line.description, line.itemCode, JSON.stringify(line.calculation), mmm, line.rateCardId, line.rateCardVersion]);

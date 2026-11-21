@@ -216,6 +216,12 @@ const PARITY = [
     { base: null, events: [A({ id: 'a', at: '09:00', to: '10:00', address: OSBORNE }), A({ id: 'b', at: '11:00', to: '12:00', address: JOONDALUP })] }],
   ['a remote base: no start or end leg',
     { base: 'remote-1', events: [A({ id: 'a', at: '09:00', to: '10:00', address: OSBORNE }), A({ id: 'b', at: '11:00', to: '12:00', address: JOONDALUP })] }],
+  // Resolved 21 Nov 2026 (owner rule book): were known divergences, now shared rules.
+  ['"Not driving this" on a leg: neither side keeps it (rule 2 — never bill a drive not made)',
+    { events: [A({ id: 'a', at: '09:00', to: '10:00', address: OSBORNE, travel: { noDriveBefore: true } }),
+      A({ id: 'b', at: '11:00', to: '12:00', address: JOONDALUP, travel: { noDriveAfter: true } })] }],
+  ['"Home" as where the day starts follows the day\'s base on both sides',
+    { events: [A({ id: 'a', at: '09:00', to: '10:00', address: OSBORNE, travel: { before: { kind: 'base', id: 'home-2', purpose: 'home' } } })] }],
   ['a tight gap still bills the drive (both keep the leg, flagged tight on the calendar)',
     { events: [A({ id: 'a', at: '09:00', to: '10:00', address: OSBORNE }), A({ id: 'b', at: '10:05', to: '11:00', address: JOONDALUP })] }],
 ];
@@ -239,37 +245,6 @@ describe('browser and billing build the same legs for the same day (T-04)', () =
   });
 });
 
-/* Genuine disagreements found when this file was written (21 Nov 2026).
-   Neither rule is changed here — the owner decides which side is right. */
-describe('known divergences — owner to decide (each is expected to fail)', () => {
-  // The calendar's right-click "Not driving this" (travel.noDriveBefore /
-  // noDriveAfter) drops the leg from the calendar and the Outlook mirror;
-  // day-route.js never reads those flags, so billing still charges the drive.
-  test.failing('"Not driving this" on a leg: the calendar drops it, billing still bills it', () => {
-    const day = { events: [A({ id: 'a', at: '09:00', to: '10:00', address: OSBORNE, travel: { noDriveBefore: true } }),
-      A({ id: 'b', at: '11:00', to: '12:00', address: JOONDALUP, travel: { noDriveAfter: true } })] };
-    expect(browserLegs(day)).toEqual(serverLegs(day));
-  });
-
-  // Desk work the therapist chose to do "at home" (travel.desk = 'home') puts
-  // them at the base on the calendar — the drive home and back out are drawn.
-  // Billing only routes client sessions, so it bills a direct drive.
-  test.failing('desk work chosen "at home" between two visits: calendar goes via home, billing bills Direct', () => {
-    const day = { events: [A({ id: 'a', at: '09:00', to: '10:00', address: OSBORNE }),
-      { id: 'd', at: '11:00', to: '13:00', type: 'report', title: 'Report writing', travel: { desk: 'home' } },
-      A({ id: 'b', at: '15:00', to: '16:00', address: JOONDALUP })] };
-    expect(browserLegs(day)).toEqual(serverLegs(day));
-  });
-
-  // "Return Home" saved on the FIRST stop's before (purpose 'home') follows the
-  // day's base on the calendar (resolveTravelPoint); day-route.js applies that
-  // only to the last stop's after, so billing starts from the saved base.
-  test.failing('"Home" as where the day starts follows the day\'s base on the calendar only', () => {
-    const day = { events: [A({ id: 'a', at: '09:00', to: '10:00', address: OSBORNE, travel: { before: { kind: 'base', id: 'home-2', purpose: 'home' } } })] };
-    expect(browserLegs(day)).toEqual(serverLegs(day));
-  });
-});
-
 /* Documented on purpose in day-route.js ("Differences, deliberate for billing"):
    only billable in-person client sessions form the billed route. A
    non-client stop with an address (a school meeting) is a stop on the
@@ -287,5 +262,42 @@ describe('deliberate difference (documented in day-route.js)', () => {
     expect(s.filter((l) => l.startsWith('BETWEEN'))).toEqual([`BETWEEN a>b ${canonAddr(OSBORNE)} -> ${canonAddr(JOONDALUP)} 30`]);
     // The day's ends agree.
     expect(b.filter((l) => !l.startsWith('BETWEEN'))).toEqual(s.filter((l) => !l.startsWith('BETWEEN')));
+  });
+});
+
+/* Owner rule book (21 Nov 2026): billed travel time is client-to-client driving
+   only — the first drive, the drives between clients and the trip home.
+   invoice-generation builds the billed day with clientToClient: true, so a
+   mid-day detour the calendar draws (desk work at home, a trip home, a stop
+   somewhere else) is billed as the direct drive between the two clients. */
+describe('deliberate difference: billing is client-to-client only (owner rule book)', () => {
+  function billedLegs(day) {
+    const user = serverUser(day.base === undefined ? 'home-1' : day.base);
+    const { legs } = DR.buildDayLegs({ user, date: DATE, sessions: billingSessions(day.events), minutesFor: minutes, clientToClient: true });
+    return legs.map((l) => `${l.kind} ${canonAddr(l.origin)} -> ${canonAddr(l.destination)}`);
+  }
+  const direct = [`OUTBOUND ${canonAddr(HOME.addr)} -> ${canonAddr(OSBORNE)}`, `BETWEEN ${canonAddr(OSBORNE)} -> ${canonAddr(JOONDALUP)}`,
+    `RETURN ${canonAddr(JOONDALUP)} -> ${canonAddr(HOME.addr)}`];
+
+  test('desk work chosen "at home" between two visits: the calendar goes via home, billing bills the direct drive', () => {
+    const day = { events: [A({ id: 'a', at: '09:00', to: '10:00', address: OSBORNE }),
+      { id: 'd', at: '11:00', to: '13:00', type: 'report', title: 'Report writing', travel: { desk: 'home' } },
+      A({ id: 'b', at: '15:00', to: '16:00', address: JOONDALUP })] };
+    expect(browserLegs(day).some((l) => l.includes(canonAddr(HOME.addr)) && !l.startsWith('OUTBOUND >a') && !l.startsWith('RETURN b>'))).toBe(true);
+    expect(billedLegs(day)).toEqual(direct);
+  });
+  test('"Via home" chosen for a gap: billed as the direct drive', () => {
+    const day = { events: [A({ id: 'a', at: '09:00', to: '10:00', address: OSBORNE, travel: { next: 'home' } }), A({ id: 'b', at: '15:00', to: '16:00', address: JOONDALUP })] };
+    expect(billedLegs(day)).toEqual(direct);
+  });
+  test('"Go somewhere else" between two stops: billed as the direct drive', () => {
+    const day = { events: [A({ id: 'a', at: '09:00', to: '10:00', address: OSBORNE, travel: { after: { kind: 'address', address: CAFE, label: 'Café', purpose: 'elsewhere' } } }),
+      A({ id: 'b', at: '13:00', to: '14:00', address: JOONDALUP })] };
+    expect(billedLegs(day)).toEqual(direct);
+  });
+  test('"Not driving this" is honoured in the billed day too', () => {
+    const day = { events: [A({ id: 'a', at: '09:00', to: '10:00', address: OSBORNE, travel: { noDriveBefore: true } }),
+      A({ id: 'b', at: '11:00', to: '12:00', address: JOONDALUP })] };
+    expect(billedLegs(day)).toEqual(direct.slice(1));
   });
 });

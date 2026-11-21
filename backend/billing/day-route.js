@@ -160,23 +160,37 @@ function viaPlace(travel, user, nextTravel) {
   return pt && !pt.remote && pt.address ? pt : null;
 }
 
+/** Is there desk work chosen "at home" in the gap between two sessions? */
+function deskHomeBetween(deskHome, a, b) {
+  if (!deskHome || !deskHome.length) return false;
+  const lo = new Date(a.end_time).getTime(), hi = new Date(b.start_time).getTime();
+  return deskHome.some(d => new Date(d.start_time).getTime() >= lo && new Date(d.end_time).getTime() <= hi);
+}
+
 /**
  * @param {object} p
  * @param {object} p.user      users row (work_location_schedule, default_work_location)
  * @param {string} p.date      YYYY-MM-DD (local)
  * @param {Array}  p.sessions  events rows sorted by start_time (in-person billable only)
  * @param {Function} [p.minutesFor]  (origin, destination) → minutes|null; enables the trip-home rule
+ * @param {boolean}  [p.clientToClient]  billing: a mid-day detour (home, elsewhere) becomes one BETWEEN leg
+ *                                      carrying `detour` — billed at the lesser of direct and detour
+ * @param {Array}    [p.deskHome]  [{start_time, end_time}] desk work chosen "at home" (travel.desk = 'home')
  * @returns {{legs:Array, base:object|null, baseUnset:boolean}}
  */
-function buildDayLegs({ user, date, sessions, minutesFor }) {
+function buildDayLegs({ user, date, sessions, minutesFor, clientToClient = false, deskHome = [] }) {
   const legs = [];
+  const detours = [];
   const base = dayBase(user, date);
   if (!sessions.length) return { legs, base, baseUnset: !base };
   const first = sessions[0];
   const last = sessions[sessions.length - 1];
   const meta = ev => (ev.custom_metadata && ev.custom_metadata.travel) || {};
 
-  const startPt = resolveSpec(meta(first).before, user) || base;
+  // "Home" as where the day starts is the day's home, whichever it is now — as
+  // the calendar resolves it (travel.js resolveTravelPoint), like Return Home.
+  const firstBefore = meta(first).before;
+  const startPt = (firstBefore && firstBefore.purpose === 'home' && base) ? base : (resolveSpec(firstBefore, user) || base);
   if (startPt && !startPt.remote && startPt.address) {
     const to = eventAddress(first);
     if (to && canonAddr(to) !== canonAddr(startPt.address)) {
@@ -190,6 +204,23 @@ function buildDayLegs({ user, date, sessions, minutesFor }) {
     if (!from || !to) continue;
     const gapMin = Math.round((new Date(b.start_time) - new Date(a.end_time)) / 60000);
     const place = viaPlace(meta(a), user, meta(b));
+    const choice = meta(a).next || (reviewBetween(meta(a), meta(b)).home ? 'home' : null)
+      || (deskHomeBetween(deskHome, a, b) ? 'home' : null);
+    const home = place ? null : viaBase(base, from, to, gapMin, minutesFor, choice);
+    if (clientToClient && (place || home)) {
+      // Billing (owner rule book + 21 Nov 2026 answer): a mid-day detour — home,
+      // somewhere else, desk work at home — is billed as whichever is LESS: the
+      // direct client-to-client drive or the detour actually driven. The caller
+      // prices both (route facts / calendar minutes) and keeps a reviewer note.
+      const via = place || base;
+      const detour = { fromEventId: a.id, toEventId: b.id, via: place ? 'elsewhere' : 'home', viaLabel: via.label || null,
+        viaAddress: via.address, legs: [{ origin: from, destination: via.address }, { origin: via.address, destination: to }]
+          .filter(l => canonAddr(l.origin) !== canonAddr(l.destination)) };
+      detours.push(detour);
+      if (canonAddr(from) === canonAddr(to)) continue;           // direct is 0 minutes: the lesser, nothing to bill
+      legs.push({ id: `between:${a.id}:${b.id}`, kind: 'BETWEEN', fromEventId: a.id, toEventId: b.id, origin: from, destination: to, detour });
+      continue;
+    }
     if (place) {
       if (canonAddr(from) !== canonAddr(place.address)) {
         legs.push({ id: `return:${a.id}`, kind: 'RETURN', fromEventId: a.id, toEventId: null, midday: true,
@@ -201,8 +232,6 @@ function buildDayLegs({ user, date, sessions, minutesFor }) {
       }
       continue;
     }
-    const choice = meta(a).next || (reviewBetween(meta(a), meta(b)).home ? 'home' : null);
-    const home = viaBase(base, from, to, gapMin, minutesFor, choice);
     if (home) {
       legs.push({ id: `return:${a.id}`, kind: 'RETURN', fromEventId: a.id, toEventId: null, midday: true,
         origin: from, destination: base.address, destinationLabel: base.label });
@@ -224,7 +253,16 @@ function buildDayLegs({ user, date, sessions, minutesFor }) {
     }
   }
   const explicitStart = !!resolveSpec(meta(first).before, user);
-  return { legs, base, baseUnset: !base && !explicitStart };
+  // "Not driving this" (travel.noDriveBefore / noDriveAfter, set on the
+  // calendar): the leg belongs to an appointment's side, exactly as travel.js
+  // owns it — a drive INTO an appointment (start or between) is its 'before',
+  // a drive AWAY to an end point is its 'after'. Never billed (rule 2).
+  const byId = new Map(sessions.map(ev => [String(ev.id), ev]));
+  const notDriven = l => {
+    if (l.kind === 'RETURN') return !!(l.fromEventId && meta(byId.get(String(l.fromEventId)) || {}).noDriveAfter === true);
+    return !!(l.toEventId && meta(byId.get(String(l.toEventId)) || {}).noDriveBefore === true);
+  };
+  return { legs: legs.filter(l => !notDriven(l)), notDriven: legs.filter(notDriven).map(l => l.id), detours, base, baseUnset: !base && !explicitStart };
 }
 
 module.exports = { TRAVEL_HOME_MIN_STAY, weekKeyForDate, dayKeyForDate, dayBase, resolveSpec, eventAddress, candidatePairs, viaPlace, reviewBetween, buildDayLegs };

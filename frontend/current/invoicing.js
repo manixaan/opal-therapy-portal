@@ -337,9 +337,18 @@
       kv('Day travel total', esc(c.dayTotalMinutes) + ' min · ' + esc(c.dayTotalKm) + ' km');
       kv('Billable sessions on route', esc(c.billableSessions));
       if (l.component === 'TRAVEL_LABOUR') {
-        kv('Initial allocation', esc(c.allocatedMinutesBeforeCap) + ' min');
-        kv('Client cap', c.capMinutes == null ? 'No cap (MM6–7)' : esc(c.capMinutes) + ' min' + (c.directions === 2 ? ' (' + esc(c.capMinutesEachWay) + ' each way, return paid)' : ''));
-        kv('Cap applied', c.capApplied ? 'Yes — minutes above the cap are not redistributed' : 'No');
+        if (c.method === 'ndis_rule_book_2026_11') {
+          var rep = c.dayReport || {};
+          kv('Clients that day', esc(c.clientsInDay));
+          kv('Cap per client', c.capMinutes == null ? 'No cap (MM6–7)' : esc(c.capMinutes) + ' min');
+          kv('This client', esc(c.cappedMinutes) + ' min' + (Number(c.returnMinutes) ? ' + ' + esc(c.returnMinutes) + ' min return' : ''));
+          kv('Day billed / not billed', esc(rep.billedMinutes) + ' / ' + esc(rep.unbilledMinutes) + ' min' + (rep.ceiling != null ? ' (ceiling ' + esc(rep.ceiling) + ')' : ''));
+          kv('Rule', esc(String(c.rule || '').replace(/_/g, ' ')));
+        } else {
+          kv('Initial allocation', esc(c.allocatedMinutesBeforeCap) + ' min');
+          kv('Client cap', c.capMinutes == null ? 'No cap (MM6–7)' : esc(c.capMinutes) + ' min' + (c.directions === 2 ? ' (' + esc(c.capMinutesEachWay) + ' each way, return paid)' : ''));
+          kv('Cap applied', c.capApplied ? 'Yes — minutes above the cap are not redistributed' : 'No');
+        }
         kv('Final claimable time', esc(c.claimableMinutes) + ' min (' + esc(c.quantityHours) + ' h)');
         kv('Rate', aud(c.travelHourlyRate) + '/hr');
       } else {
@@ -405,6 +414,10 @@
 
     var banners = '';
     if (inv.is_stale) banners += '<div class="inv-warn">⚠ ' + esc(inv.stale_reason || 'A source calendar event changed.') + ' <button class="btn btn-xs" data-inv="regen" data-id="' + esc(inv.id) + '">Regenerate now</button></div>';
+    // Reviewer notes from the travel calculation: here only — never on the PDF or in Xero.
+    var notes = [];
+    (d.lines || []).forEach(function (l) { if (l.line_status === 'ACTIVE' && l.calculation && Array.isArray(l.calculation.reviewNotes)) l.calculation.reviewNotes.forEach(function (n) { if (notes.indexOf(n) < 0) notes.push(n); }); });
+    if (notes.length) banners += '<div class="inv-note inv-review-notes"><b>For the reviewer — how travel was worked out</b> (not on the invoice)<ul>' + notes.map(function (n) { return '<li>' + esc(n) + '</li>'; }).join('') + '</ul></div>';
     if (inv.xero_state === 'PUSHED') banners += '<div class="inv-note">In Xero as ' + esc(inv.invoice_number) + (inv.xero_status ? ' (' + esc(String(inv.xero_status).toLowerCase()) + ')' : '') + '. Payments are recorded in Xero and come back with <strong>Update payments from Xero</strong>.</div>';
     else if (inv.xero_state === 'FAILED') banners += '<div class="inv-error">Not copied to Xero: ' + esc(inv.xero_error || 'unknown reason') + '</div>';
     if (inv.sent_status === 'FAILED') banners += '<div class="inv-error">The email was not sent: ' + esc(inv.email_last_error || 'unknown reason') + '</div>';
@@ -533,6 +546,7 @@
         '<div><b>' + (s.sploseActivitiesIncluded || 0) + '</b><span>Splose support activities</span></div>' +
         '<div><b>' + (s.invoicedInSplose || 0) + '</b><span>skipped — already invoiced in Splose</span></div>' +
         '<div><b>' + s.travelAllocations + '</b><span>travel allocations</span></div>' +
+        (s.travelUnbilledMinutes ? '<div><b>' + (Math.round(s.travelUnbilledMinutes * 100) / 100) + '</b><span>travel minutes above the daily ceiling (not billed)</span></div>' : '') +
         '<div><b>' + s.itemsNeedAttention + '</b><span>items need attention</span></div>' +
         '<div><b>' + s.alreadyInvoiced + '</b><span>skipped — already invoiced</span></div>' +
         '<div><b>' + skipped + '</b><span>not billable (cancelled, DNA, future…)</span></div>' +
@@ -743,6 +757,7 @@
       '<label>Allocation method<select name="allocationMethod">' + opt('EQUAL_PER_CLIENT', 'Equal per unique client', t.allocation_method) + opt('PER_SESSION', 'Per billable session', t.allocation_method) + opt('MANUAL_WEIGHTED', 'Manual weighted', t.allocation_method) + '</select></label>' +
       (t.id ? '<label>Status<select name="status">' + ['PLANNED', 'IN_PROGRESS', 'COMPLETED', 'INVOICED', 'CLOSED'].map(function (s) { return opt(s, s.replace('_', ' ').toLowerCase(), t.status); }).join('') + '</select></label>' : '') +
       '<label class="wide">Practitioner(s)<select name="practitionerIds" multiple size="4">' + state.practitioners.map(function (p) { return '<option value="' + esc(p.id) + '"' + (sel.indexOf(p.id) >= 0 ? ' selected' : '') + '>' + esc(p.name) + '</option>'; }).join('') + '</select></label>' +
+      '<label>Trip travel hours (flying + driving)<input type="number" min="0" max="500" step="0.25" name="travelHours" value="' + esc(t.travel_hours == null ? '' : t.travel_hours) + '" title="MMM6–7: the whole trip\'s travel, divided by the clients seen on the trip. Blank = worked out day by day from the calendar."></label>' +
       '<label class="wide">Travel route information<textarea name="routeNotes">' + esc(t.route_notes || '') + '</textarea></label>' +
       '<label class="wide">Notes<textarea name="notes">' + esc(t.notes || '') + '</textarea></label></form><div id="inv-trip-msg"></div>';
   }
@@ -865,7 +880,7 @@
       '<label>Xero sales account code<input name="xeroSalesAccountCode" value="' + esc(s.xeroSalesAccountCode || '') + '" placeholder="e.g. 200" title="The revenue account in Xero these invoices post to. Blank = nothing is copied to Xero."></label>' +
       '<label>Xero tax type — GST-free<input name="xeroTaxTypeGstFree" value="' + esc(s.xeroTaxTypeGstFree || 'EXEMPTOUTPUT') + '"></label>' +
       '<label>Xero tax type — GST 10%<input name="xeroTaxTypeGst" value="' + esc(s.xeroTaxTypeGst || 'OUTPUT') + '"></label>' +
-      '<label class="check wide"><input type="checkbox" name="returnTravelPayable"' + (s.returnTravelPayable ? ' checked' : '') + '> Return travel is paid to clinicians (include the return leg in claimable travel)</label>' +
+      '<div class="inv-note wide">Travel follows the NDIS rule book: the day\'s total client-to-client driving (including the trip home), capped at 30 min per client in MMM1–3 and 60 in MMM4–5 plus one return, none in MMM6–7. No kilometre charge in any zone; remote trip costs are billed through Trips.</div>' +
       '</form><div id="inv-settings-msg"></div><div class="inv-field-row"><button class="btn primary" data-inv="save-settings">Save settings</button></div></div>' +
       '<div class="inv-panel"><h3>MMM classification</h3>' + (r.mmmDataset
         ? '<div>Active dataset <b>' + esc(r.mmmDataset.version) + '</b> — ' + esc(r.mmmDataset.source) + (r.mmmDataset.published_on ? ', published ' + dmy(String(r.mmmDataset.published_on).slice(0, 10)) : '') + ' (' + esc(r.mmmDataset.ring_count) + ' boundary rings). Client addresses are geocoded once and classified against these official boundaries; a point within ~250 m of a zone boundary is sent for review.</div>'

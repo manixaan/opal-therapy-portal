@@ -104,121 +104,103 @@ describe('session pricing by zone (scenarios A–D)', () => {
   });
 });
 
-describe('travel allocation — equal day pool, participant cap, no redistribution', () => {
-  const legs3 = [
-    { id: 'l1', kind: 'OUTBOUND', toEventId: 'e1', minutes: 30, km: 20 },
-    { id: 'l2', kind: 'BETWEEN', fromEventId: 'e1', toEventId: 'e2', minutes: 20, km: 12 },
-    { id: 'l3', kind: 'BETWEEN', fromEventId: 'e2', toEventId: 'e3', minutes: 24, km: 9.2 },
-    { id: 'l4', kind: 'RETURN', fromEventId: 'e3', minutes: 40, km: 30 },
+describe('travel allocation — the owner\'s NDIS rule book (21 Nov 2026)', () => {
+  // One day = total T split into legs (the split does not matter: always from the TOTAL).
+  const day = (T, ids) => [
+    { id: 'out', kind: 'OUTBOUND', toEventId: ids[0], minutes: T / 2 },
+    { id: 'home', kind: 'RETURN', fromEventId: ids[ids.length - 1], minutes: T / 2 },
   ];
-
-  test('A — Perth MMM1: 74 min over 3 sessions = 24.67 min each at $97/h = $39.88; vehicle ≤ $0.99/km', () => {
-    const r = rateFor(1);
-    const out = T.allocateDay({ returnPayable: false, legs: legs3,
-      sessions: ['e1', 'e2', 'e3'].map(id => ({ eventId: id, clientId: id, mmm: 1, rule: rule(r) })) });
-    expect(out.totalMinutesE2).toBe(7400);
-    expect(out.legs.find(l => l.id === 'l4')).toMatchObject({ included: false, reason: 'return_travel_not_payable' });
-    for (const a of out.allocations) {
-      expect(a.allocatedMinutesBeforeCap).toBe(24.67);
-      expect(a.capMinutes).toBe(30);
-      expect(a.capApplied).toBe(false);
-      expect(a.claimableMinutes).toBe(24.67);
-      expect(a.labourCents).toBe(3988);
-      expect(a.allocatedKm).toBe(13.73);
-      expect(a.vehicleCents).toBe(1360); // 41.2 km ÷ 3 × $0.99
-      expect(a.vehicleRateCents).toBeLessThanOrEqual(99);
-    }
-  });
-
-  test('A — the 30-minute MMM1–3 cap is enforced', () => {
-    const r = rateFor(2);
-    const legs = [{ id: 'a', kind: 'OUTBOUND', toEventId: 'e1', minutes: 50, km: 45 },
-      { id: 'b', kind: 'BETWEEN', fromEventId: 'e1', toEventId: 'e2', minutes: 40, km: 30 }];
-    const out = T.allocateDay({ returnPayable: false, legs,
-      sessions: ['e1', 'e2'].map(id => ({ eventId: id, clientId: id, mmm: 2, rule: rule(r) })) });
-    for (const a of out.allocations) {
-      expect(a.allocatedMinutesBeforeCap).toBe(45);
-      expect(a.capApplied).toBe(true);
-      expect(a.claimableMinutes).toBe(30);
-      expect(a.labourCents).toBe(4850); // 0.5 h × $97
-    }
-  });
-
-  test('B — MMM4–5 keeps base rates but allows up to 60 minutes', () => {
-    const r = rateFor(4);
-    const out = T.allocateDay({ returnPayable: false, legs: [{ id: 'a', kind: 'OUTBOUND', toEventId: 'e1', minutes: 75, km: 90 }],
-      sessions: [{ eventId: 'e1', clientId: 'c', mmm: 4, rule: rule(r) }] });
-    const a = out.allocations[0];
-    expect(r.sessionRateCents).toBe(19399);
-    expect(a.travelRateCents).toBe(9700);
-    expect(a.capMinutes).toBe(60);
-    expect(a.claimableMinutes).toBe(60);
-    expect(a.labourCents).toBe(9700);
-  });
-
-  test.each([[6, 13580, 27159], [7, 14550, 29099]])('C/D — MM%i: remote travel rate, no time cap', (mmm, travelCents, sessionCents) => {
+  const alloc = (total, mmm, n, { sameAddress = false } = {}) => {
+    const ids = Array.from({ length: n }, (_, i) => 'e' + (i + 1));
     const r = rateFor(mmm);
-    const out = T.allocateDay({ returnPayable: false, legs: [{ id: 'a', kind: 'OUTBOUND', toEventId: 'e1', minutes: 180, km: 210 }],
-      sessions: [{ eventId: 'e1', clientId: 'c', mmm, rule: rule(r) }] });
-    const a = out.allocations[0];
-    expect(r.sessionRateCents).toBe(sessionCents);
-    expect(a.capMinutes).toBeNull();
-    expect(a.capApplied).toBe(false);
-    expect(a.claimableMinutes).toBe(180);
-    expect(a.labourCents).toBe(travelCents * 3);
-  });
+    return T.allocateDay({ legs: day(total, ids), sessions: ids.map((id, i) => ({ eventId: id, clientId: 'c' + (i + 1), mmm,
+      address: sameAddress ? '1 Same St, Perth WA 6000' : `${i + 1} Client St, Perth WA 6000`, rule: rule(r) })) });
+  };
+  const mins = out => out.allocations.map(a => a.claimableMinutes);
 
-  test('F — mixed-zone day: equal initial share, each participant\'s own cap and rate, no redistribution', () => {
-    const legs = [{ id: 'a', kind: 'OUTBOUND', toEventId: 'e1', minutes: 60, km: 60 },
-      { id: 'b', kind: 'BETWEEN', fromEventId: 'e1', toEventId: 'e2', minutes: 60, km: 60 },
-      { id: 'c', kind: 'BETWEEN', fromEventId: 'e2', toEventId: 'e3', minutes: 30, km: 30 }];
-    const sessions = [
-      { eventId: 'e1', clientId: 'metro', mmm: 1, rule: rule(rateFor(1)) },
-      { eventId: 'e2', clientId: 'town', mmm: 5, rule: rule(rateFor(5)) },
-      { eventId: 'e3', clientId: 'remote', mmm: 6, rule: rule(rateFor(6)) },
-    ];
-    const out = T.allocateDay({ returnPayable: false, legs, sessions });
-    const [m, t, r] = out.allocations;
-    expect([m, t, r].map(a => a.allocatedMinutesBeforeCap)).toEqual([50, 50, 50]);
-    expect(m).toMatchObject({ capApplied: true, claimableMinutes: 30, labourCents: 4850 });
-    expect(t).toMatchObject({ capApplied: false, claimableMinutes: 50, labourCents: 8083 });
-    // 0.8333 h (4 dp) × $135.80 = $113.16: the amount is priced from the printed quantity so qty × unit reconciles.
-    expect(r).toMatchObject({ capApplied: false, claimableMinutes: 50, labourCents: 11316 });
-    // The 20 minutes removed from the metro share are not given to anyone else.
-    expect(m.claimableMinutes + t.claimableMinutes + r.claimableMinutes).toBe(130);
+  test('metro 90 min, 3 clients → 30/30/30, no return', () => {
+    const out = alloc(90, 1, 3);
+    expect(mins(out)).toEqual([30, 30, 30]);
+    expect(out.report).toMatchObject({ rule: 'rule_6_within_caps', returnMinutes: 0, unbilledMinutes: 0, ceiling: 120 });
   });
-
-  test('G — return travel excluded when not payable, included (doubling the cap) when payable', () => {
+  test('metro 120 min, 2 clients at different addresses → 30/60, 30 unbilled', () => {
+    const out = alloc(120, 1, 2);
+    expect(mins(out)).toEqual([30, 60]);
+    expect(out.allocations[1]).toMatchObject({ cappedMinutes: 30, returnMinutes: 30 });
+    expect(out.report).toMatchObject({ rule: 'rule_7_capped_with_return/rule_8c_last_client', billedMinutes: 90, unbilledMinutes: 30, flags: ['UNBILLED_MINUTES'] });
+  });
+  test('metro 90 min, 2 clients at the same address → 45/45', () => {
+    expect(mins(alloc(90, 1, 2, { sameAddress: true }))).toEqual([45, 45]);
+  });
+  test('wheatbelt (MMM4–5) 250 min, 3 clients → 80/80/80, 10 unbilled', () => {
+    const out = alloc(250, 4, 3);
+    expect(mins(out)).toEqual([80, 80, 80]);
+    expect(out.report).toMatchObject({ rule: 'rule_7_capped_with_return/rule_8a_equal', ceiling: 240, billedMinutes: 240, unbilledMinutes: 10 });
+  });
+  test('wheatbelt 255 min, 4 clients → 63.75 each', () => {
+    const out = alloc(255, 5, 4);
+    expect(mins(out)).toEqual([63.75, 63.75, 63.75, 63.75]);
+    expect(out.allocations[0].hoursQtyE4).toBe(10625);                // 1.0625 h exactly
+    expect(out.report.unbilledMinutes).toBe(0);
+  });
+  test('remote (MMM6–7) 20 h, 20 clients → 1 h each, no cap, at the remote travel rate', () => {
+    const out = alloc(1200, 7, 20);
+    expect(mins(out).every(m => m === 60)).toBe(true);
+    expect(out.allocations[0]).toMatchObject({ travelRateCents: 14550, labourCents: 14550 });
+    expect(out.report).toMatchObject({ rule: 'rule_11_uncapped_remote', cap: null, unbilledMinutes: 0 });
+  });
+  test('rule 2: never more than the minutes travelled; one client alone gets up to CAP + return', () => {
+    expect(mins(alloc(20, 1, 1))).toEqual([20]);
+    expect(mins(alloc(75, 1, 1))).toEqual([60]);                     // 30 + return 30, 15 unbilled
+  });
+  test('a client seen twice counts once; the second session carries no travel', () => {
     const r = rateFor(1);
-    const legs = [{ id: 'out', kind: 'OUTBOUND', toEventId: 'e1', minutes: 20, km: 15 },
-      { id: 'ret', kind: 'RETURN', fromEventId: 'e1', minutes: 50, km: 40 }];
-    const s = [{ eventId: 'e1', clientId: 'c', mmm: 1, rule: rule(r) }];
-    const unpaid = T.allocateDay({ returnPayable: false, legs, sessions: s });
-    expect(unpaid.totalMinutesE2).toBe(2000);
-    expect(unpaid.totalKmE3).toBe(15000);
-    expect(unpaid.allocations[0]).toMatchObject({ claimableMinutes: 20, directions: 1 });
-    const paid = T.allocateDay({ returnPayable: true, legs, sessions: s });
-    expect(paid.totalMinutesE2).toBe(7000);
-    expect(paid.allocations[0]).toMatchObject({ directions: 2, capMinutes: 60, claimableMinutes: 60 });
+    const out = T.allocateDay({ legs: day(90, ['e1', 'e3']), sessions: [
+      { eventId: 'e1', clientId: 'a', mmm: 1, address: 'X', rule: rule(r) },
+      { eventId: 'e2', clientId: 'b', mmm: 1, address: 'Y', rule: rule(r) },
+      { eventId: 'e3', clientId: 'a', mmm: 1, address: 'X', rule: rule(r) }] });
+    // 90 > 2×30: each 30, plus return 30 to the LAST client seen (a, whose line sits on its first session e1).
+    expect(out.allocations.map(a => [a.eventId, a.claimableMinutes])).toEqual([['e1', 60], ['e2', 30]]);
+    expect(out.report).toMatchObject({ clients: 2, unbilledMinutes: 0 });
   });
-
-  test('legs without route facts are excluded and reported', () => {
-    const out = T.allocateDay({ returnPayable: false, legs: [{ id: 'x', kind: 'OUTBOUND', toEventId: 'e1', minutes: null }],
+  test('rule 10 (owner answer): metro client at the lesser of the drive in and the normal commute; rural clients share the rest', () => {
+    // 150 min: 75 out to the metro client, 75 home from the wheatbelt client.
+    const sessions = (commute) => [
+      { eventId: 'e1', clientId: 'a', clientName: 'Metro', mmm: 1, address: 'X', commuteMinutes: commute, rule: rule(rateFor(1)) },
+      { eventId: 'e2', clientId: 'b', clientName: 'Rural', mmm: 4, address: 'Y', rule: rule(rateFor(4)) }];
+    let out = T.allocateDay({ legs: day(150, ['e1', 'e2']), sessions: sessions(20) });
+    expect(out.report).toMatchObject({ rule: 'rule_10_mixed_metro_lesser_rural_pool', mixedZones: true });
+    expect(out.report.flags).toContain('MIXED_ZONES');
+    // Metro: lesser of 75 in and 20 commute = 20. Rural pool 150 − 75 = 75 > 60: 60 + return 15.
+    expect(out.allocations.map(x => x.claimableMinutes)).toEqual([20, 75]);
+    expect(out.report.unbilledMinutes).toBe(55);
+    expect(out.reviewNotes[0]).toMatch(/drive in 75 min, normal commute from base 20 min; billed the lesser \(20 min\)/);
+    // A long commute: the drive in (75) is less, then the 30-min metro cap.
+    out = T.allocateDay({ legs: day(150, ['e1', 'e2']), sessions: sessions(90) });
+    expect(out.allocations[0].claimableMinutes).toBe(30);
+    expect(out.reviewNotes[0]).toMatch(/capped at 30/);
+    // Never more than T, never more than each zone's cap.
+    expect(out.allocations.reduce((x, a) => x + a.claimableMinutes, 0)).toBeLessThanOrEqual(150);
+  });
+  test('the trip home is always part of T; legs without route facts are excluded and reported', () => {
+    const out = alloc(60, 1, 2);
+    expect(out.legs.find(l => l.id === 'home')).toMatchObject({ included: true, reason: 'trip_home' });
+    const bad = T.allocateDay({ legs: [{ id: 'x', kind: 'OUTBOUND', toEventId: 'e1', minutes: null }],
       sessions: [{ eventId: 'e1', clientId: 'c', mmm: 1, rule: rule(rateFor(1)) }] });
-    expect(out.issues).toEqual([{ type: 'TRAVEL_ROUTE_FAILED', eventId: 'e1', legId: 'x' }]);
+    expect(bad.issues).toEqual([{ type: 'TRAVEL_ROUTE_FAILED', eventId: 'e1', legId: 'x' }]);
   });
-
-  test('travel lines carry the full calculation snapshot', () => {
+  test('rule 13: no non-labour (km) line in any zone; the travel line carries the rule-book snapshot', () => {
     const r = rateFor(1);
-    const out = T.allocateDay({ returnPayable: false, legs: legs3,
-      sessions: ['e1', 'e2', 'e3'].map(id => ({ eventId: id, clientId: id, mmm: 1, rule: rule(r) })) });
-    const lines = S.buildTravelLines({ serviceDate: '2026-09-25', allocation: out.allocations[0], rate: r, practitionerName: 'Ann Mary', legs: out.legs });
-    expect(lines.map(l => l.component)).toEqual(['TRAVEL_LABOUR', 'TRAVEL_KM']);
-    expect(lines[0].description).toBe('25 Sep 2026, Provider Travel');
-    expect(lines[1].description).toMatch(/^25 Sep 2026, Provider Travel - Non-Labour Costs \(13\.73 km @ \$0\.99\/km\)$/);
-    expect(lines[0].calculation).toMatchObject({ dayTotalMinutes: 74, billableSessions: 3, allocatedMinutesBeforeCap: 24.67,
-      capMinutes: 30, claimableMinutes: 24.67, travelHourlyRate: '97.00', amount: '39.88' });
-    expect(lines[0].calculation.legs).toHaveLength(4);
+    const out = alloc(120, 1, 2);
+    const lines = S.buildTravelLines({ serviceDate: '2026-09-25', allocation: out.allocations[1], rate: r, practitionerName: 'Ann Mary', legs: out.legs });
+    expect(lines.map(l => l.component)).toEqual(['TRAVEL_LABOUR']);
+    expect(lines[0]).toMatchObject({ description: '25 Sep 2026, Provider Travel', durationMinutes: 60 });
+    expect(lines[0].calculation).toMatchObject({ method: 'ndis_rule_book_2026_11', cappedMinutes: 30, returnMinutes: 30,
+      claimableMinutes: 60, travelHourlyRate: '97.00', amount: '97.00', dayReport: { unbilledMinutes: 30 } });
+    for (const z of [4, 6, 7]) {
+      const o = alloc(60, z, 1);
+      expect(S.buildTravelLines({ serviceDate: '2026-09-25', allocation: o.allocations[0], rate: rateFor(z), legs: o.legs }).map(l => l.component)).toEqual(['TRAVEL_LABOUR']);
+    }
   });
 });
 

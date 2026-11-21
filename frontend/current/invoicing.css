@@ -191,3 +191,5 @@ html:where([data-theme="dark"]) .inv-paper .draft-mark { color: var(--danger-ink
   box-shadow: 0 -4px 14px rgba(0, 0, 0, .06); font-size: 13.5px; }
 .inv-send-bar[hidden] { display: none; }
 .inv-pill.xero { background: var(--info-soft); color: var(--info-ink); }
+.inv-review-notes ul { margin: 6px 0 0; padding-left: 18px; }
+.inv-review-notes li { margin: 2px 0; }
