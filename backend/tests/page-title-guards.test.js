@@ -32,6 +32,13 @@ describe('U-15 page titles and gutters', () => {
     expect(CN_CSS).toMatch(/\.cn-page-head p \{[^}]*font-size: 13px; color: var\(--ink-soft\);/);
   });
 
+  test('Settings stacks its section list above the content at phone width', () => {
+    const m = HTML.match(/@media \(max-width: 600px\) \{\n    \.settings-layout \{ flex-direction: column; height: auto; \}[\s\S]*?\n  \}\n/);
+    expect(m).not.toBeNull();
+    expect(m[0]).toContain('.settings-nav-section { display: none; }');
+    expect(m[0]).toContain('.settings-content .settings-row { grid-template-columns: minmax(0, 1fr); gap: 8px; }');
+  });
+
   test('tab-owned cards use the 12 px card radius', () => {
     expect(CN_CSS).not.toContain('var(--radius-lg');
     expect(HTML).toMatch(/\.sup-table-wrap \{[^}]*border-radius: var\(--radius-md\)/);

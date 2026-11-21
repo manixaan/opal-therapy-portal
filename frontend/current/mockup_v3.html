@@ -1092,6 +1092,21 @@ window.opIcon = function (name, size) {
   .settings-row-label strong { font-size: 13px; font-weight: 500; color: var(--ink); display: block; }
   .settings-row-label span { font-size: 11.5px; color: var(--muted); }
   .settings-row-control { flex-shrink: 0; }
+  /* U-15 at phone width: the 220 px section list beside the content left the
+     content ~70 px wide. Below 600 px the list becomes one scrolling row
+     above the content (like nav.tabs) and rows wrap; same items, same order. */
+  @media (max-width: 600px) {
+    .settings-layout { flex-direction: column; height: auto; }
+    .settings-nav {
+      width: auto; display: flex; overflow-x: auto; padding: 0;
+      border-right: none; border-bottom: 1px solid var(--border);
+    }
+    .settings-nav-section { display: none; }
+    .settings-nav-item { width: auto; flex-shrink: 0; white-space: nowrap; padding: 10px 12px; }
+    .settings-nav-item.active { border-right: none; box-shadow: inset 0 -2px 0 var(--accent); }
+    .settings-content { padding: 16px 0 24px; overflow: visible; }
+    .settings-content .settings-row { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  }
   .settings-toggle {
     position: relative; display: inline-block; width: 40px; height: 22px;
   }
