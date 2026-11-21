@@ -1,0 +1,34 @@
+/opal-feature
+
+## Idea
+24Hr Automatic Client Appt Reminders
+
+## Why
+(not yet written in the tracker)
+
+## Who uses it
+(not yet written in the tracker)
+
+## What they see
+(not yet written in the tracker)
+
+## What should happen
+(not yet written in the tracker)
+
+## Outcome
+(not yet written in the tracker)
+
+## Decision
+(not yet written in the tracker)
+
+## Where it lives today
+- backend/snapshot-routes.js (self-scoped by design, requireAuth alone OK — header documents every query scoped to req.user.id) for the Therapist Snapshot task
+- frontend/current/reports.js consumes /api/snapshot (Today report tab)
+
+## Start here
+Check whether the Development Manager tracker's "Create minimise function on snapshot" checklist item under the Therapist Snapshot task has a real implementation anywhere in frontend/current/reports.js or its CSS. If it does, note where; if not, either build it or un-tick the checklist item.
+
+## Done means
+The checklist and the code agree.
+
+Tracker: 398a0b36-a12f-4190-83e4-b3a8932b3b46
