@@ -1021,6 +1021,9 @@ describe('grouped booking-type picker', () => {
     expect(HTML).not.toContain("showToast('Appointment not saved', oErr.message || 'network error', 'warn');");
     // Q-03: an HTML error page is read as no body, never a parser error.
     expect(HTML).not.toContain('const oResult = await oResp.json();');
+    // Q-04: one dirty-tracking listener, however often the panel opens.
+    expect(HTML).toContain("addEventListener('input', _bspMarkDirty);");
+    expect(HTML).not.toContain("addEventListener('input', () => { _bspDirty = true; }");
     expect(body).toMatch(/if \(btn\) btn\.disabled = true;\s+try \{\s+await confirmBooking\(\);/);
     // Both save paths send the request id the server dedupes on.
     expect((HTML.match(/requestId: BOOKING_STATE\.requestId/g) || []).length).toBe(2);

@@ -22747,11 +22747,14 @@ function openBookingPanel(opts = {}) {
   // booking left it, with whichever groups were open still open.
   if (!opts.keepState) bspOpenFresh();
 
-  // Dirty-tracking: mark dirty on any input change inside the panel
+  // Dirty-tracking: mark dirty on any input change inside the panel. One
+  // named listener — adding the same function again is a no-op, so opening
+  // the panel no longer stacks a listener per open (Q-04).
   setTimeout(() => {
-    document.getElementById('bsp-body')?.addEventListener('input', () => { _bspDirty = true; }, { once: false });
+    document.getElementById('bsp-body')?.addEventListener('input', _bspMarkDirty);
   }, 200);
 }
+function _bspMarkDirty() { _bspDirty = true; }
 
 function bspOpenFresh() {
   document.querySelectorAll('#booking-cat-chips details.bk-group').forEach(d => { d.open = false; });
