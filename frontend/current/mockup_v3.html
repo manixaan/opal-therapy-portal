@@ -171,7 +171,7 @@
      store and computeDayTravelSegments(), the calendar leg overlays and the
      travel details panel. Deferred and loaded ahead of profile.js and
      reports.js, both of which reach into it. -->
-<script src="/travel.js?v=72" defer></script>
+<script src="/travel.js?v=73" defer></script>
 <!-- Traffic alerts: a re-priced drive that now runs into a client session —
      point at it, offer Make room, Acknowledge or Ignore (today and tomorrow). -->
 <script src="/travel-alerts.js?v=1" defer></script>
@@ -204,7 +204,7 @@
      the _rpt* data layer, the daily and weekly renderers, and the
      Snapshot Day V2 work list. Deferred, so it runs after the shell's
      inline scripts and keeps the same globals they expect. -->
-<script src="/reports.js?v=9" defer></script>
+<script src="/reports.js?v=10" defer></script>
 <script src="/navigation.js?v=17" defer></script>
 <script>
 /* Opal line icons — one consistent stroke set replacing emoji throughout.
@@ -12009,7 +12009,7 @@ function handleDragMove(event) {
    Short blocks keep one line so nothing spills past the edges. */
 function calProposedLabel(startMin, durMin, who) {
   const endMin = startMin + durMin;
-  const f = (m) => { const h = Math.floor(m / 60) % 24, mm = m % 60; return (h % 12 || 12) + ':' + String(mm).padStart(2, '0') + (h < 12 ? 'am' : 'pm'); };
+  const f = (m) => fmtTime(Math.floor(m / 60) % 24, m % 60);   // U-11
   const range = f(startMin) + '–' + f(endMin);
   if (durMin < 30) return '<span class="cp-time">' + range + '</span>';
   if (durMin < 45) return '<span class="cp-time">' + range + '</span><span class="cp-tag"> · Proposed</span>';
@@ -12101,13 +12101,8 @@ function showEventCreationPopup(dayLabel, startTime, endTime, day, startMinutes,
   function hhmmToMin(v) {
     const [h,m] = v.split(':').map(Number); return h*60+m;
   }
-  // Format minutes → "H:MM AM/PM"
-  function minToDisplay(min) {
-    const h24 = Math.floor(min/60) % 24, m = min % 60;
-    const ap = h24 < 12 ? 'AM' : 'PM';
-    const h = h24 % 12 || 12;
-    return `${h}:${String(m).padStart(2,'0')} ${ap}`;
-  }
+  // Minutes → the one display format (U-11: fmtTime)
+  function minToDisplay(min) { return fmtTime(Math.floor(min/60) % 24, min % 60); }
 
   const startVal = toHHMM(startTime);
   const endVal   = toHHMM(endTime);
@@ -14133,10 +14128,16 @@ function eventFullLocation(s) {
   return null;
 }
 
+/* U-11: THE display formatter for a time of day — every calendar, booking,
+   travel and report string goes through it. It follows Settings → Time
+   format: '24' → "14:30"; anything else → "2:30 PM", the Settings option's
+   own example and the server default ('12'), so an unset value (before
+   settings load) matches the hour axis instead of flashing 24-hour.
+   Machine formats (ISO, Outlook payloads, "HH:MM" for <input type=time>)
+   never use it. */
 function fmtTime(h, m) {
-  // Respect timeFormat setting: '12' → 12-hour AM/PM, '24' or unset → 24-hour
   var fmt = (window.APP_SETTINGS || {}).timeFormat;
-  if (fmt === '12') {
+  if (fmt !== '24') {
     var ap = h < 12 ? ' AM' : ' PM';
     return (h % 12 || 12) + ':' + String(m || 0).padStart(2,'0') + ap;
   }
@@ -17089,15 +17090,8 @@ function regionDistance(a, b) {
   };
   return MAP[key] != null ? MAP[key] : 25;
 }
-function fmtMin(min) {
-  var h = Math.floor(min / 60), m = min % 60;
-  var fmt = (window.APP_SETTINGS || {}).timeFormat;
-  if (fmt === '12') {
-    var ap = h < 12 ? 'am' : 'pm';
-    return (h % 12 || 12) + ':' + String(m).padStart(2,'0') + ap;
-  }
-  return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
-}
+// Minutes since midnight → the one display format (U-11: fmtTime).
+function fmtMin(min) { return fmtTime(Math.floor(min / 60), min % 60); }
 
 /* ---------- Impact modal ---------- */
 // `var`, not `let`: splose-sync.js reads window.pendingMove inside its
@@ -23674,12 +23668,7 @@ function _applyPanelPrefill(opts) {
     ? new Date(opts.date + 'T12:00:00').toLocaleDateString('en-AU', { day:'numeric', month:'short' })
     : '';
   const pad = n => String(n).padStart(2,'0');
-  const fmtT = (h, m) => {
-    h = h % 24;   // never read 24:45 as "12:45 PM"
-    const ampm = h < 12 ? 'AM' : 'PM';
-    const h12  = h % 12 || 12;
-    return `${h12}:${pad(m)} ${ampm}`;
-  };
+  const fmtT = (h, m) => fmtTime(h % 24, m);   // never read 24:45 as "12:45 PM" (U-11: one formatter)
 
   let timeStr = '';
   if (opts.startH !== undefined) {
@@ -23843,7 +23832,7 @@ function renderCalendarPreviewBlocks(slots) {
     const endH    = Math.floor(endMin / 60);
     const endM    = endMin % 60;
     const pad     = n => String(n).padStart(2,'0');
-    const fmtT    = (h, m) => { const h12 = h%12||12; return `${h12}:${pad(m)}${h<12?'a':'p'}`; };
+    const fmtT    = (h, m) => fmtTime(h % 24, m);   // U-11: one formatter
 
     const el = document.createElement('div');
     el.className = 'cal-preview-block cal-proposed' + (idx === 0 ? ' preview-selected' : '');

@@ -3609,7 +3609,10 @@ function _renderTravelPanel(seg) {
   });
 }
 
+// U-11: the shell's fmtTime is the one display format (follows Settings →
+// Time format); the fallback only serves a page without the shell.
 function _tpFmtTime(h, m) {
+  if (typeof fmtTime === 'function') return fmtTime(h, m);
   var ap = h < 12 ? 'am' : 'pm';
   return (h % 12 || 12) + ':' + String(m).padStart(2, '0') + ap;
 }

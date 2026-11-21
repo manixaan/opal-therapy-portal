@@ -1257,7 +1257,7 @@ describe('deleting a session re-plans the travel either side (6 Oct 2026)', () =
     await flush();
     expect(travelPatches(env, 'db-N1')[0].body).toEqual({ next: null, afterOffsetMin: null });
     expect(popup(env).textContent).toMatch(/Travel after removing Sean Hickey/);
-    expect(popup(env).textContent).toMatch(/Noah Mathew 7:45am and Noah Mathew 4:00pm are now back to back/);
+    expect(popup(env).textContent).toMatch(/Noah Mathew 7:45 AM and Noah Mathew 4:00 PM are now back to back/);
     const opts = Array.from(popup(env).querySelectorAll('.tc-opt')).map((b) => b.textContent);
     expect(opts[0]).toMatch(/^Go direct to Noah Mathew · same place, no drive \(suggested\)$/);
     expect(opts[1]).toMatch(/^Go home in between · \d+ min home, \d+ min out$/);
@@ -1274,7 +1274,7 @@ describe('deleting a session re-plans the travel either side (6 Oct 2026)', () =
     env.ev("delete SESSIONS.N2; var __opened = null; openTravelPanel = function (seg) { __opened = seg.kind; };");
     env.ev("var __ctx = travelNeighboursOf('S'); delete SESSIONS.S; var __done = travelReplanAfterDelete(__ctx);");
     await flush();
-    expect(popup(env).textContent).toMatch(/Noah Mathew 7:45am is now the last stop on Monday\. The day ends with the drive to Home/);
+    expect(popup(env).textContent).toMatch(/Noah Mathew 7:45 AM is now the last stop on Monday\. The day ends with the drive to Home/);
     popup(env).querySelector('[data-key="change"]').click();
     expect(await env.ev('__done')).toBe('change');
     expect(env.ev('__opened')).toBe('end');

@@ -721,7 +721,7 @@ describe('changed assets are cache-busted', () => {
       ['profile.js', 13],
       // 1: reports.js is new — the Daily & Weekly Snapshot domain lifted out
       // of the shell. Same reason as profile.js: a first pin is still a pin.
-      ['reports.js', 9],
+      ['reports.js', 10],
       // 3: the travel panel shows full addresses, edits the client's location
       // on the appointment, and takes a one-off start/finish address for the day.
       // 15: the superseded leg is hidden as soon as the panel opens; a placeholder
@@ -737,7 +737,7 @@ describe('changed assets are cache-busted', () => {
       // Via home switch; the panel names the real next stop (28 Oct 2026).
       // 52: drives priced at their own departure time; right-click › Not driving
       // this; the traffic-alert hook; Make room's apply shared (29 Oct 2026).
-      ['travel.js', 72],
+      ['travel.js', 73],
       // 1: traffic alerts — a re-priced drive running into a client session.
       ['travel-alerts.js', 1], ['travel-alerts.css', 2],
       // 1: booking-route.js/.css are new — client location selector, the
