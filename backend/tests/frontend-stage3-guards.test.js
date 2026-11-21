@@ -646,7 +646,7 @@ describe('calendar drag-selection coordinate fix', () => {
     // The grid callers say so themselves (10 Oct 2026): keepState injected on a
     // copy inside openBookingPanel was invisible to booking-route.js's open
     // hook, which then reset the chosen address to the client's first one.
-    expect(HTML).toContain('openBookingPanel({ day: pending.day, date, startH, startM, endH: startH + 1, endM: startM, keepState: _bspOpen });');
+    expect(HTML).toContain('openBookingPanel({ day: pending.day, date, startH, startM, endH: Math.floor(endMin / 60), endM: endMin % 60, keepState: _bspOpen });');
     expect(HTML).toContain('openBookingPanel({ day: dragState.day, date: _dragDate, startH: _dragStartH, startM: _dragStartM, endH: _dragEndH, endM: _dragEndM, keepState: _bspOpen, fromDrag: true });');
     expect(HTML).not.toMatch(/opts = Object\.assign\(\{\}, opts, \{ keepState: true \}\)/);
     expect(HTML).toContain("document.body.classList.remove('bsp-open');");
