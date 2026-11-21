@@ -1617,7 +1617,7 @@ describe('case notes review surface', () => {
   const CN_CODE = CN_JS.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
 
   test('assets are linked next to the other extracted asset pairs', () => {
-    expect(HTML).toContain('<link rel="stylesheet" href="/casenotes.css?v=3" />');
+    expect(HTML).toContain('<link rel="stylesheet" href="/casenotes.css?v=4" />');
     expect(HTML).toContain('<script src="/casenotes.js?v=6" defer></script>');
   });
 
