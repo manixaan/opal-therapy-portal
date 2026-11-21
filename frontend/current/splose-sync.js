@@ -11,9 +11,8 @@
      • marks unsynced tiles on the calendar grid
      • never prompts about waiting changes: the server's auto-sync writes
        them, and Sync Splose stays the manual way (6 Oct 2026)
-     • makes a drag / resize / time-edit real: the existing commitMove only
-       repainted the tile — this persists the new time (PATCH), which the
-       backend queues for Splose
+     • follows a saved drag / resize / time-edit (the calendar's commitMove
+       PATCHes it; the backend queues it for Splose) with the pending count
      • polls for "changed inside Splose" alerts and shows each one, asking
        whether the change was valid
      • match, link or ignore (080): each queued new appointment shows whether
@@ -840,67 +839,14 @@
 
   // ── Making a move real ────────────────────────────────────────────────────
 
-  var DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
-  function perthYmdOf(iso) {
-    var t = new Date(iso).getTime() + 8 * 3600000;
-    var d = new Date(t);
-    return [d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate()];
-  }
-  function shiftYmd(ymd, days) {
-    var d = new Date(Date.UTC(ymd[0], ymd[1] - 1, ymd[2] + days));
-    return [d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate()];
-  }
-  function pad(n) { return String(n).padStart(2, '0'); }
-  function perthIso(ymd, h, m) {
-    return ymd[0] + '-' + pad(ymd[1]) + '-' + pad(ymd[2]) + 'T' + pad(h) + ':' + pad(m) + ':00+08:00';
-  }
-
+  /* The calendar's own commitMove saves every drag, resize and time edit
+     (21 Nov 2026 — it used to be this wrapper, so a move was only real while
+     draft sync was on). Splose's part is what follows a saved move: the
+     pending count, and the tail on the "Moved" line (SploseSync.moveTail). */
   function installMovePersist() {
     if (global.__sploseSyncMovePersist) return;
     global.__sploseSyncMovePersist = true;
-    var origCommit = global.commitMove;
-    if (typeof origCommit !== 'function') return;
-    global.commitMove = function () {
-      var pm = global.pendingMove;
-      var before = pm && global.SESSIONS ? global.SESSIONS[pm.id] : null;
-      var snapshot = before ? { day: before.day, iso: before.startTimeIso, dbId: before.dbId, type: before.type, cancelled: before.cancelled } : null;
-      var out = origCommit.apply(this, arguments);
-      if (!snapshot || !snapshot.dbId || !pm) return out;
-      try {
-        var s = global.SESSIONS[pm.id];
-        var origIdx = DAYS.indexOf(snapshot.day), newIdx = DAYS.indexOf(s.day);
-        var baseYmd = snapshot.iso ? perthYmdOf(snapshot.iso) : null;
-        if (!baseYmd || origIdx < 0 || newIdx < 0) return out;
-        var ymd = shiftYmd(baseYmd, newIdx - origIdx);
-        var startIso = perthIso(ymd, s.startH, s.startM || 0);
-        var endIso = perthIso(ymd, s.endH, s.endM || 0);
-        s.startTimeIso = new Date(startIso).toISOString();
-        s.endTimeIso = new Date(endIso).toISOString();
-        // The save is handed back on the move (pm.persisted) so a caller that
-        // moves several blocks at once (Make room, travel.js) can wait for
-        // them; pm.quiet leaves the one summary toast to that caller.
-        pm.persisted = fetchJson('/api/outlook/events/' + encodeURIComponent(snapshot.dbId), { method: 'PATCH', body: { startTime: startIso, endTime: endIso } })
-          .then(function (r) {
-            if (!r.ok) {
-              toast(r.json.error || 'The move could not be saved', true);
-              if (typeof global.loadOutlookEventsToCalendar === 'function') global.loadOutlookEventsToCalendar();
-              return r;
-            }
-            if (pm.quiet) { refreshPending(); return r; }
-            var tail = S.autoSync ? 'Splose will follow shortly.' : 'Sync Splose when the week is right.';
-            // Say what actually happened to Outlook (10 Oct 2026): with write-back
-            // off, or on a portal-only row, nothing will "catch up".
-            var os = r.json.outlookStatus;
-            toast(r.json.savedToOutlook ? 'Moved — Outlook updated. ' + tail
-              : os === 'disabled' ? 'Moved — saved in the portal (Outlook write-back is off). ' + tail
-              : os === 'not_linked' ? 'Moved — saved. ' + tail
-              : 'Moved — saved. Outlook will catch up; ' + tail);
-            refreshPending();
-            return r;
-          });
-      } catch (e) { /* the visual move already happened; nothing else to undo */ }
-      return out;
-    };
+    global.addEventListener('opal:session-moved', function () { refreshPending(); });
   }
 
   // ── Changes made inside Splose ────────────────────────────────────────────
@@ -1058,6 +1004,8 @@
     /** Repaint the Sync button's count and the tab badges (block review calls this). */
     paint: function () { renderButton(); paintTabs(); },
     isReviewOpen: function () { return S.panelOpen && S.tab === 'review'; },
+    /** The words a saved move ends with while draft sync is on. */
+    moveTail: function () { return S.enabled ? (S.autoSync ? 'Splose will follow shortly.' : 'Sync Splose when the week is right.') : ''; },
     _state: S,
   };
 })(window);

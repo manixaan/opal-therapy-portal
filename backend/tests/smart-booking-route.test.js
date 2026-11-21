@@ -1779,10 +1779,9 @@ describe('Make room — shorten the flexible blocks before a client whose time i
     expect(at).toBeLessThan(SHELL.indexOf('reload so the saved appointment is what the grid shows'));
   });
 
-  test('splose-sync hands the save back on the move, and a quiet move leaves the toast to its caller', () => {
-    const sync = fs.readFileSync(path.join(FRONTEND, 'splose-sync.js'), 'utf8');
-    expect(sync).toContain("pm.persisted = fetchJson('/api/outlook/events/'");
-    expect(sync).toContain('if (pm.quiet) { refreshPending(); return r; }');
+  test('commitMove hands the save back on the move, and a quiet move leaves the toast to its caller', () => {
+    expect(SHELL).toContain("pm.persisted = fetch('/api/outlook/events/' + encodeURIComponent(from.dbId), {");
+    expect(SHELL).toContain('if (!pm.quiet) {');
   });
 });
 

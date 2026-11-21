@@ -779,7 +779,7 @@ describe('changed assets are cache-busted', () => {
       // 8: chips written only on change (no observer loop); the move toast names the Outlook status.
       // 9 (js) / 2 (css): match, link or ignore — each queued new appointment shows
       // whether Splose already holds it, with Link / Send / Ignore and bulk actions.
-      ['splose-sync.js', 14], ['splose-sync.css', 4],
+      ['splose-sync.js', 15], ['splose-sync.css', 4],
       // 1: Settings → Calendar sync — per-direction Outlook/Splose choices, the
       // Owner's practice limits and the Sync now preview (migration 081).
       ['sync-settings.js', 6], ['sync-settings.css', 3],
@@ -895,10 +895,27 @@ describe('calendar move persistence — the shell state splose-sync.js depends o
     expect(SHELL).toMatch(/^var PATIENTS = \[\];/m);
     expect(SHELL).not.toMatch(/^let PATIENTS\b/m);
     expect(SHELL).not.toMatch(/^let pendingMove\b/m);
-    const sync = fs.readFileSync(path.join(FRONTEND, 'splose-sync.js'), 'utf8');
-    expect(sync).toMatch(/global\.pendingMove/);
-    expect(sync).toMatch(/global\.SESSIONS/);
+    // travel.js still drives window.commitMove with window.pendingMove.
     expect(SHELL).toMatch(/^window\.SESSIONS = SESSIONS;/m);
+  });
+
+  // 21 Nov 2026 audit (C-01/C-02): the save lived only in splose-sync.js's
+  // commitMove wrapper, installed only when draft sync was on — with the flag
+  // off, or its one boot request failing, every move was visual only. The
+  // calendar's own commitMove now saves, and a failed save reloads the truth.
+  test('commitMove itself saves the move; splose-sync no longer wraps it', () => {
+    const body = SHELL.slice(SHELL.indexOf('function commitMove()'), SHELL.indexOf('// Cmd+Z for the calendar'));
+    expect(body).toContain('__persistMove(pendingMove, s, _persistFrom);');
+    expect(body).toContain("pm.persisted = fetch('/api/outlook/events/' + encodeURIComponent(from.dbId), {");
+    expect(body).toContain(".catch(() => ({ ok: false, status: 0,");
+    expect(body).toMatch(/if \(!res\.ok\) \{\s*showToast\('Not moved'[^\n]*\n\s*reload\(\);/);
+    const sync = fs.readFileSync(path.join(FRONTEND, 'splose-sync.js'), 'utf8');
+    expect(sync).not.toMatch(/global\.commitMove = function/);
+    expect(sync).not.toContain("fetchJson('/api/outlook/events/'");
+    expect(sync).toContain("addEventListener('opal:session-moved'");
+    // No success line before the server has answered.
+    expect(SHELL).not.toContain("showToast('Moved on the calendar')");
+    expect(SHELL).not.toContain('Splose write queued.`);');
   });
 
   // 19 Nov 2026: Case Management (and Resource Preparation, reports) share the

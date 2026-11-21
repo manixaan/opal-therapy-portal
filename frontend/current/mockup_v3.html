@@ -189,7 +189,7 @@
 <!-- Splose draft-and-publish sync: Sync Splose button, review panel, unsynced
      tiles, tab-leave prompt, and "changed inside Splose" alerts. Wraps
      switchTab and commitMove once the shell has defined them. -->
-<script src="/splose-sync.js?v=14" defer></script>
+<script src="/splose-sync.js?v=15" defer></script>
 <!-- Settings → Calendar sync: Off / Sync manually / Automatic for Outlook both
      ways, and the three-tab Sync now review (migration 081, 19 Nov 2026). -->
 <script src="/sync-settings.js?v=6" defer></script>
@@ -14632,12 +14632,19 @@ function commitGroupMove(moves, onBlocked) {
     return;
   }
   const later = moves.reduce((n, m) => n + (m.startMin - sessionStartMin(SESSIONS[m.id])), 0) > 0;
+  const saves = [];
   moves.slice().sort((a, b) => (later ? -1 : 1) * ((a.startMin - b.startMin) || 0)).forEach(m => {
-    pendingMove = { id: m.id, day: m.day, startMin: m.startMin, duration: m.dur, impact: { verdict: 'ok', impacts: [] } };
+    pendingMove = { id: m.id, day: m.day, startMin: m.startMin, duration: m.dur, impact: { verdict: 'ok', impacts: [] }, quiet: true };
     window.commitMove();
+    if (pendingMove.persisted) saves.push(pendingMove.persisted);
     pendingMove = null;
   });
-  showToast('Moved ' + moves.length + ' sessions');
+  // One line once the server has them all — never "moved" before it is true.
+  Promise.all(saves).then(rs => {
+    const failed = rs.filter(r => !r || !r.ok).length;
+    if (failed) showToast('Moved ' + (moves.length - failed) + ' of ' + moves.length + ' sessions', failed + ' could not be saved and went back.', 'error');
+    else showToast('Moved ' + moves.length + ' sessions', 'Saved');
+  });
 }
 
 /* ---------- Precision move (6 Oct 2026) ----------
@@ -15888,9 +15895,8 @@ function bdApplyEdit(id) {
     // reflects the change without a second confirmation dialog. Matches the
     // "edited times update the UI immediately" acceptance criterion for the
     // common case (e.g. shortening lunch, extending a therapy block).
-    pendingMove = { id, day: s.day, startMin, duration: dur, impact };
+    pendingMove = { id, day: s.day, startMin, duration: dur, impact, toast: ['Session updated', `${fmtTime(sh, sm)} – ${fmtTime(eh, em)} · ${dur} min`] };
     commitMove();
-    showToast('Session updated', `${fmtTime(sh, sm)} – ${fmtTime(eh, em)} · ${dur} min · Splose write queued.`);
     pendingMove = null;
     closeBlockDetail();
     return;
@@ -16440,10 +16446,8 @@ function openMoveImpact(id, newDay, newStartMin, durationMin, impact) {
   // move that cannot happen — an overlap, too little travel time — still opens
   // the review below.
   if (impact.verdict !== 'blocker') {
-    const notes = (impact.impacts || []).filter(i => i.sev === 'warn').map(i => i.ttl);
-    commitMove();
-    if (notes.length) showToast('Moved', notes.join(' · '));
-    else if (!window.SploseSync) showToast('Moved on the calendar');
+    pendingMove.notes = (impact.impacts || []).filter(i => i.sev === 'warn').map(i => i.ttl);
+    commitMove();   // its save says "Moved" (with any notes) once the server has it
     pendingMove = null;
     drag = null;
     return;
@@ -16516,7 +16520,6 @@ function cancelMove() {
 function confirmMove() {
   if (!pendingMove || pendingMove.impact.verdict === 'blocker') return;
   commitMove();
-  if (!window.SploseSync) showToast('Moved on the calendar');
   closeImpactModal();
   pendingMove = null;
   drag = null;
@@ -16524,8 +16527,8 @@ function confirmMove() {
 
 function addTravelAndConfirm() {
   if (!pendingMove) return;
+  pendingMove.toast = ['Moved', 'Add the travel leg from the event\'s detail panel'];
   commitMove();
-  showToast('Moved. Add the travel leg from the event\'s detail panel.');
   closeImpactModal();
   pendingMove = null;
   drag = null;
@@ -16538,6 +16541,7 @@ function commitMove() {
   const s = SESSIONS[id];
   const origDay = s.day;
   const before = { day: s.day, startMin: sessionStartMin(s), duration: durMin(s) };
+  const _persistFrom = { day: s.day, iso: s.startTimeIso, dbId: s.dbId, cancelled: s.cancelled };
   const sh = Math.floor(startMin / 60), sm = startMin % 60;
   const eh = Math.floor((startMin + duration) / 60), em = (startMin + duration) % 60;
   s.startH = sh; s.startM = sm; s.endH = eh; s.endM = em;
@@ -16563,6 +16567,10 @@ function commitMove() {
   }
   // Remove ghost if present
   if (drag && drag.ghost && drag.ghost.parentElement) drag.ghost.parentElement.removeChild(drag.ghost);
+  // Save it. The calendar's own move is the write (21 Nov 2026 audit C-01):
+  // it used to live only in the Splose draft-sync wrapper, so with that flag
+  // off — or its one boot request failing — a move was visual only.
+  __persistMove(pendingMove, s, _persistFrom);
   // Travel + gap overlays need to be refreshed now that the block has moved/resized
   if (typeof refreshDayOverlays === 'function') refreshDayOverlays(newDay);
   if (typeof refreshDayOverlays === 'function' && origDay && origDay !== newDay) refreshDayOverlays(origDay);
@@ -16570,6 +16578,58 @@ function commitMove() {
   // (An undo replay skips it: the travel the move changed is put back by the same undo step.)
   if (!__calMoveUndoReplaying && typeof travelChainAfterMove === 'function') setTimeout(() => travelChainAfterMove(id), 0);
   if (!__calMoveUndoReplaying) __registerMoveUndo(id, s, before);
+}
+
+/* Write a committed move to the server: PATCH /api/outlook/events/:dbId with
+   the new Perth start/end. The promise is handed back on the move
+   (pm.persisted, resolving { ok, status, json }) so a caller moving several
+   blocks at once (Make room, travel.js) can wait for them; pm.quiet leaves the
+   one summary toast to that caller; pm.toast = [title, sub] replaces the
+   default success line. On any failure — HTTP or network — the calendar
+   reloads from the server, so the tile goes back to where it really is, and
+   says so. 'opal:session-moved' lets Splose sync add its own follow-up.
+   s.__unsaved marks the block until the server has answered, so nothing
+   mirrors a time that is not saved yet. */
+function __persistMove(pm, s, from) {
+  if (!pm || !s || !from || !from.dbId || !from.iso) return;
+  const days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+  const oi = days.indexOf(from.day), ni = days.indexOf(s.day);
+  if (oi < 0 || ni < 0) return;
+  const pad = (n) => String(n).padStart(2, '0');
+  const p = new Date(new Date(from.iso).getTime() + 8 * 3600000);
+  const d = new Date(Date.UTC(p.getUTCFullYear(), p.getUTCMonth(), p.getUTCDate() + (ni - oi)));
+  const ymd = d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate());
+  const iso = (h, m) => ymd + 'T' + pad(h) + ':' + pad(m || 0) + ':00+08:00';
+  const startIso = iso(s.startH, s.startM), endIso = iso(s.endH, s.endM);
+  s.startTimeIso = new Date(startIso).toISOString();
+  s.endTimeIso = new Date(endIso).toISOString();
+  s.__unsaved = true;
+  const reload = () => { if (typeof loadOutlookEventsToCalendar === 'function') loadOutlookEventsToCalendar(); };
+  pm.persisted = fetch('/api/outlook/events/' + encodeURIComponent(from.dbId), {
+    method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ startTime: startIso, endTime: endIso }),
+  }).then(r => r.json().catch(() => ({})).then(j => ({ ok: r.ok, status: r.status, json: j })))
+    .catch(() => ({ ok: false, status: 0, json: { error: 'The move could not be saved — check your connection.' } }))
+    .then(res => {
+      s.__unsaved = false;
+      if (!res.ok) {
+        showToast('Not moved', (res.json && res.json.error) || 'The move could not be saved.', 'error');
+        reload();
+        return res;
+      }
+      if (!pm.quiet) {
+        const os = res.json && res.json.outlookStatus;
+        let where = res.json && res.json.savedToOutlook ? 'Saved · Outlook updated'
+          : os === 'disabled' ? 'Saved in the portal (Outlook write-back is off)'
+          : 'Saved';
+        const tail = window.SploseSync && typeof window.SploseSync.moveTail === 'function' ? window.SploseSync.moveTail() : '';
+        if (tail) where += ' · ' + tail;
+        if (pm.toast) showToast(pm.toast[0], pm.toast[1] ? pm.toast[1] + ' · ' + where : where);
+        else showToast('Moved', (pm.notes && pm.notes.length ? pm.notes.join(' · ') + ' · ' : '') + where);
+      }
+      try { window.dispatchEvent(new CustomEvent('opal:session-moved', { detail: { id: s.id, dbId: from.dbId, quiet: !!pm.quiet, response: res } })); } catch (e) { /* old browsers */ }
+      return res;
+    });
 }
 
 // Cmd+Z for the calendar: every committed drag, edge-resize or time edit is one
