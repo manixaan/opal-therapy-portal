@@ -3,7 +3,7 @@
 - Tracker stage: **idea**
 - Tracker environment: **none**
 - Evidence label: **built-untested**
-- Addressed since the last audit (2026-11-19..2026-11-20): **no**
+- Addressed since the last audit (2026-11-20..2026-11-21): **no**
 - Created (any located code): **yes**
 
 ## Located files
@@ -25,13 +25,13 @@ OK — backend/profile-routes.js is requireAuth router-wide + inline canApprove(
 Resource Hub has E2E proof (portal.spec.js) but that is a different subsystem; there is still no dedicated "Professional Development" tab/page proof under its real home (My Profile).
 
 ## Recency
-Not touched since the last audit (2026-11-19) — zero commits landed in `backend/` or `frontend/current/` anywhere in the repository between 18:39 UTC 2026-11-19 and tonight's audit.
+Not touched since the last audit (2026-11-20) — none of the 77 commits that landed in `backend/` or `frontend/current/` between 18:52 UTC 2026-11-20 and tonight's audit touched `backend/profile-routes.js` or the CPD section (that window was calendar/booking/travel/Splose-sync and invoicing/billing/Xero work only).
 
 ## Open tasks (from the tracker)
 (no tasks recorded on this card)
 
 ## Reason for the label
-**Reclassified tonight from `tab-unproven` to `built-untested`.** Last night's label assumed the code's home was still undecided between Resource Hub and My Profile, with Resource Hub's own tests treated as indirect coverage. Tonight's fresh grep resolved the location: it is concretely the CPD section of the My Profile tab, backed by backend/profile-routes.js. No test — unit or integration — exercises the `/api/profile/cpd` round trip itself (only unrelated/incidental hits), which is exactly the `built-untested` definition (code located and guarded, but no test exercises it, or the only tests are unrelated) rather than a tab-proof gap on tested code.
+Confirmed again tonight as `built-untested` (reclassified from `tab-unproven` on 2026-11-20 once a fresh grep resolved the location: it is concretely the CPD section of the My Profile tab, backed by backend/profile-routes.js). No test — unit or integration — exercises the `/api/profile/cpd` round trip itself (only unrelated/incidental hits), which is exactly the `built-untested` definition (code located and guarded, but no test exercises it, or the only tests are unrelated) rather than a tab-proof gap on tested code.
 
 ## Disagreement with the tracker
 None beyond the location correction above — the tracker's own next_action ("decide whether this card merges into Resource Hub or My Profile") is now answered by the code: it already lives in My Profile.

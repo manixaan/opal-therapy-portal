@@ -3,7 +3,7 @@
 - Tracker stage: **idea**
 - Tracker environment: **none**
 - Evidence label: **built-untested**
-- Addressed since the last audit (2026-11-19..2026-11-20): **no**
+- Addressed since the last audit (2026-11-20..2026-11-21): **no**
 - Created (any located code): **yes**
 
 ## Located files
@@ -21,7 +21,7 @@ OK functionally — requireAuth router-wide plus an inline canApprove(req.user) 
 PROFILE TAB exists; no E2E or browser QA entry.
 
 ## Recency
-Not touched since the last audit (2026-11-19) — zero commits landed in `backend/` or `frontend/current/` anywhere in the repository between 18:39 UTC 2026-11-19 and tonight's audit.
+Not touched since the last audit (2026-11-20) — none of the 77 commits that landed in `backend/` or `frontend/current/` between 18:52 UTC 2026-11-20 and tonight's audit touched `backend/profile-routes.js` or the Profile tab (that window was calendar/booking/travel/Splose-sync and invoicing/billing/Xero work only).
 
 ## Open tasks (from the tracker)
 - Review Portal Structure — todo

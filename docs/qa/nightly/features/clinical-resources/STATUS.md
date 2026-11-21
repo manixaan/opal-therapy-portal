@@ -3,7 +3,7 @@
 - Tracker stage: **idea**
 - Tracker environment: **none**
 - Evidence label: **proven**
-- Addressed since the last audit (2026-11-19..2026-11-20): **no**
+- Addressed since the last audit (2026-11-20..2026-11-21): **no**
 - Created (any located code): **yes**
 
 ## Located files
@@ -23,7 +23,7 @@ OK — requireAuth + requireRole('owner') / requireManager on writes, re-confirm
 e2e/tests/portal.spec.js:116 still has the Resource Hub assertion ("Resource Hub shows approved starter content, no authoring, no public URLs") — real E2E coverage of the tab, confirmed present tonight.
 
 ## Recency
-Not touched since the last audit (2026-11-19) — zero commits landed in `backend/` or `frontend/current/` anywhere in the repository between 18:39 UTC 2026-11-19 and tonight's audit.
+Not touched since the last audit (2026-11-20) — none of the 77 commits that landed in `backend/` or `frontend/current/` between 18:52 UTC 2026-11-20 and tonight's audit touched any Resource Hub file (that window was calendar/booking/travel/Splose-sync and invoicing/billing/Xero work only).
 
 ## Open tasks (from the tracker)
 (no tasks recorded on this card)

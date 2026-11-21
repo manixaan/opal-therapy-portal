@@ -3,7 +3,7 @@
 - Tracker stage: **idea**
 - Tracker environment: **none**
 - Evidence label: **tab-unproven**
-- Addressed since the last audit (2026-11-19..2026-11-20): **no**
+- Addressed since the last audit (2026-11-20..2026-11-21): **no**
 - Created (any located code): **yes**
 
 ## Located files
@@ -26,7 +26,7 @@ OK — requireClinicalRead/Write (fca/letter) and requireTemplateRead/Write (tem
 None found — no tab banner, no E2E spec, no browser QA entry names FCA/Letter/Agreement.
 
 ## Recency
-Not touched since the last audit (2026-11-19) — zero commits landed in `backend/` or `frontend/current/` anywhere in the repository between 18:39 UTC 2026-11-19 and tonight's audit.
+Mostly untouched — of the 77 commits landed between 18:52 UTC 2026-11-20 and tonight's audit, one made a cosmetic 2-line change to `frontend/current/reports.js`: its `_rptFmtTime` helper now delegates to the shell's shared `fmtTime` when available (part of an unrelated calendar time-format consolidation, U-11). It does not touch FCA, Progress Letter, Client Agreement Form, or any of the Report Templates routes/logic — confirmed no functional change and no test regression.
 
 ## Open tasks (from the tracker)
 - FCA — todo
@@ -34,7 +34,7 @@ Not touched since the last audit (2026-11-19) — zero commits landed in `backen
 - Client Agreement Form — todo
 
 ## Reason for the label
-All three document types generate correctly and 625 backend tests pass — the gap is proof, not missing code: nobody has hand-checked a document through to a downloaded file, and no browser/E2E test covers any of the three flows. Unchanged from last night.
+All three document types generate correctly and 625 backend tests pass (re-confirmed fresh tonight) — the gap is proof, not missing code: nobody has hand-checked a document through to a downloaded file, and no browser/E2E test covers any of the three flows. Unchanged from last night.
 
 ## Disagreement with the tracker
 Tracker "idea" stage vs. an extensive, well-tested document-generation backend.

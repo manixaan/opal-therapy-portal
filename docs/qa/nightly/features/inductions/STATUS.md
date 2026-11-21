@@ -3,7 +3,7 @@
 - Tracker stage: **idea**
 - Tracker environment: **none**
 - Evidence label: **needs-refinement**
-- Addressed since the last audit (2026-11-19..2026-11-20): **no**
+- Addressed since the last audit (2026-11-20..2026-11-21): **no**
 - Created (any located code): **yes**
 
 ## Located files
@@ -24,7 +24,7 @@ OK — requireAuth + requireRole('owner'), re-confirmed.
 e2e/tests/tutorials.spec.js still exists and still covers the learner-side flow end-to-end (start, highlight, advance, pause, resume across reload/re-login, complete, restart). No coverage of the creator/builder or AI-helper side.
 
 ## Recency
-Not touched since the last audit (2026-11-19) — zero commits landed in `backend/` or `frontend/current/` anywhere in the repository between 18:39 UTC 2026-11-19 and tonight's audit.
+Not touched since the last audit (2026-11-20) — none of the 77 commits that landed in `backend/` or `frontend/current/` between 18:52 UTC 2026-11-20 and tonight's audit touched any induction file (that window was calendar/booking/travel/Splose-sync and invoicing/billing/Xero work only).
 
 ## Open tasks (from the tracker)
 - Induction Playground — todo

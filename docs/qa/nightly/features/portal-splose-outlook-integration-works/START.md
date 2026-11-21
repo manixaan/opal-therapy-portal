@@ -22,19 +22,14 @@ Portal - Splose - Outlook | Integration Works
 (not yet written in the tracker)
 
 ## Where it lives today
-- backend/splose-sync-routes.js
-- backend/travel-sync-routes.js
-- backend/sync-settings-routes.js
-- backend/calendar-routes.js
-- backend/splose-link-routes.js
-- backend/block-review-routes.js (new 2026-11-19 — `router.use('/api/block-review', requireAuth, denyReadOnly)`)
-- backend/block-review.js, backend/sync-preferences.js, backend/rich-notes.js (new 2026-11-19 — logic/utility modules, no HTTP surface of their own)
-- backend/billing/day-route.js, backend/billing/invoice-generation.js (billing route-planning logic this subsystem feeds, not route files)
-- New endpoint `PATCH /api/events/:dbId/notes` added to backend/routes.js
-- frontend: travel.js, booking-route.js, navigation.js, block-review.js, sync-settings.js, splose-sync.js, mockup_v3.html (calendar/booking panels, side panel, Sync popup)
+- backend/calendar-routes.js, backend/nf2f-routes.js, backend/travel-sync-routes.js, backend/splose-sync-routes.js, backend/sync-settings-routes.js, backend/splose-link-routes.js, backend/block-review-routes.js
+- `PATCH /api/events/:dbId/notes` in backend/routes.js
+- backend/travel-outlook-sync.js, backend/sync-preferences.js, backend/splose-api.js, backend/rich-notes.js, backend/block-review.js
+- backend/billing/{calendar-travel-minutes,day-route,route-facts,travel-billing,nf2f-timer,trips}.js
+- frontend: travel.js/.css, booking-route.js/.css, nf2f.js/.css, splose-sync.js/.css, sync-settings.js, block-review.js/.css, mockup_v3.html (calendar/booking panels, side panel, Sync popup)
 
 ## Start here
-Walk the Multi Calendar Rules checklist against the live portal: book a session, confirm the "changes saved but not synced" indicator, check travel-time calculation, and confirm Portal/Splose match in both directions. This is a verification pass, not a build task — the subsystem grew substantially overnight (relocate-before-block booking, server-saved side-panel notes, a redesigned three-tab Sync popup, a new outside-events review queue) and now passes 456 unit + 126 integration tests underneath it.
+Walk the Multi Calendar Rules checklist against the live portal: book a session, confirm the "changes saved but not synced" indicator, check travel-time calculation, and confirm Portal/Splose match in both directions. This is a verification pass, not a build task — the subsystem grew hugely again overnight 2026-11-21 (calendar a11y/gesture/rendering polish, booking panel, travel-leg display/routing, NF2F timer, a redesigned one-button Sync popup with a "To check" tab, an Outlook-text-escaping security fix) and now passes 2,290 unit + 133 integration tests underneath it.
 
 ## Done means
 Each Multi Calendar Rules checklist item is manually confirmed against the live portal with no bug found; label becomes `proven`.

@@ -3,41 +3,41 @@
 - Tracker stage: **idea**
 - Tracker environment: **none**
 - Evidence label: **needs-refinement**
-- Addressed since the last audit (2026-11-19..2026-11-20): **no**
+- Addressed since the last audit (2026-11-20..2026-11-21): **yes — heavily**
 - Created (any located code): **yes**
 
 ## Located files
-- backend/splose-sync-routes.js
-- backend/travel-sync-routes.js
-- backend/sync-settings-routes.js
 - backend/calendar-routes.js
+- backend/nf2f-routes.js
+- backend/travel-sync-routes.js
+- backend/splose-sync-routes.js
+- backend/sync-settings-routes.js
 - backend/splose-link-routes.js
-- backend/block-review-routes.js (added 2026-11-19 — `router.use('/api/block-review', requireAuth, denyReadOnly)`)
-- backend/block-review.js, backend/sync-preferences.js, backend/rich-notes.js (added 2026-11-19 — logic/utility modules, no HTTP surface of their own)
-- backend/billing/day-route.js, backend/billing/invoice-generation.js (billing route-planning logic this subsystem feeds, not route files)
-- New endpoint `PATCH /api/events/:dbId/notes` added to backend/routes.js
-- frontend: travel.js, booking-route.js, navigation.js, block-review.js, sync-settings.js, splose-sync.js, mockup_v3.html (calendar/booking panels, side panel, Sync popup)
+- backend/block-review-routes.js
+- `PATCH /api/events/:dbId/notes` in backend/routes.js
+- backend/travel-outlook-sync.js, backend/sync-preferences.js, backend/splose-api.js, backend/rich-notes.js, backend/block-review.js
+- backend/billing/{calendar-travel-minutes,day-route,route-facts,travel-billing,nf2f-timer,trips}.js (travel/route-planning logic this subsystem's UI consumes — not the invoicing use of the same billing engine, which the Xero Integration Works folder covers separately)
+- frontend: travel.js/.css, booking-route.js/.css, nf2f.js/.css, splose-sync.js/.css, sync-settings.js, block-review.js/.css, and the calendar tab block in mockup_v3.html
+- Migrations touched this window: `089_nf2f_untimed_resolution.sql`, `090_calendar_travel_minutes.sql` (applied cleanly inside the integration suite's own isolated schema setup; not run as a standalone migration by this audit)
 
 ## Guard check
-OK — every route file guarded (`requireAuth` + `requireRole`/`requirePermission`/`denyReadOnly` as appropriate), re-confirmed tonight including `block-review-routes.js` (added 2026-11-19). The `PATCH /api/events/:dbId/notes` endpoint is `requireAuth` + an inline role check (blocks `read_only`/`pre_employee`) + SQL scoped `WHERE id = $1 AND user_id = $2` — self-scoped by design, the same convention as `snapshot-routes.js`, not a missing guard.
+OK — every route file sits behind `requireAuth` plus a role/permission middleware or `denyReadOnly`, re-confirmed tonight across all seven route files. `PATCH /api/events/:dbId/notes` is `requireAuth` + an inline role check + SQL scoped `WHERE id = $1 AND user_id = $2` — self-scoped by design, not a gap. No unguarded route found. `node --check` clean on all 17 located backend files.
 
 ## Tests run
-- unit (12 pre-existing files): `outlook-delta-preserve.test.js, outlook-mirror.test.js, splose-alert-dialog.test.js, splose-api-queue.test.js, splose-auto-sync-reset.test.js, splose-credentials.test.js, splose-draft-sync.test.js, splose-link-routes.test.js, splose-match.test.js, splose-poller.test.js, travel-outlook-sync.test.js, travel-sync-routes.test.js` — **pass** (12 files / 156 tests)
-- unit (7 files added/changed 2026-11-19): `smart-booking-route.test.js, event-drawer-consistency.test.js, booking-panel-fresh.test.js, rich-notes.test.js, billing-engine.test.js, block-review.test.js, sync-preferences.test.js` — **pass** (7 files / 300 tests, re-run fresh tonight, identical to last night)
-- unit (8 guard/asset-pin files): `frontend-stage3-guards.test.js, assign-learning-guards.test.js, nf2f-frontend.test.js, onboarding-journey-frontend-guards.test.js, templates-frontend-guards.test.js, travel-physical-route.test.js, travel-traffic.test.js, assessment-surface-guards.test.js` — **pass** (8 files / 656 tests; some of these files are also exercised separately under other features' own test batches — not a separate defect count, just the same shared guard file run from two angles tonight)
-- integration (12 files): `calendar-category-colours.itest.js, calendar-local-first.itest.js, outlook-claim.itest.js, outlook-delta-preserve.itest.js, splose-connection.itest.js, splose-draft-sync.itest.js, splose-link-ignore.itest.js, sync-settings.itest.js, travel-outlook-sync.itest.js, event-notes.itest.js, block-review.itest.js, invoicing.itest.js` — **pass** (12 files / 126 tests, re-run fresh tonight, identical to last night)
+- unit: 63 files run in 5 batches — **pass** (2,290/2,290 tests; calendar rendering/a11y/gestures, booking, travel, NF2F, Splose sync/match/poller/credentials, sync preferences/backfill/safety, theme/time-format guards, rich-notes, block-review)
+- integration: 15 files — **pass** (133/133 tests, including fresh application of all 92 migrations). First two attempts against the shared `DB_NAME=therapy_scheduler_audit` hit `deadlock detected` on `TRUNCATE` across all 13 suites — a sibling audit worker (the Xero-feature fork) was running its own integration suite against that same database name concurrently. This is a cross-process DB collision, not a code defect. Re-run against an isolated database name passed cleanly. **Flagged in the brief's Technical detail: tonight's bootstrap should give each verification worker its own `DB_NAME` suffix.**
 
 ## Tab / browser proof
-docs/qa/BROWSER_QA_RESULTS.md rows E/F/J — dated 2026-08-01, stale (predates the whole 2026-11 window). No fresh browser/E2E proof added tonight.
+docs/qa/BROWSER_QA_RESULTS.md rows E/F/J — dated 2026-08-01, stale (predates the whole 2026-11 window). `e2e/tests/portal.spec.js` has zero calendar/booking/travel/sync references. No fresh browser/E2E proof added tonight.
 
 ## Recency
-**Not addressed tonight.** Zero commits landed in `backend/` or `frontend/current/` anywhere in the repository between the last audit (18:39 UTC 2026-11-19) and tonight's. Last night's 10-commit landing (Smart Booking relocate-before-block, side-panel day change, server-saved side-panel notes, the wrong-event fix, the redesigned three-tab Sync popup with its outside-events block-review queue) stands unchanged — this feature's unit test files remain at 456 tests across 19 files, plus 126 integration tests across 12 files, all re-confirmed passing fresh tonight rather than carried forward from the number alone.
+**Heavily addressed tonight.** ~70 of the 77 commits that landed in `backend/` and `frontend/current/` since the last audit (18:52 UTC 2026-11-20) touch this subsystem: calendar a11y/gesture/rendering polish, the booking panel, travel-leg display and routing, the NF2F timer, a redesigned one-button Sync popup with a "To check" outside-events tab, and a security fix escaping Outlook event text in calendar tiles/panel. Two of tonight's commits (`9606c4c`, `175cee5`) re-pin three guard tests after intentional UI changes — all still passing. Unit test count rose from 456 (19 files) to 2,290 (63 files); integration rose from 126 (12 files) to 133 (15 files) — all green, no regression.
 
 ## Open tasks (from the tracker)
 - Multi Calendar Rules — todo
 
 ## Reason for the label
-Code, guards and a now much larger test suite all pass — but the one tracker task (Multi Calendar Rules) is still `todo` and the next_action ("walk the Multi Calendar Rules checklist against the live portal") is still open. Tonight's commits added a large amount of new, tested code underneath this subsystem but did not touch that live-verification checklist item itself — it is a human, not a code, task.
+Code, guards and a now much larger test suite all pass, and tonight's large landing is clean — but the one tracker task (Multi Calendar Rules) is still `todo` and the next_action ("walk the Multi Calendar Rules checklist against the live portal") is still open, and no tab-level browser/E2E proof exists either. `needs-refinement` is the stricter, correct label given the open human checklist item.
 
 ## Disagreement with the tracker
-Tracker "idea" stage vs. a very large, heavily tested, and tonight even more actively developed calendar/sync/booking subsystem.
+Tracker "idea" stage vs. a very large, heavily tested, production subsystem that just grew substantially again tonight (~70 more commits, ~1,840 more passing unit tests than last night's snapshot) — the same disagreement as every prior night, now with more evidence behind it.
