@@ -533,6 +533,7 @@
         '<div><b>' + (s.sploseActivitiesIncluded || 0) + '</b><span>Splose support activities</span></div>' +
         '<div><b>' + (s.invoicedInSplose || 0) + '</b><span>skipped — already invoiced in Splose</span></div>' +
         '<div><b>' + s.travelAllocations + '</b><span>travel allocations</span></div>' +
+        (s.travelUnbilledMinutes ? '<div><b>' + (Math.round(s.travelUnbilledMinutes * 100) / 100) + '</b><span>travel minutes above the daily ceiling (not billed)</span></div>' : '') +
         '<div><b>' + s.itemsNeedAttention + '</b><span>items need attention</span></div>' +
         '<div><b>' + s.alreadyInvoiced + '</b><span>skipped — already invoiced</span></div>' +
         '<div><b>' + skipped + '</b><span>not billable (cancelled, DNA, future…)</span></div>' +
@@ -865,7 +866,7 @@
       '<label>Xero sales account code<input name="xeroSalesAccountCode" value="' + esc(s.xeroSalesAccountCode || '') + '" placeholder="e.g. 200" title="The revenue account in Xero these invoices post to. Blank = nothing is copied to Xero."></label>' +
       '<label>Xero tax type — GST-free<input name="xeroTaxTypeGstFree" value="' + esc(s.xeroTaxTypeGstFree || 'EXEMPTOUTPUT') + '"></label>' +
       '<label>Xero tax type — GST 10%<input name="xeroTaxTypeGst" value="' + esc(s.xeroTaxTypeGst || 'OUTPUT') + '"></label>' +
-      '<label class="check wide"><input type="checkbox" name="returnTravelPayable"' + (s.returnTravelPayable ? ' checked' : '') + '> Return travel is paid to clinicians (include the return leg in claimable travel)</label>' +
+      '<div class="inv-note wide">Travel follows the NDIS rule book: the day\'s total client-to-client driving (including the trip home), capped at 30 min per client in MMM1–3 and 60 in MMM4–5 plus one return, none in MMM6–7. No kilometre charge in any zone; remote trip costs are billed through Trips.</div>' +
       '</form><div id="inv-settings-msg"></div><div class="inv-field-row"><button class="btn primary" data-inv="save-settings">Save settings</button></div></div>' +
       '<div class="inv-panel"><h3>MMM classification</h3>' + (r.mmmDataset
         ? '<div>Active dataset <b>' + esc(r.mmmDataset.version) + '</b> — ' + esc(r.mmmDataset.source) + (r.mmmDataset.published_on ? ', published ' + dmy(String(r.mmmDataset.published_on).slice(0, 10)) : '') + ' (' + esc(r.mmmDataset.ring_count) + ' boundary rings). Client addresses are geocoded once and classified against these official boundaries; a point within ~250 m of a zone boundary is sent for review.</div>'

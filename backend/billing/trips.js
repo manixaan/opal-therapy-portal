@@ -287,8 +287,9 @@ async function generateTripInvoices({ pool = defaultPool, orgId, userId, tripId,
         const line = {
           component: 'TRIP_COST',
           itemCode: rate ? (rate.rule.tripCostItemCode || rate.rule.vehicleItemCode) : null,
-          description: `Remote Trip Shared Travel Cost – ${trip.name}`,
-          serviceDate: to, durationMinutes: null, quantityE4: 10000, unitCents: a.amountCents, amountCents: a.amountCents,
+          // Rule 13 (owner rule book): "Provider Travel – non-labour costs", item 15_799_0128_1_3, in $1 units.
+          description: `Provider Travel – non-labour costs (${trip.name})`,
+          serviceDate: to, durationMinutes: null, quantityE4: a.amountCents * 100, unitCents: 100, amountCents: a.amountCents,
           mmm, rateCardId: rate ? rate.card.id : null, rateCardVersion: rate ? rate.card.version : null,
           calculation: { ...calc, tripId, tripName: trip.name, tripDates: { from, to } },
         };
@@ -297,7 +298,7 @@ async function generateTripInvoices({ pool = defaultPool, orgId, userId, tripId,
           if (!['DRAFT', 'NEEDS_ATTENTION'].includes(claim.invoice_status)) continue;
           if (claim.line_status === 'REMOVED' || claim.is_overridden) { book.touch(claim.invoice_id); continue; }
           await tx.query(
-            `UPDATE invoice_lines SET trip_allocation_id = $2, unit_price = $3, amount = $3, quantity = 1, description = $4,
+            `UPDATE invoice_lines SET trip_allocation_id = $2, unit_price = 1, amount = $3, quantity = $3, description = $4,
                     item_code = $5, calculation = $6, mmm_zone = $7, rate_card_id = $8, rate_card_version = $9, updated_at = NOW()
               WHERE id = $1`,
             [claim.id, ta.id, a.amount, line.description, line.itemCode, JSON.stringify(line.calculation), mmm, line.rateCardId, line.rateCardVersion]);

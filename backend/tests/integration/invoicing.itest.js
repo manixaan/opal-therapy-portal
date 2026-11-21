@@ -192,7 +192,7 @@ describe('guards and tenancy', () => {
 });
 
 describe('normal invoicing', () => {
-  test('A — Perth MMM1 day: three sessions, travel split evenly with the 30-minute cap, return unpaid', async () => {
+  test('A — Perth MMM1 day: 114 min, 3 clients at different addresses → 30/30/54 (rule book), no km line', async () => {
     const app = buildApp();
     const org = await seedOrganisation();
     const { agent } = await login(app, 'owner', org.id);
@@ -214,19 +214,20 @@ describe('normal invoicing', () => {
     expect(s).toMatchObject({ invoicesCreated: 3, sessionsIncluded: 3, travelAllocations: 3, itemsNeedAttention: 0 });
     const list = await invoices(agent);
     expect(list).toHaveLength(3);
+    const want = { c1: ['30', '48.50', '242.49'], c2: ['30', '48.50', '242.49'], c3: ['54', '87.30', '281.29'] };
     for (const inv of list) {
       expect(inv.invoice_number).toMatch(/^INV-\d+$/);
       const { lines, invoice } = await detail(agent, inv.id);
       const [sess] = byComp(lines, 'SESSION');
       expect(sess).toMatchObject({ unit_price: '193.99', quantity: '1.0000', amount: '193.99', mmm_zone: 1 });
       const [lab] = byComp(lines, 'TRAVEL_LABOUR');
-      expect(lab).toMatchObject({ unit_price: '97.00', amount: '39.88' });
-      expect(lab.calculation).toMatchObject({ dayTotalMinutes: 74, billableSessions: 3, allocatedMinutesBeforeCap: 24.67, capMinutes: 30, claimableMinutes: 24.67 });
-      expect(lab.calculation.legs.find(l => l.kind === 'RETURN')).toMatchObject({ included: false, reason: 'return_travel_not_payable' });
-      const [km] = byComp(lines, 'TRAVEL_KM');
-      expect(km.amount).toBe('13.60');
-      expect(km.calculation.vehicleRatePerKm).toBe('0.99');
-      expect(invoice.total).toBe('247.47');
+      const [mins, amount, total] = want[inv.client_id];
+      expect(lab).toMatchObject({ unit_price: '97.00', amount });
+      expect(lab.calculation).toMatchObject({ method: 'ndis_rule_book_2026_11', dayTotalMinutes: 114, clientsInDay: 3, capMinutes: 30,
+        claimableMinutes: Number(mins), dayReport: { totalMinutes: 114, billedMinutes: 114, unbilledMinutes: 0 } });
+      expect(lab.calculation.legs.find(l => l.kind === 'RETURN')).toMatchObject({ included: true, reason: 'trip_home' });
+      expect(byComp(lines, 'TRAVEL_KM')).toHaveLength(0);            // rule 13: no km line in any zone
+      expect(invoice.total).toBe(total);
       expect(invoice.payer_name).toBe('MARS Plan Manager');
       expect(invoice.status).toBe('DRAFT');
     }
@@ -248,7 +249,7 @@ describe('normal invoicing', () => {
     await run(agent, d, d);
     let [inv] = await invoices(agent);
     let lab = byComp((await detail(agent, inv.id)).lines, 'TRAVEL_LABOUR')[0];
-    expect(lab.quantity).toBe('0.3000');
+    expect(lab.quantity).toBe('0.4667');                                 // 18 out + 10 home = 28 ≤ 30
     const iss = (await agent.get('/api/invoicing/issues')).body.issues || [];
     expect(iss.some((i) => i.issue_type === 'TRAVEL_MINUTES_NOT_FROM_CALENDAR')).toBe(true);
 
@@ -259,8 +260,8 @@ describe('normal invoicing', () => {
     await run(agent, d, d);
     [inv] = await invoices(agent);
     lab = byComp((await detail(agent, inv.id)).lines, 'TRAVEL_LABOUR')[0];
-    expect(lab.quantity).toBe('0.4167');
-    expect(lab.amount).toBe('40.42');   // 0.4167 h x $97.00
+    expect(lab.quantity).toBe('0.5833');                                 // 25 + 10 = 35 > 30: 30 + return 5
+    expect(lab.amount).toBe('56.58');   // 0.5833 h x $97.00
 
     // A later redraw of the past day with other minutes is not taken.
     const again = await CTM.recordDays(db.pool, pr.id, [{ date: d, legs: [{ ...leg, minutes: 40 }] }]);
@@ -271,7 +272,7 @@ describe('normal invoicing', () => {
     expect(bad.body.results[0].status).toBe(409);
   });
 
-  test('a long gap with Via home chosen is a trip home: Return + Start legs, same as the calendar', async () => {
+  test('a long gap with Via home chosen is billed as the direct drive (rule book: client-to-client only)', async () => {
     const app = buildApp();
     const org = await seedOrganisation();
     const { agent } = await login(app, 'owner', org.id);
@@ -286,14 +287,12 @@ describe('normal invoicing', () => {
     await event(pr, { clientId: 'a1', clientName: 'Afternoon Client', date: d, start: '14:00', location: 'A home, Perth WA 6000' }); // 4 h gap
     await db.pool.query(`UPDATE events SET custom_metadata = '{"travel":{"next":"home"}}'::jsonb WHERE id = $1`, [m]);
     await run(agent, d, d);
-    const kinds = [];
     for (const inv of await invoices(agent)) {
       const lab = byComp((await detail(agent, inv.id)).lines, 'TRAVEL_LABOUR')[0];
-      kinds.push(...lab.calculation.legs.filter(l => l.included).map(l => l.kind));
-      expect(lab.calculation.legs.some(l => l.kind === 'BETWEEN')).toBe(false);
-      expect(lab.calculation.dayTotalMinutes).toBe(15 + 15 + 20 + 20);
+      expect(lab.calculation.legs.filter(l => l.included).map(l => l.kind)).toEqual(['OUTBOUND', 'BETWEEN', 'RETURN']);
+      expect(lab.calculation.dayTotalMinutes).toBe(15 + 25 + 20);       // 60 = 2 × 30: 30 each
+      expect(lab.calculation.claimableMinutes).toBe(30);
     }
-    expect(kinds.sort()).toEqual(['OUTBOUND', 'OUTBOUND', 'OUTBOUND', 'OUTBOUND', 'RETURN', 'RETURN', 'RETURN', 'RETURN']);
   });
 
   test('E + H — one client three days → one invoice; re-running never duplicates', async () => {
@@ -316,10 +315,10 @@ describe('normal invoicing', () => {
     expect(second).toMatchObject({ invoicesCreated: 0, invoicesUpdated: 1, linesAdded: 0 });
     expect(await invoices(agent)).toHaveLength(1);
     d = await detail(agent, inv.id);
-    expect(active(d.lines)).toHaveLength(9);
+    expect(active(d.lines)).toHaveLength(6);
     expect(d.invoice.total).toBe(total);
     const { rows: [{ n }] } = await db.pool.query(`SELECT COUNT(*)::int AS n FROM invoice_lines WHERE line_status IN ('ACTIVE','REMOVED')`);
-    expect(n).toBe(9);
+    expect(n).toBe(6);
     // Google is asked once per distinct route, then the persisted facts are reused.
     const callsAfterFirstTwoRuns = routeCalls.length;
     await run(agent, day(0), day(4));
@@ -354,16 +353,49 @@ describe('normal invoicing', () => {
       got[inv.client_id] = { s: byComp(d.lines, 'SESSION')[0], t: byComp(d.lines, 'TRAVEL_LABOUR')[0] };
     }
     expect(got.z4.s.unit_price).toBe('193.99');
-    expect(got.z4.t).toMatchObject({ unit_price: '97.00', amount: '97.00' });
-    expect(got.z4.t.calculation).toMatchObject({ capMinutes: 60, capApplied: true, claimableMinutes: 60 });
+    // MMM4: T = 75 + 10 home = 85 > 60 → 60 + return 25 = 85 min.
+    expect(got.z4.t).toMatchObject({ unit_price: '97.00', amount: '137.42' });
+    expect(got.z4.t.calculation).toMatchObject({ capMinutes: 60, capApplied: true, cappedMinutes: 60, returnMinutes: 25, claimableMinutes: 85 });
+    // MMM6–7: no cap (rule 11) — 160 and 210 min, remote travel rates.
     expect(got.z6.s.unit_price).toBe('271.59');
-    expect(got.z6.t).toMatchObject({ unit_price: '135.80', amount: '339.50' });
+    expect(got.z6.t).toMatchObject({ unit_price: '135.80', amount: '362.14' });
     expect(got.z6.t.calculation.capMinutes).toBeNull();
     expect(got.z7.s.unit_price).toBe('290.99');
-    expect(got.z7.t).toMatchObject({ unit_price: '145.50', amount: '485.00' });
+    expect(got.z7.t).toMatchObject({ unit_price: '145.50', amount: '509.25' });
   });
 
-  test('G — return travel only when payable', async () => {
+  test('rule book: a mixed-zone day is drafted and flagged for review; "Not driving this" is never billed', async () => {
+    const app = buildApp();
+    const org = await seedOrganisation();
+    const { agent } = await login(app, 'owner', org.id);
+    const d = day(2);
+    const pr = await practitioner(org.id, 'Mix', 'Mix Base, Perth WA 6000', [d]);
+    await profile(agent, 'mx1', planManaged('Metro Client', 1));
+    await profile(agent, 'mx4', planManaged('Wheatbelt Client', 4));
+    route('Mix Base, Perth WA 6000', 'Metro home, Perth WA 6000', 20, 10);
+    route('Metro home, Perth WA 6000', 'Wheat home, Collie WA 6225', 50, 60);
+    route('Wheat home, Collie WA 6225', 'Mix Base, Perth WA 6000', 60, 70);
+    const e1 = await event(pr, { clientId: 'mx1', clientName: 'Metro Client', date: d, start: '09:00', location: 'Metro home, Perth WA 6000' });
+    await event(pr, { clientId: 'mx4', clientName: 'Wheatbelt Client', date: d, start: '12:00', location: 'Wheat home, Collie WA 6225' });
+    const s1 = await run(agent, d, d);
+    expect(s1.invoicesCreated).toBe(2);
+    const iss = ((await agent.get('/api/invoicing/issues')).body.issues || []).filter((i) => i.issue_type === 'TRAVEL_MIXED_ZONE_DAY');
+    expect(iss.map((i) => i.client_id).sort()).toEqual(['mx1', 'mx4']);
+    // Drafted at the smaller cap (30): T = 130 > 60 → 30 each + return 30 to the last client; 40 unbilled.
+    const labs = {};
+    for (const inv of await invoices(agent)) labs[inv.client_id] = byComp((await detail(agent, inv.id)).lines, 'TRAVEL_LABOUR')[0];
+    expect(labs.mx1.calculation).toMatchObject({ claimableMinutes: 30, dayReport: { mixedZones: true, cap: 30, unbilledMinutes: 40 } });
+    expect(labs.mx4.calculation.claimableMinutes).toBe(60);
+
+    // The first drive marked "Not driving this": it leaves T (rule 2).
+    await db.pool.query(`UPDATE events SET custom_metadata = '{"travel":{"noDriveBefore":true}}'::jsonb WHERE id = $1`, [e1]);
+    await run(agent, d, d);
+    for (const inv of await invoices(agent)) labs[inv.client_id] = byComp((await detail(agent, inv.id)).lines, 'TRAVEL_LABOUR')[0];
+    expect(labs.mx1.calculation.dayTotalMinutes).toBe(110);
+    expect(labs.mx1.calculation.legs.some((l) => l.kind === 'OUTBOUND')).toBe(false);
+  });
+
+  test('G — the trip home is always part of the day (rule book); the old setting changes nothing', async () => {
     const app = buildApp();
     const org = await seedOrganisation();
     const { agent } = await login(app, 'owner', org.id);
@@ -374,13 +406,13 @@ describe('normal invoicing', () => {
     await run(agent, day(0), day(0));
     let [inv] = await invoices(agent);
     let lab = byComp((await detail(agent, inv.id)).lines, 'TRAVEL_LABOUR')[0];
-    expect(lab.calculation).toMatchObject({ dayTotalMinutes: 10, claimableMinutes: 10, directions: 1 });
+    expect(lab.calculation).toMatchObject({ dayTotalMinutes: 22, claimableMinutes: 22, directions: 1 });
 
-    await agent.put('/api/invoicing/settings').send({ returnTravelPayable: true });
+    await agent.put('/api/invoicing/settings').send({ returnTravelPayable: false });
     await run(agent, day(0), day(0));
     [inv] = await invoices(agent);
     lab = byComp((await detail(agent, inv.id)).lines, 'TRAVEL_LABOUR')[0];
-    expect(lab.calculation).toMatchObject({ dayTotalMinutes: 22, claimableMinutes: 22, directions: 2 });
+    expect(lab.calculation).toMatchObject({ dayTotalMinutes: 22, claimableMinutes: 22, directions: 1 });
   });
 
   test('I — missing payer: attention issue, draft left unaddressed, finalise refused', async () => {
@@ -640,8 +672,8 @@ describe('J — rural trip', () => {
       const d = await detail(agent, inv.id);
       const tc = byComp(d.lines, 'TRIP_COST');
       expect(tc).toHaveLength(1);
-      expect(tc[0].amount).toBe('400.00');
-      expect(tc[0].description).toBe('Remote Trip Shared Travel Cost – East Kimberley – October 2026');
+      expect(tc[0]).toMatchObject({ amount: '400.00', unit_price: '1.00', quantity: '400.0000', item_code: '15_799_0128_1_3' });
+      expect(tc[0].description).toBe('Provider Travel – non-labour costs (East Kimberley – October 2026)');
       expect(tc[0].calculation).toMatchObject({ method: 'EQUAL_PER_CLIENT', eligiblePool: '6000.00', clientCount: 15 });
       expect(byComp(d.lines, 'SESSION').every(s => s.unit_price === '290.99')).toBe(true);
       sum += Math.round(Number(tc[0].amount) * 100);
