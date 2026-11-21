@@ -4843,10 +4843,8 @@ window.opIcon = function (name, size) {
 <section class="view active" id="view-book">
   <div class="booking-grid">
     <div class="panel">
-      <h2>
-        New appointment
-        <span class="h2-sub" id="book-week-sub">This week</span>
-      </h2>
+      <!-- One heading (U-09): the panel header says "New appointment" and
+           carries the week range (#book-week-sub, in the header below). -->
 
       <!-- Step 1: Booking Type -->
       <div class="step-body" id="step-1" data-help="booking-step1">
@@ -5341,7 +5339,8 @@ window.opIcon = function (name, size) {
         <svg class="bsp-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>
         </svg>
-        <span class="bsp-title" id="bsp-title" tabindex="-1">New Appointment</span>
+        <span class="bsp-title" id="bsp-title" tabindex="-1">New appointment</span>
+        <span class="bsp-sub" id="book-week-sub">This week</span>
       </div>
       <button class="bsp-close" onclick="closeBookingPanel(true)" title="Close panel" aria-label="Close">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -22970,9 +22969,11 @@ body.bsp-open #impact-modal    { z-index: 1201; }
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
-.bsp-header-left { display: flex; align-items: center; gap: 8px; }
+.bsp-header-left { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .bsp-icon { width: 16px; height: 16px; stroke: var(--accent); }
-.bsp-title { font-size: 15px; font-weight: 700; color: var(--ink); }
+.bsp-title { font-size: 15px; font-weight: 700; color: var(--ink); white-space: nowrap; }
+/* The week range sits beside the one title (U-09). */
+.bsp-sub { font-size: 12px; font-weight: 500; line-height: 1.3; color: var(--muted); min-width: 0; }
 /* The sheet titles take focus on open (Q-06) as a landing point, not a control: no ring. */
 #bsp-title:focus, #bd-title:focus { outline: none; box-shadow: none; }
 .bsp-close {
@@ -23047,10 +23048,6 @@ body.bsp-open #impact-modal    { z-index: 1201; }
   border-radius: 0 !important;
   background: transparent !important;
   padding: 16px !important;
-}
-.bsp-body .booking-grid > .panel > h2 {
-  font-size: 13px !important;
-  margin-bottom: 14px !important;
 }
 
 /* ── Calendar slot hover hint — REMOVED ── */
