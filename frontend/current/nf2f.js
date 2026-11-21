@@ -437,6 +437,102 @@
   }
   NF.openAllocate = openAllocate;
 
+  /* ─────────────── Blocks that ended with no time entered ───────────────
+     A billable non-face-to-face block that finished without its timer run
+     must be answered before carrying on: claim the whole block (split evenly
+     across its clients), enter each client's minutes, or say the work did not
+     happen (not billed; the owner is notified). There is no close button,
+     Escape and the backdrop do nothing — the only way out is an answer.
+     Until answered, Invoicing holds those clients' drafts (NF2F_UNTIMED). */
+  var UNTIMED = { open: false, checking: false };
+  async function checkUntimed() {
+    if (UNTIMED.open || UNTIMED.checking || document.hidden) return;
+    UNTIMED.checking = true;
+    try {
+      var r = await api('/api/nf2f/untimed');
+      if (r.blocks && r.blocks.length) showUntimed(r.blocks[0], r.blocks.length);
+    } catch (e) { /* signed out or offline: ask again later */ }
+    finally { UNTIMED.checking = false; }
+  }
+  function whenText(b) {
+    var st = new Date(b.start), en = new Date(b.end);
+    var day = st.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'short' });
+    var t = function (d) { return d.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' }); };
+    return day + ', ' + t(st) + '–' + t(en);
+  }
+  function showUntimed(b, count) {
+    UNTIMED.open = true;
+    var many = b.clients.length > 1;
+    var bd = document.createElement('div');
+    bd.id = 'nf2f-untimed';
+    bd.className = 'nf2f-untimed-backdrop';
+    bd.innerHTML =
+      '<div class="nf2f-untimed" role="alertdialog" aria-modal="true" aria-labelledby="nf2f-untimed-h" aria-describedby="nf2f-untimed-d">' +
+        '<h2 id="nf2f-untimed-h">No time was entered for billable work</h2>' +
+        '<p id="nf2f-untimed-d"><b>' + esc(b.title || 'Non-face-to-face') + '</b><br>' + esc(whenText(b)) + ' · ' + b.blockMinutes + ' min block<br>' +
+          'Client' + (many ? 's' : '') + ': ' + esc(namesOf(b.clients, 6)) + '</p>' +
+        (count > 1 ? '<p class="nf2f-untimed-count">' + count + ' blocks need an answer. This is the earliest.</p>' : '') +
+        '<fieldset class="nf2f-untimed-opts"><legend>How should this be billed?</legend>' +
+          '<label><input type="radio" name="nf2f-u" value="FULL_BLOCK" checked> Claim the full ' + b.blockMinutes + ' minutes' +
+            (many ? ', split evenly across ' + b.clients.length + ' clients' : '') + '</label>' +
+          '<label><input type="radio" name="nf2f-u" value="PER_CLIENT"> Enter the minutes for ' + (many ? 'each client' : 'this client') + '</label>' +
+          '<div class="nf2f-untimed-mins" hidden>' + b.clients.map(function (c) {
+            return '<label>' + esc(c.clientName || ('Client ' + c.clientId)) + ' <input type="number" min="0" max="' + b.blockMinutes + '" step="1" inputmode="numeric" data-client="' + esc(c.clientId) + '" value=""> min</label>';
+          }).join('') + '</div>' +
+          '<label><input type="radio" name="nf2f-u" value="DID_NOT_HAPPEN"> This work did not happen — do not bill</label>' +
+          '<div class="nf2f-untimed-why" hidden><label>Why not? (sent to the owner)<textarea maxlength="500" rows="2"></textarea></label></div>' +
+        '</fieldset>' +
+        '<div class="nf2f-untimed-err" role="alert"></div>' +
+        '<div class="nf2f-untimed-foot"><button type="button" class="btn primary" data-u="save">Save</button></div>' +
+      '</div>';
+    document.body.appendChild(bd);
+    var dlg = bd.querySelector('.nf2f-untimed');
+    var err = bd.querySelector('.nf2f-untimed-err');
+    var sync = function () {
+      var m = (bd.querySelector('input[name="nf2f-u"]:checked') || {}).value;
+      bd.querySelector('.nf2f-untimed-mins').hidden = m !== 'PER_CLIENT';
+      bd.querySelector('.nf2f-untimed-why').hidden = m !== 'DID_NOT_HAPPEN';
+      bd.querySelector('[data-u="save"]').textContent = m === 'DID_NOT_HAPPEN' ? 'Do not bill' : 'Save and bill';
+      err.textContent = '';
+    };
+    bd.addEventListener('change', sync);
+    bd.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); }
+      if (e.key === 'Tab') {
+        var f = Array.prototype.filter.call(dlg.querySelectorAll('input, textarea, button'), function (x) { return x.offsetParent !== null; });
+        if (!f.length) return;
+        if (e.shiftKey && document.activeElement === f[0]) { e.preventDefault(); f[f.length - 1].focus(); }
+        else if (!e.shiftKey && document.activeElement === f[f.length - 1]) { e.preventDefault(); f[0].focus(); }
+      }
+    }, true);
+    bd.querySelector('[data-u="save"]').addEventListener('click', async function () {
+      var btn = this;
+      var mode = (bd.querySelector('input[name="nf2f-u"]:checked') || {}).value;
+      var body = { mode: mode };
+      if (mode === 'PER_CLIENT') {
+        body.minutes = Array.prototype.map.call(bd.querySelectorAll('.nf2f-untimed-mins input'), function (i) {
+          return { clientId: i.dataset.client, minutes: i.value === '' ? 0 : Number(i.value) };
+        });
+      }
+      if (mode === 'DID_NOT_HAPPEN') body.reason = bd.querySelector('.nf2f-untimed-why textarea').value;
+      btn.disabled = true;
+      try {
+        await send('/api/events/' + encodeURIComponent(b.eventId) + '/nf2f/resolve', 'POST', body);
+        bd.remove();
+        UNTIMED.open = false;
+        toast(mode === 'DID_NOT_HAPPEN' ? 'Marked as not done' : 'Time entered',
+          mode === 'DID_NOT_HAPPEN' ? 'It will not be billed. The owner has been told.' : 'It will be on the next invoice run.');
+        setTimeout(checkUntimed, 300);
+      } catch (e) {
+        err.textContent = e.message || 'Could not save. Try again.';
+        btn.disabled = false;
+      }
+    });
+    sync();
+    setTimeout(function () { var first = dlg.querySelector('input[name="nf2f-u"]'); if (first) first.focus(); }, 0);
+  }
+  NF.checkUntimed = checkUntimed;
+
   /* ───────────────────────────── Wiring ───────────────────────────── */
   function wrapGlobal(name, after) {
     var orig = global[name];
@@ -467,7 +563,9 @@
     refreshRunning();
     RUN.tick = setInterval(tick, 1000);
     RUN.poll = setInterval(refreshRunning, 60000);
-    document.addEventListener('visibilitychange', function () { if (!document.hidden) refreshRunning(); });
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) { refreshRunning(); checkUntimed(); } });
+    setTimeout(checkUntimed, 4000);
+    setInterval(checkUntimed, 10 * 60000);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire); else wire();
 })(window);

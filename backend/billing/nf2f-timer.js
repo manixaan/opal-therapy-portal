@@ -100,6 +100,74 @@ function splitSeconds(totalSeconds, alloc) {
   return parts.map(({ exact, ...p }) => p);
 }
 
+/**
+ * A block that ended with no time entered must be resolved (migration 089):
+ *   { mode: 'FULL_BLOCK' }                                  the whole block, split evenly
+ *   { mode: 'PER_CLIENT', minutes: [{clientId, minutes}] }  each client's own minutes
+ *   { mode: 'DID_NOT_HAPPEN', reason }                      not billed; the owner is told
+ * Returns { ok, resolution, seconds, allocation, clientSeconds, note } or { ok:false, error }.
+ * Per-client minutes are whole minutes, at least one client above zero, and
+ * together no longer than the block.
+ */
+function validateResolution(input, clients, blockSecs) {
+  const mode = input && input.mode;
+  if (mode === 'FULL_BLOCK') {
+    return { ok: true, resolution: 'FULL_BLOCK', seconds: blockSecs, allocation: equalSplit(clients, 100), clientSeconds: null, note: null };
+  }
+  if (mode === 'DID_NOT_HAPPEN') {
+    const note = String((input && input.reason) || '').trim().slice(0, 500);
+    if (!note) return { ok: false, error: 'Say briefly why this work did not happen' };
+    return { ok: true, resolution: 'DID_NOT_HAPPEN', seconds: 0, allocation: null, clientSeconds: null, note };
+  }
+  if (mode === 'PER_CLIENT') {
+    const list = Array.isArray(input && input.minutes) ? input.minutes : null;
+    const ids = clients.map(c => String(c.clientId));
+    if (!list || list.length !== ids.length || !list.every(m => m && ids.includes(String(m.clientId)))
+        || new Set(list.map(m => String(m.clientId))).size !== ids.length) {
+      return { ok: false, error: 'Give minutes for exactly this block\'s clients' };
+    }
+    const parts = list.map(m => ({ clientId: String(m.clientId), minutes: Number(m.minutes) }));
+    if (parts.some(m => !Number.isInteger(m.minutes) || m.minutes < 0)) return { ok: false, error: 'Minutes must be whole numbers, 0 or more' };
+    const total = parts.reduce((a, m) => a + m.minutes, 0) * 60;
+    if (total <= 0) return { ok: false, error: 'Enter the minutes worked for at least one client, or choose "This work did not happen"' };
+    if (total > blockSecs) return { ok: false, error: `That is ${Math.round(total / 60)} minutes, longer than the ${Math.round(blockSecs / 60)}-minute block` };
+    const names = new Map(clients.map(c => [String(c.clientId), c.clientName || null]));
+    const clientSeconds = parts.map(m => ({ clientId: m.clientId, clientName: names.get(m.clientId), seconds: m.minutes * 60 }));
+    const allocation = clientSeconds.map(c => ({ clientId: c.clientId, clientName: c.clientName, percent: round2(c.seconds * 100 / total) }));
+    return { ok: true, resolution: 'PER_CLIENT', seconds: total, allocation, clientSeconds, note: null };
+  }
+  return { ok: false, error: 'Choose how to bill this block' };
+}
+
+/**
+ * Each client's billable seconds for a block. A PER_CLIENT resolution bills
+ * exactly the minutes entered; otherwise the timed total is split by the
+ * allocation (splitSeconds). DID_NOT_HAPPEN bills nothing.
+ */
+function clientParts(row, clients, timedSeconds) {
+  if (row && row.resolution === 'DID_NOT_HAPPEN') return [];
+  if (row && row.resolution === 'PER_CLIENT' && Array.isArray(row.client_seconds)) {
+    const ids = new Set(clients.map(c => String(c.clientId)));
+    const names = new Map(clients.map(c => [String(c.clientId), c.clientName || null]));
+    const saved = row.client_seconds.filter(c => c && ids.has(String(c.clientId)));
+    if (saved.length === ids.size) {
+      const total = saved.reduce((a, c) => a + (Number(c.seconds) || 0), 0);
+      return saved.map(c => ({ clientId: String(c.clientId), clientName: names.get(String(c.clientId)),
+        seconds: Number(c.seconds) || 0, percent: total ? round2((Number(c.seconds) || 0) * 100 / total) : 0 }));
+    }
+  }
+  return splitSeconds(timedSeconds, allocationFor(row, clients));
+}
+
+/** Ended, billable, no time entered and not yet resolved: the clinician must answer. */
+function needsResolution(row, clients, endTime, now = new Date()) {
+  if (!clients.length) return false;
+  if (new Date(endTime) > now) return false;
+  if (row && row.resolution) return false;
+  if (row && row.status === 'RUNNING') return false;
+  return !(row && Number(row.accumulated_seconds) > 0);
+}
+
 /** The clients a block names (custom_metadata.booking.clients), or []. */
 function blockClients(ev) {
   const b = ev && ev.custom_metadata && ev.custom_metadata.booking;
@@ -127,5 +195,5 @@ async function settleRow(q, row, now = new Date()) {
 
 module.exports = {
   elapsedSeconds, settled, allocationFor, equalSplit, validateAllocation, splitSeconds,
-  blockClients, blockSeconds, settleRow,
+  blockClients, blockSeconds, settleRow, validateResolution, clientParts, needsResolution,
 };

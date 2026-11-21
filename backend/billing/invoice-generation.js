@@ -98,8 +98,10 @@ async function loadCandidateEvents(q, orgId, { from, to, practitionerIds, client
 }
 
 /**
- * Non-face-to-face blocks in the period that name clients and carry a timer
- * (migration 076). Their timed work is billed per client as NF2F lines.
+ * Non-face-to-face blocks in the period that name clients (migration 076).
+ * Their timed work is billed per client as NF2F lines. A block with no timer
+ * row is still loaded: if it ended with no time entered and was never
+ * resolved (migration 089) its clients are held, never silently billed $0.
  */
 async function loadNf2fBlocks(q, orgId, { from, to, practitionerIds, eventIds, tz }) {
   const params = [orgId, from, to, tz];
@@ -117,10 +119,10 @@ async function loadNf2fBlocks(q, orgId, { from, to, practitionerIds, eventIds, t
             to_char(((e.start_time AT TIME ZONE 'UTC') AT TIME ZONE $4)::date, 'YYYY-MM-DD') AS local_date,
             COALESCE(tp.display_name, u.name) AS practitioner_name, ceb.attendance,
             t.event_id AS t_event_id, t.status AS t_status, t.run_started_at, t.accumulated_seconds, t.limit_seconds,
-            t.auto_stopped, t.stopped_at, t.non_billable_percent, t.allocation
+            t.auto_stopped, t.stopped_at, t.non_billable_percent, t.allocation, t.resolution, t.client_seconds
        FROM events e
        JOIN users u ON u.id = e.user_id
-       JOIN event_billing_timers t ON t.event_id = e.id
+       LEFT JOIN event_billing_timers t ON t.event_id = e.id
        LEFT JOIN therapist_profiles tp ON tp.user_id = u.id
        LEFT JOIN calendar_event_billing ceb ON ceb.event_id = e.id
       WHERE ${where.join(' AND ')}
@@ -180,20 +182,33 @@ async function prepare(q, orgId, opts) {
     const clients = NF.blockClients(b);
     if (!clients.length) continue;                                   // no clients = not billable
     if (String(b.status || '').toLowerCase() === 'cancelled' || ['CANCELLED', 'NOT_BILLABLE', 'DID_NOT_ATTEND'].includes(b.attendance)) continue;
+    if (new Date(b.end_time) > now) continue;                       // not over yet
     summary.eventsExamined++;
-    const timer = await NF.settleRow(q, { event_id: b.t_event_id, status: b.t_status, run_started_at: b.run_started_at,
+    const timer = b.t_event_id ? await NF.settleRow(q, { event_id: b.t_event_id, status: b.t_status, run_started_at: b.run_started_at,
       accumulated_seconds: b.accumulated_seconds, limit_seconds: b.limit_seconds, auto_stopped: b.auto_stopped,
-      stopped_at: b.stopped_at, non_billable_percent: b.non_billable_percent, allocation: b.allocation }, now);
-    if (timer.status === 'RUNNING') {
+      stopped_at: b.stopped_at, non_billable_percent: b.non_billable_percent, allocation: b.allocation,
+      resolution: b.resolution, client_seconds: b.client_seconds }, now) : null;
+    if (timer && timer.resolution === 'DID_NOT_HAPPEN') { skip('nf2f_did_not_happen'); continue; }
+    if (NF.needsResolution(timer, clients, b.end_time, now)) {
+      // No time entered: hold each client's draft until the clinician says how to bill it.
+      for (const c of clients) {
+        if (opts.clientIds && opts.clientIds.length && !opts.clientIds.includes(c.clientId)) continue;
+        issues.raise('NF2F_UNTIMED', { eventId: b.id, clientId: c.clientId, practitionerId: b.user_id, serviceDate: b.local_date,
+          message: `"${b.title || 'Non-face-to-face'}" on ${S.displayDate(b.local_date)} ended with no time entered. ${b.practitioner_name || 'The clinician'} must claim the block, enter each client's minutes, or mark it as not done.`,
+          fixTarget: { kind: 'event', eventId: b.id, date: b.local_date } });
+      }
+      continue;
+    }
+    if (timer && timer.status === 'RUNNING') {
       issues.raise('NF2F_TIMER_RUNNING', { eventId: b.id, practitionerId: b.user_id, serviceDate: b.local_date,
         message: `"${b.title || 'Non-face-to-face'}" on ${S.displayDate(b.local_date)} still has its timer running. Stop it to bill the time.`,
         fixTarget: { kind: 'event', eventId: b.id, date: b.local_date } });
       continue;
     }
-    const timed = Number(timer.accumulated_seconds) || 0;
+    const timed = Number(timer && timer.accumulated_seconds) || 0;
     if (timed <= 0) continue;
     const alloc = NF.allocationFor(timer, clients);
-    for (const part of NF.splitSeconds(timed, alloc)) {
+    for (const part of NF.clientParts(timer, clients, timed)) {
       if (part.seconds <= 0) continue;
       if (opts.clientIds && opts.clientIds.length && !opts.clientIds.includes(part.clientId)) continue;
       nf2fParts.push({ ev: { ...b, client_id: part.clientId, client_name: part.clientName }, block: b, part, timed, alloc,

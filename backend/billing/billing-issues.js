@@ -19,6 +19,7 @@ const ISSUE_TYPES = Object.freeze({
   SESSION_MMM_UNRESOLVED:    { severity: 'BLOCKING', label: 'Session MMM zone unknown' },
   SESSION_MMM_REVIEW:        { severity: 'BLOCKING', label: 'Session MMM zone needs confirmation' },
   NF2F_TIMER_RUNNING:        { severity: 'WARNING',  label: 'Non-face-to-face timer still running' },
+  NF2F_UNTIMED:              { severity: 'BLOCKING', label: 'Non-face-to-face block has no time entered' },
   EVENT_NO_CLIENT:           { severity: 'BLOCKING', label: 'Event has no client' },
   EVENT_NO_LOCATION:         { severity: 'BLOCKING', label: 'Event has no location' },
   EVENT_NO_SERVICE_TYPE:     { severity: 'BLOCKING', label: 'Event has no service type' },
