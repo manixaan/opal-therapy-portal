@@ -218,3 +218,11 @@ describe('the booking panel has one heading, and it carries the week range (U-09
     expect(rule(HTML, '.bsp-sub')).not.toMatch(/ellipsis|nowrap/);   // the range wraps, it is never cut
   });
 });
+
+describe('mini-month targets are at least 24 px (Q-09)', () => {
+  test('day cells and month arrows are 24 px high (cells are ~26 px wide in the 212 px sidebar)', () => {
+    expect(rule(HTML, '  .mm-cell')).toMatch(/line-height: 24px; height: 24px;/);
+    expect(HTML).toContain('.mini-cal-head .nav-arrow { width: 24px; height: 24px;');
+    expect(HTML).toContain('width: 212px; flex: 0 0 212px;');
+  });
+});

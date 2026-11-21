@@ -2645,12 +2645,14 @@ window.opIcon = function (name, size) {
   }
   .btn-cal-sidebar:hover { background: var(--panel-sunk); color: var(--ink); }
   .mini-cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
-  .mini-cal-head .nav-arrow { width: 22px; height: 22px; font-size: 13px; }
+  /* Mini-month targets are at least 24 px (Q-09, WCAG 2.5.8): the cells are
+     ~26.6 px wide in the 212 px sidebar, so only their height grew. */
+  .mini-cal-head .nav-arrow { width: 24px; height: 24px; font-size: 13px; }
   .mini-cal-label { font-size: 12.5px; font-weight: 600; color: var(--ink); }
   .mini-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; }
   .mm-dow { font-size: 9px; font-weight: 600; color: var(--muted); text-align: center; padding: 2px 0 4px; text-transform: uppercase; }
   .mm-cell {
-    font-size: 10.5px; text-align: center; line-height: 22px; height: 22px;
+    font-size: 10.5px; text-align: center; line-height: 24px; height: 24px;
     border-radius: 50%; cursor: pointer; color: var(--ink);
     border: none; background: none; font-family: inherit; padding: 0;
     font-variant-numeric: tabular-nums;
