@@ -190,3 +190,4 @@ html:where([data-theme="dark"]) .inv-paper .draft-mark { color: var(--danger-ink
   margin-top: 8px; padding: 10px 12px; border: 1px solid var(--border, #e4ded6); border-radius: 10px; background: var(--panel, #fff);
   box-shadow: 0 -4px 14px rgba(0, 0, 0, .06); font-size: 13.5px; }
 .inv-send-bar[hidden] { display: none; }
+.inv-pill.xero { background: var(--info-soft); color: var(--info-ink); }

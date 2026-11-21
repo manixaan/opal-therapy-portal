@@ -102,7 +102,7 @@
     el.dataset.ready = '1';
     el.innerHTML =
       '<div class="inv-head"><div><h1>Invoicing</h1><div class="inv-sub" id="inv-sub">Calendar sessions and travel become NDIS invoice drafts.</div></div>' +
-      '<div class="inv-head-actions"><button class="btn" data-inv="new-trip">Invoice a trip</button><button class="btn" data-inv="complete">Complete invoicing…</button><button class="btn primary" data-inv="complete-last" title="Draft every client\'s invoice for last Monday to Friday, all practitioners">Invoice last week</button></div></div>' +
+      '<div class="inv-head-actions"><button class="btn" data-inv="new-trip">Invoice a trip</button><button class="btn" data-inv="xero-payments" title="Read payments recorded in Xero onto invoices copied there">Update payments from Xero</button><button class="btn" data-inv="complete">Complete invoicing…</button><button class="btn primary" data-inv="complete-last" title="Draft every client\'s invoice for last Monday to Friday, all practitioners">Invoice last week</button></div></div>' +
       '<div id="inv-cards" class="inv-cards">' + skel(1) + '</div>' +
       '<nav class="inv-subnav" id="inv-subnav" aria-label="Invoicing sections">' + SECTIONS.map(function (s) {
         return '<button type="button" data-sec="' + s[0] + '"' + (s[0] === state.section ? ' class="active"' : '') + '>' + esc(s[1]) + (s[0] === 'attention' ? ' <span class="cnt" id="inv-attn-cnt"></span>' : '') + '</button>';
@@ -278,7 +278,8 @@
           '<td>' + dmy(i.issue_date) + '</td><td>' + dmy(i.due_date) + '</td>' +
           '<td class="num">' + money(i.total) + '</td><td class="num">' + money(i.outstanding) + '</td>' +
           '<td>' + pill(i.display_status) + (i.open_issues ? ' <span class="inv-dim">' + i.open_issues + ' issue' + (i.open_issues === 1 ? '' : 's') + '</span>' : '') + '</td>' +
-          '<td>' + (i.sent_status === 'SENT' ? '<span class="inv-pill SENT">Sent</span>'
+          '<td>' + (i.xero_state === 'PUSHED' ? '<span class="inv-pill xero" title="Copied to Xero">Xero</span> ' : i.xero_state === 'FAILED' ? '<span class="inv-pill NEEDS_ATTENTION" title="Not copied to Xero">Xero ✕</span> ' : '') +
+            (i.sent_status === 'SENT' ? '<span class="inv-pill SENT">Sent</span>'
             : i.sent_status === 'FAILED' ? '<span class="inv-pill NEEDS_ATTENTION" title="' + esc(i.email_last_error || '') + '">Send failed</span>'
             : '<span class="inv-dim">Not sent</span>') + '</td></tr>';
       }).join('') + '</tbody></table></div><div class="inv-send-bar" id="inv-send-bar" hidden></div><div class="inv-dim" style="margin-top:6px">' + r.total + ' invoice' + (r.total === 1 ? '' : 's') + '</div>';
@@ -394,6 +395,7 @@
     if (finalised) {
       actions.push('<button class="btn" data-inv="email" data-id="' + esc(inv.id) + '">Email invoice</button>');
       if (inv.sent_status !== 'SENT') actions.push('<button class="btn" data-inv="mark-sent" data-id="' + esc(inv.id) + '">Mark sent</button>');
+      if (inv.xero_state !== 'PUSHED' && inv.xero_state !== 'VOIDED') actions.push('<button class="btn" data-inv="xero-push" data-id="' + esc(inv.id) + '" title="Copy this invoice to Xero with the same number">Copy to Xero</button>');
       if (inv.status !== 'PAID') actions.push('<button class="btn" data-inv="payment" data-id="' + esc(inv.id) + '" data-outstanding="' + esc(inv.outstanding) + '">Record payment</button>');
     }
     if (inv.status !== 'VOID') {
@@ -403,6 +405,9 @@
 
     var banners = '';
     if (inv.is_stale) banners += '<div class="inv-warn">⚠ ' + esc(inv.stale_reason || 'A source calendar event changed.') + ' <button class="btn btn-xs" data-inv="regen" data-id="' + esc(inv.id) + '">Regenerate now</button></div>';
+    if (inv.xero_state === 'PUSHED') banners += '<div class="inv-note">In Xero as ' + esc(inv.invoice_number) + (inv.xero_status ? ' (' + esc(String(inv.xero_status).toLowerCase()) + ')' : '') + '. Payments are recorded in Xero and come back with <strong>Update payments from Xero</strong>.</div>';
+    else if (inv.xero_state === 'FAILED') banners += '<div class="inv-error">Not copied to Xero: ' + esc(inv.xero_error || 'unknown reason') + '</div>';
+    if (inv.sent_status === 'FAILED') banners += '<div class="inv-error">The email was not sent: ' + esc(inv.email_last_error || 'unknown reason') + '</div>';
     if (inv.source_changed_after_finalise) banners += '<div class="inv-error">Source event changed after invoice finalisation. This invoice has not been altered — use <strong>Void &amp; reissue</strong> to correct it, or dismiss the attention item if no correction is needed.</div>';
     if (inv.status === 'VOID') banners += '<div class="inv-note">Voided ' + dt(inv.voided_at) + (inv.voided_by_name ? ' by ' + esc(inv.voided_by_name) : '') + ': ' + esc(inv.void_reason || '') + (inv.reissued_as_id ? ' · Reissued as <button class="inv-link" data-inv="open" data-id="' + esc(inv.reissued_as_id) + '">' + esc(inv.reissued_as_number) + '</button>' : '') + '</div>';
     if (inv.reissue_of_number) banners += '<div class="inv-note">Reissue of ' + esc(inv.reissue_of_number) + '.</div>';
@@ -856,6 +861,9 @@
       '<label>Default trip allocation<select name="defaultTripAllocationMethod">' + opt('EQUAL_PER_CLIENT', 'Equal per unique client', s.defaultTripAllocationMethod) + opt('PER_SESSION', 'Per billable session', s.defaultTripAllocationMethod) + opt('MANUAL_WEIGHTED', 'Manual weighted', s.defaultTripAllocationMethod) + '</select></label>' +
       '<label>Completion rule<select name="completionRule">' + opt('PAST_CONFIRMED', 'Past confirmed sessions are delivered', s.completionRule) + opt('EXPLICIT_ONLY', 'Only sessions marked Completed', s.completionRule) + '</select></label>' +
       '<label>Timezone<input name="timezone" value="' + esc(s.timezone) + '"></label>' +
+      '<label>Xero sales account code<input name="xeroSalesAccountCode" value="' + esc(s.xeroSalesAccountCode || '') + '" placeholder="e.g. 200" title="The revenue account in Xero these invoices post to. Blank = nothing is copied to Xero."></label>' +
+      '<label>Xero tax type — GST-free<input name="xeroTaxTypeGstFree" value="' + esc(s.xeroTaxTypeGstFree || 'EXEMPTOUTPUT') + '"></label>' +
+      '<label>Xero tax type — GST 10%<input name="xeroTaxTypeGst" value="' + esc(s.xeroTaxTypeGst || 'OUTPUT') + '"></label>' +
       '<label class="check wide"><input type="checkbox" name="returnTravelPayable"' + (s.returnTravelPayable ? ' checked' : '') + '> Return travel is paid to clinicians (include the return leg in claimable travel)</label>' +
       '</form><div id="inv-settings-msg"></div><div class="inv-field-row"><button class="btn primary" data-inv="save-settings">Save settings</button></div></div>' +
       '<div class="inv-panel"><h3>MMM classification</h3>' + (r.mmmDataset
@@ -1057,6 +1065,24 @@
           await post('/invoices/' + id + '/mark-sent', { sentTo: to || null }); toast('Marked as sent'); refreshDetail(); break;
         }
         case 'send-selected': openSendSelected(); break;
+        case 'xero-payments': {
+          btn.disabled = true;
+          try {
+            var xp = await post('/xero/sync-payments', {});
+            toast('Payments updated from Xero', xp.updated + ' of ' + xp.checked + ' invoice' + (xp.checked === 1 ? '' : 's') + ' changed' + (xp.voidedInXero ? ' · ' + xp.voidedInXero + ' voided in Xero only — check them' : ''));
+            loadOverview(); if (state.section === 'invoices' && !state.invoiceId) loadInvoiceList();
+          } finally { btn.disabled = false; }
+          break;
+        }
+        case 'xero-push': {
+          btn.disabled = true;
+          try {
+            var xr = await post('/invoices/' + id + '/xero', {});
+            toast(xr.already ? 'Already in Xero' : 'Copied to Xero', xr.adopted ? 'Xero already had this invoice; it is now linked.' : '');
+            refreshDetail();
+          } finally { btn.disabled = false; }
+          break;
+        }
         case 'send-go': await sendSelected(btn); break;
         case 'email': {
           var inv = state.detail && state.detail.invoice;

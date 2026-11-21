@@ -35,6 +35,7 @@ const DR = require('./billing/day-route');
 const Issues = require('./billing/billing-issues');
 const SB = require('./billing/splose-billing-source');
 const PD = require('./billing/payer-directory');
+const XP = require('./billing/xero-invoice-push');
 const { recordAudit, listAudit } = require('./billing/billing-audit');
 const storage = require('./storage');
 
@@ -63,6 +64,10 @@ const safe = (fn) => (req, res) => {
   return Promise.resolve(fn(req, res)).catch((err) => {
     if (err && err.status && err.status < 500) {
       return res.status(err.status).json({ error: err.message, code: err.code || undefined });
+    }
+    // Xero and mail failures carry an owner-readable message built for this (never upstream detail).
+    if (err && err.status >= 500 && /^(XERO_|SEND_FAILED$)/.test(String(err.code || ''))) {
+      return res.status(502).json({ error: err.message, code: err.code });
     }
     if (err && err.code === '23505') return res.status(409).json({ error: 'That change conflicts with an existing billing record' });
     log.error('invoicing route error', { error: err, path: req.path });
@@ -145,7 +150,7 @@ router.get('/api/invoicing/runs', safe(async (req, res) => {
 }));
 
 // Run before an invoice is emailed: the Xero copy (xero-invoice-push.js) when switched on.
-function sendHooks() { return {}; }
+function sendHooks() { return { beforeEmail: XP.beforeEmail }; }
 
 // ── Invoices ──────────────────────────────────────────────────────────────
 
@@ -186,16 +191,29 @@ router.post('/api/invoicing/invoices/:id/finalise', uuidParam('id'), safe(async 
   res.json(await Life.finalise({ pool, orgId: orgId(req), userId: req.user.id, invoiceId: req.params.id }));
 }));
 
+// Voiding an invoice that is in Xero voids the Xero copy first; if Xero says no, nothing changes.
+async function voidInXeroFirst(req) {
+  const reason = String((req.body || {}).reason || '').trim();
+  if (reason.length < 3) throw Object.assign(new Error('A reason is required'), { status: 400, code: 'REASON_REQUIRED' });
+  await XP.beforeVoid({ pool, orgId: orgId(req), userId: req.user.id, invoiceId: req.params.id });
+}
+
 router.post('/api/invoicing/invoices/:id/void', uuidParam('id'), safe(async (req, res) => {
+  await voidInXeroFirst(req);
   const r = await Life.voidInvoice({ pool, orgId: orgId(req), userId: req.user.id, invoiceId: req.params.id, reason: (req.body || {}).reason });
   res.json({ status: r.status });
 }));
 
 router.post('/api/invoicing/invoices/:id/reissue', uuidParam('id'), safe(async (req, res) => {
+  await voidInXeroFirst(req);
   res.json(await Life.voidAndReissue({ pool, orgId: orgId(req), userId: req.user.id, invoiceId: req.params.id, reason: (req.body || {}).reason }));
 }));
 
 router.post('/api/invoicing/invoices/:id/payments', uuidParam('id'), safe(async (req, res) => {
+  // An invoice copied to Xero is paid in Xero (bank feed); payments come back with "Update payments from Xero".
+  if (await XP.isLinked(pool, req.params.id)) {
+    return res.status(409).json({ error: 'This invoice is in Xero. Record the payment in Xero, then use "Update payments from Xero".', code: 'PAID_IN_XERO' });
+  }
   res.status(201).json(await Life.recordPayment({ pool, orgId: orgId(req), userId: req.user.id, invoiceId: req.params.id, input: req.body || {} }));
 }));
 
@@ -207,6 +225,17 @@ router.post('/api/invoicing/invoices/:id/email', uuidParam('id'), safe(async (re
   const b = req.body || {};
   res.json(await Life.emailInvoice({ pool, orgId: orgId(req), userId: req.user.id, invoiceId: req.params.id, to: b.to, resend: b.resend === true,
     hooks: sendHooks() }));
+}));
+
+// Copy one final invoice to Xero now (catch-up for invoices sent before the copy was on).
+router.post('/api/invoicing/invoices/:id/xero', uuidParam('id'), safe(async (req, res) => {
+  res.json(await XP.pushInvoice({ pool, orgId: orgId(req), userId: req.user.id, invoiceId: req.params.id }));
+}));
+
+// Payments: read from Xero onto every open invoice copied there.
+router.post('/api/invoicing/xero/sync-payments', safe(async (req, res) => {
+  if (!XP.isEnabled()) return res.status(409).json({ error: 'Copying invoices to Xero is switched off', code: 'XERO_PUSH_DISABLED' });
+  res.json(await XP.syncPayments({ pool, orgId: orgId(req), userId: req.user.id }));
 }));
 
 // "Send selected": finalise, copy to Xero (when on), email — each invoice once.

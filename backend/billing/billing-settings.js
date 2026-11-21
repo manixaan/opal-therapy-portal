@@ -27,6 +27,9 @@ const SETTINGS_FIELDS = {
   completionRule: 'completion_rule',
   timezone: 'timezone',
   sessionDescription: 'session_description',
+  xeroSalesAccountCode: 'xero_sales_account_code',
+  xeroTaxTypeGstFree: 'xero_tax_type_gst_free',
+  xeroTaxTypeGst: 'xero_tax_type_gst',
 };
 
 function rowToSettings(r) {
@@ -118,6 +121,15 @@ function validateSettingsPatch(patch) {
       case 'invoicePrefix':
         if (!/^[A-Za-z0-9\-_/]{0,20}$/.test(String(v || ''))) errors.push('invoicePrefix may use letters, digits, - _ / (max 20)');
         else out[k] = String(v || '');
+        break;
+      case 'xeroSalesAccountCode':
+        if (v != null && v !== '' && !/^[A-Za-z0-9.\-]{1,10}$/.test(String(v))) errors.push('Xero sales account code is invalid');
+        else out[k] = v == null || v === '' ? null : String(v);
+        break;
+      case 'xeroTaxTypeGstFree':
+      case 'xeroTaxTypeGst':
+        if (!/^[A-Z0-9_]{2,30}$/.test(String(v || ''))) errors.push(`${k} must be a Xero tax type code (e.g. EXEMPTOUTPUT, OUTPUT)`);
+        else out[k] = String(v);
         break;
       case 'timezone':
         if (!/^[A-Za-z_]+\/[A-Za-z_]+$/.test(String(v || ''))) errors.push('timezone is invalid'); else out[k] = v;

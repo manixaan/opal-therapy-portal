@@ -97,6 +97,7 @@ async function listInvoices(q, orgId, f = {}, { tz = 'Australia/Perth' } = {}) {
             to_char(i.period_start,'YYYY-MM-DD') AS period_start, to_char(i.period_end,'YYYY-MM-DD') AS period_end,
             i.total, i.amount_paid, (i.total - i.amount_paid) AS outstanding, i.status, i.sent_status, i.is_stale,
             i.payer_email, i.email_last_error,
+            (SELECT xl.state FROM xero_invoice_links xl WHERE xl.invoice_id = i.id) AS xero_state,
             i.source_changed_after_finalise, i.trip_id, t.name AS trip_name,
             (SELECT array_agg(DISTINCT l.mmm_zone) FROM invoice_lines l WHERE l.invoice_id = i.id AND l.line_status = 'ACTIVE' AND l.mmm_zone IS NOT NULL) AS mmm_zones,
             (SELECT COUNT(*)::int FROM billing_issues b WHERE b.invoice_id = i.id AND b.status = 'OPEN') AS open_issues,
@@ -140,8 +141,10 @@ async function getInvoiceDetail(q, orgId, invoiceId, { tz = 'Australia/Perth' } 
             fu.name AS finalised_by_name, vu.name AS voided_by_name,
             ri.invoice_number AS reissue_of_number,
             (SELECT r.invoice_number FROM invoices r WHERE r.reissue_of_invoice_id = i.id ORDER BY r.created_at DESC LIMIT 1) AS reissued_as_number,
-            (SELECT r.id FROM invoices r WHERE r.reissue_of_invoice_id = i.id ORDER BY r.created_at DESC LIMIT 1) AS reissued_as_id
+            (SELECT r.id FROM invoices r WHERE r.reissue_of_invoice_id = i.id ORDER BY r.created_at DESC LIMIT 1) AS reissued_as_id,
+            xl.state AS xero_state, xl.xero_status, xl.last_error AS xero_error, xl.pushed_at AS xero_pushed_at, xl.payments_synced_at AS xero_payments_synced_at
        FROM invoices i LEFT JOIN trips t ON t.id = i.trip_id
+       LEFT JOIN xero_invoice_links xl ON xl.invoice_id = i.id
        LEFT JOIN users fu ON fu.id = i.finalised_by_user_id LEFT JOIN users vu ON vu.id = i.voided_by_user_id
        LEFT JOIN invoices ri ON ri.id = i.reissue_of_invoice_id
       WHERE i.id = $1 AND i.organisation_id = $2`, [invoiceId, orgId]);

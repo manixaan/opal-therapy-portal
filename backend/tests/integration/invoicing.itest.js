@@ -955,3 +955,132 @@ describe('send selected — finalise and email each ticked invoice exactly once 
     expect((await therapist.post('/api/invoicing/invoices/send-batch').send({ ids: [by.s2.id] })).status).toBe(403);
   });
 });
+
+describe('Xero copy — same number, AUTHORISED, exactly once (migration 092)', () => {
+  const XP = require('../../billing/xero-invoice-push');
+  function fakeXero() {
+    const X = { invoices: [], contacts: [{ ContactID: 'c-alpha', Name: 'Alpha PM', ContactStatus: 'ACTIVE' }], posts: [], voids: [], keys: [], loseResponse: false, roundOff: 0 };
+    X.client = {
+      tenant: async () => 'tenant-1',
+      findInvoiceByNumber: async (_o, n) => X.invoices.filter((i) => i.InvoiceNumber === n),
+      getInvoices: async (_o, ids) => X.invoices.filter((i) => ids.includes(i.InvoiceID)),
+      findContacts: async (_o, name) => X.contacts.filter((c) => c.Name === name),
+      createContact: async () => { throw new Error('not allowed in test'); },
+      createInvoice: async (_o, p, key) => {
+        X.posts.push(p); X.keys.push(key);
+        // Xero's idempotency: the same key returns the same invoice.
+        let inv = X.invoices.find((i) => i._key === key);
+        if (!inv) {
+          const total = p.LineItems.reduce((a, l) => a + Math.round(l.LineAmount * 100), 0) / 100 + X.roundOff;
+          inv = { InvoiceID: 'x-' + (X.invoices.length + 1), InvoiceNumber: p.InvoiceNumber, Type: 'ACCREC', Status: p.Status,
+            Contact: p.Contact, Total: total.toFixed(2), AmountPaid: 0, _key: key };
+          X.invoices.push(inv);
+        }
+        if (X.loseResponse) { X.loseResponse = false; const e = new Error('timeout'); e.code = 'ECONNABORTED'; throw e; }
+        return inv;
+      },
+      voidInvoice: async (_o, id) => { X.voids.push(id); const i = X.invoices.find((x) => x.InvoiceID === id); if (i) i.Status = 'VOIDED'; return i; },
+    };
+    XP.setClient(X.client);
+    return X;
+  }
+  const ENV = { ENABLE_XERO_WRITE: process.env.ENABLE_XERO_WRITE, ENABLE_XERO_INVOICE_PUSH: process.env.ENABLE_XERO_INVOICE_PUSH };
+  beforeEach(() => { MAIL.sent.length = 0; MAIL.fail = false; MAIL.configured = true; process.env.ENABLE_XERO_WRITE = 'true'; process.env.ENABLE_XERO_INVOICE_PUSH = 'true'; });
+  afterAll(() => { Object.entries(ENV).forEach(([k, v]) => { if (v === undefined) delete process.env[k]; else process.env[k] = v; }); XP.setClient(null); });
+
+  async function oneDraft(pm = 'Alpha PM') {
+    const app = buildApp();
+    const org = await seedOrganisation();
+    const { agent } = await login(app, 'owner', org.id);
+    await agent.put('/api/invoicing/settings').send({ abn: '49699791958', xeroSalesAccountCode: '200' });
+    const pr = await practitioner(org.id, 'Xero P', 'Base, Perth WA 6000', [day(0)]);
+    await profile(agent, 'x1', planManaged('Xero Client', 1, pm));
+    await event(pr, { clientId: 'x1', clientName: 'Xero Client', date: day(0), start: '09:00', minutes: 50, location: 'Base, Perth WA 6000' });
+    await run(agent, day(0), day(0));
+    const [inv] = await invoices(agent);
+    return { agent, app, org, inv };
+  }
+
+  test('send copies to Xero first (same number, AUTHORISED, GST-free, no Xero email); a lost response and a resend never duplicate', async () => {
+    const X = fakeXero();
+    const { agent, inv } = await oneDraft();
+    X.loseResponse = true;                                   // Xero created it but the answer was lost
+    let r = await agent.post('/api/invoicing/invoices/send-batch').send({ ids: [inv.id] });
+    expect(r.body).toMatchObject({ sent: 0, failed: 1 });
+    expect(MAIL.sent).toHaveLength(0);                       // no email until Xero has it
+    r = await agent.post('/api/invoicing/invoices/send-batch').send({ ids: [inv.id] });
+    expect(r.body).toMatchObject({ sent: 1 });
+    expect(X.invoices).toHaveLength(1);                      // adopted by number, not created twice
+    const p = X.posts[0];
+    expect(p).toMatchObject({ Type: 'ACCREC', Status: 'AUTHORISED', InvoiceNumber: inv.invoice_number, LineAmountTypes: 'Exclusive', Contact: { ContactID: 'c-alpha' } });
+    expect(p.LineItems[0]).toMatchObject({ AccountCode: '200', TaxType: 'EXEMPTOUTPUT', Quantity: 0.8333, UnitAmount: 193.99, LineAmount: 161.65 });
+    expect(new Set(X.keys).size).toBe(1);                    // one idempotency key for the invoice
+
+    // Sending again (deliberate resend) does not touch Xero again.
+    await agent.post(`/api/invoicing/invoices/${inv.id}/email`).send({ resend: true });
+    expect(X.posts).toHaveLength(1);
+    const { rows: [link] } = await db.pool.query(`SELECT state, xero_invoice_id FROM xero_invoice_links WHERE invoice_id = $1`, [inv.id]);
+    expect(link).toEqual({ state: 'PUSHED', xero_invoice_id: 'x-1' });
+  });
+
+  test('a number Xero already uses for something else stops the send', async () => {
+    const X = fakeXero();
+    const { agent, inv } = await oneDraft();
+    X.invoices.push({ InvoiceID: 'other', InvoiceNumber: inv.invoice_number, Type: 'ACCREC', Status: 'AUTHORISED', Contact: { ContactID: 'someone' }, Total: '5.00' });
+    let r = await agent.post('/api/invoicing/invoices/send-batch').send({ ids: [inv.id] });
+    expect(r.body.results[0]).toMatchObject({ outcome: 'failed', code: 'XERO_NUMBER_CLASH' });
+    expect(MAIL.sent).toHaveLength(0);
+  });
+
+  test('a payer that is not a contact in Xero stops the send', async () => {
+    const Y = fakeXero();
+    const b = await oneDraft('Unknown PM');
+    const r = await b.agent.post('/api/invoicing/invoices/send-batch').send({ ids: [b.inv.id] });
+    expect(r.body.results[0]).toMatchObject({ outcome: 'failed', code: 'XERO_CONTACT_MISSING' });
+    expect(r.body.results[0].message).toMatch(/not a contact in Xero/);
+    expect(Y.posts).toHaveLength(0);
+  });
+
+  test('a total Xero works out differently is voided straight away and not emailed', async () => {
+    const X = fakeXero();
+    X.roundOff = 0.01;
+    const { agent, inv } = await oneDraft();
+    const r = await agent.post('/api/invoicing/invoices/send-batch').send({ ids: [inv.id] });
+    expect(r.body.results[0]).toMatchObject({ outcome: 'failed', code: 'XERO_TOTAL_MISMATCH' });
+    expect(X.voids).toEqual(['x-1']);
+    expect(MAIL.sent).toHaveLength(0);
+  });
+
+  test('payments come from Xero; manual payments are refused; void voids Xero first and stops when Xero has payments', async () => {
+    const X = fakeXero();
+    const { agent, inv } = await oneDraft();
+    await agent.post('/api/invoicing/invoices/send-batch').send({ ids: [inv.id] });
+    expect((await agent.post(`/api/invoicing/invoices/${inv.id}/payments`).send({ amount: '10.00', paidOn: day(5) })).status).toBe(409);
+
+    X.invoices[0].AmountPaid = 100;
+    let s = await agent.post('/api/invoicing/xero/sync-payments');
+    expect(s.body).toMatchObject({ checked: 1, updated: 1 });
+    let d = (await detail(agent, inv.id)).invoice;
+    expect(d).toMatchObject({ status: 'PART_PAID', amount_paid: '100.00' });
+    expect((await agent.post(`/api/invoicing/invoices/${inv.id}/void`).send({ reason: 'wrong client' })).status).toBe(409);
+
+    X.invoices[0].AmountPaid = 0;
+    await agent.post('/api/invoicing/xero/sync-payments');
+    d = (await detail(agent, inv.id)).invoice;
+    expect(d).toMatchObject({ status: 'SENT', amount_paid: '0.00' });
+    const v = await agent.post(`/api/invoicing/invoices/${inv.id}/void`).send({ reason: 'wrong client' });
+    expect(v.status).toBe(200);
+    expect(X.voids).toEqual(['x-1']);
+    expect((await db.pool.query(`SELECT state FROM xero_invoice_links WHERE invoice_id = $1`, [inv.id])).rows[0].state).toBe('VOIDED');
+  });
+
+  test('switched off: nothing goes to Xero and emailing works as before; the old Accounting draft door closes when on', async () => {
+    const X = fakeXero();
+    process.env.ENABLE_XERO_INVOICE_PUSH = 'false';
+    const { agent, inv } = await oneDraft();
+    const r = await agent.post('/api/invoicing/invoices/send-batch').send({ ids: [inv.id] });
+    expect(r.body).toMatchObject({ sent: 1 });
+    expect(X.posts).toHaveLength(0);
+    expect((await agent.post(`/api/invoicing/invoices/${inv.id}/xero`)).body.code).toBe('XERO_PUSH_DISABLED');
+  });
+});

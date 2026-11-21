@@ -796,7 +796,7 @@ describe('changed assets are cache-busted', () => {
       // 1: Invoicing — calendar-driven NDIS invoices, travel and rural trip billing.
       // 4 (js): the session's MMM zone selector in the calendar billing box.
       // 5 (js): Complete invoicing counts non-face-to-face shares.
-      ['invoicing.js', 10], ['invoicing.css', 6],
+      ['invoicing.js', 11], ['invoicing.css', 7],
       ['induction-assistant.js', 3], ['induction-assistant.css', 4],
       // js 5: two-step editor panel, contents-mirroring outline with
       // drag-to-reorder, multi-article A4 pagination fix. css 5: the

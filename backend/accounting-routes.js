@@ -292,6 +292,11 @@ router.post('/api/accounting/candidates/:id/review', ...ownerOnly, async (req, r
 
 // Draft invoice creation — FLAG-GATED. Never approves or sends.
 router.post('/api/accounting/candidates/:id/create-draft-invoice', ...ownerOnly, async (req, res) => {
+  // One door into Xero: once Invoicing copies its invoices to Xero, this older
+  // path would bill the same sessions a second time (21 Nov 2026).
+  if (require('./billing/xero-invoice-push').isEnabled()) {
+    return res.status(409).json({ error: 'Invoices go to Xero from Invoicing now', code: 'use_invoicing' });
+  }
   if (!flags.isDraftInvoiceCreateEnabled()) {
     return res.status(403).json({
       error: 'Draft invoice creation is disabled', code: 'draft_create_disabled',
