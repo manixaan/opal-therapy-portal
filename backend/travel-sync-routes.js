@@ -5,6 +5,9 @@
  *
  *   PUT /api/travel/outlook-sync         { date, legs: [...], seenEventIds: [...] }
  *   PUT /api/travel/outlook-sync/batch   { days: [ <the same body>, … ] }  (≤ 7)
+ *   PUT /api/travel/calendar-minutes     { days: [{ date, legs: [{ origin, destination, minutes, ownerEventId, side }] }] } (≤ 7)
+ *       — the calendar's traffic-aware leg minutes, kept for invoicing
+ *         (billing/calendar-travel-minutes.js, migration 090). Own calendar only.
  *
  * The calendar sends a day's computed travel legs; travel-outlook-sync.js makes
  * the user's Outlook calendar match (create / move / delete, never duplicate).
@@ -21,6 +24,17 @@ const { requireAuth, requireAnyPermission } = require('./permissions');
 
 const router = express.Router();
 router.use('/api/travel/outlook-sync', requireAuth, requireAnyPermission('manage_own_schedule', 'manage_all_schedules'));
+router.use('/api/travel/calendar-minutes', requireAuth, requireAnyPermission('manage_own_schedule', 'manage_all_schedules'));
+
+router.put('/api/travel/calendar-minutes', async (req, res) => {
+  try {
+    const r = await require('./billing/calendar-travel-minutes').recordDays(db.pool, req.session.userId, req.body && req.body.days);
+    res.status(r.status).json(r.body);
+  } catch (e) {
+    console.error('Calendar travel minutes error:', e && e.message);
+    res.status(500).json({ error: 'Could not record travel minutes' });
+  }
+});
 
 const deps = (userId) => ({
   pool: db.pool,

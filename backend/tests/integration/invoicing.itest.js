@@ -224,6 +224,44 @@ describe('normal invoicing', () => {
   });
 
   // 19 Nov 2026: a trip home in between is billed only when chosen (travel.next 'home'), as the calendar draws it.
+  test('travel bills the minutes the calendar recorded, not the route lookup; a past day stays as first recorded', async () => {
+    const CTM = require('../../billing/calendar-travel-minutes');
+    const app = buildApp();
+    const org = await seedOrganisation();
+    const { agent } = await login(app, 'owner', org.id);
+    const d = day(1);
+    const pr = await practitioner(org.id, 'Cal Minutes', 'Cal Base Rd, Perth WA 6000', [d]);
+    await profile(agent, 'cm1', planManaged('Calendar Client', 1));
+    route('Cal Base Rd, Perth WA 6000', 'CM home, Perth WA 6000', 18, 11);
+    const ev = await event(pr, { clientId: 'cm1', clientName: 'Calendar Client', date: d, start: '10:00', location: 'CM home, Perth WA 6000' });
+
+    // No recorded minutes yet: the lookup prices it and the run says so.
+    await run(agent, d, d);
+    let [inv] = await invoices(agent);
+    let lab = byComp((await detail(agent, inv.id)).lines, 'TRAVEL_LABOUR')[0];
+    expect(lab.quantity).toBe('0.3000');
+    const iss = (await agent.get('/api/invoicing/issues')).body.issues || [];
+    expect(iss.some((i) => i.issue_type === 'TRAVEL_MINUTES_NOT_FROM_CALENDAR')).toBe(true);
+
+    // The calendar recorded 25 min (traffic). The draft follows it.
+    const leg = { origin: 'Cal Base Rd, Perth WA 6000', destination: 'CM home, Perth WA 6000', minutes: 25, ownerEventId: ev, side: 'before' };
+    const rec = await CTM.recordDays(db.pool, pr.id, [{ date: d, legs: [leg] }]);
+    expect(rec.body.results[0]).toMatchObject({ status: 200, body: { recorded: 1 } });
+    await run(agent, d, d);
+    [inv] = await invoices(agent);
+    lab = byComp((await detail(agent, inv.id)).lines, 'TRAVEL_LABOUR')[0];
+    expect(lab.quantity).toBe('0.4167');
+    expect(lab.amount).toBe('40.42');   // 0.4167 h x $97.00
+
+    // A later redraw of the past day with other minutes is not taken.
+    const again = await CTM.recordDays(db.pool, pr.id, [{ date: d, legs: [{ ...leg, minutes: 40 }] }]);
+    expect(again.body.results[0].body).toMatchObject({ kept: true, reason: 'past' });
+    // Someone else's event is refused.
+    const other = await practitioner(org.id, 'Other', 'X Rd, Perth WA 6000', [d]);
+    const bad = await CTM.recordDays(db.pool, other.id, [{ date: day(2), legs: [{ ...leg, ownerEventId: ev }] }]);
+    expect(bad.body.results[0].status).toBe(409);
+  });
+
   test('a long gap with Via home chosen is a trip home: Return + Start legs, same as the calendar', async () => {
     const app = buildApp();
     const org = await seedOrganisation();

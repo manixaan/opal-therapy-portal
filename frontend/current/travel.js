@@ -2720,6 +2720,7 @@ function refreshDayOverlays(day) {
   _renderDayLegs(col, segs);
   decorateTravelBadges(day, segs);
   scheduleTravelOutlookSync(day, segs);
+  scheduleCalendarMinutes(day, segs);
   // Traffic alerts (travel-alerts.js): today and tomorrow only.
   if (window.TravelAlerts && typeof window.TravelAlerts.check === 'function') { try { window.TravelAlerts.check(day, segs); } catch (_) { /* never break drawing */ } }
   // Clearing the column also removed Smart Booking's proposed travel: put it
@@ -3030,6 +3031,56 @@ async function runTravelOutlookSync(day, segs) {
   if (!q) return null;
   const out = await runTravelOutlookSyncDays([[day, segs]]);
   return (out && out[q.payload.date]) || null;
+}
+
+/* ---------- The calendar's leg minutes, kept for invoicing (21 Nov 2026) ----------
+   Invoicing bills the minutes the calendar shows for each leg (traffic at
+   departure time), not its own lookup. Once a day's legs are all priced by a
+   real route, they go to PUT /api/travel/calendar-minutes (one debounced
+   batch, like the Outlook mirror). The server keeps a past day as first
+   recorded and never rewrites a day already invoiced. Addresses and minutes
+   only; nothing about the client. */
+const CAL_MINUTES = { pending: {}, sent: {}, timer: null, delayMs: 2500 };
+function _legAddr(loc) { return loc ? (loc.address || loc.addr || '') : ''; }
+function calendarMinutesPayload(day, segs) {
+  const date = (typeof DAY_DATES !== 'undefined' && DAY_DATES) ? DAY_DATES[day] : null;
+  if (!date || !window.SESSIONS) return null;
+  const legs = [];
+  (segs || []).forEach(seg => {
+    if (seg.kind === 'gap' || seg.skipped || !seg.ownerSessionId || !(seg.travelMin > 0)) return;
+    const owner = window.SESSIONS[seg.ownerSessionId];
+    const origin = _legAddr(seg.fromLoc), destination = _legAddr(seg.toLoc);
+    if (!owner || !owner.dbId || !origin || !destination) return;
+    legs.push({ origin, destination, minutes: Math.round(seg.travelMin), ownerEventId: String(owner.dbId), side: seg.ownerSide || null });
+  });
+  return { date, legs };
+}
+function scheduleCalendarMinutes(day, segs) {
+  if (typeof fetch !== 'function' || !travelCalculationEnabled()) return;
+  if (!travelMirrorReady(day, segs)) return;           // every leg priced by a real route, every move saved
+  const payload = calendarMinutesPayload(day, segs);
+  if (!payload || !payload.legs.length) return;
+  const sig = JSON.stringify(payload);
+  if (CAL_MINUTES.sent[payload.date] === sig) return;
+  CAL_MINUTES.pending[payload.date] = { payload, sig };
+  clearTimeout(CAL_MINUTES.timer);
+  CAL_MINUTES.timer = setTimeout(async () => {
+    const due = Object.values(CAL_MINUTES.pending).slice(0, 7);
+    CAL_MINUTES.pending = {};
+    if (!due.length) return;
+    try {
+      const r = await fetch('/api/travel/calendar-minutes', {
+        method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ days: due.map(d => d.payload) }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !Array.isArray(j.results)) return;
+      j.results.forEach(x => {
+        const d = due.find(q => q.payload.date === x.date);
+        if (d && x.status !== 500) CAL_MINUTES.sent[x.date] = d.sig;   // refused or kept: final for this set
+      });
+    } catch (e) { /* offline: the next redraw sends it */ }
+  }, CAL_MINUTES.delayMs);
 }
 
 /* ---------- Travel badge on each event (4 Oct 2026) ----------

@@ -37,6 +37,7 @@ const BP = require('./billing-profiles');
 const MMM = require('./mmm-classification');
 const Loc = require('./mmm-locality');
 const NF = require('./nf2f-timer');
+const CTM = require('./calendar-travel-minutes');
 const T = require('./travel-billing');
 const DR = require('./day-route');
 const RF = require('./route-facts');
@@ -461,12 +462,23 @@ async function prepare(q, orgId, opts) {
     dayPlans.push({ userId, date, list, route });
   }
   const facts = await RF.resolveRouteFacts(q, orgId, pairs);
+  // The calendar's own (traffic-aware) minutes win over the cached lookup, so
+  // the invoice bills what the calendar showed (migration 090). Kilometres
+  // still come from the route facts — distance does not depend on traffic.
+  const calendarMinutes = await CTM.loadForDays(q, dayPlans.map(d => ({ userId: d.userId, date: d.date })));
   for (const d of dayPlans) {
     let failed = false;
+    const dayCal = calendarMinutes.get(`${d.userId}|${d.date}`) || null;
+    let estimated = 0;
     for (const leg of d.route.legs) {
       const f = facts.get(RF.routeKey(leg.origin, leg.destination));
       const needed = leg.kind !== 'RETURN' || settings.returnTravelPayable;
-      if (f && f.status === 'ok') { leg.minutes = f.minutes; leg.km = f.km; leg.provider = f.provider; }
+      const cal = CTM.minutesFor(dayCal, leg.origin, leg.destination);
+      if (f && f.status === 'ok') {
+        leg.minutes = cal != null ? cal : f.minutes; leg.km = f.km; leg.provider = f.provider;
+        leg.minutesSource = cal != null ? 'calendar' : 'route lookup';
+        if (cal == null && needed) estimated++;
+      }
       else if (needed) {
         failed = true;
         issues.raise('TRAVEL_ROUTE_FAILED', { eventId: leg.toEventId || leg.fromEventId, practitionerId: d.userId, serviceDate: d.date, extraKey: leg.id,
@@ -476,6 +488,11 @@ async function prepare(q, orgId, opts) {
       }
     }
     if (failed) { d.failed = true; continue; }
+    if (estimated) {
+      issues.raise('TRAVEL_MINUTES_NOT_FROM_CALENDAR', { practitionerId: d.userId, serviceDate: d.date, extraKey: d.userId,
+        message: `${estimated} travel leg${estimated === 1 ? '' : 's'} on ${S.displayDate(d.date)} (${d.list[0].ev.practitioner_name}) ${estimated === 1 ? 'was' : 'were'} priced from the route lookup, because the calendar had not recorded ${estimated === 1 ? 'its' : 'their'} minutes. Open that day on the calendar while it shows the travel, then reprocess — or check the minutes on the draft.`,
+        fixTarget: { kind: 'event', eventId: d.list[0].ev.id, date: d.date } });
+    }
     d.allocation = T.allocateDay({
       practitionerId: d.userId, date: d.date, returnPayable: settings.returnTravelPayable, legs: d.route.legs,
       sessions: d.list.map(s => ({ eventId: s.ev.id, clientId: s.ev.client_id, mmm: s.mmm, rule: {
@@ -485,6 +502,34 @@ async function prepare(q, orgId, opts) {
     for (const a of d.allocation.allocations) {
       const s = d.list.find(x => x.ev.id === a.eventId);
       s.travel = { allocation: a, legs: d.allocation.legs, dayPlan: d };
+    }
+  }
+
+  // 5. Travel blocks (Smart Booking "Travel", event_type 'travel') are not
+  //    priced automatically yet: they could repeat a leg the day route
+  //    already bills. Each one with a client is surfaced so it is added by
+  //    hand (a manual line) rather than silently left off.
+  if (!eventScoped) {
+    const tparams = [orgId, opts.from, opts.to, tz];
+    let tw = '';
+    if (opts.practitionerIds && opts.practitionerIds.length) { tparams.push(opts.practitionerIds); tw = ' AND e.user_id = ANY($5::uuid[])'; }
+    const { rows: tblocks } = await q.query(
+      `SELECT e.id, e.user_id, e.title, e.start_time, e.end_time, e.custom_metadata,
+              to_char(((e.start_time AT TIME ZONE 'UTC') AT TIME ZONE $4)::date, 'YYYY-MM-DD') AS local_date,
+              COALESCE(tp.display_name, u.name) AS practitioner_name
+         FROM events e JOIN users u ON u.id = e.user_id LEFT JOIN therapist_profiles tp ON tp.user_id = u.id
+        WHERE u.organisation_id = $1 AND e.event_type = 'travel' AND COALESCE(e.is_deleted, FALSE) = FALSE
+          AND LOWER(COALESCE(e.status, '')) <> 'cancelled' AND e.end_time <= NOW()
+          AND ((e.start_time AT TIME ZONE 'UTC') AT TIME ZONE $4)::date BETWEEN $2::date AND $3::date` + tw, tparams);
+    for (const t of tblocks) {
+      const b = (t.custom_metadata && t.custom_metadata.booking) || {};
+      const clientId = b.clientId != null ? String(b.clientId) : null;
+      if (!clientId) continue;                                       // no client: not billable
+      if (opts.clientIds && opts.clientIds.length && !opts.clientIds.includes(clientId)) continue;
+      const mins = Math.round((new Date(t.end_time) - new Date(t.start_time)) / 60000);
+      issues.raise('TRAVEL_BLOCK_NOT_INVOICED', { eventId: t.id, clientId, practitionerId: t.user_id, serviceDate: t.local_date,
+        message: `Travel block "${t.title || 'Travel'}" on ${S.displayDate(t.local_date)} (${t.practitioner_name}, ${mins} min) is not priced automatically. If it is not already one of the day's travel legs, add it to ${b.clientName || 'the client'}'s draft as a line.`,
+        fixTarget: { kind: 'event', eventId: t.id, date: t.local_date } });
     }
   }
 
