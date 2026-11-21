@@ -3049,31 +3049,54 @@ function travelBadgeState(s, segs) {
   if (isPhysicalStop(s)) return { state: 'here', text: 'At ' + (sessionLocation(s).address || sessionLocation(s).suburb) + ' — no drive needed (same place as before).' };
   return { state: 'add', text: 'No address — travel treats you as staying where you were.' + (s.dbId ? ' Click to add an address and route travel here.' : '') };
 }
+/* Badges are keyed by their tile and updated in place (21 Nov 2026 audit
+   P-05): a refresh rewrites a badge's class, tip and target only when they
+   changed, and adds no listeners — one delegated set on #cal-grid serves every
+   badge. It listens in the capture phase so it stops the press before the
+   tile's own drag/open handlers, exactly as the per-badge stopPropagation did
+   (capture handlers on document, e.g. precise move, still run first). */
+function _bindTravelBadgeClicks() {
+  const grid = document.getElementById('cal-grid');
+  if (!grid || grid.__travelBadgeBound) return;
+  grid.__travelBadgeBound = true;
+  const badgeOf = (e) => {
+    const b = e.target && e.target.closest ? e.target.closest('.travel-badge') : null;
+    return b && b.__tb && grid.contains(b) ? b : null;
+  };
+  // The tile drags and opens on its own events: the badge keeps its presses.
+  ['pointerdown', 'mousedown', 'touchstart'].forEach(t => grid.addEventListener(t, e => { if (badgeOf(e)) e.stopPropagation(); }, true));
+  grid.addEventListener('click', async (e) => {
+    const b = badgeOf(e);
+    if (!b) return;
+    e.stopPropagation(); e.preventDefault();
+    const st = b.__tb, s = window.SESSIONS && window.SESSIONS[st.id];
+    if (st.state === 'on' && st.leg) { openTravelPanel(st.leg); return; }
+    if (st.state === 'add' && s && s.dbId) {
+      const ask = typeof portalPrompt === 'function' ? portalPrompt : (m, d) => Promise.resolve(window.prompt(m, d));
+      const addr = await ask('Where is this? An address moves you there for travel; leave it empty to stay where you were.', '');
+      if (addr && String(addr).trim()) saveSessionAddress(s.id, String(addr).trim());
+    }
+  }, true);
+}
 function decorateTravelBadges(day, segs) {
+  _bindTravelBadgeClicks();
   sessionsForDay(day).forEach(s => {
     const el = s.element;
     if (!el || !el.isConnected) return;
-    const old = el.querySelector('.travel-badge'); if (old) old.remove();
-    if (isTravelBlock(s) || s.type === 'leave' || s.cancelled) return;
+    const old = el.querySelector('.travel-badge');
+    if (isTravelBlock(s) || s.type === 'leave' || s.cancelled) { if (old) old.remove(); return; }
     const st = travelBadgeState(s, segs);
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'travel-badge tb-' + st.state;
-    b.innerHTML = TRAVEL_BADGE_SVG;
-    b.title = st.text;
-    b.setAttribute('aria-label', st.text);
-    // The tile drags and opens on its own events: the badge keeps its clicks.
-    ['pointerdown', 'mousedown', 'touchstart'].forEach(t => b.addEventListener(t, e => e.stopPropagation()));
-    b.addEventListener('click', async (e) => {
-      e.stopPropagation(); e.preventDefault();
-      if (st.state === 'on' && st.leg) { openTravelPanel(st.leg); return; }
-      if (st.state === 'add' && s.dbId) {
-        const ask = typeof portalPrompt === 'function' ? portalPrompt : (m, d) => Promise.resolve(window.prompt(m, d));
-        const addr = await ask('Where is this? An address moves you there for travel; leave it empty to stay where you were.', '');
-        if (addr && String(addr).trim()) saveSessionAddress(s.id, String(addr).trim());
-      }
-    });
-    el.appendChild(b);
+    let b = old;
+    if (!b) {
+      b = document.createElement('button');
+      b.type = 'button';
+      b.innerHTML = TRAVEL_BADGE_SVG;
+    }
+    const cls = 'travel-badge tb-' + st.state;
+    if (b.className !== cls) b.className = cls;
+    if (b.title !== st.text) { b.title = st.text; b.setAttribute('aria-label', st.text); }
+    b.__tb = { id: s.id, state: st.state, leg: st.leg || null };
+    if (!old) el.appendChild(b);
   });
 }
 

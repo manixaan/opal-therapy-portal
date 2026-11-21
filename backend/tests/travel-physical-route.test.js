@@ -779,3 +779,23 @@ describe('before / after answered in "Blocks to review" (19 Nov 2026)', () => {
     expect(legs(c).filter((x) => x.kind === 'between').map((x) => x.via)).toEqual([null]);
   });
 });
+
+// 21 Nov 2026 audit (P-05): every overlay refresh rebuilt every badge with
+// four listeners each (204 per 3 refreshes in the harness). Badges are now
+// keyed by tile and updated in place; one delegated set on #cal-grid.
+describe('travel badges are keyed, with one delegated listener', () => {
+  const fn = (name) => { const at = SRC.indexOf('function ' + name + '('); const rest = SRC.slice(at); return rest.slice(0, rest.indexOf('\n}\n') + 2); };
+  test('a refresh reuses the badge and adds no listener to it', () => {
+    const src = fn('decorateTravelBadges');
+    expect(src).not.toMatch(/addEventListener/);
+    expect(src).toContain("let b = old;");
+    expect(src).toContain("b.__tb = { id: s.id, state: st.state, leg: st.leg || null };");
+  });
+  test('the delegated listener is bound once, in the capture phase, so it stops the tile drag first', () => {
+    const src = fn('_bindTravelBadgeClicks');
+    expect(src).toContain('if (!grid || grid.__travelBadgeBound) return;');
+    expect(src).toMatch(/\['pointerdown', 'mousedown', 'touchstart'\]\.forEach\(t => grid\.addEventListener\(t, e => \{ if \(badgeOf\(e\)\) e\.stopPropagation\(\); \}, true\)\);/);
+    expect(src).toMatch(/grid\.addEventListener\('click', async \(e\) => \{[\s\S]*\}, true\);/);
+    expect(src).toContain('window.SESSIONS[st.id]');   // the session is looked up when clicked, never a stale closure
+  });
+});
