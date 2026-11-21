@@ -52,3 +52,12 @@ test('reduced motion still collapses every transition', () => {
   expect(at).toBeGreaterThan(-1);
   expect(HTML.slice(at, at + 300)).toContain('transition-duration: 0.01ms !important;');
 });
+
+test('U-01: the Opa button steps aside while either sheet is open', () => {
+  const css = fs.readFileSync(path.join(__dirname, '../../frontend/current/opa.css'), 'utf8');
+  const at = css.indexOf('body.bsp-open #opa-fab, body.dd-open #opa-fab {');
+  expect(at).toBeGreaterThan(-1);
+  expect(css.slice(at, css.indexOf('}', at))).toContain('opacity: 0; visibility: hidden; pointer-events: none;');
+  expect(HTML).toContain("document.body.classList.add('bsp-open');");
+  expect(HTML).toContain("document.body.classList.add('dd-open');");
+});

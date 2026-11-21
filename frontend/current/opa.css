@@ -15,7 +15,13 @@
   background: var(--panel);
   box-shadow: var(--shadow-md);
   cursor: pointer; display: flex; align-items: center; justify-content: center;
-  transition: transform var(--t-fast) var(--ease-out), box-shadow var(--t-fast);
+  transition: transform var(--t-fast) var(--ease-out), box-shadow var(--t-fast), opacity var(--t-fast);
+}
+/* While the event drawer or the booking panel is open the button would sit on
+   the sheet's footer (Close / Create appointment) — step aside (U-01). */
+body.bsp-open #opa-fab, body.dd-open #opa-fab {
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transition: opacity var(--t-fast), visibility 0s linear var(--t-fast);
 }
 #opa-fab:hover { transform: translateY(-2px) scale(1.05); box-shadow: var(--shadow-lg); }
 #opa-fab:focus-visible { outline: none; box-shadow: var(--focus-ring), var(--shadow-md); }
