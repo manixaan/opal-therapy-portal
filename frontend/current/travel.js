@@ -2897,7 +2897,7 @@ function _fitLegText(el) {
    unless this view holds exactly the user's own events, so another
    therapist's calendar or a stale view can never delete anything. Nothing
    goes to Splose. Debounced per day; an unchanged set is not resent. */
-const TRAVEL_OUTLOOK_SYNC = { timers: {}, sent: {}, delayMs: 1500 };
+const TRAVEL_OUTLOOK_SYNC = { timer: null, pending: {}, sent: {}, delayMs: 1500 };
 function _perthStamp(dateStr, min) {
   const m = Math.max(0, Math.min(24 * 60 - 1, Math.round(min)));
   return dateStr + 'T' + _hhmm(m) + ':00+08:00';
@@ -2950,10 +2950,18 @@ function travelDayIsPast(day) {
   if (!date) return false;
   return date < new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Perth' }).format(new Date());
 }
+/* Days waiting to be sent share one debounce: a week's redraw becomes one
+   batch request instead of one PUT per day (T-08). The latest legs for a day
+   win; the server still checks each day on its own. */
 function scheduleTravelOutlookSync(day, segs) {
   if (typeof fetch !== 'function' || !travelCalculationEnabled()) return;
-  clearTimeout(TRAVEL_OUTLOOK_SYNC.timers[day]);
-  TRAVEL_OUTLOOK_SYNC.timers[day] = setTimeout(() => runTravelOutlookSync(day, segs), TRAVEL_OUTLOOK_SYNC.delayMs);
+  TRAVEL_OUTLOOK_SYNC.pending[day] = segs;
+  clearTimeout(TRAVEL_OUTLOOK_SYNC.timer);
+  TRAVEL_OUTLOOK_SYNC.timer = setTimeout(() => {
+    const due = TRAVEL_OUTLOOK_SYNC.pending;
+    TRAVEL_OUTLOOK_SYNC.pending = {};
+    runTravelOutlookSyncDays(Object.keys(due).map(d => [d, due[d]]));
+  }, TRAVEL_OUTLOOK_SYNC.delayMs);
 }
 /* Is this day's travel real enough to write to Outlook? (21 Nov 2026 audit
    T-06/T-07). Everything the legs depend on must have arrived: the work
@@ -2968,7 +2976,9 @@ function travelMirrorReady(day, segs) {
   return !(segs || []).some(seg => seg.kind !== 'gap' && !seg.skipped && seg.travelMin > 0 && seg.routeReal === false);
 }
 const TRAVEL_MIRROR_HORIZON_DAYS = 14;   // today + 14 (owner decision 21 Nov 2026); the server enforces it too
-async function runTravelOutlookSync(day, segs) {
+/* The request for one day, or null when nothing should be sent: not ready,
+   past, beyond the horizon, or the same set already sent. */
+function travelOutlookDayRequest(day, segs) {
   if (!travelCalculationEnabled() || !travelMirrorReady(day, segs)) return null;
   const payload = travelOutlookPayload(day, segs);
   if (!payload) return null;
@@ -2983,16 +2993,43 @@ async function runTravelOutlookSync(day, segs) {
   if (!payload.legs.length) payload.confirmEmpty = true;
   const sig = JSON.stringify(payload);
   if (TRAVEL_OUTLOOK_SYNC.sent[payload.date] === sig) return null;
+  return { payload, sig };
+}
+/* Send the ready days of [[day, segs], …] in one PUT /api/travel/outlook-sync/
+   batch. Returns { <date>: { status, body } } for the days sent, or null. */
+async function runTravelOutlookSyncDays(entries) {
+  const reqs = [], seen = new Set();
+  (entries || []).forEach(([day, segs]) => {
+    const q = travelOutlookDayRequest(day, segs);
+    if (q && !seen.has(q.payload.date)) { seen.add(q.payload.date); reqs.push(q); }
+  });
+  if (!reqs.length) return null;
   try {
-    const r = await fetch('/api/travel/outlook-sync', {
-      method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+    const r = await fetch('/api/travel/outlook-sync/batch', {
+      method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ days: reqs.map(q => q.payload) }),
     });
     const j = await r.json().catch(() => ({}));
-    // A refusal (not your day, stale view, Outlook off) is final for this
-    // exact set — don't hammer; a changed set is tried again.
-    if (r.ok || r.status === 403 || r.status === 409) TRAVEL_OUTLOOK_SYNC.sent[payload.date] = sig;
-    return { status: r.status, body: j };
+    if (!r.ok || !Array.isArray(j.results)) return null;
+    const out = {};
+    j.results.forEach(x => {
+      const q = reqs.find(q => q.payload.date === x.date);
+      if (!q) return;
+      // A refusal (not your day, stale view, Outlook off) is final for this
+      // exact set — don't hammer; a changed set is tried again. A day the
+      // server did not reach is not in the answer and is resent next time.
+      if ((x.status >= 200 && x.status < 300) || x.status === 403 || x.status === 409) TRAVEL_OUTLOOK_SYNC.sent[x.date] = q.sig;
+      out[x.date] = { status: x.status, body: x.body };
+    });
+    return out;
   } catch (e) { return null; }
+}
+/* One day (kept for callers that sync a single day): its { status, body }, or null. */
+async function runTravelOutlookSync(day, segs) {
+  const q = travelOutlookDayRequest(day, segs);
+  if (!q) return null;
+  const out = await runTravelOutlookSyncDays([[day, segs]]);
+  return (out && out[q.payload.date]) || null;
 }
 
 /* ---------- Travel badge on each event (4 Oct 2026) ----------
