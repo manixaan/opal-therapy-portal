@@ -704,8 +704,10 @@ describe('calendar clean status indicators', () => {
   });
 
   test('short events keep a minimum height and never spill', () => {
-    expect(HTML).toContain('min-height: 8px;'); // floors lowered so short tiles never eat the 4px gap
-    expect(HTML).toContain('.session.s-compact { padding: 0 6px 0 5px; font-size: 10.5px; line-height: 1.2; min-height: 8px; }');
+    // 21 Nov 2026 (C-17): the floor is in sessionTileHeight(), not CSS — a fixed
+    // 8px drew 5- and 10-min tiles the same and overlapped the next slot.
+    expect(HTML).toContain('.session.s-compact { padding: 0 6px 0 5px; font-size: 10.5px; line-height: 1.2; min-height: 0; }');
+    expect(HTML).toContain('return Math.max(px - 4, Math.min(px - 1, 8));');
   });
 
   test('booking-panel preview state survives the legacy-handler removal', () => {
@@ -849,7 +851,7 @@ describe('scheduler ui refinement', () => {
 // ── Calendar polish: separation + title recovery (2026-08-07) ────────────────
 describe('calendar polish', () => {
   test('back-to-back events carry a real 4px separation gap', () => {
-    expect(HTML).toContain('* HOUR_PX - 4)');
+    expect(HTML).toContain('const px = min / 60 * HOUR_PX;\n  return Math.max(px - 4,'); // sessionTileHeight
     expect(HTML).not.toContain('* HOUR_PX - 2)');
     expect(HTML).not.toContain('box-shadow: 0 2px 0 0 var(--bg');
   });

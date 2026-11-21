@@ -2694,7 +2694,7 @@ window.opIcon = function (name, size) {
        time slot, so a real gap of column background shows between an event
        that ends exactly when the next begins. Tops stay time-accurate. */
     overflow: hidden;
-    min-height: 8px; /* 15-min slot (12px) minus the 4px gap */
+    min-height: 0; /* height comes from sessionTileHeight() — 5/10-min tiles differ */
     transition: box-shadow 0.15s ease;
     z-index: 2; /* sit above hour-line gridlines */
   }
@@ -2725,7 +2725,10 @@ window.opIcon = function (name, size) {
      panel (and in the hover tooltip). */
   .session.s-med .s-sub { display: none; }
   .session.s-compact .s-sub { display: none; }
-  .session.s-compact { padding: 0 6px 0 5px; font-size: 10.5px; line-height: 1.2; min-height: 8px; }
+  .session.s-compact { padding: 0 6px 0 5px; font-size: 10.5px; line-height: 1.2; min-height: 0; }
+  /* Under 15 min the tile is too short for a line of text: a clean bar, the
+     title stays in the hover tip and the detail panel (C-17). */
+  .session.s-tiny .s-title, .session.s-tiny .s-sub, .session.s-tiny .travel-badge { display: none; }
   /* External-calendar-only tiles: tiny non-colour glyph so they're identifiable
      even without the blue tint (colour-blind safe). */
   .session[data-type="outlook"]::before {
@@ -3078,7 +3081,10 @@ window.opIcon = function (name, size) {
   .session.selected { box-shadow: 0 0 0 2px white, 0 0 0 4px var(--accent); z-index: 5; }
   /* Resize handles on top + bottom edges of each session */
   .session .resize-handle {
-    position: absolute; left: 20%; right: 20%; height: 8px;
+    position: absolute; left: 20%; right: 20%;
+    /* At most a quarter of the tile each, so the centre of a short tile is
+       always the move target, never a resize (C-05). */
+    height: min(8px, 25%);
     z-index: 6;
     background: transparent;
     cursor: ns-resize;
@@ -3094,6 +3100,7 @@ window.opIcon = function (name, size) {
   .session.resizing .resize-handle::before {
     content: ""; position: absolute; left: 50%; transform: translateX(-50%);
     top: 1px;
+    pointer-events: none; /* the grip can overhang a short tile's centre — never a resize target */
     width: 28px; height: 3px; border-radius: 999px;
     background: rgba(255,255,255,0.75);
     box-shadow: 0 0 0 1px rgba(0,0,0,0.12);
@@ -13798,6 +13805,14 @@ function fmtTime(h, m) {
   return String(h).padStart(2,'0') + ':' + String(m || 0).padStart(2,'0');
 }
 function durMin(s) { return (s.endH - s.startH) * 60 + ((s.endM||0) - (s.startM||0)); }
+/* A tile's drawn height: its slot minus the 4px back-to-back gap; a very
+   short event (under ~10 min) keeps at least 1px of gap instead of a fixed
+   8px floor, so 5- and 10-minute tiles differ and never overlap the next
+   slot (C-17). */
+function sessionTileHeight(min) {
+  const px = min / 60 * HOUR_PX;
+  return Math.max(px - 4, Math.min(px - 1, 8));
+}
 function sessionStartMin(s) { return s.startH * 60 + (s.startM||0); }
 function sessionEndMin(s)   { return s.endH   * 60 + (s.endM  ||0); }
 
@@ -13805,8 +13820,9 @@ function sessionEndMin(s)   { return s.endH   * 60 + (s.endM  ||0); }
    shows the title alone, ≤65 min shows title + time, longer shows all lines.
    Called from addSession and every path that changes a tile's duration. */
 function applySessionDensity(el, durationMin) {
-  el.classList.remove('s-compact', 's-med');
-  if (durationMin < 40) el.classList.add('s-compact');
+  el.classList.remove('s-compact', 's-med', 's-tiny');
+  if (durationMin < 15) el.classList.add('s-compact', 's-tiny');
+  else if (durationMin < 40) el.classList.add('s-compact');
   else if (durationMin <= 65) el.classList.add('s-med');
 }
 
@@ -13883,7 +13899,7 @@ function addSession(col, opts) {
     if (typeColour) applyCategoryColour(el, typeColour);
   }
   el.style.top    = tToY(opts.startH, opts.startM || 0) + 'px';
-  el.style.height = (durMin(opts) / 60 * HOUR_PX - 4) + 'px';
+  el.style.height = sessionTileHeight(durMin(opts)) + 'px';
   const noSubject = !opts.title || opts.title === '(No subject)' || opts.title === '(No title)' || opts.title === 'Untitled';
   // A subject-less Outlook event is a sync/mapping gap, not a real name:
   // schedule ONE bounded delta refresh per session (no hammering).
@@ -13958,7 +13974,7 @@ function repositionAllSessionTiles() {
     if (s && s.element && typeof s.startH === 'number') {
       s.element.style.top = tToY(s.startH, s.startM || 0) + 'px';
       if (typeof s.endH === 'number') {
-        s.element.style.height = (durMin(s) / 60 * HOUR_PX - 4) + 'px';
+        s.element.style.height = sessionTileHeight(durMin(s)) + 'px';
       }
     }
   });
@@ -16007,7 +16023,7 @@ function onBlockPointerMove(e) {
     // create ghost marker that shows where the block WILL snap to
     const ghost = document.createElement('div');
     ghost.className = 'drop-ghost';
-    ghost.style.height = (drag.durationMin / 60 * HOUR_PX - 4) + 'px';
+    ghost.style.height = sessionTileHeight(drag.durationMin) + 'px';
     ghost.innerHTML = '<span class="ghost-label"></span>';
     drag.ghost = ghost;
     drag.origCol.appendChild(ghost);
@@ -16207,7 +16223,7 @@ function onBlockResizeMove(e) {
 
   // Live preview: update element top/height but don't commit to state yet
   resize.el.style.top    = ((newStart - START_H * 60) / 60 * HOUR_PX) + 'px';
-  resize.el.style.height = (newDur / 60 * HOUR_PX - 4) + 'px';
+  resize.el.style.height = sessionTileHeight(newDur) + 'px';
   if (typeof applySessionDensity === 'function') applySessionDensity(resize.el, newDur);
 
   // Update duration tooltip
@@ -16249,7 +16265,7 @@ function onBlockResizeEnd(e) {
   if (!changed) {
     // No movement — treat as a plain click and open the detail panel
     el.style.top    = tToY(s.startH, s.startM || 0) + 'px';
-    el.style.height = (durMin(s) / 60 * HOUR_PX - 4) + 'px';
+    el.style.height = sessionTileHeight(durMin(s)) + 'px';
     resize = null;
     if (typeof endTravelPreview === 'function') endTravelPreview(true);
     openBlockDetail(id);
@@ -16532,7 +16548,7 @@ function cancelMove() {
     const s = SESSIONS[pendingMove.id];
     if (s && s.element) {
       s.element.style.top    = tToY(s.startH, s.startM || 0) + 'px';
-      s.element.style.height = (durMin(s) / 60 * HOUR_PX - 4) + 'px';
+      s.element.style.height = sessionTileHeight(durMin(s)) + 'px';
       s.element.classList.remove('resizing', 'dragging');
     }
   }
@@ -16577,7 +16593,7 @@ function commitMove() {
   }
   s.element.style.top = tToY(sh, sm) + 'px';
   // Resize in case duration changed via the detail-drawer timing editor or edge-handle resize
-  s.element.style.height = (duration / 60 * HOUR_PX - 4) + 'px';
+  s.element.style.height = sessionTileHeight(duration) + 'px';
   if (typeof applySessionDensity === 'function') applySessionDensity(s.element, duration);
   s.element.classList.remove('dragging', 'resizing');
   // The tile's time line follows the move. The title is the event's own and
