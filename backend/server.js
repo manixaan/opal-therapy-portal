@@ -266,7 +266,9 @@ io.use((socket, next) => sessionMiddleware(socket.request, socket.request.res ||
 // Serve the frontend from the backend to avoid CORS issues with file:// URLs
 const frontendPath = path.join(__dirname, '../frontend/current');
 console.log(`📁 Serving frontend from: ${frontendPath}`);
-app.use(express.static(frontendPath));
+// ?v=-pinned assets are immutable for a year; HTML is always revalidated
+// (static-cache.js — the ?v= pins are what make this safe).
+app.use(express.static(frontendPath, { setHeaders: require('./static-cache').setStaticCacheHeaders }));
 
 // ===== SIMPLE TEST ROUTE =====
 // This is just to verify the server is working
