@@ -243,7 +243,7 @@ describe('compact calendar week view', () => {
   // 19 Nov 2026 — owner's call: session type first, then the client.
   test('tile titles read type first: "Client Appointment - Name"', () => {
     expect(HTML).toContain('function typeFirstTitle(title)');
-    expect(HTML).toContain(': typeFirstTitle(opts.title);');
+    expect(HTML).toContain(': escapeHtml(typeFirstTitle(opts.title));');
     expect(HTML).not.toContain('nameFirstTitle');
     const src = ['_ACTIVITY_WORD_RE', '_PERSON_NAME_RE'].map(n => HTML.match(new RegExp('const ' + n + ' = .*;'))[0]).join('\n')
       + '\n' + HTML.match(/function typeFirstTitle\(title\) \{[\s\S]*?\n\}/)[0];
@@ -1072,18 +1072,21 @@ describe('grouped booking-type picker', () => {
   test('a move that can happen applies at once — only a blocked move opens the review', () => {
     const src = HTML.slice(HTML.indexOf('function openMoveImpact('), HTML.indexOf('function closeImpactModal()'));
     const run = (impact) => {
-      const calls = { commit: 0, toasts: [], modal: false };
+      const calls = { commit: 0, toasts: [], modal: false, notes: [] };
       const doc = { getElementById: () => ({ style: {}, classList: { add: () => { calls.modal = true; } }, set textContent(v) {}, set innerHTML(v) {}, set className(v) {} }) };
       const fn = new Function('SESSIONS', 'commitMove', 'showToast', 'document', 'window', 'TYPE_LABEL', 'DAY_LABEL', 'fmtTime', 'fmtMin', 'sessionKindLabel',
-        'var pendingMove, drag;' + src + '; return openMoveImpact;');
+        'var escapeHtml = (v) => String(v); var pendingMove, drag; var __commit = commitMove; commitMove = function () { __commit(pendingMove); };' + src + '; return openMoveImpact;');
       const open = fn({ s1: { day: 'thu', startH: 20, startM: 0, endH: 20, endM: 19, type: 'therapy' } },
-        () => { calls.commit++; }, (t, sub) => calls.toasts.push([t, sub]), doc, {}, {}, {}, () => '', () => '', () => 'Therapy Session');
+        (pm) => { calls.commit++; calls.notes.push(pm && pm.notes); }, (t, sub) => calls.toasts.push([t, sub]), doc, {}, {}, {}, () => '', () => '', () => 'Therapy Session');
       open('s1', 'thu', 1200, 30, impact);
       return calls;
     };
     const warn = run({ verdict: 'warn', impacts: [{ sev: 'warn', ttl: 'Outside working hours', sub: '…' }] });
     expect([warn.commit, warn.modal]).toEqual([1, false]);
-    expect(warn.toasts[0]).toEqual(['Moved', 'Outside working hours']);
+    // 21 Nov 2026 (audit U-13): no "Moved" before the server has it — the
+    // notes ride on the move and the save's own toast carries them.
+    expect(warn.toasts).toEqual([]);
+    expect(warn.notes[0]).toEqual(['Outside working hours']);
     expect(run({ verdict: 'ok', impacts: [] })).toMatchObject({ commit: 1, modal: false });
     const blocked = run({ verdict: 'blocker', impacts: [{ sev: 'blocker', ttl: 'Overlaps 8:00pm', sub: '…' }] });
     expect([blocked.commit, blocked.modal]).toEqual([0, true]);

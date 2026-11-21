@@ -107,7 +107,7 @@ describe('one title for tile and drawer', () => {
   test('the tile and the drawer both read sessionTitleText', () => {
     const add = fnSrc('addSession');
     expect(add).toContain('sessionTitleText(opts)');
-    expect(add).toContain(': typeFirstTitle(opts.title);');
+    expect(add).toContain(': escapeHtml(typeFirstTitle(opts.title));');
     const open = HTML.slice(HTML.indexOf('function openBlockDetail(id)'), HTML.indexOf('function bdClientNames(s)'));
     expect(open).toContain("document.getElementById('bd-title').textContent = sessionDrawerTitle(s);");
     expect(open).not.toContain('_titleWho');

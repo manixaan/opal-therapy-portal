@@ -1803,6 +1803,7 @@ describe('a dragged block\'s text follows it (24 Oct 2026)', () => {
       tToY: (h, m) => (h * 60 + m) * 1.2,
       fmtTime: (h, m) => (h % 12 || 12) + ':' + String(m).padStart(2, '0') + (h < 12 ? ' AM' : ' PM'),
       __registerMoveUndo: () => {}, setTimeout,
+      sessionTileHeight: (min) => min / 60 * 72 - 4,
     };
     vm.createContext(ctx);
     vm.runInContext(body + '\ncommitMove();', ctx);
