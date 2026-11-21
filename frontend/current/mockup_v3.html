@@ -504,13 +504,17 @@ window.opIcon = function (name, size) {
     50%      { transform: scale(1.64); opacity: 0.3; }
   }
   .top-spacer { flex: 1; }
+  /* Top-bar icon buttons are borderless at rest, like a macOS toolbar; the
+     hover background marks the one under the pointer or holding keyboard
+     focus (U-18, owner decision 21 Nov 2026). 32 px hit size; the global
+     :focus-visible rule still draws the teal ring. */
   .icon-btn {
     width: 32px; height: 32px; border-radius: 8px;
-    border: 1px solid var(--border); background: var(--panel);
+    border: 1px solid transparent; background: transparent;
     display: inline-flex; align-items: center; justify-content: center;
     color: var(--ink-soft); position: relative;
   }
-  .icon-btn:hover { background: var(--border-soft); }
+  .icon-btn:hover, .icon-btn:focus-visible { background: var(--border-soft); }
   .icon-btn .badge {
     position: absolute; top: -4px; right: -4px;
     background: var(--danger); color: white;

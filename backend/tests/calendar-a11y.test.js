@@ -142,3 +142,14 @@ describe('Skip to calendar (Q-07, 21 Nov 2026)', () => {
     expect(HTML).toContain("link.addEventListener('click', (e) => { e.preventDefault(); focusCalendarStart(); });");
   });
 });
+
+describe('top-bar icon buttons (U-18, 21 Nov 2026)', () => {
+  test('borderless at rest; hover background on hover and keyboard focus; 32 px kept', () => {
+    const css = HTML.slice(HTML.indexOf('  .icon-btn {'), HTML.indexOf('  .icon-btn .badge {'));
+    expect(css).toContain('width: 32px; height: 32px;');
+    expect(css).toContain('border: 1px solid transparent; background: transparent;');
+    expect(css).toContain('.icon-btn:hover, .icon-btn:focus-visible { background: var(--border-soft); }');
+    // The teal ring still comes from the global focus rule.
+    expect(HTML).toMatch(/:where\(button, a, input, select, textarea, \[tabindex\]\):focus-visible \{\s*outline: none; box-shadow: var\(--focus-ring\);/);
+  });
+});
