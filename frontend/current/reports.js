@@ -397,6 +397,8 @@ function _rptFmtH(min) {
 }
 
 function _rptFmtTime(h, m) {
+  // U-11: the shell's fmtTime is the one display format.
+  if (typeof fmtTime === 'function') return fmtTime(h, m || 0);
   if ((window.APP_SETTINGS || {}).timeFormat === '24') {
     return String(h).padStart(2,'0') + ':' + String(m || 0).padStart(2,'0');
   }

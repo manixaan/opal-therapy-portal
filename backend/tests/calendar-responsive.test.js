@@ -48,6 +48,19 @@ describe('responsive chrome (U-03)', () => {
     expect(HTML).toMatch(/data-theme-set="auto"/);
   });
 
+  test('≤600: the nav strip never pushes the page sideways at 360–390 px (wraps instead)', () => {
+    // Harness fix/tech/hdr3.js: every role × every bar tab at 390/375/360 was
+    // up to 67 px wider than the viewport (therapist, Logbook open, 360 px);
+    // after these rules the worst case is 0.
+    const b = mediaBlock(600);
+    expect(b).toMatch(/nav\.tabs \{[^}]*flex-wrap: wrap;/);
+    expect(b).toMatch(/nav\.tabs > \.tab:not\(\.active\) \{[^}]*padding: 7px 7px;/);
+    expect(b).toMatch(/nav\.tabs #nav-more-btn \{ padding: 7px 9px;/);
+    // nothing new is hidden: the open tab and the More button keep their labels
+    expect(b).not.toMatch(/nav\.tabs > \.tab\.active \{[^}]*(font-size: 0|display: none)/);
+    expect(b).not.toMatch(/#nav-more-btn \{[^}]*(font-size: 0|display: none)/);
+  });
+
   test('collapsed labels stay in the DOM (font-size:0, never display:none) so the accessible name survives', () => {
     for (const w of [1080, 860]) {
       const b = mediaBlock(w);

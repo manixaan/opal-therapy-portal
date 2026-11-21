@@ -85,8 +85,11 @@ describe('slot click near midnight (C-08)', () => {
   });
   test('the prefill strip never reads an hour past 23 as PM of the same day', () => {
     const src = fnSrc('_applyPanelPrefill');
-    const fmtT = new Function(src.slice(src.indexOf('const pad'), src.indexOf('let timeStr')) + '; return fmtT;')();
-    expect(fmtT(23, 59)).toBe('11:59 PM');
-    expect(fmtT(24, 45)).toBe('12:45 AM');
+    // U-11: fmtT now hands the wrapped hour to the shell's one formatter.
+    const fmtTimeSrc = HTML.slice(HTML.indexOf('function fmtTime(h, m) {'), HTML.indexOf('\n}\n', HTML.indexOf('function fmtTime(h, m) {')) + 2);
+    const mk = (settings) => new Function('window', fmtTimeSrc + src.slice(src.indexOf('const pad'), src.indexOf('let timeStr')) + '; return fmtT;')({ APP_SETTINGS: settings });
+    expect(mk({})(23, 59)).toBe('11:59 PM');
+    expect(mk({})(24, 45)).toBe('12:45 AM');
+    expect(mk({ timeFormat: '24' })(24, 45)).toBe('00:45');
   });
 });

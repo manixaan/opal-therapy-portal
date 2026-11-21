@@ -27,6 +27,39 @@
   window.revealShell = function () { html.classList.remove('shell-booting'); };
   setTimeout(window.revealShell, 7000);
 })();
+/* P-07 — boot GET sharing. During the first seconds several modules ask for
+   the same read (categories ×3; sync-status, Splose sync-status,
+   work-schedule, setup-status and Splose services ×2). For these exact
+   URLs only, a GET made while the same GET is in flight or answered during
+   boot gets a clone of that one response. Every caller still gets its own
+   Response (status, json) and its own 401 handling (the session-expiry
+   wrapper sits above this one). /api/events is shared once only — the
+   prefetch and the first load — so a later reload always asks the server.
+   Sharing stops for good at the first write (a /api/maps/ route-pricing
+   POST is a read)
+   (any non-GET), after BOOT_MS, and never starts on an OAuth return, where
+   sync-status is expected to change within the boot window. */
+(function () {
+  if (!window.fetch || /[?&](code|auth)=/.test(location.search)) return;
+  var nativeFetch = window.fetch.bind(window);
+  var SHARED = /^\/api\/(events|outlook\/categories|sync-status|splose\/sync-status|splose\/services|profile\/work-schedule|profile\/setup-status)$/;
+  var BOOT_MS = 10000, t0 = Date.now(), memo = {}, open = true;
+  window.fetch = function (input, init) {
+    if (!open) return nativeFetch(input, init);
+    var method = String((init && init.method) || 'GET').toUpperCase();
+    // Route pricing is a POST that writes nothing; anything else non-GET is a write.
+    var readPost = typeof input === 'string' && input.indexOf('/api/maps/') === 0;
+    if ((method !== 'GET' && !readPost) || Date.now() - t0 > BOOT_MS) { open = false; memo = {}; return nativeFetch(input, init); }
+    if (typeof input !== 'string' || !SHARED.test(input)) return nativeFetch(input, init);
+    var hit = memo[input];
+    if (hit && input === '/api/events') delete memo[input];   // one reuse, then fresh
+    if (!hit) {
+      hit = memo[input] = nativeFetch(input, init);
+      hit.then(function (r) { if (!r.ok) delete memo[input]; }, function () { delete memo[input]; });
+    }
+    return hit.then(function (r) { return r.clone(); });
+  };
+})();
 </script>
 <link rel="stylesheet" href="/dialog.css?v=2" />
 <script src="/dialog.js?v=1"></script>
@@ -189,7 +222,7 @@
 <!-- Splose draft-and-publish sync: Sync Splose button, review panel, unsynced
      tiles, tab-leave prompt, and "changed inside Splose" alerts. Wraps
      switchTab and commitMove once the shell has defined them. -->
-<script src="/splose-sync.js?v=15" defer></script>
+<script src="/splose-sync.js?v=16" defer></script>
 <!-- Settings → Calendar sync: Off / Sync manually / Automatic for Outlook both
      ways, and the three-tab Sync now review (migration 081, 19 Nov 2026). -->
 <script src="/sync-settings.js?v=6" defer></script>
@@ -204,7 +237,7 @@
      the _rpt* data layer, the daily and weekly renderers, and the
      Snapshot Day V2 work list. Deferred, so it runs after the shell's
      inline scripts and keeps the same globals they expect. -->
-<script src="/reports.js?v=9" defer></script>
+<script src="/reports.js?v=10" defer></script>
 <script src="/navigation.js?v=17" defer></script>
 <script>
 /* Opal line icons — one consistent stroke set replacing emoji throughout.
@@ -2765,8 +2798,13 @@ window.opIcon = function (name, size) {
     #app-user-chip { max-width: 96px !important; }
     header > div:last-child { margin-left: 0 !important; padding-left: 6px !important; }
     /* Nav: every tab but the open one shows its icon only. */
-    nav.tabs { padding: 5px 8px; gap: 2px; }
-    nav.tabs > .tab:not(.active) { font-size: 0; gap: 0; padding: 7px 9px; }
+    /* Tighter pads so the strip fits 360–390 px; if a long open-tab label
+       still does not fit, the strip wraps to a second row rather than
+       pushing the page sideways. */
+    nav.tabs { padding: 5px 6px; gap: 2px; flex-wrap: wrap; row-gap: 2px; }
+    nav.tabs > .tab:not(.active) { font-size: 0; gap: 0; padding: 7px 7px; }
+    nav.tabs > .tab.active { padding: 7px 10px; }
+    nav.tabs #nav-more-btn { padding: 7px 9px; gap: 4px; }
     nav.tabs .tab { flex-shrink: 0; }
     nav.tabs > .tab:not(.active) .tab-badge { font-size: 10px; margin-left: 2px; }
     /* Toolbar: two rows — view switch + Today / dates + actions. */
@@ -8579,6 +8617,14 @@ window.APP_USER = null;
   // No cap while the document is still parsing (10 Oct 2026): every inline
   // block has run once readyState leaves 'loading', so a slow network can no
   // longer outlast the retries and leave the nav ungated.
+  // P-07: the calendar's first paint needs categories and events. Ask for
+  // both now, in parallel, instead of serially after window 'load'; the
+  // loader (still started at 'load') picks up these same requests through
+  // the boot GET sharing in <head>. Auth has resolved by this point.
+  bootStep('calendar prefetch', function () {
+    fetch('/api/outlook/categories', { credentials: 'include' }).catch(function () {});
+    fetch('/api/events', { credentials: 'include' }).catch(function () {});
+  });
   bootStep('role gating', function () {
     (function applyRoleGatingWhenReady(attempt) {
       if (typeof initMasterCalendarAccess === 'function') { initMasterCalendarAccess(); return; }
@@ -9581,6 +9627,10 @@ function switchTab(name) {
     resetWizard();
     WIZARD_BOOKED = false;
   }
+  // Extension point (P-08): code that loads a tab's data listens for
+  // 'opal:tab-changed' instead of wrapping switchTab. detail.name is the tab
+  // the core actually showed (a 'book' request arrives as 'calendar').
+  try { window.dispatchEvent(new CustomEvent('opal:tab-changed', { detail: { name } })); } catch (e) { /* old browsers */ }
 }
 // Launcher-style .tab buttons without data-tab (e.g. #tab-support-pop, which
 // opens the floating Support popup) carry their own onclick and must never
@@ -12000,7 +12050,7 @@ function handleDragMove(event) {
    Short blocks keep one line so nothing spills past the edges. */
 function calProposedLabel(startMin, durMin, who) {
   const endMin = startMin + durMin;
-  const f = (m) => { const h = Math.floor(m / 60) % 24, mm = m % 60; return (h % 12 || 12) + ':' + String(mm).padStart(2, '0') + (h < 12 ? 'am' : 'pm'); };
+  const f = (m) => fmtTime(Math.floor(m / 60) % 24, m % 60);   // U-11
   const range = f(startMin) + '–' + f(endMin);
   if (durMin < 30) return '<span class="cp-time">' + range + '</span>';
   if (durMin < 45) return '<span class="cp-time">' + range + '</span><span class="cp-tag"> · Proposed</span>';
@@ -12092,13 +12142,8 @@ function showEventCreationPopup(dayLabel, startTime, endTime, day, startMinutes,
   function hhmmToMin(v) {
     const [h,m] = v.split(':').map(Number); return h*60+m;
   }
-  // Format minutes → "H:MM AM/PM"
-  function minToDisplay(min) {
-    const h24 = Math.floor(min/60) % 24, m = min % 60;
-    const ap = h24 < 12 ? 'AM' : 'PM';
-    const h = h24 % 12 || 12;
-    return `${h}:${String(m).padStart(2,'0')} ${ap}`;
-  }
+  // Minutes → the one display format (U-11: fmtTime)
+  function minToDisplay(min) { return fmtTime(Math.floor(min/60) % 24, min % 60); }
 
   const startVal = toHHMM(startTime);
   const endVal   = toHHMM(endTime);
@@ -14124,10 +14169,16 @@ function eventFullLocation(s) {
   return null;
 }
 
+/* U-11: THE display formatter for a time of day — every calendar, booking,
+   travel and report string goes through it. It follows Settings → Time
+   format: '24' → "14:30"; anything else → "2:30 PM", the Settings option's
+   own example and the server default ('12'), so an unset value (before
+   settings load) matches the hour axis instead of flashing 24-hour.
+   Machine formats (ISO, Outlook payloads, "HH:MM" for <input type=time>)
+   never use it. */
 function fmtTime(h, m) {
-  // Respect timeFormat setting: '12' → 12-hour AM/PM, '24' or unset → 24-hour
   var fmt = (window.APP_SETTINGS || {}).timeFormat;
-  if (fmt === '12') {
+  if (fmt !== '24') {
     var ap = h < 12 ? ' AM' : ' PM';
     return (h % 12 || 12) + ':' + String(m || 0).padStart(2,'0') + ap;
   }
@@ -17080,15 +17131,8 @@ function regionDistance(a, b) {
   };
   return MAP[key] != null ? MAP[key] : 25;
 }
-function fmtMin(min) {
-  var h = Math.floor(min / 60), m = min % 60;
-  var fmt = (window.APP_SETTINGS || {}).timeFormat;
-  if (fmt === '12') {
-    var ap = h < 12 ? 'am' : 'pm';
-    return (h % 12 || 12) + ':' + String(m).padStart(2,'0') + ap;
-  }
-  return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
-}
+// Minutes since midnight → the one display format (U-11: fmtTime).
+function fmtMin(min) { return fmtTime(Math.floor(min / 60), min % 60); }
 
 /* ---------- Impact modal ---------- */
 // `var`, not `let`: splose-sync.js reads window.pendingMove inside its
@@ -19802,10 +19846,10 @@ async function loadOutlookEventsToCalendar() {
   // A reload (after a booking, sync, move…) keeps the user's place in the grid.
   const _gridBefore = document.getElementById('cal-grid');
   const _scrollBefore = _gridBefore ? _gridBefore.scrollTop : 0;
-  // Ensure category colours are loaded before rendering so tiles get the right colour immediately
-  if (Object.keys(window.OUTLOOK_CATEGORY_COLOURS || {}).length === 0) {
-    await loadOutlookCategories();
-  }
+  // Category colours must be in before rendering so tiles get the right
+  // colour immediately — fetched alongside the events, not before them (P-07).
+  const _categoriesReady = Object.keys(window.OUTLOOK_CATEGORY_COLOURS || {}).length === 0
+    ? loadOutlookCategories() : null;
 
   try {
     // After the first full load, a reload in the week/day grid asks only for
@@ -19814,7 +19858,10 @@ async function loadOutlookEventsToCalendar() {
     // the history from the last full load, refreshed every EVENTS_FULL_EVERY_MS.
     const win = __eventsFetchWindow();
     const url = win ? '/api/events?from=' + encodeURIComponent(win.from) + '&to=' + encodeURIComponent(win.to) : '/api/events';
-    const response = await fetch(url, { credentials: 'include' });
+    const _eventsResponse = fetch(url, { credentials: 'include' });
+    _eventsResponse.catch(() => {});   // handled below; no unhandled-rejection noise while categories load
+    if (_categoriesReady) await _categoriesReady;
+    const response = await _eventsResponse;
     if (!response.ok) {
       console.log('⚠️ Failed to load events:', response.status);
       return;
@@ -19928,6 +19975,10 @@ async function loadOutlookEventsToCalendar() {
     console.log('✅ Events loaded! Use ‹ / › to step through other weeks.');
   } catch (error) {
     console.error('Error loading events:', error);
+  } finally {
+    // Extension point (P-08): fires after every load, ok or not (a refused or
+    // failed fetch too), for code that follows the calendar — Splose's count.
+    try { window.dispatchEvent(new CustomEvent('opal:events-loaded')); } catch (e) { /* old browsers */ }
   }
 }
 
@@ -20137,7 +20188,14 @@ function calculateDuration(startTime, endTime) {
  *
  * This runs async after initial render so it never blocks calendar load.
  */
+// Extension point (P-08): 'opal:addresses-enriched' fires once the
+// enrichment has finished (whatever it found), so follow-up checks listen
+// instead of wrapping this function.
 async function enrichOutlookTilesWithSploseAddresses() {
+  await __enrichOutlookTilesCore();
+  try { window.dispatchEvent(new CustomEvent('opal:addresses-enriched')); } catch (e) { /* old browsers */ }
+}
+async function __enrichOutlookTilesCore() {
   const mon = window.__currentWeekMonday;
   if (!mon) return;
 
@@ -21826,19 +21884,16 @@ function computeCancellationStats(appointments, patientId) {
 //  The individual load functions use SploseSync stale-while-revalidate:
 //  they show cached data immediately and only re-fetch if stale.
 // ═══════════════════════════════════════════════════════
-if (typeof switchTab === 'function') {
-  const __st = switchTab;
-  window.switchTab = function(name) {
-    __st(name);
-    if (name === 'ndis')     loadNDISData();
-    if (name === 'billing')  loadBillingData();
-    if (name === 'logbook')  loadLogbookData();
-    if (name === 'activity') loadActivityFeed();
-    if (name === 'contacts') loadContactsData();
-    if (name === 'profile')  loadProfileView();
-    if (name === 'master' && window.OpalScheduler) window.OpalScheduler.open();
-  };
-}
+window.addEventListener('opal:tab-changed', function (e) {
+  const name = e.detail && e.detail.name;
+  if (name === 'ndis')     loadNDISData();
+  if (name === 'billing')  loadBillingData();
+  if (name === 'logbook')  loadLogbookData();
+  if (name === 'activity') loadActivityFeed();
+  if (name === 'contacts') loadContactsData();
+  if (name === 'profile')  loadProfileView();
+  if (name === 'master' && window.OpalScheduler) window.OpalScheduler.open();
+});
 
 // ═══════════════════════════════════════════════════════
 //  MASTER SCHEDULER (Phase 1) — the view itself lives in /scheduler.js
@@ -23657,12 +23712,7 @@ function _applyPanelPrefill(opts) {
     ? new Date(opts.date + 'T12:00:00').toLocaleDateString('en-AU', { day:'numeric', month:'short' })
     : '';
   const pad = n => String(n).padStart(2,'0');
-  const fmtT = (h, m) => {
-    h = h % 24;   // never read 24:45 as "12:45 PM"
-    const ampm = h < 12 ? 'AM' : 'PM';
-    const h12  = h % 12 || 12;
-    return `${h12}:${pad(m)} ${ampm}`;
-  };
+  const fmtT = (h, m) => fmtTime(h % 24, m);   // never read 24:45 as "12:45 PM" (U-11: one formatter)
 
   let timeStr = '';
   if (opts.startH !== undefined) {
@@ -23826,7 +23876,7 @@ function renderCalendarPreviewBlocks(slots) {
     const endH    = Math.floor(endMin / 60);
     const endM    = endMin % 60;
     const pad     = n => String(n).padStart(2,'0');
-    const fmtT    = (h, m) => { const h12 = h%12||12; return `${h12}:${pad(m)}${h<12?'a':'p'}`; };
+    const fmtT    = (h, m) => fmtTime(h % 24, m);   // U-11: one formatter
 
     const el = document.createElement('div');
     el.className = 'cal-preview-block cal-proposed' + (idx === 0 ? ' preview-selected' : '');
@@ -24434,16 +24484,8 @@ function schedAssistantRender() {
   grid.innerHTML = html;
 }
 
-// ── Wire into tab switch ──────────────────────────────
-(function patchSATabSwitch() {
-  const _prev = window.switchTab;
-  window.switchTab = function(name) {
-    _prev && _prev(name);
-    if (name === 'autofit') {
-      // featureFlags.autoFitClients = false — tab hidden; no-op
-    }
-  };
-})();
+// (The autofit tab is hidden — featureFlags.autoFitClients = false — so it
+// needs no 'opal:tab-changed' listener.)
 </script>
 
 <!-- ============================================================
@@ -27339,12 +27381,8 @@ var HELP_TOURS = {
 
 // After Splose address enrichment, re-check tiles that have gained an address
 // and remove stale missing-addr class. Also count how many remain missing.
-(function patchEnrichOutlookTilesWithAddressRecheckBadge() {
-  var _orig = window.enrichOutlookTilesWithSploseAddresses;
-  if (typeof _orig !== 'function') return;
-
-  window.enrichOutlookTilesWithSploseAddresses = async function() {
-    await _orig.apply(this, arguments);
+(function addressRecheckBadgeAfterEnrichment() {
+  window.addEventListener('opal:addresses-enriched', function() {
     // After enrichment, re-run conflict + rural detection (address data may affect sub labels)
     requestAnimationFrame(function() {
       detectAndMarkCalendarConflicts();
@@ -27367,7 +27405,7 @@ var HELP_TOURS = {
         updateNotificationBadge();
       }
     });
-  };
+  });
 })();
 
 </script>
