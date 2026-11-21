@@ -27,6 +27,39 @@
   window.revealShell = function () { html.classList.remove('shell-booting'); };
   setTimeout(window.revealShell, 7000);
 })();
+/* P-07 — boot GET sharing. During the first seconds several modules ask for
+   the same read (categories ×3; sync-status, Splose sync-status,
+   work-schedule, setup-status and Splose services ×2). For these exact
+   URLs only, a GET made while the same GET is in flight or answered during
+   boot gets a clone of that one response. Every caller still gets its own
+   Response (status, json) and its own 401 handling (the session-expiry
+   wrapper sits above this one). /api/events is shared once only — the
+   prefetch and the first load — so a later reload always asks the server.
+   Sharing stops for good at the first write (a /api/maps/ route-pricing
+   POST is a read)
+   (any non-GET), after BOOT_MS, and never starts on an OAuth return, where
+   sync-status is expected to change within the boot window. */
+(function () {
+  if (!window.fetch || /[?&](code|auth)=/.test(location.search)) return;
+  var nativeFetch = window.fetch.bind(window);
+  var SHARED = /^\/api\/(events|outlook\/categories|sync-status|splose\/sync-status|splose\/services|profile\/work-schedule|profile\/setup-status)$/;
+  var BOOT_MS = 10000, t0 = Date.now(), memo = {}, open = true;
+  window.fetch = function (input, init) {
+    if (!open) return nativeFetch(input, init);
+    var method = String((init && init.method) || 'GET').toUpperCase();
+    // Route pricing is a POST that writes nothing; anything else non-GET is a write.
+    var readPost = typeof input === 'string' && input.indexOf('/api/maps/') === 0;
+    if ((method !== 'GET' && !readPost) || Date.now() - t0 > BOOT_MS) { open = false; memo = {}; return nativeFetch(input, init); }
+    if (typeof input !== 'string' || !SHARED.test(input)) return nativeFetch(input, init);
+    var hit = memo[input];
+    if (hit && input === '/api/events') delete memo[input];   // one reuse, then fresh
+    if (!hit) {
+      hit = memo[input] = nativeFetch(input, init);
+      hit.then(function (r) { if (!r.ok) delete memo[input]; }, function () { delete memo[input]; });
+    }
+    return hit.then(function (r) { return r.clone(); });
+  };
+})();
 </script>
 <link rel="stylesheet" href="/dialog.css?v=2" />
 <script src="/dialog.js?v=1"></script>
@@ -8584,6 +8617,14 @@ window.APP_USER = null;
   // No cap while the document is still parsing (10 Oct 2026): every inline
   // block has run once readyState leaves 'loading', so a slow network can no
   // longer outlast the retries and leave the nav ungated.
+  // P-07: the calendar's first paint needs categories and events. Ask for
+  // both now, in parallel, instead of serially after window 'load'; the
+  // loader (still started at 'load') picks up these same requests through
+  // the boot GET sharing in <head>. Auth has resolved by this point.
+  bootStep('calendar prefetch', function () {
+    fetch('/api/outlook/categories', { credentials: 'include' }).catch(function () {});
+    fetch('/api/events', { credentials: 'include' }).catch(function () {});
+  });
   bootStep('role gating', function () {
     (function applyRoleGatingWhenReady(attempt) {
       if (typeof initMasterCalendarAccess === 'function') { initMasterCalendarAccess(); return; }
@@ -19805,10 +19846,10 @@ async function loadOutlookEventsToCalendar() {
   // A reload (after a booking, sync, move…) keeps the user's place in the grid.
   const _gridBefore = document.getElementById('cal-grid');
   const _scrollBefore = _gridBefore ? _gridBefore.scrollTop : 0;
-  // Ensure category colours are loaded before rendering so tiles get the right colour immediately
-  if (Object.keys(window.OUTLOOK_CATEGORY_COLOURS || {}).length === 0) {
-    await loadOutlookCategories();
-  }
+  // Category colours must be in before rendering so tiles get the right
+  // colour immediately — fetched alongside the events, not before them (P-07).
+  const _categoriesReady = Object.keys(window.OUTLOOK_CATEGORY_COLOURS || {}).length === 0
+    ? loadOutlookCategories() : null;
 
   try {
     // After the first full load, a reload in the week/day grid asks only for
@@ -19817,7 +19858,10 @@ async function loadOutlookEventsToCalendar() {
     // the history from the last full load, refreshed every EVENTS_FULL_EVERY_MS.
     const win = __eventsFetchWindow();
     const url = win ? '/api/events?from=' + encodeURIComponent(win.from) + '&to=' + encodeURIComponent(win.to) : '/api/events';
-    const response = await fetch(url, { credentials: 'include' });
+    const _eventsResponse = fetch(url, { credentials: 'include' });
+    _eventsResponse.catch(() => {});   // handled below; no unhandled-rejection noise while categories load
+    if (_categoriesReady) await _categoriesReady;
+    const response = await _eventsResponse;
     if (!response.ok) {
       console.log('⚠️ Failed to load events:', response.status);
       return;
