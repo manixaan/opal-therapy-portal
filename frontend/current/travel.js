@@ -272,8 +272,10 @@ function travelDurationMinSync(from, to, mode) {
   const key = routeKey(from, to, modeKey);
   const entry = ROUTE_CACHE.get(key);
   if (isFresh(entry)) return entry.durationMin;
-  // Warm the cache in the background — don't await.
-  fetchRoute(from, to, modeKey).then(scheduleOverlayRefresh).catch(() => {});
+  // Warm the cache in the background — don't await. Not while a session is
+  // being dragged: each snapped position would ask for new pairs; the drop
+  // routes what it lands on (T-09).
+  if (!TRAVEL_DRAG.active) fetchRoute(from, to, modeKey).then(scheduleOverlayRefresh).catch(() => {});
   return estimateTravelMinFromTable(from, to);
 }
 
@@ -413,7 +415,11 @@ function travelAt(from, to, day, departMin) {
   if (!iso) return { min: plain, real: plainReal };
   const entry = ROUTE_CACHE.get(routeKey(from, to, 'driving') + '|t' + _departureBucket(iso));
   if (isFresh(entry)) return { min: entry.durationMin, real: entry.source === 'routes-api' };
-  fetchRoute(from, to, 'driving', { departureTime: iso }).then(scheduleOverlayRefresh).catch(() => {});
+  // The departure is worked out from the plain minutes; while those are still
+  // the suburb-table estimate, a timed request would price the wrong 15-min
+  // bucket and be asked again once the real plain answer moves the leg (T-09).
+  // Wait for it — and ask nothing mid-drag.
+  if (plainReal && !TRAVEL_DRAG.active) fetchRoute(from, to, 'driving', { departureTime: iso }).then(scheduleOverlayRefresh).catch(() => {});
   return { min: plain, real: false };
 }
 function travelMinutesAt(from, to, day, departMin) { return travelAt(from, to, day, departMin).min; }
@@ -2397,13 +2403,15 @@ function betweenTravelPlan(curr, next, base) {
   if (!fromKey || !toKey || !baseKey) return out;
   if (canonAddr(baseKey) === canonAddr(fromKey) || canonAddr(baseKey) === canonAddr(toKey)) return out;
   out.homeAvailable = true;
-  const toBase = travelMinutes(fromKey, baseKey), fromBase = travelMinutes(baseKey, toKey);
-  if (!(toBase > 0) || !(fromBase > 0)) return out;
   // A trip home in between only when the therapist chose it (19 Nov 2026,
   // owner's call): the gap rule used to send them home on its own. "Via home"
-  // stays offered on the leg's switch.
-  const goHome = choice === 'home';
-  if (goHome) Object.assign(out, { mode: 'home', home: Object.assign({}, base, { baseId: base.baseId || null }), toBase, fromBase });
+  // stays offered on the leg's switch. Only then are the drives home and back
+  // priced — about half the Routes calls of a cold week priced a trip nobody
+  // takes (21 Nov 2026 audit T-09). The choosers price it when they open.
+  if (choice !== 'home') return out;
+  const toBase = travelMinutes(fromKey, baseKey), fromBase = travelMinutes(baseKey, toKey);
+  if (!(toBase > 0) || !(fromBase > 0)) return out;
+  Object.assign(out, { mode: 'home', home: Object.assign({}, base, { baseId: base.baseId || null }), toBase, fromBase });
   return out;
 }
 /* Save the choice for the gap after this session. mode: 'direct' | 'home' | null (automatic). */

@@ -91,10 +91,33 @@ describe('a drive is priced at its own departure time', () => {
     add(c, { at: '09:00', to: '10:00', s: { address: OSBORNE, patient: 'A', travel: { next: 'direct' } } });
     add(c, { at: '12:00', to: '13:00', s: { address: JOONDALUP, patient: 'B' } });
     vm.runInContext('GOOGLE_MAPS_API_KEY = "k"', c);
+    // The plain drive is a real routed answer, so the departure (11:30) is right.
+    vm.runInContext(`ROUTE_CACHE.set(routeKey(${JSON.stringify(OSBORNE)}, ${JSON.stringify(JOONDALUP)}, 'driving'), { durationMin: 30, source: 'routes-api', fetchedAt: Date.now() })`, c);
     const leg = legs(c).find((x) => x.kind === 'between');
     expect([leg.travelMin, leg.routeReal]).toEqual([30, false]);
     const asked = c.fetch.mock.calls.filter(([u]) => u === '/api/maps/routes').map(([, o]) => JSON.parse(o.body));
     expect(asked.some((b) => b.departureTime === new Date(c.DAY_DATES.mon + 'T11:30:00+08:00').toISOString())).toBe(true);
+  });
+
+  // 21 Nov 2026 audit T-09: a departure worked out from a suburb-table
+  // estimate is the wrong 15-min bucket — asked once, then again once the
+  // real plain answer moved the leg. Now the timed request waits for it.
+  test('while the plain drive is still an estimate, no timed request is made yet', () => {
+    const c = load();
+    c.fetch.mockClear();
+    add(c, { at: '09:00', to: '10:00', s: { address: OSBORNE, patient: 'A', travel: { next: 'direct' } } });
+    add(c, { at: '12:00', to: '13:00', s: { address: JOONDALUP, patient: 'B' } });
+    vm.runInContext('GOOGLE_MAPS_API_KEY = "k"', c);
+    legs(c);
+    const asked = c.fetch.mock.calls.filter(([u]) => u === '/api/maps/routes').map(([, o]) => JSON.parse(o.body));
+    expect(asked.some((b) => b.departureTime)).toBe(false);
+  });
+
+  test('Direct gaps do not price the trip home nobody takes; mid-drag nothing new is routed', () => {
+    const src = TRAVEL.slice(TRAVEL.indexOf('function betweenTravelPlan('), TRAVEL.indexOf('async function setBetweenTravel('));
+    expect(src.indexOf("if (choice !== 'home') return out;")).toBeLessThan(src.indexOf('const toBase = travelMinutes(fromKey, baseKey)'));
+    expect(TRAVEL).toMatch(/if \(!TRAVEL_DRAG\.active\) fetchRoute\(from, to, modeKey\)/);
+    expect(TRAVEL).toMatch(/if \(plainReal && !TRAVEL_DRAG\.active\) fetchRoute\(from, to, 'driving', \{ departureTime: iso \}\)/);
   });
 
   test('a past day keeps the plain number and asks nothing timed', () => {
