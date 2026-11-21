@@ -858,6 +858,14 @@ async function getEvents(userId, filters = {}) {
     params.push(filters.startDate, filters.endDate);
   }
 
+  // Events that START in [startFrom, startBefore) — the calendar's windowed
+  // reload (P-03). Start-based, so an event running past the window's end is
+  // still returned with its day, unlike the startDate/endDate pair above.
+  if (filters.startFrom && filters.startBefore) {
+    query += ' AND start_time >= $' + (params.length + 1) + ' AND start_time < $' + (params.length + 2);
+    params.push(filters.startFrom, filters.startBefore);
+  }
+
   if (filters.eventType) {
     query += ' AND event_type = $' + (params.length + 1);
     params.push(filters.eventType);

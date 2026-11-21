@@ -695,14 +695,29 @@ router.post('/api/sync/outlook-initial', requireAuth, async (req, res) => {
  * GET /api/events
  * Returns all events in the app calendar
  * Includes both user-created and Outlook-synced events
+ * Optional ?from=<ISO>&to=<ISO>: only events that START in [from, to) — the
+ * calendar's reloads and polls ask for the weeks around the one on screen
+ * instead of the whole history (P-03). Both or neither; at most 400 days.
  */
+const EVENTS_WINDOW_MAX_MS = 400 * 86400000;
 router.get('/api/events', requireAuth, async (req, res) => {
   try {
-    const events = await db.getEvents(req.session.userId);
+    const { from, to } = req.query;
+    let filters = {};
+    if (from !== undefined || to !== undefined) {
+      const f = new Date(String(from || '')), t = new Date(String(to || ''));
+      if (typeof from !== 'string' || typeof to !== 'string' || isNaN(f.getTime()) || isNaN(t.getTime())
+          || t <= f || t - f > EVENTS_WINDOW_MAX_MS) {
+        return res.status(400).json({ error: 'from and to must be dates, from before to, at most 400 days apart' });
+      }
+      filters = { startFrom: f.toISOString(), startBefore: t.toISOString() };
+    }
+    const events = await db.getEvents(req.session.userId, filters);
 
     res.json({
       count: events.length,
       events: events,
+      ...(filters.startFrom ? { window: { from: filters.startFrom, to: filters.startBefore } } : {}),
       message: `Retrieved ${events.length} events`
     });
   } catch (error) {

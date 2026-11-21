@@ -146,3 +146,46 @@ describe('P-01 / P-02 render cost', () => {
     expect(fnSrc('function groupEventsByDay(events) {')).not.toContain('console.log(`📍');
   });
 });
+
+describe('P-03 windowed event reloads', () => {
+  function win() {
+    const dom = new JSDOM('<!doctype html><body></body>', { runScripts: 'outside-only' });
+    const w = dom.window;
+    w.eval(`function __ymd(d) { return d.toISOString().slice(0, 10); } function __weekStartDate(m) { return new Date(m); }`);
+    ['var EVENTS_FULL_EVERY_MS', 'function __perthMidnightIso(', 'function __eventsFetchWindow() {', 'function __mergeEventsWindow(']
+      .forEach(h => w.eval(h.startsWith('var') ? HTML.slice(HTML.indexOf(h), HTML.indexOf('\n', HTML.indexOf('var EVENTS_FRESH_MS'))) + '\nwindow.__eventsFresh = { full: 0, win: null };' : fnSrc(h)));
+    return w;
+  }
+  test('first load, month view, scheduler and a stale history are full loads; otherwise the weeks around the one shown', () => {
+    const w = win();
+    expect(w.eval('__eventsFetchWindow()')).toBe(null);                       // not loaded yet
+    w.eval('window.__eventsLoadedOnce = true; window.__currentWeekMonday = new Date("2026-11-23T00:00:00Z"); window.__eventsFresh.full = Date.now(); window.__calendarMode = "week";');
+    expect(w.eval('JSON.stringify(__eventsFetchWindow())')).toBe(JSON.stringify({ from: '2026-11-16T00:00:00+08:00', to: '2026-12-14T00:00:00+08:00' }));
+    w.eval('window.__calendarMode = "month"');
+    expect(w.eval('__eventsFetchWindow()')).toBe(null);
+    w.eval('window.__calendarMode = "master"');
+    expect(w.eval('__eventsFetchWindow()')).toBe(null);
+    w.eval('window.__calendarMode = "day"; window.__eventsFresh.full = Date.now() - EVENTS_FULL_EVERY_MS - 1;');
+    expect(w.eval('__eventsFetchWindow()')).toBe(null);
+  });
+  test('the merge replaces exactly the window (deletions inside it are seen) and keeps the rest', () => {
+    const w = win();
+    const cache = [
+      { id: 1, start_time: '2025-01-01T01:00:00Z' },
+      { id: 2, start_time: '2026-11-15T16:00:00Z' },   // first instant of the window
+      { id: 3, start_time: '2026-11-25T01:00:00Z' },   // deleted on the server
+      { id: 4, start_time: '2026-12-13T16:00:00Z' },   // the window's end: outside
+    ];
+    const fresh = [{ id: 2, start_time: '2026-11-15T16:00:00Z', title: 'new' }, { id: 5, start_time: '2026-11-20T01:00:00Z' },
+      { id: 9, start_time: '2030-01-01T00:00:00Z' }];   // a server answering outside the window is ignored
+    const out = JSON.parse(w.eval(`JSON.stringify(__mergeEventsWindow(${JSON.stringify(cache)}, ${JSON.stringify(fresh)}, { from: '2026-11-16T00:00:00+08:00', to: '2026-12-14T00:00:00+08:00' }))`));
+    expect(out.map(e => e.id)).toEqual([1, 2, 5, 4]);
+    expect(out[1].title).toBe('new');
+  });
+  test('the loader asks for the window and merges; a navigated-to week not freshly loaded is asked for', () => {
+    const l = fnSrc('async function loadOutlookEventsToCalendar() {');
+    expect(l).toContain("const url = win ? '/api/events?from=' + encodeURIComponent(win.from) + '&to=' + encodeURIComponent(win.to) : '/api/events';");
+    expect(l).toContain('window.__outlookEventsCache = __mergeEventsWindow(window.__outlookEventsCache || [], _fresh, win);');
+    expect(fnSrc('function renderCurrentWeek() {')).toContain('__ensureVisibleWeekFresh();');
+  });
+});

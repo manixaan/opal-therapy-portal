@@ -270,3 +270,71 @@ describe('updateEventOutlookId — linking after a racing delta import', () => {
     expect(t).toEqual({ outlook_id: OL('per-user'), is_deleted: false });
   });
 });
+
+// P-03: the calendar's reloads ask for a window, not the whole history.
+describe('GET /api/events ?from&to (windowed)', () => {
+  const express = require('express');
+  const session = require('express-session');
+  const bodyParser = require('body-parser');
+  const request = require('supertest');
+  const bcrypt = require('bcryptjs');
+  const PASSWORD = 'WindowedEventsPass1';
+
+  function buildApp() {
+    const app = express();
+    app.use(bodyParser.json());
+    app.use(session({ secret: process.env.SESSION_SECRET, resave: false, saveUninitialized: false, cookie: { secure: false } }));
+    app.use('/', require('../../auth'));
+    app.use('/', require('../../routes'));
+    return app;
+  }
+  async function signedIn(app) {
+    require('../../auth')._resetLoginRateLimit();
+    const user = await seedUser({ password_hash: await bcrypt.hash(PASSWORD, 4), role: 'therapist' });
+    const agent = request.agent(app);
+    const res = await agent.post('/api/auth/login').send({ email: user.email, password: PASSWORD });
+    expect(res.status).toBe(200);
+    return { agent, user };
+  }
+  const mk = (userId, title, start, end) => db.createEvent(userId, { title, startTime: start, endTime: end, eventType: 'admin' });
+
+  test('requires a session', async () => {
+    const res = await request(buildApp()).get('/api/events?from=2026-11-16T00:00:00%2B08:00&to=2026-12-14T00:00:00%2B08:00');
+    expect(res.status).toBe(401);
+  });
+
+  test('returns only the caller\'s live events that START in [from, to); no range = full history', async () => {
+    const app = buildApp();
+    const { agent, user } = await signedIn(app);
+    const other = await seedUser();
+    await mk(user.id, 'old', '2024-01-10T01:00:00Z', '2024-01-10T02:00:00Z');
+    await mk(user.id, 'edge-start', '2026-11-15T16:00:00Z', '2026-11-15T17:00:00Z');   // Mon 16 Nov 00:00 Perth
+    await mk(user.id, 'inside', '2026-11-25T01:00:00Z', '2026-11-25T02:00:00Z');
+    await mk(user.id, 'runs-past-end', '2026-12-13T15:00:00Z', '2026-12-13T17:00:00Z'); // starts before `to`, ends after
+    await mk(user.id, 'at-end', '2026-12-13T16:00:00Z', '2026-12-13T17:00:00Z');        // starts AT `to`: excluded
+    const gone = await mk(user.id, 'deleted', '2026-11-26T01:00:00Z', '2026-11-26T02:00:00Z');
+    await db.pool.query('UPDATE events SET is_deleted = TRUE WHERE id = $1', [gone.id]);
+    await mk(other.id, 'not mine', '2026-11-25T03:00:00Z', '2026-11-25T04:00:00Z');
+
+    const win = await agent.get('/api/events').query({ from: '2026-11-16T00:00:00+08:00', to: '2026-12-14T00:00:00+08:00' });
+    expect(win.status).toBe(200);
+    expect(win.body.events.map(e => e.title)).toEqual(['edge-start', 'inside', 'runs-past-end']);
+    expect(win.body.window).toEqual({ from: '2026-11-15T16:00:00.000Z', to: '2026-12-13T16:00:00.000Z' });
+
+    const all = await agent.get('/api/events');
+    expect(all.status).toBe(200);
+    expect(all.body.events.map(e => e.title)).toEqual(['old', 'edge-start', 'inside', 'runs-past-end', 'at-end']);
+    expect(all.body.window).toBeUndefined();
+  });
+
+  test('a bad or oversized range is refused, not widened', async () => {
+    const app = buildApp();
+    const { agent } = await signedIn(app);
+    for (const q of [{ from: '2026-11-16' }, { from: 'nope', to: '2026-12-01' }, { from: '2026-12-01', to: '2026-11-01' },
+      { from: '2026-01-01', to: '2027-03-01' }]) {
+      const res = await agent.get('/api/events').query(q);
+      expect(res.status).toBe(400);
+      expect(res.body.events).toBeUndefined();
+    }
+  });
+});

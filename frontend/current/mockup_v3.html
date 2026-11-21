@@ -19019,6 +19019,7 @@ function renderCurrentWeek() {
   __recordWeekDrawn(_sigs);
   renderToday();
   __openPendingEventDetail();
+  __ensureVisibleWeekFresh();
   // Post-render decorations — run after all tiles are in the DOM
   requestAnimationFrame(() => {
     if (!window.OUTLOOK_ONLY) {
@@ -19317,6 +19318,46 @@ function clearAllDayChips() {
  * Fetch synced Outlook events from backend, cache them, and render the
  * current Perth week. Subsequent week navigation reuses the cache.
  */
+/* ── Windowed event reloads (P-03) ──────────────────────────────────────── */
+var EVENTS_FULL_EVERY_MS = 10 * 60 * 1000;   // whole history at most this stale
+var EVENTS_FRESH_MS = 2 * 60 * 1000;         // a week shown from cache older than this is re-asked for
+window.__eventsFresh = { full: 0, win: null };
+function __perthMidnightIso(ymd) { return ymd + 'T00:00:00+08:00'; }
+// The window around the visible week, or null for a full load.
+function __eventsFetchWindow() {
+  if (!window.__eventsLoadedOnce || !window.__currentWeekMonday) return null;
+  const mode = window.__calendarMode;
+  if (mode === 'month' || mode === 'master') return null;
+  if (Date.now() - (window.__eventsFresh.full || 0) > EVENTS_FULL_EVERY_MS) return null;
+  const start = __weekStartDate(window.__currentWeekMonday);
+  const from = new Date(start); from.setUTCDate(start.getUTCDate() - 7);
+  const to = new Date(start); to.setUTCDate(start.getUTCDate() + 7 + 14);
+  return { from: __perthMidnightIso(__ymd(from)), to: __perthMidnightIso(__ymd(to)) };
+}
+// Replace the cached events that start inside the window with the fresh ones
+// (so deletions inside it are seen); everything outside is kept as it was.
+function __mergeEventsWindow(cache, fresh, win) {
+  const a = new Date(win.from).getTime(), b = new Date(win.to).getTime();
+  const inWin = (e) => { const t = new Date(e && e.start_time).getTime(); return t >= a && t < b; };
+  const out = cache.filter(e => !inWin(e)).concat(fresh.filter(inWin));
+  out.sort((x, y) => new Date(x.start_time) - new Date(y.start_time));
+  return out;
+}
+// Week navigation renders from the cache at once; when the week shown is not
+// covered by a recent load it is asked for in the background, and
+// renderWeekChanges then patches whatever changed.
+var __eventsWeekTimer = null;
+function __ensureVisibleWeekFresh() {
+  if (!window.__eventsLoadedOnce || !window.__currentWeekMonday) return;
+  const f = window.__eventsFresh, now = Date.now();
+  if (now - (f.full || 0) < EVENTS_FRESH_MS) return;
+  const start = new Date(__perthMidnightIso(__ymd(__weekStartDate(window.__currentWeekMonday)))).getTime();
+  const end = start + 7 * 86400000;
+  if (f.win && now - f.win.at < EVENTS_FRESH_MS && start >= new Date(f.win.from).getTime() && end <= new Date(f.win.to).getTime()) return;
+  clearTimeout(__eventsWeekTimer);
+  __eventsWeekTimer = setTimeout(() => { if (typeof loadOutlookEventsToCalendar === 'function') loadOutlookEventsToCalendar(); }, 250);
+}
+
 async function loadOutlookEventsToCalendar() {
   console.log('📡 Loading Outlook events to calendar...');
   // A reload (after a booking, sync, move…) keeps the user's place in the grid.
@@ -19328,18 +19369,31 @@ async function loadOutlookEventsToCalendar() {
   }
 
   try {
-    const response = await fetch('/api/events', { credentials: 'include' });
+    // After the first full load, a reload in the week/day grid asks only for
+    // the weeks around the one on screen (P-03) and merges them into the
+    // cache; month view, reports, the nearest-event snap and open-by-id keep
+    // the history from the last full load, refreshed every EVENTS_FULL_EVERY_MS.
+    const win = __eventsFetchWindow();
+    const url = win ? '/api/events?from=' + encodeURIComponent(win.from) + '&to=' + encodeURIComponent(win.to) : '/api/events';
+    const response = await fetch(url, { credentials: 'include' });
     if (!response.ok) {
       console.log('⚠️ Failed to load events:', response.status);
       return;
     }
     const data = await response.json();
-    console.log(`✅ Loaded ${data.events.length} events from backend`);
+    console.log(`✅ Loaded ${data.events.length} events from backend` + (win ? ' (window)' : ''));
 
     // Travel legs mirrored to Outlook (travel-outlook-sync.js) come back in the
     // event feed; the calendar already draws them as travel legs, so a mirror
     // row is never a second tile.
-    window.__outlookEventsCache = (data.events || []).filter(e => !(e && e.custom_metadata && e.custom_metadata.travelLegKey));
+    const _fresh = (data.events || []).filter(e => !(e && e.custom_metadata && e.custom_metadata.travelLegKey));
+    if (win) {
+      window.__outlookEventsCache = __mergeEventsWindow(window.__outlookEventsCache || [], _fresh, win);
+      window.__eventsFresh.win = { from: win.from, to: win.to, at: Date.now() };
+    } else {
+      window.__outlookEventsCache = _fresh;
+      window.__eventsFresh = { full: Date.now(), win: null };
+    }
     window.__eventsLoadedOnce = true;   // the travel mirror waits for this (travelMirrorReady)
 
     if (window.__outlookEventsCache.length === 0) {
