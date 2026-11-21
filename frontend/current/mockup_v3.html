@@ -2826,6 +2826,8 @@ window.opIcon = function (name, size) {
   .session.s-tiny .s-title, .session.s-tiny .s-sub, .session.s-tiny .travel-badge { display: none; }
   /* Runs past midnight (C-06): clamped at the end of the day. */
   .session.s-continues { border-bottom-left-radius: 0; border-bottom-right-radius: 0; border-bottom: 2px dashed rgba(0,0,0,0.28); }
+  /* …and its after-midnight part, at the top of the next day: view-only. */
+  .session.s-cont { border-top-left-radius: 0; border-top-right-radius: 0; border-top: 2px dashed rgba(0,0,0,0.28); cursor: pointer; }
   /* External-calendar-only tiles: tiny non-colour glyph so they're identifiable
      even without the blue tint (colour-blind safe). */
   .session[data-type="outlook"]::before {
@@ -14303,12 +14305,61 @@ function repositionAllSessionTiles() {
       }
     }
   });
+  if (typeof drawMidnightContinuations === 'function') drawMidnightContinuations();
   // Tops changed → re-run the side-by-side overlap layout for each day column.
   if (typeof window.__watchDayOverlaps === 'function') window.__watchDayOverlaps();
   if (typeof reflowDayOverlaps === 'function') {
     document.querySelectorAll('#cal-grid .cal-col')
       .forEach(function (c) { try { reflowDayOverlaps(c); } catch (e) {} });
   }
+}
+
+/* An event past midnight (C-06) is drawn to 24:00 on its own day; the part
+   after midnight is drawn at the top of the next day's column when that
+   column is on screen. The continuation is the same event, not a second
+   one: it is not in SESSIONS (travel, conflicts and billing never see it),
+   a click or Enter opens the event's own drawer, and it cannot be dragged
+   or resized — the event moves only from its first tile. Rebuilt from
+   SESSIONS after every merge, move and delete, so it never goes stale.
+   New bookings are same-day only; this is for imported Outlook/Splose
+   events. */
+function drawMidnightContinuations() {
+  const grid = document.getElementById('cal-grid');
+  if (!grid) return;
+  grid.querySelectorAll('.session.s-cont').forEach(el => el.remove());
+  const order = __weekDayOrder();
+  Object.keys(SESSIONS).forEach(id => {
+    const s = SESSIONS[id], src = s && s.element;
+    if (!src || !src.isConnected || !src.classList.contains('session') || typeof s.endH !== 'number') return;
+    const end = sessionEndMin(s);
+    src.classList.toggle('s-continues', end > 24 * 60);
+    if (!(end > 24 * 60)) return;
+    const own = src.closest('.cal-col');
+    const i = own ? order.indexOf(String(own.id).replace(/^day-/, '')) : -1;
+    const col = i >= 0 && i + 1 < order.length ? document.getElementById('day-' + order[i + 1]) : null;
+    if (!col || !grid.contains(col)) return;
+    const rest = Math.min(end - 24 * 60, 24 * 60);
+    const el = src.cloneNode(true);
+    el.querySelectorAll('.resize-handle, .addr-chip, .travel-badge').forEach(n => n.remove());
+    el.classList.remove('s-continues', 'selected', 'dragging', 'resizing', 'conflict-tile');
+    el.classList.add('s-cont');
+    delete el.dataset.id; delete el.dataset.outlookTile;
+    el.dataset.contOf = id;
+    el.removeAttribute('id');
+    el.style.left = ''; el.style.right = ''; el.style.width = '';
+    el.style.top = tToY(0, 0) + 'px';
+    el.style.height = sessionTileHeight(rest, 0) + 'px';
+    if (typeof applySessionDensity === 'function') applySessionDensity(el, rest);
+    el.setAttribute('aria-label', (src.getAttribute('aria-label') || s.title || 'Event') + ', continued after midnight');
+    el.tabIndex = 0;
+    el.addEventListener('pointerdown', e => e.stopPropagation());   // never a drag-create on the slot beneath
+    el.addEventListener('click', e => { e.stopPropagation(); if (SESSIONS[id]) openBlockDetail(id); });
+    el.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (SESSIONS[id]) openBlockDetail(id); }
+    });
+    col.appendChild(el);
+    reflowDayOverlaps(col);
+  });
 }
 
 /* ── Overlap layout ────────────────────────────────────────────────────
@@ -15274,6 +15325,7 @@ function __removeSessionTile(id, cols) {
   if (s.element && s.element.parentNode) s.element.parentNode.removeChild(s.element);
   if (cols && s.col) cols.add(s.col);
   delete SESSIONS[id];
+  if (s.element && s.element.classList.contains('s-continues') && typeof drawMidnightContinuations === 'function') drawMidnightContinuations();
 }
 
 async function performDeleteEvent(id, cascadeIds) {
@@ -17144,6 +17196,7 @@ function commitMove() {
   s.element.style.height = sessionTileHeight(duration, sh * 60 + sm) + 'px';
   if (typeof applySessionDensity === 'function') applySessionDensity(s.element, duration);
   s.element.classList.remove('dragging', 'resizing');
+  if (typeof drawMidnightContinuations === 'function') drawMidnightContinuations();
   // The tile's time line follows the move. The title is the event's own and
   // stays: rewriting it as "<start> <type>" (24 Oct 2026) turned "Contact
   // NDIS" into "9:00 AM Admin" and left the old range showing under it.
@@ -20363,6 +20416,7 @@ function mergeEventsIntoDayData(eventsByDay, onlyDays) {
       if (dayCol) reflowDayOverlaps(dayCol);
     }
   });
+  if (typeof drawMidnightContinuations === 'function') drawMidnightContinuations();
 }
 
 // Initialize on page load
