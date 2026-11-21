@@ -37,3 +37,26 @@ describe('tiles are clamped at the end of the day', () => {
     expect(HTML).toContain("el.classList.toggle('s-continues', sessionEndMin(opts) > 24 * 60);");
   });
 });
+
+describe('the part after midnight is drawn on the next day (C-06)', () => {
+  const src = fnSrc('drawMidnightContinuations');
+  test('the continuation is the same event: not in SESSIONS, opens its drawer, never drags or resizes', () => {
+    expect(src).toContain("el.dataset.contOf = id;");
+    expect(src).toContain("delete el.dataset.id; delete el.dataset.outlookTile;");
+    expect(src).toContain("el.querySelectorAll('.resize-handle, .addr-chip, .travel-badge').forEach(n => n.remove());");
+    expect(src).toContain("openBlockDetail(id)");
+    expect(src).not.toMatch(/SESSIONS\[[^\]]+\]\s*=/);
+    expect(src).not.toMatch(/attachBlockInteractivity|onBlockPointerDown|onBlockResizeStart/);
+  });
+  test('it starts at 00:00 of the next column on screen, only when that column exists', () => {
+    expect(src).toContain("el.style.top = tToY(0, 0) + 'px';");
+    expect(src).toContain("i + 1 < order.length ? document.getElementById('day-' + order[i + 1]) : null");
+    expect(src).toContain("grid.querySelectorAll('.session.s-cont').forEach(el => el.remove());");
+  });
+  test('it is redrawn after a merge, a move, a delete and a re-layout', () => {
+    expect(fnSrc('mergeEventsIntoDayData')).toContain('drawMidnightContinuations();');
+    expect(fnSrc('commitMove')).toContain('drawMidnightContinuations();');
+    expect(fnSrc('__removeSessionTile')).toContain('drawMidnightContinuations();');
+    expect(fnSrc('repositionAllSessionTiles')).toContain('drawMidnightContinuations();');
+  });
+});

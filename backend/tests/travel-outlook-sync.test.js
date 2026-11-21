@@ -139,6 +139,88 @@ describe('syncDay — an empty list never wipes a day unless the calendar confir
   });
 });
 
+// 21 Nov 2026 audit (T-08): a week's ready days in one request. Batching is
+// transport only — each day still goes through syncDay and all its guards.
+describe('syncDays — a batch is each day on its own', () => {
+  const MIRROR = { id: 'row-1', outlook_id: 'ol-1', start_time: '2026-10-06T04:00:00Z', end_time: '2026-10-06T04:20:00Z',
+    title: 'Travel · 20 min', location: '', key: A + '|after', local_date: '2026-10-06' };
+  const mk = () => {
+    const deleteOutlookEvent = jest.fn(async () => {});
+    return {
+      deleteOutlookEvent,
+      deps: {
+        pool: { query: jest.fn(async (sql, params) => (/AS drawn/.test(sql) ? { rows: params[1] === '2026-10-06' ? [{ id: A, drawn: true }] : [] }
+          : /travelLegKey/.test(sql) && /SELECT id, outlook_id/.test(sql) ? { rows: params[2] === '2026-10-06' ? [MIRROR] : [] } : { rows: [] })) },
+        outlook: { deleteOutlookEvent }, getAccessToken: async () => 'tok',
+      },
+    };
+  };
+  const dayBody = (date, extra) => Object.assign({ date, seenEventIds: date === '2026-10-06' ? [A] : [], legs: [] }, extra);
+
+  test('each day gets its own guard answer; one refusal never touches another day', async () => {
+    const m = mk();
+    const r = await S.syncDays(m.deps, 'user-1', { days: [
+      dayBody('2026-10-06'),                                   // empty, unconfirmed → refused
+      dayBody('2026-10-07', { seenEventIds: [B] }),            // someone else's event → not_own_day
+      dayBody('2026-10-08', { confirmEmpty: true }),           // nothing there → ok
+      dayBody('2026-10-01'),                                   // past → skipped
+      dayBody('2026-10-25'),                                   // beyond 14 days → skipped
+    ] }, NOW);
+    expect(r.status).toBe(200);
+    expect(r.results.map((x) => [x.date, x.status, x.body.code || x.body.skipped || x.body.ok])).toEqual([
+      ['2026-10-06', 409, 'empty_day_unconfirmed'],
+      ['2026-10-07', 409, 'not_own_day'],
+      ['2026-10-08', 200, true],
+      ['2026-10-01', 200, 'past'],
+      ['2026-10-25', 200, 'beyond_horizon'],
+    ]);
+    expect(m.deleteOutlookEvent).not.toHaveBeenCalled();
+  });
+
+  test('a stale day in a batch is refused like a single request', async () => {
+    const m = mk();
+    const r = await S.syncDays(m.deps, 'user-1', { days: [dayBody('2026-10-06', { seenEventIds: [], confirmEmpty: true })] }, NOW);
+    expect([r.results[0].status, r.results[0].body.code]).toEqual([409, 'stale_view']);
+    expect(m.deleteOutlookEvent).not.toHaveBeenCalled();
+  });
+
+  test('a confirmed empty day still clears its own travel, and only its own', async () => {
+    const m = mk();
+    const r = await S.syncDays(m.deps, 'user-1', { days: [dayBody('2026-10-06', { confirmEmpty: true }), dayBody('2026-10-08', { confirmEmpty: true })] }, NOW);
+    expect(r.results.map((x) => x.body.removed)).toEqual([1, 0]);
+    expect(m.deleteOutlookEvent).toHaveBeenCalledTimes(1);
+  });
+
+  test('every day goes through syncDay, in order', async () => {
+    const spy = jest.spyOn(S, 'syncDay').mockResolvedValue({ status: 200, body: { ok: true } });
+    try {
+      await S.syncDays({}, 'user-1', { days: [dayBody('2026-10-08'), dayBody('2026-10-07')] }, NOW);
+      expect(spy.mock.calls.map((c) => [c[1], c[2].date])).toEqual([['user-1', '2026-10-08'], ['user-1', '2026-10-07']]);
+    } finally { spy.mockRestore(); }
+  });
+
+  test('a thrown error stops the batch: recorded on its day, later days not attempted', async () => {
+    const off = Object.assign(new Error('off'), { code: 'FEATURE_DISABLED' });
+    const spy = jest.spyOn(S, 'syncDay').mockResolvedValueOnce({ status: 200, body: { ok: true } }).mockRejectedValueOnce(off);
+    try {
+      const r = await S.syncDays({}, 'user-1', { days: [dayBody('2026-10-06'), dayBody('2026-10-07'), dayBody('2026-10-08')] }, NOW);
+      expect(r.results.map((x) => x.date)).toEqual(['2026-10-06', '2026-10-07']);
+      expect(r.results[1].error).toBe(off);
+      expect(spy).toHaveBeenCalledTimes(2);
+    } finally { spy.mockRestore(); }
+  });
+
+  test('a malformed batch is refused before any day is touched', async () => {
+    const m = mk();
+    for (const body of [{}, { days: [] }, { days: 'x' }, { days: Array.from({ length: 8 }, (_, i) => dayBody('2026-10-0' + (i + 1))) },
+      { days: [dayBody('2026-10-06'), dayBody('2026-10-06')] }, { days: [null] }]) {
+      expect((await S.syncDays(m.deps, 'user-1', body, NOW)).status).toBe(400);
+    }
+    expect(m.deps.pool.query).not.toHaveBeenCalled();
+    expect(S.MAX_BATCH_DAYS).toBe(7);
+  });
+});
+
 test('Outlook gets Perth wall-clock times', () => {
   expect(S.perthIso(new Date('2026-10-06T04:05:00Z'))).toBe('2026-10-06T12:05:00+08:00');
   expect(S.perthDate(new Date('2026-10-05T17:30:00Z'))).toBe('2026-10-06');

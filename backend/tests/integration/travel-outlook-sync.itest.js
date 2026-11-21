@@ -146,3 +146,38 @@ test('past days are left alone; a failed Outlook write leaves no claimed key beh
   expect(r.body).toMatchObject({ created: 0, failed: 1 });
   expect(await mirrors()).toHaveLength(0);
 });
+
+// 21 Nov 2026 audit (T-08): a week's ready days in one request. Each day keeps
+// its own guards against the real database: a stale day is refused and keeps
+// its travel, an unconfirmed empty day deletes nothing, the others are synced.
+test('a batch syncs each day on its own: one stale or unconfirmed day never costs another day its travel', async () => {
+  const o = stubOutlook();
+  const DATE2 = '2030-03-05', DATE3 = '2030-03-06';
+  const next = await appt(user, `${DATE2}T02:00:00Z`, `${DATE2}T03:00:00Z`);
+  const third = await appt(user, `${DATE3}T02:00:00Z`, `${DATE3}T03:00:00Z`);
+  const leg2 = { key: next + '|after', start: `${DATE2}T11:00:00+08:00`, end: `${DATE2}T11:20:00+08:00`, title: 'Travel · 20 min · Osborne Park → Joondalup', location: 'Joondalup' };
+  const leg3 = { key: third + '|after', start: `${DATE3}T11:00:00+08:00`, end: `${DATE3}T11:20:00+08:00`, title: 'Travel · 20 min · Osborne Park → Joondalup', location: 'Joondalup' };
+  // First batch: all three days, every one with a leg.
+  const first = await sync.syncDays(deps(o), user.id, { days: [
+    { date: DATE, seenEventIds: appts, legs: [leg(appts[0], 'after', '11:00', '11:20')] },
+    { date: DATE2, seenEventIds: [next], legs: [leg2] },
+    { date: DATE3, seenEventIds: [third], legs: [leg3] },
+  ] }, NOW);
+  expect(first.results.map((x) => [x.date, x.status, x.body.created])).toEqual([[DATE, 200, 1], [DATE2, 200, 1], [DATE3, 200, 1]]);
+  expect(o.calls.create).toHaveLength(3);
+  // Second batch: day 1 stale (missing an event), day 2 emptied without
+  // confirmEmpty, day 3 confirmed empty. Only day 3's travel goes.
+  const second = await sync.syncDays(deps(o), user.id, { days: [
+    { date: DATE, seenEventIds: [appts[0]], legs: [], confirmEmpty: true },
+    { date: DATE2, seenEventIds: [next], legs: [] },
+    { date: DATE3, seenEventIds: [third], legs: [], confirmEmpty: true },
+  ] }, NOW);
+  expect(second.results.map((x) => [x.date, x.status, x.body.code || x.body.removed])).toEqual([
+    [DATE, 409, 'stale_view'], [DATE2, 409, 'empty_day_unconfirmed'], [DATE3, 200, 1]]);
+  expect(o.calls.remove).toEqual(['out-3']);
+  const live = (await mirrors()).filter((x) => !x.is_deleted).map((x) => x.key).sort();
+  expect(live).toEqual([appts[0] + '|after', next + '|after'].sort());
+  // A day beyond the 14-day horizon in a batch writes nothing.
+  const far = await sync.syncDays(deps(o), user.id, { days: [{ date: '2030-03-30', seenEventIds: [], legs: [] }] }, NOW);
+  expect(far.results[0].body.skipped).toBe('beyond_horizon');
+});

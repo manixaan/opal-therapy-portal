@@ -208,3 +208,21 @@ describe('tokens where touched (§7.4, §7.5; R8)', () => {
     expect(panel).not.toMatch(/transition: all/);
   });
 });
+
+describe('the booking panel has one heading, and it carries the week range (U-09)', () => {
+  test('no inner "New appointment" h2; the week range sits beside the panel title', () => {
+    const grid = HTML.slice(HTML.indexOf('<div class="booking-grid">'), HTML.indexOf('<!-- Step 1: Booking Type -->'));
+    expect(grid).not.toMatch(/<h2>/);
+    expect(HTML).toMatch(/<span class="bsp-title" id="bsp-title" tabindex="-1">New appointment<\/span>\s*<span class="bsp-sub" id="book-week-sub">/);
+    expect(HTML.match(/id="book-week-sub"/g)).toHaveLength(1);
+    expect(rule(HTML, '.bsp-sub')).not.toMatch(/ellipsis|nowrap/);   // the range wraps, it is never cut
+  });
+});
+
+describe('mini-month targets are at least 24 px (Q-09)', () => {
+  test('day cells and month arrows are 24 px high (cells are ~26 px wide in the 212 px sidebar)', () => {
+    expect(rule(HTML, '  .mm-cell')).toMatch(/line-height: 24px; height: 24px;/);
+    expect(HTML).toContain('.mini-cal-head .nav-arrow { width: 24px; height: 24px;');
+    expect(HTML).toContain('width: 212px; flex: 0 0 212px;');
+  });
+});

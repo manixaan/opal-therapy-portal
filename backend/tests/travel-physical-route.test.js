@@ -412,6 +412,65 @@ describe('travel mirror waits until the day is real', () => {
   });
 });
 
+// 21 Nov 2026 audit (T-08): one PUT per day — a week's ready days now go in
+// one batch request; each day keeps its own answer.
+describe('travel mirror sends a week in one request', () => {
+  const perth = (plusDays) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Perth' }).format(new Date(Date.now() + plusDays * 86400e3));
+  function week() {
+    const c = load();
+    vm.runInContext(`DAY_DATES = { mon: '${perth(1)}', tue: '${perth(2)}', wed: '${perth(3)}', thu: '${perth(30)}' };`, c);
+    c.workScheduleLoaded = () => true;
+    c.__eventsLoadedOnce = true;
+    add(c, { at: '10:00', to: '11:00', s: { day: 'mon', address: OSBORNE, patient: 'A' } });
+    add(c, { at: '10:00', to: '11:00', s: { day: 'tue', address: JOONDALUP, patient: 'B' } });
+    add(c, { at: '10:00', to: '11:00', s: { day: 'thu', address: JOONDALUP, patient: 'C' } });
+    return c;
+  }
+  const segs = (c, d) => c.computeDayTravelSegments(d).map((x) => Object.assign({}, x, { routeReal: true }));
+  const answer = (results) => ({ ok: true, status: 200, json: async () => ({ results }) });
+
+  test('ready days go in one batch; beyond the horizon is left out; an empty day says so', async () => {
+    const c = week();
+    c.fetch.mockResolvedValueOnce(answer([]));
+    await c.runTravelOutlookSyncDays(['mon', 'tue', 'wed', 'thu'].map((d) => [d, segs(c, d)]));
+    expect(c.fetch).toHaveBeenCalledTimes(1);
+    const [url, init] = c.fetch.mock.calls[0];
+    expect(url).toBe('/api/travel/outlook-sync/batch');
+    const days = JSON.parse(init.body).days;
+    expect(days.map((d) => d.date)).toEqual([perth(1), perth(2), perth(3)]);
+    expect(days[0].legs.length).toBeGreaterThan(0);
+    expect(days[2]).toMatchObject({ legs: [], confirmEmpty: true });
+  });
+
+  test('each day keeps its own answer: sent and refused days are not resent, an unreached day is', async () => {
+    const c = week();
+    const all = () => ['mon', 'tue', 'wed'].map((d) => [d, segs(c, d)]);
+    c.fetch.mockResolvedValueOnce(answer([
+      { date: perth(1), status: 200, body: { ok: true } },
+      { date: perth(2), status: 409, body: { code: 'stale_view' } },
+    ]));
+    const out = await c.runTravelOutlookSyncDays(all());
+    expect(out[perth(2)].body.code).toBe('stale_view');
+    c.fetch.mockResolvedValueOnce(answer([]));
+    await c.runTravelOutlookSyncDays(all());
+    expect(JSON.parse(c.fetch.mock.calls[1][1].body).days.map((d) => d.date)).toEqual([perth(3)]);
+  });
+
+  test('a failed request marks nothing sent', async () => {
+    const c = week();
+    c.fetch.mockResolvedValueOnce({ ok: false, status: 500, json: async () => ({}) });
+    expect(await c.runTravelOutlookSyncDays([['mon', segs(c, 'mon')]])).toBe(null);
+    c.fetch.mockResolvedValueOnce(answer([]));
+    await c.runTravelOutlookSyncDays([['mon', segs(c, 'mon')]]);
+    expect(c.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  test('scheduled days share one debounce', () => {
+    expect(SRC).toMatch(/TRAVEL_OUTLOOK_SYNC\.pending\[day\] = segs;\s*clearTimeout\(TRAVEL_OUTLOOK_SYNC\.timer\);/);
+    expect(SRC).not.toMatch(/fetch\('\/api\/travel\/outlook-sync',/);
+  });
+});
+
 // 21 Nov 2026 audit (T-01): an all-day item became a 00:00–23:59 stop.
 describe('all-day items are not stops', () => {
   test('an all-day chip (with or without an address) leaves the day\'s legs unchanged', () => {
@@ -718,5 +777,25 @@ describe('before / after answered in "Blocks to review" (19 Nov 2026)', () => {
     add(c, { at: '09:00', to: '10:00', s: { address: OSBORNE, patient: 'A', travel: { after: home, next: 'direct' } } });
     add(c, { at: '11:30', to: '12:30', s: { address: JOONDALUP, patient: 'B' } });
     expect(legs(c).filter((x) => x.kind === 'between').map((x) => x.via)).toEqual([null]);
+  });
+});
+
+// 21 Nov 2026 audit (P-05): every overlay refresh rebuilt every badge with
+// four listeners each (204 per 3 refreshes in the harness). Badges are now
+// keyed by tile and updated in place; one delegated set on #cal-grid.
+describe('travel badges are keyed, with one delegated listener', () => {
+  const fn = (name) => { const at = SRC.indexOf('function ' + name + '('); const rest = SRC.slice(at); return rest.slice(0, rest.indexOf('\n}\n') + 2); };
+  test('a refresh reuses the badge and adds no listener to it', () => {
+    const src = fn('decorateTravelBadges');
+    expect(src).not.toMatch(/addEventListener/);
+    expect(src).toContain("let b = old;");
+    expect(src).toContain("b.__tb = { id: s.id, state: st.state, leg: st.leg || null };");
+  });
+  test('the delegated listener is bound once, in the capture phase, so it stops the tile drag first', () => {
+    const src = fn('_bindTravelBadgeClicks');
+    expect(src).toContain('if (!grid || grid.__travelBadgeBound) return;');
+    expect(src).toMatch(/\['pointerdown', 'mousedown', 'touchstart'\]\.forEach\(t => grid\.addEventListener\(t, e => \{ if \(badgeOf\(e\)\) e\.stopPropagation\(\); \}, true\)\);/);
+    expect(src).toMatch(/grid\.addEventListener\('click', async \(e\) => \{[\s\S]*\}, true\);/);
+    expect(src).toContain('window.SESSIONS[st.id]');   // the session is looked up when clicked, never a stale closure
   });
 });

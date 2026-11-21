@@ -171,7 +171,7 @@
      store and computeDayTravelSegments(), the calendar leg overlays and the
      travel details panel. Deferred and loaded ahead of profile.js and
      reports.js, both of which reach into it. -->
-<script src="/travel.js?v=70" defer></script>
+<script src="/travel.js?v=72" defer></script>
 <!-- Traffic alerts: a re-priced drive that now runs into a client session —
      point at it, offer Make room, Acknowledge or Ignore (today and tomorrow). -->
 <script src="/travel-alerts.js?v=1" defer></script>
@@ -2660,12 +2660,14 @@ window.opIcon = function (name, size) {
   }
   .btn-cal-sidebar:hover { background: var(--panel-sunk); color: var(--ink); }
   .mini-cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
-  .mini-cal-head .nav-arrow { width: 22px; height: 22px; font-size: 13px; }
+  /* Mini-month targets are at least 24 px (Q-09, WCAG 2.5.8): the cells are
+     ~26.6 px wide in the 212 px sidebar, so only their height grew. */
+  .mini-cal-head .nav-arrow { width: 24px; height: 24px; font-size: 13px; }
   .mini-cal-label { font-size: 12.5px; font-weight: 600; color: var(--ink); }
   .mini-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; }
   .mm-dow { font-size: 9px; font-weight: 600; color: var(--muted); text-align: center; padding: 2px 0 4px; text-transform: uppercase; }
   .mm-cell {
-    font-size: 10.5px; text-align: center; line-height: 22px; height: 22px;
+    font-size: 10.5px; text-align: center; line-height: 24px; height: 24px;
     border-radius: 50%; cursor: pointer; color: var(--ink);
     border: none; background: none; font-family: inherit; padding: 0;
     font-variant-numeric: tabular-nums;
@@ -2841,6 +2843,8 @@ window.opIcon = function (name, size) {
   .session.s-tiny .s-title, .session.s-tiny .s-sub, .session.s-tiny .travel-badge { display: none; }
   /* Runs past midnight (C-06): clamped at the end of the day. */
   .session.s-continues { border-bottom-left-radius: 0; border-bottom-right-radius: 0; border-bottom: 2px dashed rgba(0,0,0,0.28); }
+  /* …and its after-midnight part, at the top of the next day: view-only. */
+  .session.s-cont { border-top-left-radius: 0; border-top-right-radius: 0; border-top: 2px dashed rgba(0,0,0,0.28); cursor: pointer; }
   /* External-calendar-only tiles: tiny non-colour glyph so they're identifiable
      even without the blue tint (colour-blind safe). */
   .session[data-type="outlook"]::before {
@@ -4856,10 +4860,8 @@ window.opIcon = function (name, size) {
 <section class="view active" id="view-book">
   <div class="booking-grid">
     <div class="panel">
-      <h2>
-        New appointment
-        <span class="h2-sub" id="book-week-sub">This week</span>
-      </h2>
+      <!-- One heading (U-09): the panel header says "New appointment" and
+           carries the week range (#book-week-sub, in the header below). -->
 
       <!-- Step 1: Booking Type -->
       <div class="step-body" id="step-1" data-help="booking-step1">
@@ -5354,7 +5356,8 @@ window.opIcon = function (name, size) {
         <svg class="bsp-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>
         </svg>
-        <span class="bsp-title" id="bsp-title" tabindex="-1">New Appointment</span>
+        <span class="bsp-title" id="bsp-title" tabindex="-1">New appointment</span>
+        <span class="bsp-sub" id="book-week-sub">This week</span>
       </div>
       <button class="bsp-close" onclick="closeBookingPanel(true)" title="Close panel" aria-label="Close">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -14322,12 +14325,61 @@ function repositionAllSessionTiles() {
       }
     }
   });
+  if (typeof drawMidnightContinuations === 'function') drawMidnightContinuations();
   // Tops changed → re-run the side-by-side overlap layout for each day column.
   if (typeof window.__watchDayOverlaps === 'function') window.__watchDayOverlaps();
   if (typeof reflowDayOverlaps === 'function') {
     document.querySelectorAll('#cal-grid .cal-col')
       .forEach(function (c) { try { reflowDayOverlaps(c); } catch (e) {} });
   }
+}
+
+/* An event past midnight (C-06) is drawn to 24:00 on its own day; the part
+   after midnight is drawn at the top of the next day's column when that
+   column is on screen. The continuation is the same event, not a second
+   one: it is not in SESSIONS (travel, conflicts and billing never see it),
+   a click or Enter opens the event's own drawer, and it cannot be dragged
+   or resized — the event moves only from its first tile. Rebuilt from
+   SESSIONS after every merge, move and delete, so it never goes stale.
+   New bookings are same-day only; this is for imported Outlook/Splose
+   events. */
+function drawMidnightContinuations() {
+  const grid = document.getElementById('cal-grid');
+  if (!grid) return;
+  grid.querySelectorAll('.session.s-cont').forEach(el => el.remove());
+  const order = __weekDayOrder();
+  Object.keys(SESSIONS).forEach(id => {
+    const s = SESSIONS[id], src = s && s.element;
+    if (!src || !src.isConnected || !src.classList.contains('session') || typeof s.endH !== 'number') return;
+    const end = sessionEndMin(s);
+    src.classList.toggle('s-continues', end > 24 * 60);
+    if (!(end > 24 * 60)) return;
+    const own = src.closest('.cal-col');
+    const i = own ? order.indexOf(String(own.id).replace(/^day-/, '')) : -1;
+    const col = i >= 0 && i + 1 < order.length ? document.getElementById('day-' + order[i + 1]) : null;
+    if (!col || !grid.contains(col)) return;
+    const rest = Math.min(end - 24 * 60, 24 * 60);
+    const el = src.cloneNode(true);
+    el.querySelectorAll('.resize-handle, .addr-chip, .travel-badge').forEach(n => n.remove());
+    el.classList.remove('s-continues', 'selected', 'dragging', 'resizing', 'conflict-tile');
+    el.classList.add('s-cont');
+    delete el.dataset.id; delete el.dataset.outlookTile;
+    el.dataset.contOf = id;
+    el.removeAttribute('id');
+    el.style.left = ''; el.style.right = ''; el.style.width = '';
+    el.style.top = tToY(0, 0) + 'px';
+    el.style.height = sessionTileHeight(rest, 0) + 'px';
+    if (typeof applySessionDensity === 'function') applySessionDensity(el, rest);
+    el.setAttribute('aria-label', (src.getAttribute('aria-label') || s.title || 'Event') + ', continued after midnight');
+    el.tabIndex = 0;
+    el.addEventListener('pointerdown', e => e.stopPropagation());   // never a drag-create on the slot beneath
+    el.addEventListener('click', e => { e.stopPropagation(); if (SESSIONS[id]) openBlockDetail(id); });
+    el.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (SESSIONS[id]) openBlockDetail(id); }
+    });
+    col.appendChild(el);
+    reflowDayOverlaps(col);
+  });
 }
 
 /* ── Overlap layout ────────────────────────────────────────────────────
@@ -15293,6 +15345,7 @@ function __removeSessionTile(id, cols) {
   if (s.element && s.element.parentNode) s.element.parentNode.removeChild(s.element);
   if (cols && s.col) cols.add(s.col);
   delete SESSIONS[id];
+  if (s.element && s.element.classList.contains('s-continues') && typeof drawMidnightContinuations === 'function') drawMidnightContinuations();
 }
 
 async function performDeleteEvent(id, cascadeIds) {
@@ -17163,6 +17216,7 @@ function commitMove() {
   s.element.style.height = sessionTileHeight(duration, sh * 60 + sm) + 'px';
   if (typeof applySessionDensity === 'function') applySessionDensity(s.element, duration);
   s.element.classList.remove('dragging', 'resizing');
+  if (typeof drawMidnightContinuations === 'function') drawMidnightContinuations();
   // The tile's time line follows the move. The title is the event's own and
   // stays: rewriting it as "<start> <type>" (24 Oct 2026) turned "Contact
   // NDIS" into "9:00 AM Admin" and left the old range showing under it.
@@ -20382,6 +20436,7 @@ function mergeEventsIntoDayData(eventsByDay, onlyDays) {
       if (dayCol) reflowDayOverlaps(dayCol);
     }
   });
+  if (typeof drawMidnightContinuations === 'function') drawMidnightContinuations();
 }
 
 // Initialize on page load
@@ -22935,9 +22990,11 @@ body.bsp-open #impact-modal    { z-index: 1201; }
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
-.bsp-header-left { display: flex; align-items: center; gap: 8px; }
+.bsp-header-left { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .bsp-icon { width: 16px; height: 16px; stroke: var(--accent); }
-.bsp-title { font-size: 15px; font-weight: 700; color: var(--ink); }
+.bsp-title { font-size: 15px; font-weight: 700; color: var(--ink); white-space: nowrap; }
+/* The week range sits beside the one title (U-09). */
+.bsp-sub { font-size: 12px; font-weight: 500; line-height: 1.3; color: var(--muted); min-width: 0; }
 /* The sheet titles take focus on open (Q-06) as a landing point, not a control: no ring. */
 #bsp-title:focus, #bd-title:focus { outline: none; box-shadow: none; }
 .bsp-close {
@@ -23012,10 +23069,6 @@ body.bsp-open #impact-modal    { z-index: 1201; }
   border-radius: 0 !important;
   background: transparent !important;
   padding: 16px !important;
-}
-.bsp-body .booking-grid > .panel > h2 {
-  font-size: 13px !important;
-  margin-bottom: 14px !important;
 }
 
 /* ── Calendar slot hover hint — REMOVED ── */

@@ -1,11 +1,11 @@
 'use strict';
 
-/** PUT /api/travel/outlook-sync — the guard and the error mapping. */
+/** PUT /api/travel/outlook-sync (+ /batch) — the guard and the error mapping. */
 
 let mockUser = null;
 jest.mock('../database', () => ({ pool: { query: jest.fn() }, getUser: jest.fn() }));
 jest.mock('../outlook-oauth', () => ({}));
-jest.mock('../travel-outlook-sync', () => ({ syncDay: jest.fn() }));
+jest.mock('../travel-outlook-sync', () => ({ syncDay: jest.fn(), syncDays: jest.fn() }));
 jest.mock('../permissions', () => {
   const actual = jest.requireActual('../permissions');
   return { ...actual, requireAuth: (req, res, next) => {
@@ -45,4 +45,40 @@ test('Outlook writes off → 403 feature_disabled; not connected → 409; anythi
   sync.syncDay.mockRejectedValueOnce(new Error('relation "x" does not exist'));
   const r = await request(app()).put('/api/travel/outlook-sync').send({});
   expect([r.status, r.body.error]).toEqual([500, 'Could not sync travel to Outlook']);   // no SQL leaked
+});
+
+// T-08: a week's ready days in one request.
+describe('PUT /api/travel/outlook-sync/batch', () => {
+  const put = (body) => request(app()).put('/api/travel/outlook-sync/batch').send(body);
+  test('signed-out and read-only accounts cannot batch either', async () => {
+    expect((await put({ days: [] })).status).toBe(401);
+    as('read_only');
+    expect((await put({ days: [] })).status).toBe(403);
+    expect(sync.syncDays).not.toHaveBeenCalled();
+  });
+  test("each day's answer is passed through; the caller is always the session user", async () => {
+    as('therapist');
+    sync.syncDays.mockResolvedValue({ status: 200, results: [
+      { date: '2030-03-04', status: 200, body: { ok: true, created: 1 } },
+      { date: '2030-03-05', status: 409, body: { code: 'stale_view' } },
+    ] });
+    const r = await put({ days: [{ date: '2030-03-04' }, { date: '2030-03-05' }], userId: 'someone-else' });
+    expect(r.status).toBe(200);
+    expect(r.body.results.map((x) => [x.date, x.status])).toEqual([['2030-03-04', 200], ['2030-03-05', 409]]);
+    expect(sync.syncDays.mock.calls[0][1]).toBe(mockUser.id);
+  });
+  test('a thrown day error is mapped like the single route — no internal detail', async () => {
+    as('therapist');
+    sync.syncDays.mockResolvedValue({ status: 200, results: [
+      { date: '2030-03-04', error: Object.assign(new Error('off'), { code: 'FEATURE_DISABLED' }) },
+    ] });
+    expect((await put({ days: [{}] })).body.results[0]).toEqual({ date: '2030-03-04', status: 403, body: { error: 'Outlook write-back is turned off', code: 'feature_disabled' } });
+    sync.syncDays.mockResolvedValue({ status: 200, results: [{ date: '2030-03-04', error: new Error('relation "x" does not exist') }] });
+    expect((await put({ days: [{}] })).body.results[0]).toEqual({ date: '2030-03-04', status: 500, body: { error: 'Could not sync travel to Outlook' } });
+  });
+  test('a malformed batch answer is passed through as is', async () => {
+    as('therapist');
+    sync.syncDays.mockResolvedValue({ status: 400, body: { error: 'days must be a list of 1 to 7 days' } });
+    expect((await put({})).status).toBe(400);
+  });
 });

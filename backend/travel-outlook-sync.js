@@ -288,6 +288,42 @@ async function syncValidated({ pool, outlook, getAccessToken }, userId, v) {
   return { status: 200, body: out };
 }
 
+/**
+ * A week's ready days in one request (21 Nov 2026 audit T-08): body
+ * { days: [<syncDay body>, …] }, at most 7, one per date. Batching changes only
+ * the transport — each day goes through syncDay() unchanged, in order, so every
+ * guard (validation, past, 14-day horizon, stale_view / not_own_day /
+ * not_own_leg, confirmEmpty, per-user serialisation) still applies to each day
+ * on its own, and one day's refusal never touches another's.
+ * A thrown error (writes off, Outlook not connected, anything unexpected) stops
+ * the batch: it is recorded against that day and the remaining days are not
+ * attempted — the same error would only recur, and the next run resends them.
+ * Returns { status, body } (a malformed batch) or { status: 200, results:
+ * [{ date, status, body } | { date, error }] }.
+ */
+const MAX_BATCH_DAYS = 7;
+async function syncDays(deps, userId, body, now = new Date()) {
+  const days = body && body.days;
+  if (!Array.isArray(days) || !days.length || days.length > MAX_BATCH_DAYS) {
+    return { status: 400, body: { error: 'days must be a list of 1 to ' + MAX_BATCH_DAYS + ' days' } };
+  }
+  const dates = days.map(d => d && typeof d === 'object' ? d.date : null);
+  if (dates.some(d => typeof d !== 'string') || new Set(dates).size !== dates.length) {
+    return { status: 400, body: { error: 'each day needs its own date' } };
+  }
+  const results = [];
+  for (const day of days) {
+    try {
+      const r = await module.exports.syncDay(deps, userId, day, now);
+      results.push({ date: day.date, status: r.status, body: r.body });
+    } catch (error) {
+      results.push({ date: day.date, error });
+      break;
+    }
+  }
+  return { status: 200, results };
+}
+
 /** TIMESTAMP (no zone) columns hold UTC instants; database.js parses them as
     UTC Dates (type 1114). A raw string is read the same way. */
 function asUtc(v) {
@@ -295,4 +331,4 @@ function asUtc(v) {
   return new Date(String(v).replace(' ', 'T') + (/[zZ]|[+-]\d\d:?\d\d$/.test(String(v)) ? '' : 'Z'));
 }
 
-module.exports = { MIRROR_HORIZON_DAYS, isEnabled, validateRequest, planSync, syncDay, perthIso, perthDate, asUtc, KEY_RE };
+module.exports = { MIRROR_HORIZON_DAYS, MAX_BATCH_DAYS, isEnabled, validateRequest, planSync, syncDay, syncDays, perthIso, perthDate, asUtc, KEY_RE };
