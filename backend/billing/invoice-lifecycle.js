@@ -23,6 +23,8 @@ const S = require('./session-billing');
 const BP = require('./billing-profiles');
 const Settings = require('./billing-settings');
 const { recordAudit } = require('./billing-audit');
+const SB = require('./splose-billing-source');
+const PD = require('./payer-directory');
 const { renderInvoicePdf } = require('./invoice-pdf');
 const storage = require('../storage');
 
@@ -391,7 +393,34 @@ async function currentPdf({ pool = defaultPool, orgId, userId, invoiceId, store 
 
 // ── Lifecycle transitions ──────────────────────────────────────────────────
 
+/**
+ * A draft's number was allocated when the draft was made; Splose may have
+ * issued that number since. Check Splose (fresh) and, if it is taken there,
+ * give the draft the next free number before it is finalised. Splose
+ * connected but unreadable → refuse: the number cannot be shown to be unique.
+ */
+async function clearNumberOfSplose(pool, orgId, userId, invoiceId) {
+  const { rows: [inv] } = await pool.query(
+    `SELECT invoice_number, status FROM invoices WHERE id = $1 AND organisation_id = $2`, [invoiceId, orgId]);
+  if (!inv || !EDITABLE_STATUSES.includes(inv.status)) return;
+  const settings = await Settings.ensureSettings(pool, orgId);
+  const chk = await SB.checkNumber(pool, orgId, inv.invoice_number, settings.invoicePrefix);
+  if (chk.status === 'UNAVAILABLE') {
+    throw err(409, 'Splose could not be read to confirm this invoice number is not already used there. Try again shortly.', 'SPLOSE_UNAVAILABLE');
+  }
+  if (chk.status !== 'TAKEN') return;
+  await withTx(pool, async tx => {
+    const locked = await lockInvoice(tx, orgId, invoiceId);
+    if (!EDITABLE_STATUSES.includes(locked.status) || locked.invoice_number !== inv.invoice_number) return;
+    const number = await Settings.allocateInvoiceNumber(tx, orgId);
+    await tx.query(`UPDATE invoices SET invoice_number = $2, updated_at = NOW() WHERE id = $1`, [invoiceId, number]);
+    await recordAudit(tx, { orgId, actorUserId: userId, action: 'invoice.renumbered', entityType: 'invoice', entityId: invoiceId, invoiceId,
+      before: { invoiceNumber: inv.invoice_number }, after: { invoiceNumber: number }, reason: 'Number already used in Splose' });
+  });
+}
+
 async function finalise({ pool = defaultPool, orgId, userId, invoiceId }) {
+  await clearNumberOfSplose(pool, orgId, userId, invoiceId);
   // Render outside the lock from current data, then re-check under the lock that nothing moved.
   const { vm } = await pdfViewModel(pool, orgId, invoiceId);
   vm.draft = false;
@@ -414,6 +443,8 @@ async function finalise({ pool = defaultPool, orgId, userId, invoiceId }) {
       `UPDATE invoices SET status = 'READY', finalised_at = NOW(), finalised_by_user_id = $2, updated_at = NOW() WHERE id = $1`,
       [invoiceId, userId]);
     const doc = await storeDocument(tx, orgId, userId, { ...inv, status: 'READY' }, bytes, true);
+    // The payer directory remembers where this client's invoice went (migration 083).
+    await PD.recordOpalInvoice(tx, orgId, inv, userId);
     await recordAudit(tx, { orgId, actorUserId: userId, action: 'invoice.finalised', entityType: 'invoice', entityId: invoiceId, invoiceId,
       before: { status: inv.status }, after: { status: 'READY', total: inv.total, documentSha256: doc.sha256 } });
     return { status: 'READY', documentId: doc.id };

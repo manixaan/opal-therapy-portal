@@ -273,6 +273,73 @@ The logo is `backend/assets/opal-therapy-logo.png`, the same file other Opal PDF
 
 **Numbering.** Numbers are allocated under a row lock and are sequential per organisation. A number already in use is skipped. Set "Next invoice number" to continue the practice's existing sequence. The numbers must not collide with invoices still issued from Splose; change the prefix if both stay in use.
 
+## Splose as a billing source (`billing/splose-billing-source.js`, migration 082)
+
+Read-only; nothing is written to Splose. Every run reads Splose once, fresh
+for invoices, support activities and appointments.
+
+- **Payer.** Splose's client record has the NDIS number, address and plan
+  management (`ndisInfo.fundManagement`), but not the plan manager. The only
+  link is the contact on each Splose invoice, which feeds the **payer
+  directory** (below). A blank payer is filled from the client's **latest**
+  invoice there; owner-entered values are never replaced.
+  - Plan-managed: the payer must be a plan manager, else no payer.
+  - Self-managed: anyone but a plan manager.
+  - NDIA-managed: no payer (claimed through the NDIS portal).
+  - The profile records `payer_source` (`SPLOSE_INVOICE`, `OPAL_INVOICE` or
+    `OWNER`) and which invoice.
+  - The audit row lists field names only, never values.
+- **Support activities** (report writing, case notes logged in Splose) become
+  `SPLOSE_ACTIVITY` lines.
+  - Pricing: minutes ÷ 60 × the rate card's session rate at the client's zone
+    (profile zone, else the WA locality table on the client's address).
+  - Item code: Splose's own (`15_617_0128_1_3_RR`). Its base must be the rate
+    card's session item, else SPLOSE_ACTIVITY_ITEM_UNSUPPORTED.
+  - Wording: Splose's ("FCA (Report Writing)" = service title + service type).
+  - One live claim per activity: `uq_invoice_lines_splose_activity`.
+  - Not billed:
+    - activities Splose already invoiced (`invoiceId`) or marked `doNotInvoice`;
+    - activities by a Splose practitioner not linked in Users & Roles (SPLOSE_ACTIVITY_PRACTITIONER_UNMAPPED);
+    - activities overlapping a timed Opal non-face-to-face block for the same client and practitioner (the timer wins; SPLOSE_ACTIVITY_DUPLICATES_NF2F).
+- **Sessions Splose already invoiced.** A calendar event synced from Splose
+  (`events.splose_id`) whose appointment Splose has invoiced or marked
+  do-not-invoice is skipped. A draft line for it leaves the draft. A finalised
+  Opal invoice for it raises SPLOSE_DOUBLE_BILLED and is never rewritten.
+- **Numbering.** The highest number Splose has issued with the same prefix is
+  stored (`billing_settings.splose_invoice_number_high`). Allocation never
+  goes at or below it. Finalising first re-checks Splose: a draft whose number
+  Splose has since used is renumbered (`invoice.renumbered`, audited).
+- **Fail-closed.**
+  - When Splose is connected but cannot be read completely, nothing that needs
+    Splose's judgement bills: Splose-synced sessions are held back (SPLOSE_UNAVAILABLE)
+    and activity lines are neither added nor removed.
+  - Finalising is refused while the number cannot be checked.
+  - When Splose is not connected, Splose-synced sessions are held back and finalise uses the stored number floor.
+- **Not covered yet.** A Splose activity edited after its Opal invoice was
+  finalised is not flagged. The calendar triggers only watch `events`.
+
+## Payer directory (`billing/payer-directory.js`, migration 083)
+
+Opal's own memory of who invoices go to, so it keeps working once Splose
+invoicing is off.
+
+- `billing_payers`: one row per payer. Type plus normalised name is unique, so
+  Splose's two "NDSP" contacts are one payer. The email comes from the most
+  recently invoiced contact that has one.
+- `billing_payer_invoices`: every invoice sent, and to whom. That is every Splose
+  invoice (imported on each invoicing run, or with Payers › Import all Splose
+  invoices), plus each invoice Opal finalises.
+- `billing_profiles.payer_id`: the client's chosen payer.
+- Imports are idempotent and only fill blanks. A payer the owner edited is never
+  overwritten.
+- Editing a payer carries to every linked profile. Finalised invoices keep the
+  details they were sent with.
+- A new client has no history. The owner picks a payer on the client's billing
+  profile, or types a new one, which is added to the directory and linked.
+  From then on it is remembered.
+- 30 Oct 2026, live data: 1,927 invoices, 86 clients, 51 payers (33 plan
+  managers, all with an email).
+
 ## Extension points
 
 - **Another discipline.** Add a rate card with a new `discipline`. The generator currently prices `therapy` events as OT; mapping event service types to disciplines is the next step.
