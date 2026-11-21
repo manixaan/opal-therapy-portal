@@ -23,6 +23,8 @@ const S = require('./session-billing');
 const BP = require('./billing-profiles');
 const Settings = require('./billing-settings');
 const { recordAudit } = require('./billing-audit');
+const SB = require('./splose-billing-source');
+const PD = require('./payer-directory');
 const { renderInvoicePdf } = require('./invoice-pdf');
 const storage = require('../storage');
 
@@ -94,6 +96,8 @@ async function listInvoices(q, orgId, f = {}, { tz = 'Australia/Perth' } = {}) {
             i.practitioner_names, to_char(i.issue_date,'YYYY-MM-DD') AS issue_date, to_char(i.due_date,'YYYY-MM-DD') AS due_date,
             to_char(i.period_start,'YYYY-MM-DD') AS period_start, to_char(i.period_end,'YYYY-MM-DD') AS period_end,
             i.total, i.amount_paid, (i.total - i.amount_paid) AS outstanding, i.status, i.sent_status, i.is_stale,
+            i.payer_email, i.email_last_error,
+            (SELECT xl.state FROM xero_invoice_links xl WHERE xl.invoice_id = i.id) AS xero_state,
             i.source_changed_after_finalise, i.trip_id, t.name AS trip_name,
             (SELECT array_agg(DISTINCT l.mmm_zone) FROM invoice_lines l WHERE l.invoice_id = i.id AND l.line_status = 'ACTIVE' AND l.mmm_zone IS NOT NULL) AS mmm_zones,
             (SELECT COUNT(*)::int FROM billing_issues b WHERE b.invoice_id = i.id AND b.status = 'OPEN') AS open_issues,
@@ -137,8 +141,10 @@ async function getInvoiceDetail(q, orgId, invoiceId, { tz = 'Australia/Perth' } 
             fu.name AS finalised_by_name, vu.name AS voided_by_name,
             ri.invoice_number AS reissue_of_number,
             (SELECT r.invoice_number FROM invoices r WHERE r.reissue_of_invoice_id = i.id ORDER BY r.created_at DESC LIMIT 1) AS reissued_as_number,
-            (SELECT r.id FROM invoices r WHERE r.reissue_of_invoice_id = i.id ORDER BY r.created_at DESC LIMIT 1) AS reissued_as_id
+            (SELECT r.id FROM invoices r WHERE r.reissue_of_invoice_id = i.id ORDER BY r.created_at DESC LIMIT 1) AS reissued_as_id,
+            xl.state AS xero_state, xl.xero_status, xl.last_error AS xero_error, xl.pushed_at AS xero_pushed_at, xl.payments_synced_at AS xero_payments_synced_at
        FROM invoices i LEFT JOIN trips t ON t.id = i.trip_id
+       LEFT JOIN xero_invoice_links xl ON xl.invoice_id = i.id
        LEFT JOIN users fu ON fu.id = i.finalised_by_user_id LEFT JOIN users vu ON vu.id = i.voided_by_user_id
        LEFT JOIN invoices ri ON ri.id = i.reissue_of_invoice_id
       WHERE i.id = $1 AND i.organisation_id = $2`, [invoiceId, orgId]);
@@ -391,7 +397,34 @@ async function currentPdf({ pool = defaultPool, orgId, userId, invoiceId, store 
 
 // ── Lifecycle transitions ──────────────────────────────────────────────────
 
+/**
+ * A draft's number was allocated when the draft was made; Splose may have
+ * issued that number since. Check Splose (fresh) and, if it is taken there,
+ * give the draft the next free number before it is finalised. Splose
+ * connected but unreadable → refuse: the number cannot be shown to be unique.
+ */
+async function clearNumberOfSplose(pool, orgId, userId, invoiceId) {
+  const { rows: [inv] } = await pool.query(
+    `SELECT invoice_number, status FROM invoices WHERE id = $1 AND organisation_id = $2`, [invoiceId, orgId]);
+  if (!inv || !EDITABLE_STATUSES.includes(inv.status)) return;
+  const settings = await Settings.ensureSettings(pool, orgId);
+  const chk = await SB.checkNumber(pool, orgId, inv.invoice_number, settings.invoicePrefix);
+  if (chk.status === 'UNAVAILABLE') {
+    throw err(409, 'Splose could not be read to confirm this invoice number is not already used there. Try again shortly.', 'SPLOSE_UNAVAILABLE');
+  }
+  if (chk.status !== 'TAKEN') return;
+  await withTx(pool, async tx => {
+    const locked = await lockInvoice(tx, orgId, invoiceId);
+    if (!EDITABLE_STATUSES.includes(locked.status) || locked.invoice_number !== inv.invoice_number) return;
+    const number = await Settings.allocateInvoiceNumber(tx, orgId);
+    await tx.query(`UPDATE invoices SET invoice_number = $2, updated_at = NOW() WHERE id = $1`, [invoiceId, number]);
+    await recordAudit(tx, { orgId, actorUserId: userId, action: 'invoice.renumbered', entityType: 'invoice', entityId: invoiceId, invoiceId,
+      before: { invoiceNumber: inv.invoice_number }, after: { invoiceNumber: number }, reason: 'Number already used in Splose' });
+  });
+}
+
 async function finalise({ pool = defaultPool, orgId, userId, invoiceId }) {
+  await clearNumberOfSplose(pool, orgId, userId, invoiceId);
   // Render outside the lock from current data, then re-check under the lock that nothing moved.
   const { vm } = await pdfViewModel(pool, orgId, invoiceId);
   vm.draft = false;
@@ -414,6 +447,8 @@ async function finalise({ pool = defaultPool, orgId, userId, invoiceId }) {
       `UPDATE invoices SET status = 'READY', finalised_at = NOW(), finalised_by_user_id = $2, updated_at = NOW() WHERE id = $1`,
       [invoiceId, userId]);
     const doc = await storeDocument(tx, orgId, userId, { ...inv, status: 'READY' }, bytes, true);
+    // The payer directory remembers where this client's invoice went (migration 083).
+    await PD.recordOpalInvoice(tx, orgId, inv, userId);
     await recordAudit(tx, { orgId, actorUserId: userId, action: 'invoice.finalised', entityType: 'invoice', entityId: invoiceId, invoiceId,
       before: { status: inv.status }, after: { status: 'READY', total: inv.total, documentSha256: doc.sha256 } });
     return { status: 'READY', documentId: doc.id };
@@ -463,36 +498,168 @@ async function markSent({ pool = defaultPool, orgId, userId, invoiceId, sentTo, 
   });
 }
 
-/** Email the final PDF through the shared mail transport; falls back cleanly when SMTP is unconfigured. */
-async function emailInvoice({ pool = defaultPool, orgId, userId, invoiceId, to, mailer }) {
+/**
+ * Claim the right to email an invoice (migration 091), under its row lock:
+ * a double click, a retry or a second user can never send it twice. A sent
+ * invoice is resent only when `resend` is asked for explicitly; an attempt
+ * still in flight (SENDING, under 10 minutes old) is refused.
+ */
+const SENDING_STALE_MS = 10 * 60 * 1000;
+async function claimSend({ pool, orgId, invoiceId, resend = false, batchId = null }) {
+  return withTx(pool, async tx => {
+    const inv = await lockInvoice(tx, orgId, invoiceId);
+    if (!FINAL_STATUSES.includes(inv.status)) throw err(409, 'Finalise the invoice before emailing it', 'NOT_FINAL');
+    if (inv.sent_status === 'SENDING') {
+      if (inv.email_attempted_at && Date.now() - new Date(inv.email_attempted_at).getTime() < SENDING_STALE_MS) {
+        throw err(409, 'This invoice is being sent right now', 'SEND_IN_PROGRESS');
+      }
+      // An attempt that never finished: the email may have gone. Only a deliberate resend sends it.
+      if (!resend) throw err(409, 'An earlier send of this invoice did not finish, so it may already have been emailed. Check with the payer, then use Email invoice to resend.', 'SEND_OUTCOME_UNKNOWN');
+    }
+    if (inv.sent_status === 'SENT' && !resend) throw err(409, 'This invoice has already been sent', 'ALREADY_SENT');
+    await tx.query(`UPDATE invoices SET sent_status = 'SENDING', email_attempted_at = NOW(), email_last_error = NULL,
+                           email_batch_id = COALESCE($2, email_batch_id), updated_at = NOW() WHERE id = $1`, [invoiceId, batchId]);
+    return inv;
+  });
+}
+
+async function sendFailed({ pool, orgId, userId, invoiceId, reason, previous }) {
+  const msg = String(reason || 'Sending failed').slice(0, 300);
+  await withTx(pool, async tx => {
+    await lockInvoice(tx, orgId, invoiceId);
+    // A resend that fails leaves an earlier successful send standing.
+    await tx.query(`UPDATE invoices SET sent_status = CASE WHEN $3 = 'SENT' THEN 'SENT' ELSE 'FAILED' END,
+                           email_last_error = $2, updated_at = NOW() WHERE id = $1`, [invoiceId, msg, previous || null]);
+    await recordAudit(tx, { orgId, actorUserId: userId, action: 'invoice.email_failed', entityType: 'invoice', entityId: invoiceId, invoiceId,
+      after: { reason: msg } });
+  });
+}
+
+/** A failure the owner can read — never a stack, an address or the mail body. */
+function sendErrorText(e) {
+  if (e && e.code === 'EMAIL_NOT_CONFIGURED') return 'Email is not set up for this portal';
+  const status = e && (e.status || e.statusCode);
+  if (status === 403) return 'The mailbox refused to send (Mail.Send permission)';
+  if (status === 404) return 'The sending mailbox was not found';
+  if (status === 429) return 'Microsoft 365 is limiting sending; try again shortly';
+  return 'The email could not be sent';
+}
+
+/** Email the final PDF through the shared mail transport, exactly once unless `resend`. */
+async function emailInvoice({ pool = defaultPool, orgId, userId, invoiceId, to, mailer, resend = false, batchId = null, hooks = {} }) {
   const email = mailer || require('../email');
+  const { rows: [pre] } = await pool.query(`SELECT * FROM invoices WHERE id = $1 AND organisation_id = $2`, [invoiceId, orgId]);
+  if (!pre) throw err(404, 'Invoice not found');
+  if (!FINAL_STATUSES.includes(pre.status)) throw err(409, 'Finalise the invoice before emailing it', 'NOT_FINAL');
+  const recipient = to || pre.payer_email;
+  if (!recipient || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(recipient)) throw err(400, 'No valid recipient email address', 'NO_EMAIL');
+  if (typeof email.isEmailConfigured === 'function' && !email.isEmailConfigured()) return { sent: false, reason: 'EMAIL_NOT_CONFIGURED' };
+  if (hooks.beforeEmail) await hooks.beforeEmail({ pool, orgId, userId, invoiceId });
+  const inv = await claimSend({ pool, orgId, invoiceId, resend, batchId });
+  let result;
+  try {
+    const pdf = await currentPdf({ pool, orgId, userId, invoiceId });
+    const business = await Settings.businessProfile(pool, orgId);
+    const esc = email.escapeHtml || (s => String(s));
+    const due = M.formatAud(M.toCents(inv.total) - M.toCents(inv.amount_paid));
+    const subject = `Tax invoice ${inv.invoice_number} from ${business.name}`;
+    const html = `<p>Hello${inv.payer_name ? ` ${esc(inv.payer_name)}` : ''},</p>
+<p>Please find attached tax invoice <strong>${esc(inv.invoice_number)}</strong> for ${esc(inv.client_name || 'our client')}${inv.ndis_number ? ` (NDIS ${esc(inv.ndis_number)})` : ''}.</p>
+<p>Amount due: <strong>${esc(due)}</strong>${inv.due_date ? `, due ${esc(S.displayDate(ymd(inv.due_date)))}` : ''}.</p>
+<p>Kind regards,<br>${esc(business.name)}</p>`;
+    result = await email.sendTemplated({ to: recipient, subject, html,
+      text: `Tax invoice ${inv.invoice_number} attached. Amount due ${due}.`,
+      attachments: [{ filename: pdf.fileName, content: pdf.bytes, contentType: 'application/pdf' }] });
+  } catch (e) {
+    await sendFailed({ pool, orgId, userId, invoiceId, reason: sendErrorText(e), previous: inv.sent_status });
+    throw err(502, sendErrorText(e), 'SEND_FAILED');
+  }
+  if (result && result.skipped) {
+    await sendFailed({ pool, orgId, userId, invoiceId, reason: 'Email is not set up for this portal', previous: inv.sent_status });
+    return { sent: false, reason: 'EMAIL_NOT_CONFIGURED' };
+  }
+  // The email has gone: record it. A failure here must not look like "not sent".
+  await withTx(pool, async tx => {
+    await lockInvoice(tx, orgId, invoiceId);
+    await tx.query(`UPDATE invoices SET email_send_count = email_send_count + 1 WHERE id = $1`, [invoiceId]);
+  }).catch(() => {});
+  await markSent({ pool, orgId, userId, invoiceId, sentTo: recipient, via: resend ? 'email (resend)' : 'email' });
+  return { sent: true, to: recipient };
+}
+
+/**
+ * "Send selected": for each ticked invoice, in order — finalise a draft,
+ * copy it to Xero when that is switched on (hooks.beforeEmail), then email
+ * it to its payer. One at a time with a short pause (Microsoft 365 allows
+ * about 30 messages a minute). Every invoice gets its own outcome; nothing
+ * already sent is sent again. One batch per organisation at a time.
+ */
+const BATCH_MAX = 100;
+const runningBatches = new Set();
+async function sendBatch({ pool = defaultPool, orgId, userId, ids, mailer, pauseMs = 2200, hooks = {} }) {
+  const email = mailer || require('../email');
+  const list = [...new Set((Array.isArray(ids) ? ids : []).map(String))];
+  if (!list.length) throw err(400, 'Choose at least one invoice', 'NO_INVOICES');
+  if (list.length > BATCH_MAX) throw err(400, `Send at most ${BATCH_MAX} invoices at a time`, 'TOO_MANY');
+  if (typeof email.isEmailConfigured === 'function' && !email.isEmailConfigured()) {
+    throw err(409, 'Email is not set up for this portal, so nothing was sent', 'EMAIL_NOT_CONFIGURED');
+  }
+  if (runningBatches.has(orgId)) throw err(409, 'Another send is already running', 'BATCH_RUNNING');
+  runningBatches.add(orgId);
+  const batchId = require('crypto').randomUUID();
+  const results = [];
+  try {
+    for (let i = 0; i < list.length; i++) {
+      const id = list[i];
+      const { rows: [inv] } = await pool.query(
+        `SELECT id, invoice_number, status, sent_status, payer_email, client_name, total FROM invoices WHERE id = $1 AND organisation_id = $2`, [id, orgId]);
+      const base = { id, number: inv && inv.invoice_number, client: inv && inv.client_name, to: inv && inv.payer_email };
+      if (!inv) { results.push({ ...base, outcome: 'skipped', code: 'NOT_FOUND', message: 'Invoice not found' }); continue; }
+      if (inv.status === 'VOID') { results.push({ ...base, outcome: 'skipped', code: 'VOID', message: 'Voided' }); continue; }
+      if (inv.sent_status === 'SENT') { results.push({ ...base, outcome: 'skipped', code: 'ALREADY_SENT', message: 'Already sent' }); continue; }
+      if (inv.sent_status === 'SENDING') { results.push({ ...base, outcome: 'skipped', code: 'SEND_OUTCOME_UNKNOWN', message: 'An earlier send did not finish — check, then resend it from the invoice' }); continue; }
+      if (inv.status === 'NEEDS_ATTENTION') { results.push({ ...base, outcome: 'skipped', code: 'NEEDS_ATTENTION', message: 'Needs attention first' }); continue; }
+      if (!inv.payer_email) { results.push({ ...base, outcome: 'skipped', code: 'NO_EMAIL', message: 'No email address for the payer' }); continue; }
+      try {
+        if (EDITABLE_STATUSES.includes(inv.status)) await finalise({ pool, orgId, userId, invoiceId: id });
+        if (hooks.beforeEmail) await hooks.beforeEmail({ pool, orgId, userId, invoiceId: id });
+        const r = await emailInvoice({ pool, orgId, userId, invoiceId: id, mailer: email, batchId });
+        if (!r.sent) results.push({ ...base, outcome: 'failed', code: r.reason, message: 'Email is not set up' });
+        else results.push({ ...base, outcome: 'sent', to: r.to });
+      } catch (e) {
+        results.push({ ...base, outcome: 'failed', code: e.code || 'ERROR', message: e.status && e.status < 500 || e.code === 'SEND_FAILED' || e.code === 'XERO_PUSH_FAILED' ? e.message : 'Could not send' });
+      }
+      if (pauseMs && i < list.length - 1 && results[results.length - 1].outcome === 'sent') await new Promise(r => setTimeout(r, pauseMs));
+    }
+  } finally { runningBatches.delete(orgId); }
+  const count = k => results.filter(r => r.outcome === k).length;
+  return { batchId, sent: count('sent'), skipped: count('skipped'), failed: count('failed'), results };
+}
+
+/** Every reason voidInvoice would refuse, checked BEFORE anything is voided in Xero. */
+function voidRefusal(inv) {
+  if (inv.status === 'VOID') return err(409, 'Invoice is already void');
+  if (M.toCents(inv.amount_paid) > 0) return err(409, 'Refund or reverse the recorded payments before voiding', 'HAS_PAYMENTS');
+  if (inv.sent_status === 'SENDING') return err(409, 'This invoice is being emailed; void it once that has finished', 'SEND_IN_PROGRESS');
+  return null;
+}
+async function assertVoidable({ pool = defaultPool, orgId, invoiceId, reason }) {
+  requireReason(reason);
   const { rows: [inv] } = await pool.query(`SELECT * FROM invoices WHERE id = $1 AND organisation_id = $2`, [invoiceId, orgId]);
   if (!inv) throw err(404, 'Invoice not found');
-  if (!FINAL_STATUSES.includes(inv.status)) throw err(409, 'Finalise the invoice before emailing it', 'NOT_FINAL');
-  const recipient = to || inv.payer_email;
-  if (!recipient || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(recipient)) throw err(400, 'No valid recipient email address', 'NO_EMAIL');
-  const pdf = await currentPdf({ pool, orgId, userId, invoiceId });
-  const business = await Settings.businessProfile(pool, orgId);
-  const esc = email.escapeHtml || (s => String(s));
-  const subject = `Tax invoice ${inv.invoice_number} from ${business.name}`;
-  const html = `<p>Hello${inv.payer_name ? ` ${esc(inv.payer_name)}` : ''},</p>
-<p>Please find attached tax invoice <strong>${esc(inv.invoice_number)}</strong> for ${esc(inv.client_name || 'our client')}${inv.ndis_number ? ` (NDIS ${esc(inv.ndis_number)})` : ''}.</p>
-<p>Amount due: <strong>${esc(M.formatAud(M.toCents(inv.total) - M.toCents(inv.amount_paid)))}</strong>${inv.due_date ? `, due ${esc(S.displayDate(ymd(inv.due_date)))}` : ''}.</p>
-<p>Kind regards,<br>${esc(business.name)}</p>`;
-  const result = await email.sendTemplated({ to: recipient, subject, html,
-    text: `Tax invoice ${inv.invoice_number} attached. Amount due ${M.formatAud(M.toCents(inv.total) - M.toCents(inv.amount_paid))}.`,
-    attachments: [{ filename: pdf.fileName, content: pdf.bytes, contentType: 'application/pdf' }] });
-  if (result && result.skipped) return { sent: false, reason: 'EMAIL_NOT_CONFIGURED' };
-  await markSent({ pool, orgId, userId, invoiceId, sentTo: recipient, via: 'email' });
-  return { sent: true };
+  const r = voidRefusal(inv);
+  if (r) throw r;
 }
 
 async function voidInvoice({ pool = defaultPool, orgId, userId, invoiceId, reason }) {
   const why = requireReason(reason);
   return withTx(pool, async tx => {
     const inv = await lockInvoice(tx, orgId, invoiceId);
-    if (inv.status === 'VOID') throw err(409, 'Invoice is already void');
-    if (M.toCents(inv.amount_paid) > 0) throw err(409, 'Refund or reverse the recorded payments before voiding', 'HAS_PAYMENTS');
+    const refusal = voidRefusal(inv);
+    if (refusal) throw refusal;
+    // An invoice copied to Xero is voided there first (xero-invoice-push beforeVoid); never leave a live Xero copy behind.
+    const { rows: [xl] } = await tx.query(`SELECT state FROM xero_invoice_links WHERE invoice_id = $1 FOR UPDATE`, [invoiceId]);
+    if (xl && (xl.state === 'PUSHED' || xl.state === 'PENDING')) throw err(409, 'This invoice is in Xero; void it through Opal so Xero is voided too', 'XERO_LINKED');
     await tx.query(`UPDATE invoices SET status = 'VOID', voided_at = NOW(), voided_by_user_id = $2, void_reason = $3, updated_at = NOW() WHERE id = $1`,
       [invoiceId, userId, why]);
     // Freeing the claims is what lets a corrected invoice be issued for the same events.
@@ -535,6 +702,6 @@ async function voidAndReissue({ pool = defaultPool, orgId, userId, invoiceId, re
 module.exports = {
   voidAndReissue,
   EDITABLE_STATUSES, FINAL_STATUSES, withTx, listInvoices, invoiceCounts, getInvoiceDetail, editLine, setLineStatus,
-  addManualLine, updateDraftHeader, currentPdf, readDocument, finalise, recordPayment, markSent, emailInvoice,
+  addManualLine, updateDraftHeader, currentPdf, readDocument, finalise, recordPayment, markSent, emailInvoice, sendBatch, claimSend, assertVoidable,
   voidInvoice, statusForPaid, pdfViewModel,
 };

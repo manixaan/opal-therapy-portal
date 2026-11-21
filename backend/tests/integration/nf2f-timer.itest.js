@@ -98,4 +98,92 @@ describe('non-face-to-face timer', () => {
     expect((await request(app).get('/api/nf2f/running')).status).toBe(401);
     expect((await request(app).post(`/api/events/${id}/nf2f/start`)).status).toBe(401);
   });
+
+  test('a block that ended with no time entered must be answered (migration 089)', async () => {
+    const app = buildApp();
+    const org = await seedOrganisation();
+    const { agent, user } = await agentFor(app, 'therapist', org.id);
+    const owner = await seedUser({ role: 'owner', organisation_id: org.id });
+    const end = new Date(Date.now() - 2 * 3600e3); end.setUTCSeconds(0, 0);
+    const start = new Date(end.getTime() - 30 * 60e3);
+    const mk = async (clients, offsetH = 0) => (await agent.post('/api/outlook/events').send({ ...block(clients),
+      startTime: new Date(start.getTime() - offsetH * 3600e3).toISOString(), endTime: new Date(end.getTime() - offsetH * 3600e3).toISOString() })).body.dbId;
+    const a = await mk(five.slice(0, 2));
+    const b = await mk(five.slice(2, 4), 3);
+    const c = await mk(five.slice(4, 5), 6);
+
+    let list = (await agent.get('/api/nf2f/untimed')).body.blocks;
+    expect(list.map((x) => x.eventId).sort()).toEqual([a, b, c].sort());
+    expect(list.find((x) => x.eventId === a)).toMatchObject({ blockMinutes: 30 });
+
+    // Full block, split evenly.
+    let r = await agent.post(`/api/events/${a}/nf2f/resolve`).send({ mode: 'FULL_BLOCK' });
+    expect(r.status).toBe(200);
+    expect(r.body.split.map((p) => p.seconds)).toEqual([900, 900]);
+    expect((await agent.post(`/api/events/${a}/nf2f/start`)).status).toBe(409);
+
+    // Per client: exact minutes; longer than the block is refused.
+    expect((await agent.post(`/api/events/${b}/nf2f/resolve`).send({ mode: 'PER_CLIENT', minutes: [{ clientId: '13', minutes: 25 }, { clientId: '14', minutes: 10 }] })).status).toBe(400);
+    r = await agent.post(`/api/events/${b}/nf2f/resolve`).send({ mode: 'PER_CLIENT', minutes: [{ clientId: '13', minutes: 10 }, { clientId: '14', minutes: 7 }] });
+    expect(r.status).toBe(200);
+    expect(r.body.split.map((p) => p.seconds)).toEqual([600, 420]);
+    expect((await agent.put(`/api/events/${b}/nf2f/allocation`).send({ allocation: [{ clientId: '13', percent: 50 }, { clientId: '14', percent: 50 }] })).status).toBe(409);
+
+    // Did not happen: a reason is required, nothing billed, the owner is told.
+    expect((await agent.post(`/api/events/${c}/nf2f/resolve`).send({ mode: 'DID_NOT_HAPPEN' })).status).toBe(400);
+    r = await agent.post(`/api/events/${c}/nf2f/resolve`).send({ mode: 'DID_NOT_HAPPEN', reason: 'Report postponed by the family' });
+    expect(r.status).toBe(200);
+    expect(r.body.split).toEqual([]);
+    const { rows: notes } = await db.pool.query(`SELECT user_id, type, message FROM user_notifications WHERE type = 'nf2f_not_done'`);
+    expect(notes).toHaveLength(1);
+    expect(notes[0].user_id).toBe(owner.id);
+    expect(notes[0].message).toMatch(/Report postponed by the family/);
+
+    expect((await agent.get('/api/nf2f/untimed')).body.blocks).toEqual([]);
+    expect(user.id).toBeTruthy();
+  });
+
+  test('an untimed block holds its clients from invoicing until answered', async () => {
+    const G = require('../../billing/invoice-generation');
+    require('../../billing/splose-billing-source').setSploseSource({ isConfigured: () => false });
+    const app = buildApp();
+    const org = await seedOrganisation();
+    const { agent, user } = await agentFor(app, 'therapist', org.id);
+    const end = new Date(Date.now() - 26 * 3600e3); end.setUTCSeconds(0, 0);
+    const start = new Date(end.getTime() - 30 * 60e3);
+    const id = (await agent.post('/api/outlook/events').send({ ...block(five.slice(0, 1)), startTime: start.toISOString(), endTime: end.toISOString() })).body.dbId;
+    const ymd = (d) => d.toLocaleDateString('en-CA', { timeZone: 'Australia/Perth' });
+    const plan = await G.prepare(db.pool, org.id, { from: ymd(new Date(end.getTime() - 2 * 86400e3)), to: ymd(new Date()), practitionerIds: [user.id] });
+    const held = plan.issues.list().filter((i) => i.type === 'NF2F_UNTIMED');
+    expect(held).toHaveLength(1);
+    expect(held[0]).toMatchObject({ eventId: id, clientId: '11', severity: 'BLOCKING' });
+    expect(plan.nf2f).toEqual([]);
+
+    await agent.post(`/api/events/${id}/nf2f/resolve`).send({ mode: 'PER_CLIENT', minutes: [{ clientId: '11', minutes: 10 }] });
+    const plan2 = await G.prepare(db.pool, org.id, { from: ymd(new Date(end.getTime() - 2 * 86400e3)), to: ymd(new Date()), practitionerIds: [user.id] });
+    expect(plan2.issues.list().filter((i) => i.type === 'NF2F_UNTIMED')).toEqual([]);
+    expect(plan2.nf2f.map((n) => n.part.seconds)).toEqual([600]);
+  });
+
+  test('the owner can answer for an employee; a resize after "full block" bills the new length', async () => {
+    const G = require('../../billing/invoice-generation');
+    require('../../billing/splose-billing-source').setSploseSource({ isConfigured: () => false });
+    const app = buildApp();
+    const org = await seedOrganisation();
+    const { agent, user } = await agentFor(app, 'therapist', org.id);
+    const { agent: owner } = await agentFor(app, 'owner', org.id);
+    const end = new Date(Date.now() - 26 * 3600e3); end.setUTCSeconds(0, 0);
+    const start = new Date(end.getTime() - 90 * 60e3);
+    const id = (await agent.post('/api/outlook/events').send({ ...block(five.slice(0, 2)), startTime: start.toISOString(), endTime: end.toISOString() })).body.dbId;
+
+    const v = (await owner.get(`/api/events/${id}/nf2f`)).body;
+    expect(v).toMatchObject({ needsAnswer: true, blockMinutes: 90 });
+    expect((await owner.post(`/api/events/${id}/nf2f/resolve`).send({ mode: 'FULL_BLOCK' })).status).toBe(200);
+
+    // The block is shortened to 30 minutes afterwards: the invoice follows the block.
+    await db.pool.query(`UPDATE events SET end_time = start_time + interval '30 minutes' WHERE id = $1`, [id]);
+    const ymd = (d) => d.toLocaleDateString('en-CA', { timeZone: 'Australia/Perth' });
+    const plan = await G.prepare(db.pool, org.id, { from: ymd(new Date(end.getTime() - 2 * 86400e3)), to: ymd(new Date()), practitionerIds: [user.id] });
+    expect(plan.nf2f.map((n) => n.part.seconds)).toEqual([900, 900]);
+  });
 });

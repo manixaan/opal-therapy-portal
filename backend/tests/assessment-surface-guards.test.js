@@ -737,7 +737,7 @@ describe('changed assets are cache-busted', () => {
       // Via home switch; the panel names the real next stop (28 Oct 2026).
       // 52: drives priced at their own departure time; right-click › Not driving
       // this; the traffic-alert hook; Make room's apply shared (29 Oct 2026).
-      ['travel.js', 72],
+      ['travel.js', 73],
       // 1: traffic alerts — a re-priced drive running into a client session.
       ['travel-alerts.js', 1], ['travel-alerts.css', 2],
       // 1: booking-route.js/.css are new — client location selector, the
@@ -755,7 +755,7 @@ describe('changed assets are cache-busted', () => {
       // 4 (js): each client's share shows m:ss, not rounded minutes.
       // 5 (js) / 3 (css): Allocate billing takes any typed number; warns over 100%.
       // js 6 / css 4: Allocate billing takes a time as well as a % (14 Nov 2026).
-      ['nf2f.js', 7], ['nf2f.css', 4],
+      ['nf2f.js', 9], ['nf2f.css', 5],
       // 1: travel-block.js is new — the billable Travel block in Smart Booking
       // (start + end location, length from Google Maps).
       // 2: no 4-hour cap — a priced drive may fill up to 12 h (14 Nov 2026).
@@ -796,7 +796,7 @@ describe('changed assets are cache-busted', () => {
       // 1: Invoicing — calendar-driven NDIS invoices, travel and rural trip billing.
       // 4 (js): the session's MMM zone selector in the calendar billing box.
       // 5 (js): Complete invoicing counts non-face-to-face shares.
-      ['invoicing.js', 5], ['invoicing.css', 5],
+      ['invoicing.js', 12], ['invoicing.css', 7],
       ['induction-assistant.js', 3], ['induction-assistant.css', 4],
       // js 5: two-step editor panel, contents-mirroring outline with
       // drag-to-reorder, multi-article A4 pagination fix. css 5: the

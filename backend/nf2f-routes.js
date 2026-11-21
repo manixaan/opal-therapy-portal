@@ -9,6 +9,8 @@
  *   POST /api/events/:dbId/nf2f/start        start (or resume); any other running timer of mine stops
  *   POST /api/events/:dbId/nf2f/stop
  *   PUT  /api/events/:dbId/nf2f/allocation   { allocation:[{clientId, percent}], nonBillablePercent }
+ *   GET  /api/nf2f/untimed                   my ended blocks with no time entered (must be answered)
+ *   POST /api/events/:dbId/nf2f/resolve      { mode: FULL_BLOCK | PER_CLIENT | DID_NOT_HAPPEN, minutes?, reason? }
  *
  * Only a non-face-to-face block that names clients has a timer (with none it
  * is not billable). The timer never runs past the block's length; once a
@@ -55,7 +57,7 @@ async function finalised(q, eventId) {
   const { rows } = await q.query(
     `SELECT 1 FROM invoice_lines l JOIN invoices i ON i.id = l.invoice_id
       WHERE l.calendar_event_id = $1 AND l.component = 'NF2F' AND l.line_status IN ('ACTIVE','REMOVED')
-        AND i.status NOT IN ('DRAFT','NEEDS_ATTENTION') LIMIT 1`, [eventId]);
+        AND i.status NOT IN ('DRAFT','NEEDS_ATTENTION','VOID') LIMIT 1`, [eventId]);
   return rows.length > 0;
 }
 
@@ -66,14 +68,17 @@ function view(ev, row) {
   const elapsed = T.elapsedSeconds(row, now);
   return {
     eventId: ev.id, title: ev.title, start: ev.start_time, end: ev.end_time,
+    blockMinutes: Math.round(T.blockSeconds(ev) / 60),
+    needsAnswer: T.needsResolution(row, clients, ev.end_time, now, T.blockSeconds(ev)),
     billable: clients.length > 0, clients,
     timer: {
       status: row ? row.status : 'IDLE', elapsedSeconds: elapsed, limitSeconds: row ? Number(row.limit_seconds) : T.blockSeconds(ev),
       runStartedAt: row && row.status === 'RUNNING' ? row.run_started_at : null, autoStopped: !!(row && row.auto_stopped),
       stoppedAt: row ? row.stopped_at : null,
     },
+    resolution: row && row.resolution ? { mode: row.resolution, note: row.resolution_note || null, at: row.resolved_at || null } : null,
     allocation: alloc,
-    split: T.splitSeconds(elapsed, alloc),
+    split: T.clientParts(row, clients, elapsed),
   };
 }
 
@@ -94,6 +99,7 @@ router.post('/api/events/:dbId/nf2f/start', requireAuth, safe(async (req, res) =
   if (await finalised(db.pool, ev.id)) return res.status(409).json({ error: 'This time is already on a finalised invoice' });
   let row = await timerRow(db.pool, ev.id);
   if (row && row.status === 'RUNNING') return res.json(view(ev, row));
+  if (row && row.resolution) return res.status(409).json({ error: 'This block\'s time has already been entered' });
   if (row && T.elapsedSeconds(row) >= Number(row.limit_seconds)) {
     return res.status(409).json({ error: 'The timer has reached this block\'s length. Make the block longer to time more.' });
   }
@@ -135,6 +141,8 @@ router.put('/api/events/:dbId/nf2f/allocation', requireAuth, safe(async (req, re
   const clients = T.blockClients(ev);
   if (!clients.length) return res.status(400).json({ error: 'This block has no clients, so it is not billable' });
   if (await finalised(db.pool, ev.id)) return res.status(409).json({ error: 'This time is already on a finalised invoice' });
+  const cur = await timerRow(db.pool, ev.id);
+  if (cur && cur.resolution === 'PER_CLIENT') return res.status(409).json({ error: 'Each client\'s minutes were entered for this block; enter them again instead' });
   const v = T.validateAllocation(req.body || {}, clients);
   if (!v.ok) return res.status(400).json({ error: v.error });
   await db.pool.query(
@@ -189,6 +197,83 @@ router.get('/api/nf2f/blocks', safe(async (req, res) => {
     });
   }
   res.json({ blocks });
+}));
+
+// ── Blocks that ended with no time entered (migration 089) ──────────────────
+// The calendar asks about each one and cannot be dismissed without an answer.
+// Mine only, from the last 31 days; older ones surface in Invoicing › Needs attention.
+router.get('/api/nf2f/untimed', safe(async (req, res) => {
+  const { rows } = await db.pool.query(
+    `SELECT e.id, e.user_id, e.title, e.start_time, e.end_time, e.custom_metadata, e.organisation_id
+       FROM events e
+       LEFT JOIN calendar_event_billing ceb ON ceb.event_id = e.id
+      WHERE e.user_id = $1 AND COALESCE(e.is_deleted, FALSE) = FALSE
+        AND LOWER(COALESCE(e.status, '')) <> 'cancelled'
+        AND COALESCE(ceb.attendance, '') NOT IN ('CANCELLED', 'NOT_BILLABLE', 'DID_NOT_ATTEND')
+        AND e.custom_metadata->'booking'->>'group' = 'nf2f'
+        AND e.end_time <= NOW() AND e.end_time > NOW() - INTERVAL '62 days'
+      ORDER BY e.start_time`, [req.session.userId]);
+  const blocks = [];
+  for (const ev of rows) {
+    const clients = T.blockClients(ev);
+    const row = await timerRow(db.pool, ev.id);
+    if (!T.needsResolution(row, clients, ev.end_time, new Date(), T.blockSeconds(ev))) continue;
+    if (await finalised(db.pool, ev.id)) continue;
+    const booking = (ev.custom_metadata && ev.custom_metadata.booking) || {};
+    blocks.push({ eventId: ev.id, title: ev.title, kind: booking.kind || null, start: ev.start_time, end: ev.end_time,
+      blockMinutes: Math.round(T.blockSeconds(ev) / 60), clients });
+  }
+  res.json({ blocks });
+}));
+
+async function notifyOwnersNotDone(q, ev, actorId, note) {
+  const orgId = ev.organisation_id || ev.owner_org;
+  if (!orgId) return;
+  const { rows: owners } = await q.query(
+    `SELECT id FROM users WHERE organisation_id = $1 AND role = 'owner' AND COALESCE(is_active, TRUE) = TRUE AND id <> $2`, [orgId, actorId]);
+  const { rows: [who] } = await q.query(`SELECT name FROM users WHERE id = $1`, [ev.user_id]);
+  const when = new Date(ev.start_time).toLocaleDateString('en-AU', { timeZone: 'Australia/Perth', weekday: 'short', day: 'numeric', month: 'short' });
+  const clients = T.blockClients(ev).map(c => c.clientName || 'a client').join(', ');
+  for (const o of owners) {
+    await q.query(
+      `INSERT INTO user_notifications (user_id, type, title, message, severity, related_entity, action_payload)
+       VALUES ($1, 'nf2f_not_done', $2, $3, 'warning', $4, $5::jsonb)`,
+      [o.id, 'Billable work marked as not done',
+       `${(who && who.name) || 'A clinician'} marked "${ev.title || 'Non-face-to-face'}" (${when}, ${clients}) as not done, so it will not be billed. Reason: ${note}`,
+       `event:${ev.id}`, JSON.stringify({ kind: 'event', eventId: ev.id, date: ev.start_time })]);
+  }
+}
+
+router.post('/api/events/:dbId/nf2f/resolve', requireAuth, safe(async (req, res) => {
+  const ev = await loadBlock(req, req.params.dbId);
+  if (!ev) return res.status(404).json({ error: 'Event not found' });
+  const clients = T.blockClients(ev);
+  if (!clients.length) return res.status(400).json({ error: 'This block has no clients, so it is not billable' });
+  if (new Date(ev.end_time) > new Date()) return res.status(409).json({ error: 'This block has not finished yet' });
+  if (await finalised(db.pool, ev.id)) return res.status(409).json({ error: 'This time is already on a finalised invoice' });
+  const existing = await timerRow(db.pool, ev.id);
+  if (existing && existing.status === 'RUNNING') return res.status(409).json({ error: 'Stop the timer first' });
+  if (existing && !existing.resolution && Number(existing.accumulated_seconds) >= T.MIN_TIMED_SECONDS) {
+    return res.status(409).json({ error: 'This block already has timed work' });
+  }
+  const v = T.validateResolution(req.body || {}, clients, T.blockSeconds(ev));
+  if (!v.ok) return res.status(400).json({ error: v.error });
+  const { rows: [row] } = await db.pool.query(
+    `INSERT INTO event_billing_timers (event_id, organisation_id, user_id, status, accumulated_seconds, limit_seconds, stopped_at,
+                                       allocation, non_billable_percent, resolution, client_seconds, resolution_note, resolved_by_user_id, resolved_at)
+     VALUES ($1, $2, $3, 'STOPPED', $4, $5, NOW(), $6::jsonb, 0, $7, $8::jsonb, $9, $10, NOW())
+     ON CONFLICT (event_id) DO UPDATE SET status = 'STOPPED', run_started_at = NULL, accumulated_seconds = EXCLUDED.accumulated_seconds,
+       limit_seconds = EXCLUDED.limit_seconds, stopped_at = NOW(), allocation = EXCLUDED.allocation, non_billable_percent = 0,
+       resolution = EXCLUDED.resolution, client_seconds = EXCLUDED.client_seconds, resolution_note = EXCLUDED.resolution_note,
+       resolved_by_user_id = EXCLUDED.resolved_by_user_id, resolved_at = NOW(), updated_at = NOW()
+     RETURNING *`,
+    [ev.id, ev.organisation_id || ev.owner_org || null, ev.user_id, v.seconds, T.blockSeconds(ev),
+     v.allocation ? JSON.stringify(v.allocation) : null, v.resolution,
+     v.clientSeconds ? JSON.stringify(v.clientSeconds) : null, v.note, req.session.userId]);
+  if (v.resolution === 'DID_NOT_HAPPEN') await notifyOwnersNotDone(db.pool, ev, req.session.userId, v.note);
+  else if (existing && existing.resolution === 'DID_NOT_HAPPEN') await notifyOwnersNotDone(db.pool, ev, req.session.userId, `changed from "not done" to billed (${v.resolution === 'FULL_BLOCK' ? 'full block' : 'minutes per client'})`);
+  await flagDrafts(db.pool, ev.id, v.resolution === 'DID_NOT_HAPPEN' ? 'block marked as not done' : 'block time entered');
+  res.json(view(ev, row));
 }));
 
 router.get('/api/nf2f/running', safe(async (req, res) => {

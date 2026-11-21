@@ -69,3 +69,20 @@
 .nf2f-total { margin-top: 10px; font-weight: 700; font-size: 13.5px; }
 .nf2f-total.bad { color: var(--danger, #c2412e); }
 .nf2f-alloc-table tr.over :is(.nf2f-pct, .nf2f-min) { border-color: var(--danger, #c2412e); color: var(--danger, #c2412e); }
+
+/* Blocks that ended with no time entered — answered before carrying on (21 Nov 2026). */
+.nf2f-untimed-backdrop { position: fixed; inset: 0; z-index: 10050; background: rgba(20, 16, 12, .45); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.nf2f-untimed { background: var(--panel, #fff); color: inherit; border-radius: 12px; box-shadow: var(--shadow-lg, 0 18px 48px rgba(0,0,0,.25)); width: min(460px, 100%); max-height: calc(100vh - 32px); overflow: auto; padding: 20px 22px; }
+.nf2f-untimed h2 { margin: 0 0 8px; font-size: 17px; color: var(--danger, #c2412e); }
+.nf2f-untimed p { margin: 0 0 12px; font-size: 13.5px; line-height: 1.5; }
+.nf2f-untimed-count { color: var(--muted, #8a837b); }
+.nf2f-untimed-opts { border: 0; margin: 0; padding: 0; display: grid; gap: 8px; }
+.nf2f-untimed-opts legend { font-weight: 700; font-size: 13.5px; margin-bottom: 6px; }
+.nf2f-untimed-opts > label { display: flex; gap: 8px; align-items: flex-start; font-size: 13.5px; padding: 8px 10px; border: 1px solid var(--border, #e4ded6); border-radius: 8px; cursor: pointer; }
+.nf2f-untimed-opts > label:has(input:checked) { border-color: var(--accent, #2a8c82); }
+.nf2f-untimed-mins, .nf2f-untimed-why { display: grid; gap: 6px; padding: 0 4px 0 30px; font-size: 13px; }
+.nf2f-untimed-mins[hidden], .nf2f-untimed-why[hidden] { display: none; }
+.nf2f-untimed-mins input { width: 72px; margin: 0 4px; }
+.nf2f-untimed-why textarea { display: block; width: 100%; margin-top: 4px; font: inherit; }
+.nf2f-untimed-err { min-height: 18px; margin-top: 8px; font-size: 13px; color: var(--danger, #c2412e); }
+.nf2f-untimed-foot { display: flex; justify-content: flex-end; margin-top: 6px; }

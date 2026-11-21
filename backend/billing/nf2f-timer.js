@@ -100,6 +100,98 @@ function splitSeconds(totalSeconds, alloc) {
   return parts.map(({ exact, ...p }) => p);
 }
 
+/**
+ * A block that ended with no time entered must be resolved (migration 089):
+ *   { mode: 'FULL_BLOCK' }                                  the whole block, split evenly
+ *   { mode: 'PER_CLIENT', minutes: [{clientId, minutes}] }  each client's own minutes
+ *   { mode: 'DID_NOT_HAPPEN', reason }                      not billed; the owner is told
+ * Returns { ok, resolution, seconds, allocation, clientSeconds, note } or { ok:false, error }.
+ * Per-client minutes are whole minutes, at least one client above zero, and
+ * together no longer than the block.
+ */
+function validateResolution(input, clients, blockSecs) {
+  const mode = input && input.mode;
+  if (mode === 'FULL_BLOCK') {
+    return { ok: true, resolution: 'FULL_BLOCK', seconds: blockSecs, allocation: equalSplit(clients, 100), clientSeconds: null, note: null };
+  }
+  if (mode === 'DID_NOT_HAPPEN') {
+    const note = String((input && input.reason) || '').trim().slice(0, 500);
+    if (!note) return { ok: false, error: 'Say briefly why this work did not happen' };
+    return { ok: true, resolution: 'DID_NOT_HAPPEN', seconds: 0, allocation: null, clientSeconds: null, note };
+  }
+  if (mode === 'PER_CLIENT') {
+    const list = Array.isArray(input && input.minutes) ? input.minutes : null;
+    const ids = clients.map(c => String(c.clientId));
+    if (!list || list.length !== ids.length || !list.every(m => m && ids.includes(String(m.clientId)))
+        || new Set(list.map(m => String(m.clientId))).size !== ids.length) {
+      return { ok: false, error: 'Give minutes for exactly this block\'s clients' };
+    }
+    const parts = list.map(m => ({ clientId: String(m.clientId), minutes: Number(m.minutes) }));
+    if (parts.some(m => !Number.isInteger(m.minutes) || m.minutes < 0)) return { ok: false, error: 'Minutes must be whole numbers, 0 or more' };
+    const total = parts.reduce((a, m) => a + m.minutes, 0) * 60;
+    if (total <= 0) return { ok: false, error: 'Enter the minutes worked for at least one client, or choose "This work did not happen"' };
+    if (total > blockSecs) return { ok: false, error: `That is ${Math.round(total / 60)} minutes, longer than the ${Math.round(blockSecs / 60)}-minute block` };
+    const names = new Map(clients.map(c => [String(c.clientId), c.clientName || null]));
+    const clientSeconds = parts.map(m => ({ clientId: m.clientId, clientName: names.get(m.clientId), seconds: m.minutes * 60 }));
+    const allocation = clientSeconds.map(c => ({ clientId: c.clientId, clientName: c.clientName, percent: round2(c.seconds * 100 / total) }));
+    return { ok: true, resolution: 'PER_CLIENT', seconds: total, allocation, clientSeconds, note: null };
+  }
+  return { ok: false, error: 'Choose how to bill this block' };
+}
+
+/** A timer shorter than this is treated as no time entered (an accidental tap). */
+const MIN_TIMED_SECONDS = 60;
+
+/**
+ * Does a PER_CLIENT answer still fit the block as it is now? It does not once
+ * the block's clients changed or the block got shorter than the minutes
+ * entered — then the clinician is asked again rather than the time re-split.
+ */
+function perClientStale(row, clients, blockSecs) {
+  if (!row || row.resolution !== 'PER_CLIENT' || !Array.isArray(row.client_seconds)) return false;
+  const ids = clients.map(c => String(c.clientId)).sort();
+  const saved = row.client_seconds.map(c => String(c && c.clientId)).sort();
+  if (ids.length !== saved.length || ids.some((id, i) => id !== saved[i])) return true;
+  const total = row.client_seconds.reduce((a, c) => a + (Number(c && c.seconds) || 0), 0);
+  return blockSecs != null && total > blockSecs;
+}
+
+/**
+ * Each client's billable seconds for a block, judged against the block as it
+ * is now (blockSecs):
+ *   FULL_BLOCK     the block's CURRENT length, split evenly across its CURRENT clients;
+ *   PER_CLIENT     exactly the minutes entered (the caller has checked perClientStale);
+ *   DID_NOT_HAPPEN nothing;
+ *   timer          the timed seconds, never more than the block, split by the allocation.
+ */
+function clientParts(row, clients, timedSeconds, blockSecs = null) {
+  if (row && row.resolution === 'DID_NOT_HAPPEN') return [];
+  if (row && row.resolution === 'FULL_BLOCK' && blockSecs != null) {
+    return splitSeconds(blockSecs, { nonBillablePercent: 0, clients: equalSplit(clients, 100) });
+  }
+  if (row && row.resolution === 'PER_CLIENT' && Array.isArray(row.client_seconds) && !perClientStale(row, clients, blockSecs)) {
+    const names = new Map(clients.map(c => [String(c.clientId), c.clientName || null]));
+    const total = row.client_seconds.reduce((a, c) => a + (Number(c.seconds) || 0), 0);
+    return row.client_seconds.map(c => ({ clientId: String(c.clientId), clientName: names.get(String(c.clientId)),
+      seconds: Number(c.seconds) || 0, percent: total ? round2((Number(c.seconds) || 0) * 100 / total) : 0 }));
+  }
+  const capped = blockSecs != null ? Math.min(Number(timedSeconds) || 0, blockSecs) : timedSeconds;
+  return splitSeconds(capped, allocationFor(row, clients));
+}
+
+/**
+ * Must the clinician answer for this block? Ended, billable, and either no
+ * time entered (or under a minute, an accidental tap), or a per-client answer
+ * that no longer fits the block.
+ */
+function needsResolution(row, clients, endTime, now = new Date(), blockSecs = null) {
+  if (!clients.length) return false;
+  if (new Date(endTime) > now) return false;
+  if (row && row.status === 'RUNNING') return false;
+  if (row && row.resolution) return perClientStale(row, clients, blockSecs);
+  return !(row && Number(row.accumulated_seconds) >= MIN_TIMED_SECONDS);
+}
+
 /** The clients a block names (custom_metadata.booking.clients), or []. */
 function blockClients(ev) {
   const b = ev && ev.custom_metadata && ev.custom_metadata.booking;
@@ -127,5 +219,5 @@ async function settleRow(q, row, now = new Date()) {
 
 module.exports = {
   elapsedSeconds, settled, allocationFor, equalSplit, validateAllocation, splitSeconds,
-  blockClients, blockSeconds, settleRow,
+  blockClients, blockSeconds, settleRow, validateResolution, clientParts, needsResolution, perClientStale, MIN_TIMED_SECONDS,
 };

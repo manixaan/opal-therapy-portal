@@ -34,6 +34,11 @@ const SCOPES = [
   'openid', 'profile', 'email', 'offline_access',
   'accounting.transactions.read',
   'accounting.contacts.read',
+  // Write: Invoicing copies sent invoices to Xero and may add a payer contact
+  // (billing/xero-invoice-push.js, behind ENABLE_XERO_INVOICE_PUSH). A
+  // connection made before 21 Nov 2026 must reconnect to grant these.
+  'accounting.transactions',
+  'accounting.contacts',
   'accounting.settings.read',
   'accounting.reports.read',
 ];

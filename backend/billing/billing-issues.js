@@ -19,6 +19,7 @@ const ISSUE_TYPES = Object.freeze({
   SESSION_MMM_UNRESOLVED:    { severity: 'BLOCKING', label: 'Session MMM zone unknown' },
   SESSION_MMM_REVIEW:        { severity: 'BLOCKING', label: 'Session MMM zone needs confirmation' },
   NF2F_TIMER_RUNNING:        { severity: 'WARNING',  label: 'Non-face-to-face timer still running' },
+  NF2F_UNTIMED:              { severity: 'BLOCKING', label: 'Non-face-to-face block has no time entered' },
   EVENT_NO_CLIENT:           { severity: 'BLOCKING', label: 'Event has no client' },
   EVENT_NO_LOCATION:         { severity: 'BLOCKING', label: 'Event has no location' },
   EVENT_NO_SERVICE_TYPE:     { severity: 'BLOCKING', label: 'Event has no service type' },
@@ -26,11 +27,20 @@ const ISSUE_TYPES = Object.freeze({
   RATE_UNAVAILABLE:          { severity: 'BLOCKING', label: 'Rate unavailable for service date' },
   TRAVEL_ROUTE_FAILED:       { severity: 'BLOCKING', label: 'Travel route failed' },
   TRAVEL_DAY_DEFERRED:       { severity: 'WARNING',  label: 'Travel for this day is waiting on another session' },
+  TRAVEL_MINUTES_IMPLAUSIBLE: { severity: 'BLOCKING', label: 'Calendar travel minutes far from the route' },
+  TRAVEL_MINUTES_NOT_FROM_CALENDAR: { severity: 'WARNING', label: 'Travel minutes not recorded by the calendar' },
+  TRAVEL_BLOCK_NOT_INVOICED: { severity: 'WARNING',  label: 'Travel block needs adding by hand' },
   WORK_LOCATION_NOT_SET:     { severity: 'WARNING',  label: 'Day work location not set (no start/end travel leg)' },
   TRIP_COST_INCOMPLETE:      { severity: 'BLOCKING', label: 'Trip cost incomplete' },
   TRIP_ALLOCATION_CHANGED:   { severity: 'BLOCKING', label: 'Trip allocation changed after invoice finalised' },
   ALREADY_BILLED_CONFLICT:   { severity: 'WARNING',  label: 'Already billed conflict' },
   SOURCE_CHANGED_AFTER_FINALISE: { severity: 'BLOCKING', label: 'Source event changed after invoice finalisation' },
+  // Splose as a billing source (billing/splose-billing-source.js, migration 082)
+  SPLOSE_UNAVAILABLE:        { severity: 'BLOCKING', label: 'Splose could not be checked' },
+  SPLOSE_DOUBLE_BILLED:      { severity: 'BLOCKING', label: 'Invoiced in both Splose and Opal' },
+  SPLOSE_ACTIVITY_PRACTITIONER_UNMAPPED: { severity: 'BLOCKING', label: 'Splose practitioner not linked to a portal user' },
+  SPLOSE_ACTIVITY_ITEM_UNSUPPORTED:      { severity: 'BLOCKING', label: 'Splose support item not on the rate card' },
+  SPLOSE_ACTIVITY_DUPLICATES_NF2F:       { severity: 'WARNING',  label: 'Splose activity overlaps a timed non-face-to-face block' },
 });
 
 /**

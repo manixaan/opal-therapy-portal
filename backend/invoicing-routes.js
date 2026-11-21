@@ -33,6 +33,9 @@ const SessionMmm = require('./billing/session-mmm-store');
 const RF = require('./billing/route-facts');
 const DR = require('./billing/day-route');
 const Issues = require('./billing/billing-issues');
+const SB = require('./billing/splose-billing-source');
+const PD = require('./billing/payer-directory');
+const XP = require('./billing/xero-invoice-push');
 const { recordAudit, listAudit } = require('./billing/billing-audit');
 const storage = require('./storage');
 
@@ -61,6 +64,10 @@ const safe = (fn) => (req, res) => {
   return Promise.resolve(fn(req, res)).catch((err) => {
     if (err && err.status && err.status < 500) {
       return res.status(err.status).json({ error: err.message, code: err.code || undefined });
+    }
+    // Xero and mail failures carry an owner-readable message built for this (never upstream detail).
+    if (err && err.status >= 500 && /^(XERO_|SEND_FAILED$)/.test(String(err.code || ''))) {
+      return res.status(502).json({ error: err.message, code: err.code });
     }
     if (err && err.code === '23505') return res.status(409).json({ error: 'That change conflicts with an existing billing record' });
     log.error('invoicing route error', { error: err, path: req.path });
@@ -142,6 +149,9 @@ router.get('/api/invoicing/runs', safe(async (req, res) => {
   res.json({ runs: rows });
 }));
 
+// Run before an invoice is emailed: the Xero copy (xero-invoice-push.js) when switched on.
+function sendHooks() { return { beforeEmail: XP.beforeEmail }; }
+
 // ── Invoices ──────────────────────────────────────────────────────────────
 
 router.get('/api/invoicing/invoices', safe(async (req, res) => {
@@ -181,16 +191,29 @@ router.post('/api/invoicing/invoices/:id/finalise', uuidParam('id'), safe(async 
   res.json(await Life.finalise({ pool, orgId: orgId(req), userId: req.user.id, invoiceId: req.params.id }));
 }));
 
+// Voiding an invoice that is in Xero voids the Xero copy first; if Xero says no, nothing changes.
+async function voidInXeroFirst(req) {
+  // Everything Opal would refuse is refused before Xero is touched.
+  await Life.assertVoidable({ pool, orgId: orgId(req), invoiceId: req.params.id, reason: (req.body || {}).reason });
+  await XP.beforeVoid({ pool, orgId: orgId(req), userId: req.user.id, invoiceId: req.params.id });
+}
+
 router.post('/api/invoicing/invoices/:id/void', uuidParam('id'), safe(async (req, res) => {
+  await voidInXeroFirst(req);
   const r = await Life.voidInvoice({ pool, orgId: orgId(req), userId: req.user.id, invoiceId: req.params.id, reason: (req.body || {}).reason });
   res.json({ status: r.status });
 }));
 
 router.post('/api/invoicing/invoices/:id/reissue', uuidParam('id'), safe(async (req, res) => {
+  await voidInXeroFirst(req);
   res.json(await Life.voidAndReissue({ pool, orgId: orgId(req), userId: req.user.id, invoiceId: req.params.id, reason: (req.body || {}).reason }));
 }));
 
 router.post('/api/invoicing/invoices/:id/payments', uuidParam('id'), safe(async (req, res) => {
+  // An invoice copied to Xero is paid in Xero (bank feed); payments come back with "Update payments from Xero".
+  if (await XP.isLinked(pool, req.params.id)) {
+    return res.status(409).json({ error: 'This invoice is in Xero. Record the payment in Xero, then use "Update payments from Xero".', code: 'PAID_IN_XERO' });
+  }
   res.status(201).json(await Life.recordPayment({ pool, orgId: orgId(req), userId: req.user.id, invoiceId: req.params.id, input: req.body || {} }));
 }));
 
@@ -199,7 +222,27 @@ router.post('/api/invoicing/invoices/:id/mark-sent', uuidParam('id'), safe(async
 }));
 
 router.post('/api/invoicing/invoices/:id/email', uuidParam('id'), safe(async (req, res) => {
-  res.json(await Life.emailInvoice({ pool, orgId: orgId(req), userId: req.user.id, invoiceId: req.params.id, to: (req.body || {}).to }));
+  const b = req.body || {};
+  res.json(await Life.emailInvoice({ pool, orgId: orgId(req), userId: req.user.id, invoiceId: req.params.id, to: b.to, resend: b.resend === true,
+    hooks: sendHooks() }));
+}));
+
+// Copy one final invoice to Xero now (catch-up for invoices sent before the copy was on).
+router.post('/api/invoicing/invoices/:id/xero', uuidParam('id'), safe(async (req, res) => {
+  res.json(await XP.pushInvoice({ pool, orgId: orgId(req), userId: req.user.id, invoiceId: req.params.id }));
+}));
+
+// Payments: read from Xero onto every open invoice copied there.
+router.post('/api/invoicing/xero/sync-payments', safe(async (req, res) => {
+  if (!XP.isEnabled()) return res.status(409).json({ error: 'Copying invoices to Xero is switched off', code: 'XERO_PUSH_DISABLED' });
+  res.json(await XP.syncPayments({ pool, orgId: orgId(req), userId: req.user.id }));
+}));
+
+// "Send selected": finalise, copy to Xero (when on), email — each invoice once.
+router.post('/api/invoicing/invoices/send-batch', safe(async (req, res) => {
+  const ids = Array.isArray((req.body || {}).ids) ? req.body.ids : [];
+  if (!ids.length || ids.some(id => !UUID_RE.test(String(id)))) return res.status(400).json({ error: 'Choose at least one invoice' });
+  res.json(await Life.sendBatch({ pool, orgId: orgId(req), userId: req.user.id, ids, hooks: sendHooks() }));
 }));
 
 function sendPdf(req, res, bytes, fileName) {
@@ -409,15 +452,38 @@ router.get('/api/invoicing/clients/:clientId', safe(async (req, res) => {
   const p = await BP.getProfile(pool, orgId(req), String(req.params.clientId));
   if (!p) return res.status(404).json({ error: 'Client billing profile not found' });
   const ds = await MMM.activeDataset(pool);
-  res.json({ profile: p, effectiveMmm: MMM.effectiveMmm(p), mmmDataset: ds ? { version: ds.version, source: ds.source } : null });
+  res.json({ profile: p, effectiveMmm: MMM.effectiveMmm(p), mmmDataset: ds ? { version: ds.version, source: ds.source } : null,
+    payerHistory: await PD.historyForClient(pool, orgId(req), p.client_id) });
 }));
 
 router.put('/api/invoicing/clients/:clientId', safe(async (req, res) => {
   const clientId = String(req.params.clientId).slice(0, 255);
-  const { errors, values } = BP.validateProfilePatch(req.body || {});
+  const body = { ...(req.body || {}) };
+  // Picking a payer from the directory copies its details onto the profile.
+  let chosen = null;
+  if (body.payerId) {
+    chosen = UUID_RE.test(String(body.payerId)) ? await PD.getPayer(pool, orgId(req), String(body.payerId)) : null;
+    if (!chosen || chosen.archived) return res.status(404).json({ error: 'Payer not found' });
+    Object.assign(body, { payerType: chosen.payer_type, payerName: chosen.name, payerEmail: chosen.email,
+      payerAddress: chosen.address, payerReference: chosen.reference });
+  }
+  const { errors, values } = BP.validateProfilePatch(body);
   if (errors.length) return res.status(400).json({ error: errors.join('; ') });
   const out = await Life.withTx(pool, async tx => {
-    const r = await BP.upsertProfile(tx, orgId(req), clientId, req.user.id, values);
+    let r = await BP.upsertProfile(tx, orgId(req), clientId, req.user.id, values);
+    // Remember the payer: link the profile to its directory entry, adding a new
+    // payer to the directory the first time it is entered.
+    if (['payerType', 'payerName', 'payerEmail'].some(k => k in values)) {
+      const a = r.after;
+      const payer = a.payer_name && a.payer_type
+        ? chosen || await PD.ensurePayer(tx, orgId(req), { payerType: a.payer_type, name: a.payer_name, email: a.payer_email,
+          address: a.payer_address, reference: a.payer_reference }, req.user.id)
+        : null;
+      const { rows: [linked] } = await tx.query(
+        `UPDATE billing_profiles SET payer_id = $3, payer_source = CASE WHEN $3::uuid IS NULL THEN NULL ELSE 'OWNER' END, payer_source_detail = NULL
+          WHERE organisation_id = $1 AND client_id = $2 RETURNING *`, [orgId(req), clientId, payer ? payer.id : null]);
+      r = { ...r, after: linked };
+    }
     const changed = Object.keys(values).reduce((acc, k) => {
       const col = BP.EDITABLE[k];
       if (String(r.before ? r.before[col] ?? '' : '') !== String(r.after[col] ?? '')) acc[k] = { from: r.before ? r.before[col] : null, to: r.after[col] };
@@ -462,21 +528,58 @@ router.put('/api/invoicing/clients/:clientId/mmm-override', safe(async (req, res
 }));
 
 router.post('/api/invoicing/clients/:clientId/import-splose', safe(async (req, res) => {
-  const clientId = String(req.params.clientId);
-  const splose = require('./splose-api');
-  if (typeof splose.isConfigured === 'function' && !(await splose.isConfigured())) return res.status(409).json({ error: 'Splose is not connected' });
-  let patient;
-  try { patient = await splose.getPatient(clientId); } catch (_) { return res.status(502).json({ error: 'Could not read the client from Splose' }); }
+  const clientId = String(req.params.clientId).slice(0, 255);
+  const data = await SB.loadForClient(clientId);
+  if (data.status === 'UNAVAILABLE') return res.status(502).json({ error: 'Could not read the client from Splose' });
+  const connected = data.status === 'OK';
+  if (connected && !data.patients.has(clientId)) return res.status(404).json({ error: 'Client not found in Splose' });
+  await BP.ensureStubProfiles(pool, orgId(req), [{ clientId, clientName: connected ? data.patients.get(clientId).fullName || null : null }]);
   const existing = await BP.getProfile(pool, orgId(req), clientId);
-  const values = BP.fieldsFromSplosePatient(patient, existing);
+  // Fills blanks only: name, NDIS number, address and plan management from
+  // Splose; the payer from the payer directory (the client's latest invoice,
+  // which this also imports). Owner data is never replaced. Without Splose
+  // the directory alone still answers.
   const out = await Life.withTx(pool, async tx => {
-    const r = await BP.upsertProfile(tx, orgId(req), clientId, req.user.id, values);
-    await recordAudit(tx, { orgId: orgId(req), actorUserId: req.user.id, action: 'billing_profile.imported_from_splose',
-      entityType: 'billing_profile', entityId: clientId, after: { fields: Object.keys(values) } });
-    return r.after;
+    if (connected) await PD.syncFromSplose(tx, orgId(req), { invoices: data.invoices, contacts: data.contactList }, req.user.id);
+    return SB.fillProfile(tx, orgId(req), existing, connected ? data : null, req.user.id);
   });
-  const classified = await MMM.ensureClassified(pool, out);
-  res.json({ profile: classified, imported: Object.keys(values) });
+  const classified = await MMM.ensureClassified(pool, out.profile);
+  res.json({ profile: classified, imported: out.fields, splose: data.status });
+}));
+
+// ── Payer directory (migration 083) ──────────────────────────────────────
+
+router.get('/api/invoicing/payers', safe(async (req, res) => {
+  res.json({ payers: await PD.listPayers(pool, orgId(req), { search: req.query.q || null, includeArchived: req.query.archived === '1' }) });
+}));
+
+router.post('/api/invoicing/payers', safe(async (req, res) => {
+  const { errors, values } = PD.validatePayer(req.body || {});
+  if (errors.length) return res.status(400).json({ error: errors.join('; ') });
+  const existing = (await pool.query(`SELECT id FROM billing_payers WHERE organisation_id = $1 AND payer_type = $2 AND name_key = $3`,
+    [orgId(req), values.payerType, PD.nameKey(values.name)])).rows[0];
+  if (existing) return res.status(409).json({ error: 'A payer with this name and type is already in the directory', payerId: existing.id });
+  const payer = await Life.withTx(pool, tx => PD.ensurePayer(tx, orgId(req), { payerType: values.payerType, name: values.name,
+    email: values.email, address: values.address, reference: values.reference }, req.user.id));
+  res.status(201).json({ payer });
+}));
+
+router.put('/api/invoicing/payers/:id', uuidParam('id'), safe(async (req, res) => {
+  const { errors, values } = PD.validatePayer(req.body || {}, { partial: true });
+  if (errors.length) return res.status(400).json({ error: errors.join('; ') });
+  const r = await Life.withTx(pool, tx => PD.updatePayer(tx, orgId(req), req.params.id, values, req.user.id));
+  if (r.error === 'NOT_FOUND') return res.status(404).json({ error: 'Payer not found' });
+  if (r.error === 'DUPLICATE') return res.status(409).json({ error: 'Another payer already has this name and type' });
+  res.json({ payer: r.after, linkedProfilesUpdated: r.linkedUpdated });
+}));
+
+/** Read every Splose invoice into the directory (also happens on every invoicing run). */
+router.post('/api/invoicing/payers/import-splose', safe(async (req, res) => {
+  const src = await SB.loadDirectorySource();
+  if (src.status === 'NOT_CONNECTED') return res.status(409).json({ error: 'Splose is not connected' });
+  if (src.status !== 'OK') return res.status(502).json({ error: 'Splose could not be read completely; nothing was imported' });
+  const result = await Life.withTx(pool, tx => PD.syncFromSplose(tx, orgId(req), src, req.user.id));
+  res.json(result);
 }));
 
 // ── Route facts (manual entry when Google cannot route a leg) ─────────────
@@ -502,7 +605,8 @@ router.get('/api/invoicing/settings', safe(async (req, res) => {
   await RC.ensureDefaultRateCard(pool, orgId(req));
   const [org, cards, ds] = await Promise.all([Settings.loadOrgProfile(pool, orgId(req)), RC.loadRateCards(pool, orgId(req)), MMM.activeDataset(pool)]);
   res.json({ settings, organisation: org, rateCards: cards, mmmDataset: ds,
-    nextInvoiceNumberPreview: Settings.formatInvoiceNumber(settings.invoicePrefix, settings.nextInvoiceNumber, settings.invoiceNumberPadding),
+    nextInvoiceNumberPreview: Settings.formatInvoiceNumber(settings.invoicePrefix,
+      Math.max(settings.nextInvoiceNumber, (settings.sploseInvoiceNumberHigh || 0) + 1), settings.invoiceNumberPadding),
     emailConfigured: require('./email').isEmailConfigured(), mapsConfigured: !!process.env.GOOGLE_MAPS_API_KEY });
 }));
 

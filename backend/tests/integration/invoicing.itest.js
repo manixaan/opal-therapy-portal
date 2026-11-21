@@ -11,6 +11,15 @@
  * Acceptance scenarios A–L from the specification are labelled in the tests.
  */
 
+// Email: a fake transport so sending is observable and nothing leaves the process.
+const MAIL = { sent: [], fail: false, configured: true };
+jest.mock('../../email', () => {
+  const actual = jest.requireActual('../../email');
+  return { ...actual,
+    isEmailConfigured: () => MAIL.configured,
+    sendTemplated: async (m) => { if (MAIL.fail) { const e = new Error('boom'); e.status = 503; throw e; } MAIL.sent.push(m); return { messageId: 'm' + MAIL.sent.length }; },
+  };
+});
 const express = require('express');
 const session = require('express-session');
 const bodyParser = require('body-parser');
@@ -20,6 +29,8 @@ const bcrypt = require('bcryptjs');
 const { db, truncateAll, seedUser, seedOrganisation, closePool } = require('./helpers');
 const { setMapsProvider } = require('../../billing/maps-adapter');
 const DR = require('../../billing/day-route');
+// Splose is not part of these scenarios (invoicing-splose.itest.js covers it): disconnected, so nothing leaves the process.
+require('../../billing/splose-billing-source').setSploseSource({ isConfigured: () => false });
 
 const PASSWORD = 'InvPass1!';
 
@@ -222,6 +233,44 @@ describe('normal invoicing', () => {
   });
 
   // 19 Nov 2026: a trip home in between is billed only when chosen (travel.next 'home'), as the calendar draws it.
+  test('travel bills the minutes the calendar recorded, not the route lookup; a past day stays as first recorded', async () => {
+    const CTM = require('../../billing/calendar-travel-minutes');
+    const app = buildApp();
+    const org = await seedOrganisation();
+    const { agent } = await login(app, 'owner', org.id);
+    const d = day(1);
+    const pr = await practitioner(org.id, 'Cal Minutes', 'Cal Base Rd, Perth WA 6000', [d]);
+    await profile(agent, 'cm1', planManaged('Calendar Client', 1));
+    route('Cal Base Rd, Perth WA 6000', 'CM home, Perth WA 6000', 18, 11);
+    const ev = await event(pr, { clientId: 'cm1', clientName: 'Calendar Client', date: d, start: '10:00', location: 'CM home, Perth WA 6000' });
+
+    // No recorded minutes yet: the lookup prices it and the run says so.
+    await run(agent, d, d);
+    let [inv] = await invoices(agent);
+    let lab = byComp((await detail(agent, inv.id)).lines, 'TRAVEL_LABOUR')[0];
+    expect(lab.quantity).toBe('0.3000');
+    const iss = (await agent.get('/api/invoicing/issues')).body.issues || [];
+    expect(iss.some((i) => i.issue_type === 'TRAVEL_MINUTES_NOT_FROM_CALENDAR')).toBe(true);
+
+    // The calendar recorded 25 min (traffic). The draft follows it.
+    const leg = { origin: 'Cal Base Rd, Perth WA 6000', destination: 'CM home, Perth WA 6000', minutes: 25, ownerEventId: ev, side: 'before' };
+    const rec = await CTM.recordDays(db.pool, pr.id, [{ date: d, legs: [leg] }]);
+    expect(rec.body.results[0]).toMatchObject({ status: 200, body: { recorded: 1 } });
+    await run(agent, d, d);
+    [inv] = await invoices(agent);
+    lab = byComp((await detail(agent, inv.id)).lines, 'TRAVEL_LABOUR')[0];
+    expect(lab.quantity).toBe('0.4167');
+    expect(lab.amount).toBe('40.42');   // 0.4167 h x $97.00
+
+    // A later redraw of the past day with other minutes is not taken.
+    const again = await CTM.recordDays(db.pool, pr.id, [{ date: d, legs: [{ ...leg, minutes: 40 }] }]);
+    expect(again.body.results[0].body).toMatchObject({ kept: true, reason: 'past' });
+    // Someone else's event is refused.
+    const other = await practitioner(org.id, 'Other', 'X Rd, Perth WA 6000', [d]);
+    const bad = await CTM.recordDays(db.pool, other.id, [{ date: day(2), legs: [{ ...leg, ownerEventId: ev }] }]);
+    expect(bad.body.results[0].status).toBe(409);
+  });
+
   test('a long gap with Via home chosen is a trip home: Return + Start legs, same as the calendar', async () => {
     const app = buildApp();
     const org = await seedOrganisation();
@@ -821,5 +870,269 @@ describe('non-face-to-face billable time (migration 076)', () => {
     expect(line).toMatchObject({ quantity: '0.5000', amount: '97.00' });
     const { rows: [t] } = await db.pool.query(`SELECT status, auto_stopped, accumulated_seconds FROM event_billing_timers WHERE event_id = $1`, [ev]);
     expect(t).toEqual({ status: 'STOPPED', auto_stopped: true, accumulated_seconds: 1800 });
+  });
+});
+
+describe('send selected — finalise and email each ticked invoice exactly once (migration 091)', () => {
+  beforeEach(() => { MAIL.sent.length = 0; MAIL.fail = false; MAIL.configured = true; });
+
+  async function threeDrafts() {
+    const app = buildApp();
+    const org = await seedOrganisation();
+    const { agent } = await login(app, 'owner', org.id);
+    await agent.put('/api/invoicing/settings').send({ abn: '49699791958' });
+    const pr = await practitioner(org.id, 'Send P', 'Base, Perth WA 6000', [day(0)]);
+    await profile(agent, 's1', planManaged('Send One', 1, 'Alpha PM'));
+    await profile(agent, 's2', planManaged('Send Two', 1, 'Beta PM'));
+    await profile(agent, 's3', { ...planManaged('Send Three', 1, 'Gamma PM'), payerEmail: '' });
+    await event(pr, { clientId: 's1', clientName: 'Send One', date: day(0), start: '09:00', location: 'Base, Perth WA 6000' });
+    await event(pr, { clientId: 's2', clientName: 'Send Two', date: day(0), start: '11:00', location: 'Base, Perth WA 6000' });
+    await event(pr, { clientId: 's3', clientName: 'Send Three', date: day(0), start: '13:00', location: 'Base, Perth WA 6000' });
+    await run(agent, day(0), day(0));
+    const list = await invoices(agent);
+    const by = Object.fromEntries(list.map((i) => [i.client_id, i]));
+    return { agent, app, org, by };
+  }
+
+  test('ticked drafts are finalised and emailed; no address is skipped; a second press sends nothing again', async () => {
+    const { agent, by } = await threeDrafts();
+    const ids = [by.s1.id, by.s2.id, by.s3.id];
+    const r = await agent.post('/api/invoicing/invoices/send-batch').send({ ids });
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ sent: 2, skipped: 1, failed: 0 });
+    expect(r.body.results.find((x) => x.id === by.s3.id)).toMatchObject({ outcome: 'skipped', code: 'NO_EMAIL' });
+    expect(MAIL.sent.map((m) => m.to).sort()).toEqual(['alpha@pm.test', 'beta@pm.test']);
+    expect(MAIL.sent[0].attachments[0].contentType).toBe('application/pdf');
+    const d1 = (await detail(agent, by.s1.id)).invoice;
+    expect(d1).toMatchObject({ status: 'SENT', sent_status: 'SENT', sent_to: 'alpha@pm.test' });
+
+    const again = await agent.post('/api/invoicing/invoices/send-batch').send({ ids });
+    expect(again.body).toMatchObject({ sent: 0 });
+    expect(again.body.results.filter((x) => x.code === 'ALREADY_SENT')).toHaveLength(2);
+    expect(MAIL.sent).toHaveLength(2);
+
+    // The single Email button refuses a second send unless it is a deliberate resend.
+    expect((await agent.post(`/api/invoicing/invoices/${by.s1.id}/email`).send({})).status).toBe(409);
+    const re = await agent.post(`/api/invoicing/invoices/${by.s1.id}/email`).send({ resend: true });
+    expect(re.body).toMatchObject({ sent: true });
+    expect(MAIL.sent).toHaveLength(3);
+  });
+
+  test('an unticked invoice is left alone; a failed send is recorded and can be retried', async () => {
+    const { agent, by } = await threeDrafts();
+    MAIL.fail = true;
+    const r = await agent.post('/api/invoicing/invoices/send-batch').send({ ids: [by.s1.id] });
+    expect(r.body).toMatchObject({ sent: 0, failed: 1 });
+    expect(r.body.results[0].message).toMatch(/could not be sent/);
+    let d = (await detail(agent, by.s1.id)).invoice;
+    expect(d).toMatchObject({ status: 'READY', sent_status: 'FAILED' });
+    expect((await detail(agent, by.s2.id)).invoice.status).toBe('DRAFT');      // not ticked: untouched
+
+    MAIL.fail = false;
+    const retry = await agent.post('/api/invoicing/invoices/send-batch').send({ ids: [by.s1.id] });
+    expect(retry.body).toMatchObject({ sent: 1 });
+    d = (await detail(agent, by.s1.id)).invoice;
+    expect(d.sent_status).toBe('SENT');
+  });
+
+  test('two sends at once email once; nothing is sent when email is not set up; guards hold', async () => {
+    const { agent, app, org, by } = await threeDrafts();
+    await agent.post(`/api/invoicing/invoices/${by.s1.id}/finalise`);
+    const [a, b] = await Promise.all([
+      agent.post(`/api/invoicing/invoices/${by.s1.id}/email`).send({}),
+      agent.post(`/api/invoicing/invoices/${by.s1.id}/email`).send({}),
+    ]);
+    expect([a.status, b.status].sort()).toEqual([200, 409]);
+    expect(MAIL.sent).toHaveLength(1);
+
+    MAIL.configured = false;
+    const off = await agent.post('/api/invoicing/invoices/send-batch').send({ ids: [by.s2.id] });
+    expect(off.status).toBe(409);
+    expect((await detail(agent, by.s2.id)).invoice.status).toBe('DRAFT');
+
+    expect((await agent.post('/api/invoicing/invoices/send-batch').send({ ids: ['nope'] })).status).toBe(400);
+    const { agent: therapist } = await login(app, 'therapist', org.id);
+    expect((await therapist.post('/api/invoicing/invoices/send-batch').send({ ids: [by.s2.id] })).status).toBe(403);
+  });
+});
+
+describe('Xero copy — same number, AUTHORISED, exactly once (migration 092)', () => {
+  const XP = require('../../billing/xero-invoice-push');
+  function fakeXero() {
+    const X = { invoices: [], contacts: [{ ContactID: 'c-alpha', Name: 'Alpha PM', ContactStatus: 'ACTIVE' }], posts: [], voids: [], keys: [], loseResponse: false, roundOff: 0 };
+    X.client = {
+      tenant: async () => 'tenant-1',
+      findInvoiceByNumber: async (_o, n) => X.invoices.filter((i) => i.InvoiceNumber === n),
+      getInvoices: async (_o, ids) => X.invoices.filter((i) => ids.includes(i.InvoiceID)),
+      findContacts: async (_o, name) => X.contacts.filter((c) => c.Name === name),
+      createContact: async () => { throw new Error('not allowed in test'); },
+      createInvoice: async (_o, p, key) => {
+        X.posts.push(p); X.keys.push(key);
+        // Xero's idempotency: the same key returns the same invoice.
+        let inv = X.invoices.find((i) => i._key === key);
+        if (!inv) {
+          const total = p.LineItems.reduce((a, l) => a + Math.round(l.LineAmount * 100), 0) / 100 + X.roundOff;
+          inv = { InvoiceID: 'x-' + (X.invoices.length + 1), InvoiceNumber: p.InvoiceNumber, Type: 'ACCREC', Status: p.Status,
+            Contact: p.Contact, Total: total.toFixed(2), AmountPaid: 0, _key: key };
+          X.invoices.push(inv);
+        }
+        if (X.loseResponse) { X.loseResponse = false; const e = new Error('timeout'); e.code = 'ECONNABORTED'; throw e; }
+        return inv;
+      },
+      voidInvoice: async (_o, id) => { X.voids.push(id); const i = X.invoices.find((x) => x.InvoiceID === id); if (i) i.Status = 'VOIDED'; return i; },
+    };
+    XP.setClient(X.client);
+    return X;
+  }
+  const ENV = { ENABLE_XERO_WRITE: process.env.ENABLE_XERO_WRITE, ENABLE_XERO_INVOICE_PUSH: process.env.ENABLE_XERO_INVOICE_PUSH };
+  beforeEach(() => { MAIL.sent.length = 0; MAIL.fail = false; MAIL.configured = true; process.env.ENABLE_XERO_WRITE = 'true'; process.env.ENABLE_XERO_INVOICE_PUSH = 'true'; });
+  afterAll(() => { Object.entries(ENV).forEach(([k, v]) => { if (v === undefined) delete process.env[k]; else process.env[k] = v; }); XP.setClient(null); });
+
+  async function oneDraft(pm = 'Alpha PM') {
+    const app = buildApp();
+    const org = await seedOrganisation();
+    const { agent } = await login(app, 'owner', org.id);
+    await agent.put('/api/invoicing/settings').send({ abn: '49699791958', xeroSalesAccountCode: '200' });
+    const pr = await practitioner(org.id, 'Xero P', 'Base, Perth WA 6000', [day(0)]);
+    await profile(agent, 'x1', planManaged('Xero Client', 1, pm));
+    await event(pr, { clientId: 'x1', clientName: 'Xero Client', date: day(0), start: '09:00', minutes: 50, location: 'Base, Perth WA 6000' });
+    await run(agent, day(0), day(0));
+    const [inv] = await invoices(agent);
+    return { agent, app, org, inv };
+  }
+
+  test('send copies to Xero first (same number, AUTHORISED, GST-free, no Xero email); a lost response and a resend never duplicate', async () => {
+    const X = fakeXero();
+    const { agent, inv } = await oneDraft();
+    X.loseResponse = true;                                   // Xero created it but the answer was lost
+    let r = await agent.post('/api/invoicing/invoices/send-batch').send({ ids: [inv.id] });
+    expect(r.body).toMatchObject({ sent: 0, failed: 1 });
+    expect(MAIL.sent).toHaveLength(0);                       // no email until Xero has it
+    r = await agent.post('/api/invoicing/invoices/send-batch').send({ ids: [inv.id] });
+    expect(r.body).toMatchObject({ sent: 1 });
+    expect(X.invoices).toHaveLength(1);                      // adopted by number, not created twice
+    const p = X.posts[0];
+    expect(p).toMatchObject({ Type: 'ACCREC', Status: 'AUTHORISED', InvoiceNumber: inv.invoice_number, LineAmountTypes: 'Exclusive', Contact: { ContactID: 'c-alpha' } });
+    expect(p.LineItems[0]).toMatchObject({ AccountCode: '200', TaxType: 'EXEMPTOUTPUT', Quantity: 0.8333, UnitAmount: 193.99, LineAmount: 161.65 });
+    expect(new Set(X.keys).size).toBe(1);                    // one idempotency key for the invoice
+
+    // Sending again (deliberate resend) does not touch Xero again.
+    await agent.post(`/api/invoicing/invoices/${inv.id}/email`).send({ resend: true });
+    expect(X.posts).toHaveLength(1);
+    const { rows: [link] } = await db.pool.query(`SELECT state, xero_invoice_id FROM xero_invoice_links WHERE invoice_id = $1`, [inv.id]);
+    expect(link).toEqual({ state: 'PUSHED', xero_invoice_id: 'x-1' });
+  });
+
+  test('a number Xero already uses for something else stops the send', async () => {
+    const X = fakeXero();
+    const { agent, inv } = await oneDraft();
+    X.invoices.push({ InvoiceID: 'other', InvoiceNumber: inv.invoice_number, Type: 'ACCREC', Status: 'AUTHORISED', Contact: { ContactID: 'someone' }, Total: '5.00' });
+    let r = await agent.post('/api/invoicing/invoices/send-batch').send({ ids: [inv.id] });
+    expect(r.body.results[0]).toMatchObject({ outcome: 'failed', code: 'XERO_NUMBER_CLASH' });
+    expect(MAIL.sent).toHaveLength(0);
+  });
+
+  test('a payer that is not a contact in Xero stops the send', async () => {
+    const Y = fakeXero();
+    const b = await oneDraft('Unknown PM');
+    const r = await b.agent.post('/api/invoicing/invoices/send-batch').send({ ids: [b.inv.id] });
+    expect(r.body.results[0]).toMatchObject({ outcome: 'failed', code: 'XERO_CONTACT_MISSING' });
+    expect(r.body.results[0].message).toMatch(/not a contact in Xero/);
+    expect(Y.posts).toHaveLength(0);
+  });
+
+  test('a total Xero works out differently is voided straight away and not emailed', async () => {
+    const X = fakeXero();
+    X.roundOff = 0.01;
+    const { agent, inv } = await oneDraft();
+    const r = await agent.post('/api/invoicing/invoices/send-batch').send({ ids: [inv.id] });
+    expect(r.body.results[0]).toMatchObject({ outcome: 'failed', code: 'XERO_TOTAL_MISMATCH' });
+    expect(X.voids).toEqual(['x-1']);
+    expect(MAIL.sent).toHaveLength(0);
+  });
+
+  test('payments come from Xero; manual payments are refused; void voids Xero first and stops when Xero has payments', async () => {
+    const X = fakeXero();
+    const { agent, inv } = await oneDraft();
+    await agent.post('/api/invoicing/invoices/send-batch').send({ ids: [inv.id] });
+    expect((await agent.post(`/api/invoicing/invoices/${inv.id}/payments`).send({ amount: '10.00', paidOn: day(5) })).status).toBe(409);
+
+    X.invoices[0].AmountPaid = 100;
+    let s = await agent.post('/api/invoicing/xero/sync-payments');
+    expect(s.body).toMatchObject({ checked: 1, updated: 1 });
+    let d = (await detail(agent, inv.id)).invoice;
+    expect(d).toMatchObject({ status: 'PART_PAID', amount_paid: '100.00' });
+    expect((await agent.post(`/api/invoicing/invoices/${inv.id}/void`).send({ reason: 'wrong client' })).status).toBe(409);
+
+    X.invoices[0].AmountPaid = 0;
+    await agent.post('/api/invoicing/xero/sync-payments');
+    d = (await detail(agent, inv.id)).invoice;
+    expect(d).toMatchObject({ status: 'SENT', amount_paid: '0.00' });
+    const v = await agent.post(`/api/invoicing/invoices/${inv.id}/void`).send({ reason: 'wrong client' });
+    expect(v.status).toBe(200);
+    expect(X.voids).toEqual(['x-1']);
+    expect((await db.pool.query(`SELECT state FROM xero_invoice_links WHERE invoice_id = $1`, [inv.id])).rows[0].state).toBe('VOIDED');
+  });
+
+  test('review fixes: a copy whose id was lost is still voided; a send that never finished needs a deliberate resend; a copy in flight is not pushed twice', async () => {
+    const X = fakeXero();
+    const { agent, inv } = await oneDraft();
+    X.loseResponse = true;
+    await agent.post('/api/invoicing/invoices/send-batch').send({ ids: [inv.id] });   // Xero has it; Opal only knows FAILED
+    let { rows: [link] } = await db.pool.query(`SELECT state, xero_invoice_id FROM xero_invoice_links WHERE invoice_id = $1`, [inv.id]);
+    expect(link).toEqual({ state: 'FAILED', xero_invoice_id: null });
+    const v = await agent.post(`/api/invoicing/invoices/${inv.id}/void`).send({ reason: 'wrong client' });
+    expect(v.status).toBe(200);
+    expect(X.voids).toEqual(['x-1']);                 // found by number and voided, not left live
+
+    // A copy already in flight (PENDING, fresh) is refused rather than pushed again.
+    const b = await oneDraft();
+    await b.agent.post(`/api/invoicing/invoices/${b.inv.id}/finalise`);
+    await db.pool.query(`INSERT INTO xero_invoice_links (invoice_id, organisation_id, xero_tenant_id, invoice_number, idempotency_key, state)
+                         SELECT id, organisation_id, 'tenant-1', invoice_number || '-b', 'k', 'PENDING' FROM invoices WHERE id = $1`, [b.inv.id]);
+    expect((await b.agent.post(`/api/invoicing/invoices/${b.inv.id}/xero`)).body.code).toBe('XERO_PENDING');
+    expect((await b.agent.post(`/api/invoicing/invoices/${b.inv.id}/void`).send({ reason: 'test' })).body.code).toBe('XERO_PENDING');
+
+    // A send that started long ago and never finished: no automatic resend.
+    process.env.ENABLE_XERO_INVOICE_PUSH = 'false';
+    const c = await oneDraft();
+    await c.agent.post(`/api/invoicing/invoices/${c.inv.id}/finalise`);
+    await db.pool.query(`UPDATE invoices SET sent_status = 'SENDING', email_attempted_at = NOW() - interval '1 hour' WHERE id = $1`, [c.inv.id]);
+    const r = await c.agent.post('/api/invoicing/invoices/send-batch').send({ ids: [c.inv.id] });
+    expect(r.body.results[0]).toMatchObject({ outcome: 'skipped', code: 'SEND_OUTCOME_UNKNOWN' });
+    expect((await c.agent.post(`/api/invoicing/invoices/${c.inv.id}/email`).send({})).body.code).toBe('SEND_OUTCOME_UNKNOWN');
+    expect((await c.agent.post(`/api/invoicing/invoices/${c.inv.id}/email`).send({ resend: true })).body).toMatchObject({ sent: true });
+  });
+
+  test('review fixes: Opal payments block the copy; credits in Xero count as paid; Xero is not voided when Opal would refuse', async () => {
+    const X = fakeXero();
+    process.env.ENABLE_XERO_INVOICE_PUSH = 'false';
+    const { agent, inv } = await oneDraft();
+    await agent.post(`/api/invoicing/invoices/${inv.id}/finalise`);
+    await agent.post(`/api/invoicing/invoices/${inv.id}/payments`).send({ amount: '10.00', paidOn: day(5) });
+    process.env.ENABLE_XERO_INVOICE_PUSH = 'true';
+    expect((await agent.post(`/api/invoicing/invoices/${inv.id}/xero`)).body.code).toBe('XERO_HAS_OPAL_PAYMENTS');
+    expect(X.posts).toHaveLength(0);
+
+    const b = await oneDraft();
+    await b.agent.post('/api/invoicing/invoices/send-batch').send({ ids: [b.inv.id] });
+    const xi = X.invoices[X.invoices.length - 1];
+    xi.AmountPaid = 0; xi.AmountCredited = Number(xi.Total); xi.AmountDue = 0;   // fully credited in Xero
+    await b.agent.post('/api/invoicing/xero/sync-payments');
+    expect((await detail(b.agent, b.inv.id)).invoice.status).toBe('PAID');
+    // Opal refuses the void (it now shows money against it), so Xero is not touched.
+    const v = await b.agent.post(`/api/invoicing/invoices/${b.inv.id}/void`).send({ reason: 'wrong client' });
+    expect(v.status).toBe(409);
+    expect(X.voids).toEqual([]);
+  });
+
+  test('switched off: nothing goes to Xero and emailing works as before; the old Accounting draft door closes when on', async () => {
+    const X = fakeXero();
+    process.env.ENABLE_XERO_INVOICE_PUSH = 'false';
+    const { agent, inv } = await oneDraft();
+    const r = await agent.post('/api/invoicing/invoices/send-batch').send({ ids: [inv.id] });
+    expect(r.body).toMatchObject({ sent: 1 });
+    expect(X.posts).toHaveLength(0);
+    expect((await agent.post(`/api/invoicing/invoices/${inv.id}/xero`)).body.code).toBe('XERO_PUSH_DISABLED');
   });
 });

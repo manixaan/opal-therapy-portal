@@ -182,3 +182,12 @@ html:where([data-theme="dark"]) .inv-paper .mini:hover { color: var(--accent-ink
 html:where([data-theme="dark"]) .inv-paper .calc { background: var(--panel); border-color: var(--border); color: var(--ink-soft); }
 html:where([data-theme="dark"]) .inv-paper .src { color: var(--accent-ink); }
 html:where([data-theme="dark"]) .inv-paper .draft-mark { color: var(--danger-ink); }
+
+/* Send selected (21 Nov 2026): tick column + sticky action bar. */
+.inv-table th.inv-sel, .inv-table td.inv-sel { width: 34px; text-align: center; padding-left: 6px; padding-right: 6px; }
+.inv-table td.inv-sel input, .inv-table th.inv-sel input { width: 16px; height: 16px; cursor: pointer; }
+.inv-send-bar { position: sticky; bottom: 0; z-index: 2; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between;
+  margin-top: 8px; padding: 10px 12px; border: 1px solid var(--border, #e4ded6); border-radius: 10px; background: var(--panel, #fff);
+  box-shadow: 0 -4px 14px rgba(0, 0, 0, .06); font-size: 13.5px; }
+.inv-send-bar[hidden] { display: none; }
+.inv-pill.xero { background: var(--info-soft); color: var(--info-ink); }

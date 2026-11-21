@@ -27,6 +27,9 @@ const SETTINGS_FIELDS = {
   completionRule: 'completion_rule',
   timezone: 'timezone',
   sessionDescription: 'session_description',
+  xeroSalesAccountCode: 'xero_sales_account_code',
+  xeroTaxTypeGstFree: 'xero_tax_type_gst_free',
+  xeroTaxTypeGst: 'xero_tax_type_gst',
 };
 
 function rowToSettings(r) {
@@ -35,6 +38,8 @@ function rowToSettings(r) {
   out.nextInvoiceNumber = Number(out.nextInvoiceNumber);
   out.invoiceNumberPadding = Number(out.invoiceNumberPadding);
   out.paymentTermsDays = Number(out.paymentTermsDays);
+  out.sploseInvoiceNumberHigh = r.splose_invoice_number_high == null ? null : Number(r.splose_invoice_number_high);
+  out.sploseNumbersCheckedAt = r.splose_numbers_checked_at || null;
   out.updatedAt = r.updated_at;
   return out;
 }
@@ -117,6 +122,15 @@ function validateSettingsPatch(patch) {
         if (!/^[A-Za-z0-9\-_/]{0,20}$/.test(String(v || ''))) errors.push('invoicePrefix may use letters, digits, - _ / (max 20)');
         else out[k] = String(v || '');
         break;
+      case 'xeroSalesAccountCode':
+        if (v != null && v !== '' && !/^[A-Za-z0-9.\-]{1,10}$/.test(String(v))) errors.push('Xero sales account code is invalid');
+        else out[k] = v == null || v === '' ? null : String(v);
+        break;
+      case 'xeroTaxTypeGstFree':
+      case 'xeroTaxTypeGst':
+        if (!/^[A-Z0-9_]{2,30}$/.test(String(v || ''))) errors.push(`${k} must be a Xero tax type code (e.g. EXEMPTOUTPUT, OUTPUT)`);
+        else out[k] = String(v);
+        break;
       case 'timezone':
         if (!/^[A-Za-z_]+\/[A-Za-z_]+$/.test(String(v || ''))) errors.push('timezone is invalid'); else out[k] = v;
         break;
@@ -150,13 +164,15 @@ function formatInvoiceNumber(prefix, n, padding) {
 /**
  * Allocates the next invoice number under a row lock, skipping any number
  * already used (e.g. the owner lowered the counter). Must run in a transaction.
+ * Never at or below the highest number Splose has issued (migration 082), so
+ * the two systems cannot hand out the same number.
  */
 async function allocateInvoiceNumber(q, orgId) {
   await ensureSettings(q, orgId);
   const { rows: [s] } = await q.query(
-    `SELECT invoice_prefix, next_invoice_number, invoice_number_padding FROM billing_settings
+    `SELECT invoice_prefix, next_invoice_number, invoice_number_padding, splose_invoice_number_high FROM billing_settings
       WHERE organisation_id = $1 FOR UPDATE`, [orgId]);
-  let n = Number(s.next_invoice_number);
+  let n = Math.max(Number(s.next_invoice_number), Number(s.splose_invoice_number_high || 0) + 1);
   for (let guard = 0; guard < 10000; guard++, n++) {
     const candidate = formatInvoiceNumber(s.invoice_prefix, n, Number(s.invoice_number_padding));
     const { rows } = await q.query(

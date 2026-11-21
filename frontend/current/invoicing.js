@@ -12,6 +12,8 @@
   var state = {
     section: 'invoices', overview: null, practitioners: [], filters: { status: '', q: '', practitionerId: '', from: '', to: '', payer: '', trip: false, mmm: '', sort: 'issue', dir: 'desc' },
     invoiceId: null, tripId: null, tripTab: 'overview', settings: null,
+    // Send selected: every sendable row starts ticked; untick the ones to look into.
+    unticked: {}, listRows: [],
   };
 
   // ── Helpers ──────────────────────────────────────────────────────────────
@@ -92,7 +94,7 @@
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && document.getElementById('inv-backdrop')) closeModal(); });
 
   // ── Shell ────────────────────────────────────────────────────────────────
-  var SECTIONS = [['invoices', 'Invoices'], ['attention', 'Needs attention'], ['trips', 'Trips'], ['clients', 'Client billing'], ['runs', 'Runs'], ['settings', 'Billing settings']];
+  var SECTIONS = [['invoices', 'Invoices'], ['attention', 'Needs attention'], ['trips', 'Trips'], ['clients', 'Client billing'], ['payers', 'Payers'], ['runs', 'Runs'], ['settings', 'Billing settings']];
 
   function renderShell() {
     var el = root();
@@ -100,7 +102,7 @@
     el.dataset.ready = '1';
     el.innerHTML =
       '<div class="inv-head"><div><h1>Invoicing</h1><div class="inv-sub" id="inv-sub">Calendar sessions and travel become NDIS invoice drafts.</div></div>' +
-      '<div class="inv-head-actions"><button class="btn" data-inv="new-trip">Invoice a trip</button><button class="btn primary" data-inv="complete">Complete invoicing</button></div></div>' +
+      '<div class="inv-head-actions"><button class="btn" data-inv="new-trip">Invoice a trip</button><button class="btn" data-inv="xero-payments" title="Read payments recorded in Xero onto invoices copied there">Update payments from Xero</button><button class="btn" data-inv="complete">Complete invoicing…</button><button class="btn primary" data-inv="complete-last" title="Draft every client\'s invoice for last Monday to Friday, all practitioners">Invoice last week</button></div></div>' +
       '<div id="inv-cards" class="inv-cards">' + skel(1) + '</div>' +
       '<nav class="inv-subnav" id="inv-subnav" aria-label="Invoicing sections">' + SECTIONS.map(function (s) {
         return '<button type="button" data-sec="' + s[0] + '"' + (s[0] === state.section ? ' class="active"' : '') + '>' + esc(s[1]) + (s[0] === 'attention' ? ' <span class="cnt" id="inv-attn-cnt"></span>' : '') + '</button>';
@@ -141,7 +143,7 @@
     var el = section();
     if (!el) return;
     el.innerHTML = skel(6);
-    var fn = { invoices: renderInvoices, attention: renderAttention, trips: renderTrips, clients: renderClients, runs: renderRuns, settings: renderSettings }[sec];
+    var fn = { invoices: renderInvoices, attention: renderAttention, trips: renderTrips, clients: renderClients, payers: renderPayers, runs: renderRuns, settings: renderSettings }[sec];
     Promise.resolve(fn(el)).catch(function (e) { denied(el, e); });
   }
 
@@ -179,6 +181,72 @@
     return '?' + q.join('&');
   }
 
+  /* Can this row go out with "Send selected"? A draft or final invoice that
+     is not sent yet, has a payer email and needs no attention. */
+  function sendable(i) {
+    return (i.status === 'DRAFT' || i.status === 'READY') && i.sent_status !== 'SENT' && i.sent_status !== 'SENDING' && !!i.payer_email && !i.is_stale;
+  }
+  function whyNotSendable(i) {
+    if (i.sent_status === 'SENT') return 'Already sent';
+    if (i.sent_status === 'SENDING') return 'Being sent';
+    if (i.status === 'NEEDS_ATTENTION') return 'Needs attention first';
+    if (i.is_stale) return 'Source changed — regenerate first';
+    if (!i.payer_email) return 'No payer email';
+    return 'Not sendable (' + String(i.status || '').toLowerCase().replace('_', ' ') + ')';
+  }
+  function selectedRows() { return state.listRows.filter(function (i) { return sendable(i) && !state.unticked[i.id]; }); }
+  function renderSendBar() {
+    var bar = document.getElementById('inv-send-bar');
+    if (!bar) return;
+    var rows = selectedRows(), all = state.listRows.filter(sendable);
+    if (!all.length) { bar.hidden = true; return; }
+    bar.hidden = false;
+    var total = rows.reduce(function (a, i) { return a + Math.round(Number(i.total) * 100); }, 0) / 100;
+    bar.innerHTML = '<span><b>' + rows.length + '</b> of ' + all.length + ' ready to send ticked · ' + money(total.toFixed(2)) + '</span>' +
+      '<button type="button" class="btn primary" data-inv="send-selected"' + (rows.length ? '' : ' disabled') + '>Finalise &amp; send selected (' + rows.length + ')</button>';
+    var head = document.getElementById('inv-sel-all');
+    if (head) { head.checked = rows.length === all.length; head.indeterminate = rows.length > 0 && rows.length < all.length; }
+  }
+
+  function openSendSelected() {
+    var rows = selectedRows();
+    if (!rows.length) return;
+    var total = rows.reduce(function (a, i) { return a + Math.round(Number(i.total) * 100); }, 0) / 100;
+    var body = '<p>Each ticked invoice is finalised (its number and PDF are locked), copied to Xero when that is switched on, and emailed with its PDF to:</p>' +
+      '<div class="inv-table-wrap" style="max-height:280px"><table class="inv-table"><thead><tr><th>Invoice #</th><th>Client</th><th>To</th><th class="num">Amount</th></tr></thead><tbody>' +
+      rows.map(function (i) { return '<tr><td>' + esc(i.invoice_number) + '</td><td>' + esc(i.client_name || '—') + '</td><td>' + esc(i.payer_email) + '</td><td class="num">' + money(i.total) + '</td></tr>'; }).join('') +
+      '</tbody></table></div><p class="inv-note">' + rows.length + ' invoice' + (rows.length === 1 ? '' : 's') + ', ' + money(total.toFixed(2)) + ' in total. Unticked invoices are left as they are. This cannot be unsent.</p><div id="inv-send-result"></div>';
+    modal('Send ' + rows.length + ' invoice' + (rows.length === 1 ? '' : 's'), body,
+      '<button class="btn" data-inv="close-modal">Cancel</button><button class="btn primary" id="inv-send-go" data-inv="send-go">Finalise &amp; send</button>', { wide: true });
+    document.getElementById('inv-backdrop').__ids = rows.map(function (i) { return i.id; });
+  }
+
+  async function sendSelected(btn) {
+    var bd = document.getElementById('inv-backdrop');
+    var ids = (bd && bd.__ids) || [];
+    var out = document.getElementById('inv-send-result');
+    btn.disabled = true; btn.textContent = 'Sending ' + ids.length + '…';
+    var cancel = bd.querySelector('[data-inv="close-modal"]');
+    if (cancel) cancel.disabled = true;
+    try {
+      var r = await post('/invoices/send-batch', { ids: ids });
+      var label = { sent: 'Sent', skipped: 'Skipped', failed: 'Not sent' };
+      out.innerHTML = '<div class="' + (r.failed ? 'inv-error' : 'inv-ok') + '">' + r.sent + ' sent' + (r.skipped ? ', ' + r.skipped + ' skipped' : '') + (r.failed ? ', ' + r.failed + ' not sent' : '') + '.</div>' +
+        '<table class="inv-table"><tbody>' + r.results.map(function (x) {
+          return '<tr><td>' + esc(x.number || '') + '</td><td>' + esc(x.client || '') + '</td><td><span class="inv-pill ' + (x.outcome === 'sent' ? 'SENT' : x.outcome === 'failed' ? 'NEEDS_ATTENTION' : 'DRAFT') + '">' + label[x.outcome] + '</span></td><td>' + esc(x.outcome === 'sent' ? (x.to || '') : (x.message || '')) + '</td></tr>';
+        }).join('') + '</tbody></table>';
+      var foot = document.getElementById('inv-modal-foot');
+      if (foot) foot.innerHTML = '<button class="btn primary" data-inv="close-modal">Done</button>';
+      state.unticked = {};
+      loadOverview();
+      loadInvoiceList();
+    } catch (e) {
+      out.innerHTML = '<div class="inv-error">' + esc(e.message) + '</div>';
+      btn.disabled = false; btn.textContent = 'Finalise & send';
+      if (cancel) cancel.disabled = false;
+    }
+  }
+
   var COLS = [['number', 'Invoice #'], [null, 'To'], ['client', 'Client'], [null, 'Location'], [null, 'Practitioner'], ['issue', 'Issue date'], ['due', 'Due date'], ['total', 'Amount', 'num'], [null, 'Outstanding', 'num'], [null, 'Status'], [null, 'Sent status']];
 
   async function loadInvoiceList() {
@@ -191,12 +259,17 @@
         return;
       }
       var f = state.filters;
-      el.innerHTML = '<div class="inv-table-wrap"><table class="inv-table"><thead><tr>' + COLS.map(function (c) {
+      state.listRows = r.invoices;
+      el.innerHTML = '<div class="inv-table-wrap"><table class="inv-table"><thead><tr><th class="inv-sel"><input type="checkbox" id="inv-sel-all" aria-label="Tick every invoice ready to send"></th>' + COLS.map(function (c) {
         var sorted = c[0] && f.sort === c[0];
         return '<th class="' + (c[2] || '') + (c[0] ? ' sortable' : '') + (sorted ? ' sorted' : '') + '"' + (c[0] ? ' data-inv="sort" data-sort="' + c[0] + '" tabindex="0" aria-sort="' + (sorted ? (f.dir === 'asc' ? 'ascending' : 'descending') : 'none') + '"' : '') + '>' + esc(c[1]) + (sorted ? (f.dir === 'asc' ? ' ▲' : ' ▼') : '') + '</th>';
       }).join('') + '</tr></thead><tbody>' + r.invoices.map(function (i) {
         var loc = (i.mmm_zones || []).filter(Boolean).map(function (z) { return 'MM' + z; }).join(', ');
+        var can = sendable(i);
         return '<tr class="clickable" data-inv="open" data-id="' + esc(i.id) + '">' +
+          '<td class="inv-sel">' + (can
+            ? '<input type="checkbox" class="inv-sel-row" data-id="' + esc(i.id) + '"' + (state.unticked[i.id] ? '' : ' checked') + ' aria-label="Send ' + esc(i.invoice_number) + '">'
+            : '<span class="inv-dim" title="' + esc(whyNotSendable(i)) + '" aria-label="' + esc(whyNotSendable(i)) + '">–</span>') + '</td>' +
           '<td><button type="button" class="inv-link" data-inv="open" data-id="' + esc(i.id) + '">' + esc(i.invoice_number) + '</button>' + (i.is_stale || i.source_changed_after_finalise ? '<div class="inv-dim" title="A source calendar event changed">⚠ source changed</div>' : '') + '</td>' +
           '<td>' + (i.payer_name ? esc(i.payer_name) : '<span class="inv-pill NEEDS_ATTENTION">Recipient missing</span>') + '</td>' +
           '<td>' + esc(i.client_name || '—') + (i.ndis_number ? '<div class="inv-dim">NDIS ' + esc(i.ndis_number) + '</div>' : '') + '</td>' +
@@ -205,10 +278,26 @@
           '<td>' + dmy(i.issue_date) + '</td><td>' + dmy(i.due_date) + '</td>' +
           '<td class="num">' + money(i.total) + '</td><td class="num">' + money(i.outstanding) + '</td>' +
           '<td>' + pill(i.display_status) + (i.open_issues ? ' <span class="inv-dim">' + i.open_issues + ' issue' + (i.open_issues === 1 ? '' : 's') + '</span>' : '') + '</td>' +
-          '<td>' + (i.sent_status === 'SENT' ? '<span class="inv-pill SENT">Sent</span>' : '<span class="inv-dim">Not sent</span>') + '</td></tr>';
-      }).join('') + '</tbody></table></div><div class="inv-dim" style="margin-top:6px">' + r.total + ' invoice' + (r.total === 1 ? '' : 's') + '</div>';
+          '<td>' + (i.xero_state === 'PUSHED' ? '<span class="inv-pill xero" title="Copied to Xero">Xero</span> ' : i.xero_state === 'FAILED' ? '<span class="inv-pill NEEDS_ATTENTION" title="Not copied to Xero">Xero ✕</span> ' : '') +
+            (i.sent_status === 'SENT' ? '<span class="inv-pill SENT">Sent</span>'
+            : i.sent_status === 'FAILED' ? '<span class="inv-pill NEEDS_ATTENTION" title="' + esc(i.email_last_error || '') + '">Send failed</span>'
+            : '<span class="inv-dim">Not sent</span>') + '</td></tr>';
+      }).join('') + '</tbody></table></div><div class="inv-send-bar" id="inv-send-bar" hidden></div><div class="inv-dim" style="margin-top:6px">' + r.total + ' invoice' + (r.total === 1 ? '' : 's') + '</div>';
+      renderSendBar();
     } catch (e) { denied(el, e); }
   }
+
+  document.addEventListener('change', function (e) {
+    var t = e.target;
+    if (t && t.classList && t.classList.contains('inv-sel-row')) {
+      if (t.checked) delete state.unticked[t.dataset.id]; else state.unticked[t.dataset.id] = true;
+      renderSendBar();
+    } else if (t && t.id === 'inv-sel-all') {
+      state.listRows.filter(sendable).forEach(function (i) { if (t.checked) delete state.unticked[i.id]; else state.unticked[i.id] = true; });
+      document.querySelectorAll('#inv-list .inv-sel-row').forEach(function (c) { c.checked = t.checked; });
+      renderSendBar();
+    }
+  });
 
   var searchTimer = null;
   document.addEventListener('input', function (e) {
@@ -232,7 +321,7 @@
   });
 
   // ── Invoice detail ───────────────────────────────────────────────────────
-  var COMPONENT_LABEL = { SESSION: 'Session', TRAVEL_LABOUR: 'Provider travel', TRAVEL_KM: 'Vehicle / non-labour', TRIP_COST: 'Trip cost', MANUAL: 'Manual' };
+  var COMPONENT_LABEL = { SESSION: 'Session', TRAVEL_LABOUR: 'Provider travel', TRAVEL_KM: 'Vehicle / non-labour', TRIP_COST: 'Trip cost', MANUAL: 'Manual', NF2F: 'Non-face-to-face', SPLOSE_ACTIVITY: 'Splose support activity' };
 
   function calcHtml(l) {
     var c = l.calculation || {};
@@ -258,6 +347,13 @@
       }
       kv('Amount', aud(c.amount));
       kv('Rate card', c.rateCard ? esc(c.rateCard.name) + ' v' + esc(c.rateCard.version) : '—');
+    } else if (l.component === 'SPLOSE_ACTIVITY') {
+      kv('Service date', dmy(c.serviceDate)); kv('Logged in Splose', esc(c.serviceTitle || 'Support activity') + ' (activity ' + esc(c.sploseActivityId) + ')');
+      kv('Duration', esc(c.durationMinutes) + ' min → ' + esc(c.quantityHours) + ' h');
+      kv('MMM', c.mmm ? 'MM' + esc(c.mmm) + (c.mmmSource && c.mmmSource.source ? ' (' + esc(c.mmmSource.source) + ')' : '') : '—');
+      kv('Rate card', c.rateCard ? esc(c.rateCard.name) + ' v' + esc(c.rateCard.version) : '—');
+      kv('Hourly rate', aud(c.hourlyRate)); if (c.splosePricing != null) kv('Splose price', aud(c.splosePricing));
+      kv('Amount', aud(c.amount));
     } else if (l.component === 'TRIP_COST') {
       kv('Trip', esc(c.tripName)); kv('Method', esc(String(c.method || '').replace(/_/g, ' ').toLowerCase()));
       kv('Eligible shared pool', aud(c.eligiblePool)); kv('Total trip costs', aud(c.totalCosts)); kv('Non-billable costs', aud(c.nonBillableCosts));
@@ -299,6 +395,7 @@
     if (finalised) {
       actions.push('<button class="btn" data-inv="email" data-id="' + esc(inv.id) + '">Email invoice</button>');
       if (inv.sent_status !== 'SENT') actions.push('<button class="btn" data-inv="mark-sent" data-id="' + esc(inv.id) + '">Mark sent</button>');
+      if (inv.xero_state !== 'PUSHED' && inv.xero_state !== 'VOIDED') actions.push('<button class="btn" data-inv="xero-push" data-id="' + esc(inv.id) + '" title="Copy this invoice to Xero with the same number">Copy to Xero</button>');
       if (inv.status !== 'PAID') actions.push('<button class="btn" data-inv="payment" data-id="' + esc(inv.id) + '" data-outstanding="' + esc(inv.outstanding) + '">Record payment</button>');
     }
     if (inv.status !== 'VOID') {
@@ -308,6 +405,9 @@
 
     var banners = '';
     if (inv.is_stale) banners += '<div class="inv-warn">⚠ ' + esc(inv.stale_reason || 'A source calendar event changed.') + ' <button class="btn btn-xs" data-inv="regen" data-id="' + esc(inv.id) + '">Regenerate now</button></div>';
+    if (inv.xero_state === 'PUSHED') banners += '<div class="inv-note">In Xero as ' + esc(inv.invoice_number) + (inv.xero_status ? ' (' + esc(String(inv.xero_status).toLowerCase()) + ')' : '') + '. Payments are recorded in Xero and come back with <strong>Update payments from Xero</strong>.</div>';
+    else if (inv.xero_state === 'FAILED') banners += '<div class="inv-error">Not copied to Xero: ' + esc(inv.xero_error || 'unknown reason') + '</div>';
+    if (inv.sent_status === 'FAILED') banners += '<div class="inv-error">The email was not sent: ' + esc(inv.email_last_error || 'unknown reason') + '</div>';
     if (inv.source_changed_after_finalise) banners += '<div class="inv-error">Source event changed after invoice finalisation. This invoice has not been altered — use <strong>Void &amp; reissue</strong> to correct it, or dismiss the attention item if no correction is needed.</div>';
     if (inv.status === 'VOID') banners += '<div class="inv-note">Voided ' + dt(inv.voided_at) + (inv.voided_by_name ? ' by ' + esc(inv.voided_by_name) : '') + ': ' + esc(inv.void_reason || '') + (inv.reissued_as_id ? ' · Reissued as <button class="inv-link" data-inv="open" data-id="' + esc(inv.reissued_as_id) + '">' + esc(inv.reissued_as_number) + '</button>' : '') + '</div>';
     if (inv.reissue_of_number) banners += '<div class="inv-note">Reissue of ' + esc(inv.reissue_of_number) + '.</div>';
@@ -378,27 +478,36 @@
     if (t.kind === 'rate_cards') return '<button class="btn btn-xs" data-inv="goto" data-sec="settings">Rate cards</button>';
     if (t.kind === 'trip') return '<button class="btn btn-xs" data-inv="open-trip" data-id="' + esc(t.tripId) + '" data-tab="' + esc(t.tab || 'costs') + '">Open trip</button>';
     if (t.kind === 'route') return '<button class="btn btn-xs" data-inv="manual-route" data-o="' + esc(t.origin) + '" data-d="' + esc(t.destination) + '">Enter route</button>';
+    if (t.kind === 'nf2f') return '<button class="btn btn-xs" data-inv="nf2f-resolve" data-id="' + esc(t.eventId) + '">Enter the time</button>';
     if (t.kind === 'event' || t.kind === 'work_location') return '<button class="btn btn-xs" data-inv="to-calendar" data-date="' + esc(t.date || '') + '">Open calendar</button>';
     return '';
   }
 
   // ── Complete invoicing ───────────────────────────────────────────────────
-  function openCompleteInvoicing() {
+  function openCompleteInvoicing(opts) {
     var today = new Date();
     var mon = mondayOf(today);
     var ranges = {
       today: [ymdLocal(today), ymdLocal(today)],
       week: [ymdLocal(mon), ymdLocal(addDays(mon, 6))],
       last: [ymdLocal(addDays(mon, -7)), ymdLocal(addDays(mon, -1))],
+      // The Monday routine: the previous working week, every practitioner.
+      lastwork: [ymdLocal(addDays(mon, -7)), ymdLocal(addDays(mon, -3))],
     };
     var body =
-      '<div class="inv-seg" role="group" aria-label="Period"><button type="button" data-range="today">Today</button><button type="button" data-range="week" class="on">This week</button><button type="button" data-range="last">Last week</button><button type="button" data-range="custom">Custom</button></div>' +
-      '<div class="inv-field-row"><label class="inv-dim">From <input type="date" id="inv-run-from" value="' + ranges.week[0] + '"></label><label class="inv-dim">To <input type="date" id="inv-run-to" value="' + ranges.week[1] + '"></label>' +
+      '<div class="inv-seg" role="group" aria-label="Period"><button type="button" data-range="lastwork" class="on">Last Mon–Fri</button><button type="button" data-range="today">Today</button><button type="button" data-range="week">This week</button><button type="button" data-range="last">Last week</button><button type="button" data-range="custom">Custom</button></div>' +
+      '<div class="inv-field-row"><label class="inv-dim">From <input type="date" id="inv-run-from" value="' + ranges.lastwork[0] + '"></label><label class="inv-dim">To <input type="date" id="inv-run-to" value="' + ranges.lastwork[1] + '"></label>' +
       '<label class="inv-dim">Practitioner <select id="inv-run-prac"><option value="">All practitioners</option>' + state.practitioners.map(function (p) { return '<option value="' + esc(p.id) + '">' + esc(p.name) + '</option>'; }).join('') + '</select></label></div>' +
       '<div class="inv-note">Completed, billable sessions in this period are priced from each client\'s MMM zone and the rate card for the service date, travel is divided across each practitioner\'s day, and sessions are grouped into one draft per client and plan manager. Anything that cannot be billed safely goes to <b>Needs attention</b>. Running it again never duplicates a charge.</div>' +
       '<div id="inv-run-result"></div>';
     var bd = modal('Complete invoicing', body, '<button class="btn" data-inv="close-modal">Close</button><button class="btn primary" id="inv-run-go" data-inv="run-go">Create drafts</button>');
     bd.__ranges = ranges;
+    // One press on Monday: "Invoice last week" opens this and starts the run
+    // for the previous Mon–Fri across all practitioners straight away.
+    if (opts && opts.autorun) {
+      var go = document.getElementById('inv-run-go');
+      if (go) runInvoicing(go);
+    }
     if (!state.practitioners.length) get('/practitioners').then(function (r) {
       state.practitioners = r.practitioners || [];
       var sel = document.getElementById('inv-run-prac');
@@ -421,6 +530,8 @@
         '<div><b>' + s.invoicesUpdated + '</b><span>drafts updated</span></div>' +
         '<div><b>' + s.sessionsIncluded + '</b><span>sessions included</span></div>' +
         '<div><b>' + (s.nf2fIncluded || 0) + '</b><span>non-face-to-face shares</span></div>' +
+        '<div><b>' + (s.sploseActivitiesIncluded || 0) + '</b><span>Splose support activities</span></div>' +
+        '<div><b>' + (s.invoicedInSplose || 0) + '</b><span>skipped — already invoiced in Splose</span></div>' +
         '<div><b>' + s.travelAllocations + '</b><span>travel allocations</span></div>' +
         '<div><b>' + s.itemsNeedAttention + '</b><span>items need attention</span></div>' +
         '<div><b>' + s.alreadyInvoiced + '</b><span>skipped — already invoiced</span></div>' +
@@ -469,10 +580,20 @@
 
   function opt(v, label, cur) { return '<option value="' + esc(v) + '"' + (String(cur || '') === String(v) ? ' selected' : '') + '>' + esc(label) + '</option>'; }
 
+  var PAYER_TYPE_LABEL = { PLAN_MANAGER: 'Plan manager', PARTICIPANT: 'Participant', NOMINEE: 'Nominee', OTHER: 'Other' };
+  function payerHistoryHtml(h) {
+    if (!h || !h.length) return '<div class="inv-panel" style="margin-top:12px"><h3>Invoice history</h3><div class="inv-dim">No invoices on record for this client yet, so there is nobody to remember. Choose or enter the payer above; it is remembered from then on.</div></div>';
+    return '<div class="inv-panel" style="margin-top:12px"><h3>Invoice history</h3><div class="inv-table-wrap"><table class="inv-table"><thead><tr><th>Sent to</th><th>Type</th><th class="num">Invoices</th><th>Latest</th></tr></thead><tbody>' +
+      h.map(function (x) { return '<tr><td>' + esc(x.name) + (x.email ? '<div class="inv-dim">' + esc(x.email) + '</div>' : '') + '</td><td>' + esc(PAYER_TYPE_LABEL[x.payer_type] || x.payer_type) + '</td><td class="num">' + x.invoices + '</td><td>' + esc(x.last_invoice_number || '—') + ' · ' + dmy(x.last_issue_date) + ' (' + (x.last_source === 'OPAL' ? 'Opal' : 'Splose') + ')</td></tr>'; }).join('') +
+      '</tbody></table></div></div>';
+  }
+
   async function openClient(clientId) {
     var bd = modal('Client billing profile', skel(8), null, { wide: true });
     try {
-      var r = await get('/clients/' + encodeURIComponent(clientId));
+      var both = await Promise.all([get('/clients/' + encodeURIComponent(clientId)), get('/payers').catch(function () { return { payers: [] }; })]);
+      var r = both[0], payers = both[1].payers;
+      state.payerList = payers;
       var p = r.profile;
       var zone = r.effectiveMmm ? 'MM' + r.effectiveMmm : 'Unresolved';
       var mmmInfo = p.mmm_manual_override
@@ -487,8 +608,11 @@
         '<label>Plan start<input type="date" name="planStart" value="' + esc((p.plan_start || '').slice(0, 10)) + '"></label>' +
         '<label>Plan end<input type="date" name="planEnd" value="' + esc((p.plan_end || '').slice(0, 10)) + '"></label>' +
         '<label>Management type<select name="managementType">' + opt('', '—', p.management_type) + opt('PLAN_MANAGED', 'Plan managed', p.management_type) + opt('SELF_MANAGED', 'Self managed', p.management_type) + opt('NDIA_MANAGED', 'NDIA (agency) managed', p.management_type) + opt('OTHER', 'Other / private', p.management_type) + '</select></label>' +
+        '<label class="wide">Choose a payer from the directory<select id="inv-payer-pick" aria-describedby="inv-payer-pick-hint"><option value="">— or type a new payer below —</option>' +
+          (payers || []).map(function (y) { return '<option value="' + esc(y.id) + '"' + (y.id === p.payer_id ? ' selected' : '') + '>' + esc(y.name) + ' · ' + esc(PAYER_TYPE_LABEL[y.payer_type] || y.payer_type) + (y.email ? ' · ' + esc(y.email) : ' · no email') + '</option>'; }).join('') +
+          '</select><span class="inv-dim" id="inv-payer-pick-hint">A payer typed in for the first time is added to the directory and remembered for this client\'s later invoices.</span><input type="hidden" name="payerId" value="' + esc(p.payer_id || '') + '"></label>' +
         '<label>Payer type<select name="payerType">' + opt('', '—', p.payer_type) + opt('PLAN_MANAGER', 'Plan manager', p.payer_type) + opt('PARTICIPANT', 'Participant', p.payer_type) + opt('NOMINEE', 'Nominee', p.payer_type) + opt('OTHER', 'Other', p.payer_type) + '</select></label>' +
-        '<label>Invoice to (plan manager / payer)<input name="payerName" value="' + esc(p.payer_name || '') + '"></label>' +
+        '<label>Invoice to (plan manager / payer)<input name="payerName" value="' + esc(p.payer_name || '') + '">' + (p.payer_source_detail ? '<span class="inv-dim">From ' + esc(p.payer_source_detail) + '</span>' : '') + '</label>' +
         '<label>Payer email<input type="email" name="payerEmail" value="' + esc(p.payer_email || '') + '"></label>' +
         '<label>Payer reference<input name="payerReference" value="' + esc(p.payer_reference || '') + '"></label>' +
         '<label>Payment terms (days, blank = default)<input type="number" min="0" max="365" name="paymentTermsDays" value="' + esc(p.payment_terms_days == null ? '' : p.payment_terms_days) + '"></label>' +
@@ -497,6 +621,7 @@
         '<label class="wide">Participant billing address<textarea name="participantBillingAddress">' + esc(p.participant_billing_address || '') + '</textarea></label>' +
         '<label class="wide">Billing notes<textarea name="billingNotes">' + esc(p.billing_notes || '') + '</textarea></label>' +
         '</form><div id="inv-client-msg"></div>' +
+        payerHistoryHtml(r.payerHistory) +
         '<div class="inv-panel" style="margin-top:12px"><h3>MMM override</h3><div class="inv-field-row"><select id="inv-mmm-zone"><option value="">No override</option>' + [1, 2, 3, 4, 5, 6, 7].map(function (z) { return opt(z, 'MM' + z, p.mmm_manual_override); }).join('') + '</select>' +
         '<input id="inv-mmm-reason" placeholder="Reason (required)" style="flex:1;min-width:200px"><button class="btn" type="button" data-inv="mmm-override" data-client="' + esc(clientId) + '">Save override</button><button class="btn" type="button" data-inv="mmm-refresh" data-client="' + esc(clientId) + '">Re-check address</button></div></div>';
       document.getElementById('inv-modal-body').insertAdjacentHTML('afterend', '<footer id="inv-modal-foot"><button class="btn" data-inv="import-splose" data-client="' + esc(clientId) + '">Fill blanks from Splose</button><button class="btn" data-inv="close-modal">Close</button><button class="btn primary" data-inv="save-client" data-client="' + esc(clientId) + '">Save profile</button></footer>');
@@ -515,6 +640,72 @@
       loadOverview();
     } catch (e) { msg.innerHTML = '<div class="inv-error">' + esc(e.message) + '</div>'; }
   }
+
+  // ── Payer directory ──────────────────────────────────────────────────────
+  async function renderPayers(el) {
+    el.innerHTML = '<div class="inv-note">Everyone invoices have gone to: plan managers, participants and nominees. Filled from every Splose invoice (on each invoicing run, or now with the button), and from each invoice Opal finalises. A client with no payer gets the payer of their latest invoice here; a new client is given one by choosing it on their billing profile.</div>' +
+      '<div class="inv-filters"><input type="search" id="inv-py-q" placeholder="Search payer name or email" aria-label="Search payers">' +
+      '<button class="btn" type="button" data-inv="payers-import">Import all Splose invoices</button><button class="btn primary" type="button" data-inv="payer-new">Add payer</button></div>' +
+      '<div id="inv-py-msg"></div><div id="inv-py-list">' + skel(5) + '</div>';
+    await loadPayers('');
+  }
+  async function loadPayers(q) {
+    var box = document.getElementById('inv-py-list');
+    var r = await get('/payers' + (q ? '?q=' + encodeURIComponent(q) : ''));
+    state.payerList = r.payers;
+    if (!r.payers.length) { box.innerHTML = '<div class="inv-panel inv-empty">' + (q ? 'No payer matches.' : 'The directory is empty. Import the Splose invoices, or add a payer.') + '</div>'; return; }
+    box.innerHTML = '<div class="inv-table-wrap"><table class="inv-table"><thead><tr><th>Payer</th><th>Type</th><th>Email</th><th class="num">Clients</th><th class="num">Invoices</th><th>Last invoiced</th><th>Source</th></tr></thead><tbody>' + r.payers.map(function (y) {
+      return '<tr class="clickable" data-inv="payer-edit" data-id="' + esc(y.id) + '"><td><button type="button" class="inv-link" data-inv="payer-edit" data-id="' + esc(y.id) + '">' + esc(y.name) + '</button></td>' +
+        '<td>' + esc(PAYER_TYPE_LABEL[y.payer_type] || y.payer_type) + '</td><td>' + (y.email ? esc(y.email) : '<span class="inv-pill NEEDS_ATTENTION">No email</span>') + '</td>' +
+        '<td class="num">' + Math.max(y.linked_clients, y.history_clients) + '</td><td class="num">' + y.invoices + '</td><td>' + dmy(y.last_issue_date) + '</td>' +
+        '<td>' + (y.source === 'SPLOSE_IMPORT' ? 'Splose' : 'Added in Opal') + '</td></tr>';
+    }).join('') + '</tbody></table></div>';
+  }
+  var pyTimer = null;
+  document.addEventListener('input', function (e) { if (e.target.id === 'inv-py-q') { clearTimeout(pyTimer); var v = e.target.value.trim(); pyTimer = setTimeout(function () { loadPayers(v); }, 250); } });
+  function openPayer(id) {
+    var y = id ? (state.payerList || []).find(function (x) { return x.id === id; }) : null;
+    var t = y ? y.payer_type : 'PLAN_MANAGER';
+    modal(y ? 'Payer' : 'Add payer', '<form class="inv-form" id="inv-payer-form">' +
+      '<label>Name<input name="name" required value="' + esc(y ? y.name : '') + '"></label>' +
+      '<label>Type<select name="payerType">' + ['PLAN_MANAGER', 'PARTICIPANT', 'NOMINEE', 'OTHER'].map(function (k) { return opt(k, PAYER_TYPE_LABEL[k], t); }).join('') + '</select></label>' +
+      '<label>Invoice email<input type="email" name="email" value="' + esc(y && y.email ? y.email : '') + '"></label>' +
+      '<label>Reference<input name="reference" value="' + esc(y && y.reference ? y.reference : '') + '"></label>' +
+      '<label class="wide">Billing address<textarea name="address">' + esc(y && y.address ? y.address : '') + '</textarea></label>' +
+      (y ? '<label class="wide"><span><input type="checkbox" name="archived"' + (y.archived ? ' checked' : '') + '> Archived (no longer offered for new clients)</span></label>' : '') +
+      '</form>' + (y ? '<div class="inv-note">Changes apply to every client whose profile uses this payer (' + y.linked_clients + ') and to their drafts on the next run. Finalised invoices keep the details they were sent with.</div>' : '') +
+      '<div id="inv-payer-msg"></div>',
+      '<button class="btn" data-inv="close-modal">Close</button><button class="btn primary" data-inv="payer-save"' + (y ? ' data-id="' + esc(y.id) + '"' : '') + '>Save payer</button>');
+  }
+  async function savePayer(id) {
+    var f = document.getElementById('inv-payer-form'), b = {};
+    Array.prototype.forEach.call(f.elements, function (el) { if (!el.name) return; b[el.name] = el.type === 'checkbox' ? el.checked : (el.value.trim() || null); });
+    try {
+      if (id) await put('/payers/' + id, b); else await post('/payers', b);
+      closeModal(); toast('Payer saved'); if (state.section === 'payers') loadPayers((document.getElementById('inv-py-q') || {}).value || '');
+    } catch (e) { document.getElementById('inv-payer-msg').innerHTML = '<div class="inv-error">' + esc(e.message) + '</div>'; }
+  }
+  // Choosing a directory payer fills the payer fields; editing the name afterwards makes it a new payer.
+  document.addEventListener('change', function (e) {
+    if (e.target.id !== 'inv-payer-pick') return;
+    var form = document.getElementById('inv-client-form');
+    var y = (state.payerList || []).find(function (x) { return x.id === e.target.value; });
+    form.elements.payerId.value = y ? y.id : '';
+    form.dataset.pickedFrom = y ? y.id : '';
+    if (!y) return;
+    form.elements.payerType.value = y.payer_type; form.elements.payerName.value = y.name;
+    form.elements.payerEmail.value = y.email || ''; form.elements.payerReference.value = y.reference || ''; form.elements.payerAddress.value = y.address || '';
+  });
+  document.addEventListener('input', function (e) {
+    var form = document.getElementById('inv-client-form');
+    if (!form || e.target.form !== form || e.target.name !== 'payerName') return;
+    form.elements.payerId.value = ''; var pick = document.getElementById('inv-payer-pick'); if (pick) pick.value = '';
+    // A new name is a new payer: the picked payer's contact details must not carry over to it.
+    if (form.dataset.pickedFrom) {
+      form.dataset.pickedFrom = '';
+      form.elements.payerEmail.value = ''; form.elements.payerReference.value = ''; form.elements.payerAddress.value = '';
+    }
+  });
 
   // ── Runs ─────────────────────────────────────────────────────────────────
   async function renderRuns(el) {
@@ -653,7 +844,7 @@
     var s = r.settings, o = r.organisation || {};
     el.innerHTML =
       '<div class="inv-panel"><h3>Business &amp; invoice details</h3>' +
-      '<div class="inv-note">Blank business fields fall back to Settings → Organisation (' + esc(o.name || 'not set') + '). Next invoice number: <b>' + esc(r.nextInvoiceNumberPreview) + '</b>. Email: ' + (r.emailConfigured ? 'configured' : '<b>not configured</b> — use Mark sent') + '. Google Maps: ' + (r.mapsConfigured ? 'configured' : '<b>not configured</b> — travel legs need manual routes') + '.</div>' +
+      '<div class="inv-note">Blank business fields fall back to Settings → Organisation (' + esc(o.name || 'not set') + '). Next invoice number: <b>' + esc(r.nextInvoiceNumberPreview) + '</b>' + (s.sploseInvoiceNumberHigh ? ' (continues after Splose\'s ' + esc(s.invoicePrefix || '') + esc(s.sploseInvoiceNumberHigh) + ')' : '') + '. Email: ' + (r.emailConfigured ? 'configured' : '<b>not configured</b> — use Mark sent') + '. Google Maps: ' + (r.mapsConfigured ? 'configured' : '<b>not configured</b> — travel legs need manual routes') + '.</div>' +
       '<form class="inv-form" id="inv-settings-form">' +
       '<label>Invoice prefix<input name="invoicePrefix" value="' + esc(s.invoicePrefix) + '"></label>' +
       '<label>Next invoice number<input type="number" min="1" name="nextInvoiceNumber" value="' + esc(s.nextInvoiceNumber) + '"></label>' +
@@ -671,6 +862,9 @@
       '<label>Default trip allocation<select name="defaultTripAllocationMethod">' + opt('EQUAL_PER_CLIENT', 'Equal per unique client', s.defaultTripAllocationMethod) + opt('PER_SESSION', 'Per billable session', s.defaultTripAllocationMethod) + opt('MANUAL_WEIGHTED', 'Manual weighted', s.defaultTripAllocationMethod) + '</select></label>' +
       '<label>Completion rule<select name="completionRule">' + opt('PAST_CONFIRMED', 'Past confirmed sessions are delivered', s.completionRule) + opt('EXPLICIT_ONLY', 'Only sessions marked Completed', s.completionRule) + '</select></label>' +
       '<label>Timezone<input name="timezone" value="' + esc(s.timezone) + '"></label>' +
+      '<label>Xero sales account code<input name="xeroSalesAccountCode" value="' + esc(s.xeroSalesAccountCode || '') + '" placeholder="e.g. 200" title="The revenue account in Xero these invoices post to. Blank = nothing is copied to Xero."></label>' +
+      '<label>Xero tax type — GST-free<input name="xeroTaxTypeGstFree" value="' + esc(s.xeroTaxTypeGstFree || 'EXEMPTOUTPUT') + '"></label>' +
+      '<label>Xero tax type — GST 10%<input name="xeroTaxTypeGst" value="' + esc(s.xeroTaxTypeGst || 'OUTPUT') + '"></label>' +
       '<label class="check wide"><input type="checkbox" name="returnTravelPayable"' + (s.returnTravelPayable ? ' checked' : '') + '> Return travel is paid to clinicians (include the return leg in claimable travel)</label>' +
       '</form><div id="inv-settings-msg"></div><div class="inv-field-row"><button class="btn primary" data-inv="save-settings">Save settings</button></div></div>' +
       '<div class="inv-panel"><h3>MMM classification</h3>' + (r.mmmDataset
@@ -824,6 +1018,7 @@
       switch (a) {
         case 'close-modal': closeModal(); break;
         case 'complete': openCompleteInvoicing(); break;
+        case 'complete-last': openCompleteInvoicing({ autorun: true }); break;
         case 'run-go': await runInvoicing(btn); break;
         case 'card': state.filters.status = btn.dataset.status; go('invoices'); break;
         case 'chip': state.filters.status = btn.dataset.status; go('invoices'); break;
@@ -870,11 +1065,36 @@
           if (to === null) return;
           await post('/invoices/' + id + '/mark-sent', { sentTo: to || null }); toast('Marked as sent'); refreshDetail(); break;
         }
+        case 'send-selected': openSendSelected(); break;
+        case 'nf2f-resolve':
+          if (window.Nf2f && typeof window.Nf2f.openResolve === 'function') window.Nf2f.openResolve(id);
+          break;
+        case 'xero-payments': {
+          btn.disabled = true;
+          try {
+            var xp = await post('/xero/sync-payments', {});
+            toast('Payments updated from Xero', xp.updated + ' of ' + xp.checked + ' invoice' + (xp.checked === 1 ? '' : 's') + ' changed' + (xp.voidedInXero ? ' · ' + xp.voidedInXero + ' voided in Xero only — check them' : ''));
+            loadOverview(); if (state.section === 'invoices' && !state.invoiceId) loadInvoiceList();
+          } finally { btn.disabled = false; }
+          break;
+        }
+        case 'xero-push': {
+          btn.disabled = true;
+          try {
+            var xr = await post('/invoices/' + id + '/xero', {});
+            toast(xr.already ? 'Already in Xero' : 'Copied to Xero', xr.adopted ? 'Xero already had this invoice; it is now linked.' : '');
+            refreshDetail();
+          } finally { btn.disabled = false; }
+          break;
+        }
+        case 'send-go': await sendSelected(btn); break;
         case 'email': {
           var inv = state.detail && state.detail.invoice;
+          var resend = !!(inv && inv.sent_status === 'SENT');
+          if (resend && !(await confirmIt('This invoice was already sent' + (inv.sent_to ? ' to ' + inv.sent_to : '') + '. Send it again?'))) return;
           var addr = await ask('Email the final PDF to:', { value: (inv && inv.payer_email) || '' });
           if (!addr) return;
-          var er = await post('/invoices/' + id + '/email', { to: addr });
+          var er = await post('/invoices/' + id + '/email', { to: addr, resend: resend });
           toast(er.sent ? 'Invoice emailed' : 'Email is not configured', er.sent ? addr : 'Send it yourself and use Mark sent');
           refreshDetail(); break;
         }
@@ -952,6 +1172,17 @@
           break;
         }
         case 'open-client': await openClient(btn.dataset.client); break;
+        case 'payer-new': openPayer(null); break;
+        case 'payer-edit': openPayer(btn.dataset.id); break;
+        case 'payer-save': await savePayer(btn.dataset.id || null); break;
+        case 'payers-import': {
+          var pm = document.getElementById('inv-py-msg');
+          btn.disabled = true; pm.innerHTML = '<div class="inv-note">Reading every Splose invoice…</div>';
+          try { var pi = await post('/payers/import-splose'); pm.innerHTML = '<div class="inv-ok">Read ' + pi.invoices + ' Splose invoices for ' + pi.clients + ' clients: ' + pi.payers + ' payers (' + pi.newPayers + ' new), ' + pi.newInvoices + ' invoices newly recorded.</div>'; await loadPayers(''); }
+          catch (e) { pm.innerHTML = '<div class="inv-error">' + esc(e.message) + '</div>'; }
+          btn.disabled = false;
+          break;
+        }
         case 'save-client': await saveClient(btn.dataset.client); break;
         case 'mmm-override': {
           var z = document.getElementById('inv-mmm-zone').value, rs = document.getElementById('inv-mmm-reason').value;

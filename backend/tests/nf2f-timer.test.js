@@ -54,3 +54,60 @@ test('a block\'s clients come from its booking; other groups have none', () => {
   expect(T.blockClients({ custom_metadata: { booking: { group: 'nf2f', clientId: null } } })).toEqual([]);
   expect(T.blockClients({ custom_metadata: { booking: { group: 'report', clientId: '1' } } })).toEqual([]);
 });
+
+describe('a block that ended with no time entered (migration 089)', () => {
+  const two = [{ clientId: '1', clientName: 'Al' }, { clientId: '2', clientName: 'Bo' }];
+  const past = new Date('2026-11-17T03:00:00Z'), now = new Date('2026-11-21T00:00:00Z');
+  test('needs an answer only once ended, billable, untimed and unresolved', () => {
+    expect(T.needsResolution(null, two, past, now)).toBe(true);
+    expect(T.needsResolution({ status: 'IDLE', accumulated_seconds: 0 }, two, past, now)).toBe(true);
+    expect(T.needsResolution(null, [], past, now)).toBe(false);                        // no clients = not billable
+    expect(T.needsResolution(null, two, new Date('2026-11-22T00:00:00Z'), now)).toBe(false); // not over
+    expect(T.needsResolution({ status: 'STOPPED', accumulated_seconds: 600 }, two, past, now)).toBe(false);
+    expect(T.needsResolution({ status: 'RUNNING', accumulated_seconds: 0 }, two, past, now)).toBe(false);
+    expect(T.needsResolution({ status: 'STOPPED', accumulated_seconds: 0, resolution: 'DID_NOT_HAPPEN' }, two, past, now)).toBe(false);
+  });
+  test('full block: the whole block, split evenly, to the second', () => {
+    const v = T.validateResolution({ mode: 'FULL_BLOCK' }, two, 1800);
+    expect(v).toMatchObject({ ok: true, resolution: 'FULL_BLOCK', seconds: 1800 });
+    const parts = T.clientParts({ resolution: 'FULL_BLOCK', allocation: v.allocation, non_billable_percent: 0 }, two, 1800);
+    expect(parts.map((p) => p.seconds)).toEqual([900, 900]);
+  });
+  test('per client: exactly the minutes entered, never longer than the block', () => {
+    const v = T.validateResolution({ mode: 'PER_CLIENT', minutes: [{ clientId: '1', minutes: 10 }, { clientId: '2', minutes: 7 }] }, two, 1800);
+    expect(v).toMatchObject({ ok: true, seconds: 1020 });
+    const parts = T.clientParts({ resolution: 'PER_CLIENT', client_seconds: v.clientSeconds, allocation: v.allocation }, two, 1020);
+    expect(parts.map((p) => p.seconds)).toEqual([600, 420]);
+    expect(T.validateResolution({ mode: 'PER_CLIENT', minutes: [{ clientId: '1', minutes: 20 }, { clientId: '2', minutes: 11 }] }, two, 1800).error).toMatch(/longer than the 30-minute block/);
+    expect(T.validateResolution({ mode: 'PER_CLIENT', minutes: [{ clientId: '1', minutes: 0 }, { clientId: '2', minutes: 0 }] }, two, 1800).ok).toBe(false);
+    expect(T.validateResolution({ mode: 'PER_CLIENT', minutes: [{ clientId: '1', minutes: 2.5 }, { clientId: '2', minutes: 1 }] }, two, 1800).ok).toBe(false);
+    expect(T.validateResolution({ mode: 'PER_CLIENT', minutes: [{ clientId: '1', minutes: 5 }] }, two, 1800).ok).toBe(false);
+  });
+  test('did not happen: needs a reason, bills nothing', () => {
+    expect(T.validateResolution({ mode: 'DID_NOT_HAPPEN' }, two, 1800).ok).toBe(false);
+    expect(T.validateResolution({ mode: 'DID_NOT_HAPPEN', reason: 'Client cancelled the report' }, two, 1800)).toMatchObject({ ok: true, seconds: 0 });
+    expect(T.clientParts({ resolution: 'DID_NOT_HAPPEN' }, two, 0)).toEqual([]);
+    expect(T.validateResolution({ mode: 'nope' }, two, 1800).ok).toBe(false);
+  });
+});
+
+describe('an answer is judged against the block as it is now (review fixes)', () => {
+  const two = [{ clientId: '1', clientName: 'Al' }, { clientId: '2', clientName: 'Bo' }];
+  const past = new Date('2026-11-17T03:00:00Z'), now = new Date('2026-11-21T00:00:00Z');
+  test('full block follows a resize and the current clients', () => {
+    const row = { resolution: 'FULL_BLOCK', accumulated_seconds: 5400 };
+    expect(T.clientParts(row, two, 5400, 1800).map((p) => p.seconds)).toEqual([900, 900]);         // shrunk 90 → 30 min
+    expect(T.clientParts(row, [...two, { clientId: '3' }], 5400, 1800).map((p) => p.seconds)).toEqual([600, 600, 600]);
+  });
+  test('per client goes stale when the clients change or the block gets shorter than the minutes', () => {
+    const row = { resolution: 'PER_CLIENT', client_seconds: [{ clientId: '1', seconds: 600 }, { clientId: '2', seconds: 420 }] };
+    expect(T.needsResolution(row, two, past, now, 1800)).toBe(false);
+    expect(T.needsResolution(row, two, past, now, 900)).toBe(true);
+    expect(T.needsResolution(row, [two[0]], past, now, 1800)).toBe(true);
+    expect(T.needsResolution(row, [...two, { clientId: '3' }], past, now, 1800)).toBe(true);
+  });
+  test('a timer is capped at the block; under a minute counts as no time entered', () => {
+    expect(T.clientParts({ accumulated_seconds: 3600 }, two, 3600, 1800).reduce((a, p) => a + p.seconds, 0)).toBe(1800);
+    expect(T.needsResolution({ status: 'STOPPED', accumulated_seconds: 5 }, two, past, now, 1800)).toBe(true);
+  });
+});
