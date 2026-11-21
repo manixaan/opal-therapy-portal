@@ -11716,7 +11716,7 @@ function initCalColInteractions() {
     col.addEventListener('pointerdown', _calColPointerDown);
     col.addEventListener('pointermove', _calColPointerMove);
     col.addEventListener('pointerup',   _calColPointerUp);
-    col.addEventListener('pointercancel', () => { _calDragPending = null; });
+    col.addEventListener('pointercancel', () => cancelActiveGesture());
   });
 }
 
@@ -15989,7 +15989,7 @@ function onBlockPointerDown(e, id) {
     durationMin: durMin(s),
     currentDay: s.day,
     currentStartMin: sessionStartMin(s),
-    moved: false, draggable,
+    moved: false, draggable, live: true,
     pointerId: e.pointerId,
     // The rest of the selection, moved by the same minutes and days.
     group: draggable && CAL_SELECTION.has(id) && CAL_SELECTION.size > 1
@@ -16007,17 +16007,57 @@ function onBlockPointerDown(e, id) {
 
 function onBlockPointerCancel() {
   // Browser cancelled the pointer (e.g. iOS scroll takeover, multi-touch, alt-tab).
-  // Clean up exactly like pointerup so drag state never gets stuck.
-  window.removeEventListener('pointermove',   onBlockPointerMove);
-  window.removeEventListener('pointerup',     onBlockPointerUp);
-  if (drag) {
-    if (drag.ghost) drag.ghost.remove();
-    if (drag.el) { drag.el.classList.remove('dragging'); }
-    _dragRevertGroup(drag);
-    drag = null;
-  }
-  if (typeof endTravelPreview === 'function') endTravelPreview(true);
+  cancelActiveGesture();
 }
+
+/* One cancel path for every calendar gesture (C-09): a tile drag, an edge
+   resize and a drag-to-create. Bound to pointercancel on all three and to
+   Escape. The tile goes back where it was, the ghost / tip go, the state
+   machines reset and the travel preview ends. Returns true when something
+   was cancelled. A drag whose pointer is already up (its move review is
+   open) is not a live gesture — the review owns it. */
+function cancelActiveGesture() {
+  let did = false;
+  if (drag && drag.live) {
+    window.removeEventListener('pointermove', onBlockPointerMove);
+    window.removeEventListener('pointerup', onBlockPointerUp);
+    window.removeEventListener('pointercancel', onBlockPointerCancel);
+    try { drag.el.releasePointerCapture(drag.pointerId); } catch (_) {}
+    _dragRevertGroup(drag);
+    revertDragVisuals();
+    drag = null;
+    did = true;
+  }
+  if (resize) {
+    window.removeEventListener('pointermove', onBlockResizeMove);
+    window.removeEventListener('pointerup', onBlockResizeEnd);
+    window.removeEventListener('pointercancel', onBlockPointerCancel);
+    const r = resize;
+    resize = null;
+    if (r.tip && r.tip.parentElement) r.tip.parentElement.removeChild(r.tip);
+    try { r.el.releasePointerCapture(r.pointerId); } catch (_) {}
+    r.el.classList.remove('resizing');
+    r.el.style.top = tToY(r.s.startH, r.s.startM || 0) + 'px';
+    r.el.style.height = sessionTileHeight(durMin(r.s), sessionStartMin(r.s)) + 'px';
+    if (typeof applySessionDensity === 'function') applySessionDensity(r.el, durMin(r.s));
+    if (typeof endTravelPreview === 'function') endTravelPreview(true);
+    did = true;
+  }
+  if (dragState.isCreating || _calDragPending) {
+    if (_calDragPending) { try { _calDragPending.col.releasePointerCapture(_calDragPending.pointerId); } catch (_) {} }
+    _calDragPending = null;
+    if (dragState.animationFrameId) cancelAnimationFrame(dragState.animationFrameId);
+    dragState.animationFrameId = null;
+    if (dragState.block && dragState.block.parentElement) dragState.block.remove();
+    dragState.block = null;
+    dragState.isCreating = false;
+    did = true;
+  }
+  return did;
+}
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && cancelActiveGesture()) { e.preventDefault(); e.stopPropagation(); }
+}, true);
 
 function onBlockPointerMove(e) {
   if (!drag) return;
@@ -16119,7 +16159,9 @@ function pointerOverColumn(x) {
 
 function onBlockPointerUp(e) {
   window.removeEventListener('pointermove', onBlockPointerMove);
+  window.removeEventListener('pointercancel', onBlockPointerCancel);
   if (!drag) return;
+  drag.live = false;
   if (!drag.moved) {
     // Treat as click → open detail.
     // NOTE: the browser fires a 'click' event after pointerup. That click
@@ -16197,6 +16239,7 @@ function onBlockResizeStart(e, id, edge) {
   s.element.classList.add('resizing');
   window.addEventListener('pointermove', onBlockResizeMove);
   window.addEventListener('pointerup',   onBlockResizeEnd, { once: true });
+  window.addEventListener('pointercancel', onBlockPointerCancel, { once: true });
 }
 
 function onBlockResizeMove(e) {
@@ -16257,6 +16300,7 @@ function onBlockResizeMove(e) {
 
 function onBlockResizeEnd(e) {
   window.removeEventListener('pointermove', onBlockResizeMove);
+  window.removeEventListener('pointercancel', onBlockPointerCancel);
   if (!resize) return;
 
   const el = resize.el;
