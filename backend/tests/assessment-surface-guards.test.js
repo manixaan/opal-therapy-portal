@@ -746,7 +746,7 @@ describe('changed assets are cache-busted', () => {
       // 7 (js) / 2 (css): the MMM zone under the session address, sent with Create appointment.
       // 8 (js): the typed start snaps to 15 min on blur, not per keystroke.
       // 9 (js): no Return Home when a no-address booking leaves you at home already.
-      ['booking-route.js', 14], ['booking-route.css', 7],
+      ['booking-route.js', 15], ['booking-route.css', 7],
       // 1: recurrence.js/.css are new — Repeat in Smart Booking, the event panel and delete scope.
       ['recurrence.js', 1], ['recurrence.css', 2],
       // 1: nf2f.js/.css are new — several clients on a non-face-to-face block, its billing timer and allocation.

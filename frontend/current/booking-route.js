@@ -1001,7 +1001,11 @@
     STAY.text = text;
     setMeta(text, 'muted');
   }
-  setInterval(function () { checkMmm(); renderStayHint(); }, 600);
+  // Only while the booking panel is open: idle, the page does no work (P-10).
+  setInterval(function () {
+    if (!document.body || !document.body.classList.contains('bsp-open')) return;
+    checkMmm(); renderStayHint();
+  }, 600);
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire); else wire();
 })(window);

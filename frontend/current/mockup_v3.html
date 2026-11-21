@@ -178,7 +178,7 @@
 <!-- Route-aware Smart Booking: client location selector, work-location
      notice, and the "What next?" continuation after a booking. Extends the
      booking panel; the route maths live in travel.js, loaded just above. -->
-<script src="/booking-route.js?v=14" defer></script>
+<script src="/booking-route.js?v=15" defer></script>
 <script src="/recurrence.js?v=1" defer></script>
 <script src="/nf2f.js?v=7" defer></script>
 <!-- Travel block: a billable start → end drive, priced by Google Maps. -->
@@ -2167,6 +2167,9 @@ window.opIcon = function (name, size) {
      and the app-shell sync pill, not the calendar toolbar. Functionality
      is untouched — this is display only. */
   .cal-topbar .tz-label, .cal-topbar #cal-sync-strip { display: none !important; }
+  /* Scheduler view has its own date, ‹ › and Today: the toolbar's would be a
+     second, unsynced set (C-24). */
+  .cal-topbar:has(.view-tab[data-view="master"].active) :is(.toolbar-divider, .btn-today, .nav-arrow, #week-label) { display: none; }
   .cal-topbar .spacer { flex: 1; }
 
   /* Sync strip — compact inline indicator at the right of the toolbar */
@@ -2258,16 +2261,19 @@ window.opIcon = function (name, size) {
   /* Clickable day cell — drill into Day View */
   .month-cell[data-date] { cursor: pointer; }
   .month-cell[data-date]:hover { background: var(--accent-soft); }
-  .month-cell.selected-day { background: #eef3fa; outline: 2px solid var(--accent); outline-offset: -2px; }
+  .month-cell.selected-day { background: var(--accent-soft); outline: 2px solid var(--accent); outline-offset: -2px; }
+  /* Every date sits in the same 24 px box, so today's dot does not push its
+     chips 8 px lower than the other days' (C-25). */
   .month-cell .month-date {
     font-size: 13px; font-weight: 500; color: var(--ink);
+    height: 24px; display: flex; align-items: center;
     margin-bottom: 2px;
   }
   .month-cell.other-month .month-date { color: var(--muted); }
   .month-cell.today .month-date {
     color: white; background: var(--accent);
-    width: 24px; height: 24px; border-radius: 50%;
-    display: inline-flex; align-items: center; justify-content: center;
+    width: 24px; border-radius: 50%;
+    justify-content: center;
     font-weight: 600;
   }
   .month-event {
@@ -3961,7 +3967,7 @@ window.opIcon = function (name, size) {
     cursor: pointer;
     transition: background 0.1s;
   }
-  .cal-ctx-menu-item:hover { background: var(--accent-soft); color: var(--accent-deep); }
+  .cal-ctx-menu-item:hover, .cal-ctx-menu-item:focus { background: var(--accent-soft); color: var(--accent-deep); outline: none; }
   .cal-ctx-menu-item .ctx-icon { font-size: 15px; }
   .cal-ctx-menu-sep { height: 1px; background: var(--border); margin: 4px 0; }
   /* Precision move (startPreciseMove): the session being nudged, and the key hint under it. */
@@ -13245,7 +13251,20 @@ function __registerBookingUndo(dbId, title) {
   });
 }
 
+// Where the user was when they pressed Create (U-14). A slow save must not
+// pull them back to the calendar / the booked week if they have moved on.
+function __bookingNavSnapshot() {
+  const tab = document.querySelector('.tab.active[data-tab]');
+  return { tab: tab ? tab.dataset.tab : null, week: window.__currentWeekMonday ? __ymd(window.__currentWeekMonday) : null };
+}
+function __bookingUserMoved(snap) {
+  if (!snap) return false;
+  const now = __bookingNavSnapshot();
+  return now.tab !== snap.tab || now.week !== snap.week;
+}
+
 async function confirmBooking() {
+  const _navAtSubmit = __bookingNavSnapshot();
   const cat = BOOKING_STATE.category;
   const btn = document.getElementById('create-booking-btn');
   const resetBtn = () => {
@@ -13370,8 +13389,9 @@ async function confirmBooking() {
         return;
       }
 
-      // Add to local calendar canvas
-      const col = document.getElementById('day-' + t.day);
+      // Add to local calendar canvas — only on the week it belongs to (a user
+      // who moved weeks mid-save must not see it drawn on theirs; U-14).
+      const col = (!t.dateStr || __isVisibleWeekDate(t.dateStr)) ? document.getElementById('day-' + t.day) : null;
       if (col) {
         // The optimistic tile is the saved row, stamped like a loaded Outlook
         // tile so the reload below replaces it — unstamped, it stayed beside
@@ -13408,11 +13428,13 @@ async function confirmBooking() {
       WIZARD_BOOKED = true;
       resetBtn();
       if (typeof resetWizard === 'function') resetWizard();
-      if (typeof switchTab === 'function') { window.__viewManuallySet = true; switchTab('calendar'); }
+      // Moved on to another tab or week while it saved: stay there, the toast says it (U-14).
+      const _stay = __bookingUserMoved(_navAtSubmit);
+      if (!_stay && typeof switchTab === 'function') { window.__viewManuallySet = true; switchTab('calendar'); }
       // Jump only when the day is not already on screen: a week render from
       // the cache (which lacks the new row) blanked the new tile until the
       // reload landed (C-13). The reload then redraws just the changed day.
-      if (t?.dateStr && typeof gotoWeekOf === 'function' && !__isVisibleWeekDate(t.dateStr)) gotoWeekOf(t.dateStr);
+      if (!_stay && t?.dateStr && typeof gotoWeekOf === 'function' && !__isVisibleWeekDate(t.dateStr)) gotoWeekOf(t.dateStr);
       if (typeof loadOutlookEventsToCalendar === 'function') loadOutlookEventsToCalendar();
       showToast(`${outlookTitle} added`, outlookId ? 'Also added to Outlook' : 'Saved in the portal calendar');
       if (newDbId && _repeatRuleNow && window.Recurrence) window.Recurrence.afterBooked(newDbId, _repeatRuleNow);
@@ -13606,7 +13628,8 @@ async function confirmBooking() {
     if (typeof clearBspTravelPreview === 'function') clearBspTravelPreview();
 
     // Add to local calendar canvas
-    const col = _bookedFor ? null : document.getElementById('day-' + slot.day);
+    // …and nothing on a week the user moved to while it saved (U-14).
+    const col = (_bookedFor || __bookingUserMoved(_navAtSubmit)) ? null : document.getElementById('day-' + slot.day);
     if (col) {
       const sub = patient ? `${patient.first} ${patient.last}` : (TYPE_LABEL[type] || '');
       // The optimistic tile is the SAVED appointment: it carries the row id
@@ -13647,11 +13670,13 @@ async function confirmBooking() {
     WIZARD_BOOKED = true;
     resetBtn();
     if (typeof resetWizard === 'function') resetWizard();
-    if (typeof switchTab === 'function') { window.__viewManuallySet = true; switchTab('calendar'); }
+    // Moved on to another tab or week while it saved: stay there, the toast says it (U-14).
+    const _stay = __bookingUserMoved(_navAtSubmit);
+    if (!_stay && typeof switchTab === 'function') { window.__viewManuallySet = true; switchTab('calendar'); }
     // Jump only when the day is not already on screen: a week render from the
     // cache (which lacks the new row) blanked the new tile until the reload
     // landed (C-13).
-    if (slot?.day && DAY_DATES?.[slot.day] && typeof gotoWeekOf === 'function' && !__isVisibleWeekDate(DAY_DATES[slot.day])) {
+    if (!_stay && slot?.day && DAY_DATES?.[slot.day] && typeof gotoWeekOf === 'function' && !__isVisibleWeekDate(DAY_DATES[slot.day])) {
       gotoWeekOf(DAY_DATES[slot.day]);
     }
     // The row is already in the local DB (the POST writes it synchronously):
@@ -14860,6 +14885,44 @@ function closeCalContextMenu() {
     if (m && !(e.target && e.target.nodeType === 1 && m.contains(e.target))) closeCalContextMenu();
   }, { capture: true, passive: true });
   window.addEventListener('resize', () => { if (open()) closeCalContextMenu(); }, { passive: true });
+})();
+
+/* Keyboard for the same two menus (C-22 / IA-08): role=menu with menuitems,
+   the first item takes focus, ↑/↓/Home/End move, Enter/Space choose, Tab
+   closes; when the menu goes, focus returns to the tile (or leg) it came
+   from. Watches body for the menu, so travel.js's leg menu needs no change. */
+(function calContextMenuKeys() {
+  let opener = null;
+  function wire(menu) {
+    const items = Array.from(menu.querySelectorAll('.cal-ctx-menu-item'));
+    menu.setAttribute('role', 'menu');
+    items.forEach(it => { it.setAttribute('role', 'menuitem'); it.tabIndex = -1; });
+    menu.querySelectorAll('.cal-ctx-menu-sep').forEach(sep => sep.setAttribute('role', 'separator'));
+    const a = document.activeElement;
+    opener = (a && a !== document.body && !menu.contains(a)) ? a : null;
+    if (items[0]) items[0].focus({ preventScroll: true });
+    menu.addEventListener('keydown', (e) => {
+      const i = items.indexOf(document.activeElement);
+      const go = (n) => { e.preventDefault(); const t = items[(n + items.length) % items.length]; if (t) t.focus(); };
+      if (e.key === 'ArrowDown') go(i + 1);
+      else if (e.key === 'ArrowUp') go(i < 0 ? items.length - 1 : i - 1);
+      else if (e.key === 'Home') go(0);
+      else if (e.key === 'End') go(items.length - 1);
+      else if ((e.key === 'Enter' || e.key === ' ') && i >= 0) { e.preventDefault(); items[i].click(); }
+      else if (e.key === 'Tab') { e.preventDefault(); closeCalContextMenu(); }
+    });
+  }
+  new MutationObserver((recs) => {
+    recs.forEach(r => {
+      r.addedNodes.forEach(n => { if (n.id === 'cal-ctx-menu-active') wire(n); });
+      r.removedNodes.forEach(n => {
+        if (n.id !== 'cal-ctx-menu-active') return;
+        const back = opener; opener = null;
+        const a = document.activeElement;
+        if (back && back.isConnected && (!a || a === document.body)) { try { back.focus({ preventScroll: true }); } catch (e) { /* gone */ } }
+      });
+    });
+  }).observe(document.body, { childList: true });
 })();
 
 function ctxDeleteEvent(id) {
@@ -18775,7 +18838,8 @@ function setCalendarMode(mode) {
       }
     }
     window.__currentDayOffset = focusIdx;
-    document.querySelectorAll(`[data-day="${__ALL_DAYS[focusIdx]}"]`).forEach(el => el.classList.add('is-focus'));
+    // Focus the column and title the toolbar with that day, not the week (C-07).
+    __applyDayFocus(focusIdx);
   }
 
   // Update nav arrow tooltips to match mode
@@ -18868,6 +18932,8 @@ function __applyDayFocus(offset) {
   if (mon) {
     const d = new Date(mon);
     d.setUTCDate(mon.getUTCDate() + offset);
+    // The day shown is the selected day, so Day → Week → Day comes back to it (C-07).
+    window.__selectedDate = new Date(d);
     const label = document.getElementById('week-label');
     if (label) {
       label.textContent = d.toLocaleDateString('en-AU', {
