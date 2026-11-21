@@ -31,3 +31,12 @@ test('an empty-grid press closes the drawer and goes no further; a tile press go
   expect(g).toContain('closeBlockDetail();');
   expect(g).toContain('}, true);');
 });
+
+test('U-02: Reschedule opens the drawer\'s time editor, and only where that editor exists', () => {
+  const open = fnSrc('openBlockDetail');
+  expect(open).toContain('if (_movableTime) {\n    parts.push(`<button type="button" class="btn" onclick="bdReschedule()">Reschedule</button>`);');
+  expect(open).not.toContain('<button class="btn">Reschedule</button>');
+  const r = fnSrc('bdReschedule');
+  expect(r).toContain("document.getElementById('bd-start')");
+  expect(r).toContain('start.focus();');
+});

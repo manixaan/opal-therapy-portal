@@ -15166,8 +15166,9 @@ function openBlockDetail(id) {
   if (s.patientId && !s.cancelled) {
     parts.push(`<button class="btn" onclick="closeBlockDetail(); quickBook('${s.patientId}')">＋ Book follow-up</button>`);
   }
-  if (MOVABLE_TYPES.has(s.type) && !s.cancelled) {
-    parts.push(`<button class="btn">Reschedule</button>`);
+  // Reschedule = the time editor above (U-02): only where that editor exists.
+  if (_movableTime) {
+    parts.push(`<button type="button" class="btn" onclick="bdReschedule()">Reschedule</button>`);
   }
   // Navigate to location button — shown whenever we have a routable address
   const navAddr = s.address || s.location || s.locationObj?.formattedAddress;
@@ -15881,6 +15882,15 @@ async function bdApplyDay(id) {
 }
 
 /* ---------- Editable-time flow inside detail drawer ---------- */
+/* The drawer's Reschedule button: bring the time editor into view and put
+   the cursor in Start (U-02). */
+function bdReschedule() {
+  const start = document.getElementById('bd-start');
+  if (!start) return;
+  const row = start.closest('.time-edit-row');
+  if (row && row.scrollIntoView) row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  start.focus();
+}
 function bdRecalc(id) {
   const s = SESSIONS[id];
   if (!s) return;
