@@ -3140,6 +3140,12 @@ window.opIcon = function (name, size) {
     animation: fadeIn 120ms ease;
   }
   .detail-backdrop.show { display: block; }
+  /* While the drawer is open the week grid stays above its backdrop, so one
+     click on another tile opens that tile (C-10). An empty-grid press closes
+     the drawer (calGridDrawerGuard), as the backdrop did. */
+  body.dd-open #cal-grid { position: relative; z-index: 1091; }
+  body.dd-open #impact-backdrop { z-index: 1200 !important; }
+  body.dd-open #impact-modal    { z-index: 1201; }
   @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
   .detail-drawer {
     position: fixed; top: 0; right: -480px; bottom: 0;
@@ -15196,6 +15202,7 @@ function openBlockDetail(id) {
 
   document.getElementById('detail-backdrop').classList.add('show');
   document.getElementById('detail-drawer').classList.add('show');
+  document.body.classList.add('dd-open');
 }
 // The event's client name(s), wherever the event carries them: a fresh
 // booking (patient), the events row (client_name from Splose or a booking),
@@ -15353,8 +15360,23 @@ function closeBlockDetail() {
   if (typeof notesFlush === 'function') notesFlush();   // a note typed just before closing still saves
   document.getElementById('detail-backdrop').classList.remove('show');
   document.getElementById('detail-drawer').classList.remove('show');
+  document.body.classList.remove('dd-open');
   document.querySelectorAll('.session.selected').forEach(x => x.classList.remove('selected'));
 }
+
+// With the drawer open, a press on the grid outside any tile closes the
+// drawer and does nothing else — the same as the backdrop it sits above.
+// A press on a tile goes through: its click opens that tile in the drawer.
+(function calGridDrawerGuard() {
+  const grid = document.getElementById('cal-grid');
+  if (!grid) return;
+  grid.addEventListener('pointerdown', (e) => {
+    if (!document.body.classList.contains('dd-open')) return;
+    if (e.target.closest && e.target.closest('.session, .travel-overlay')) return;
+    e.stopPropagation(); e.preventDefault();
+    closeBlockDetail();
+  }, true);
+})();
 
 // Close the detail drawer on Escape — keyboard accessibility
 document.addEventListener('keydown', function(e) {
