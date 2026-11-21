@@ -86,7 +86,7 @@
 <link rel="stylesheet" href="/resourcelibrary.css?v=4" />
 <link rel="stylesheet" href="/opa.css?v=5" />
 <link rel="stylesheet" href="/finance.css?v=2" />
-<link rel="stylesheet" href="/invoicing.css?v=3" />
+<link rel="stylesheet" href="/invoicing.css?v=4" />
 <link rel="stylesheet" href="/induction-assistant.css?v=4" />
 <link rel="stylesheet" href="/supportpop.css?v=2" />
 <link rel="stylesheet" href="/casenotes.css?v=3" />
@@ -100,7 +100,7 @@
 <link rel="stylesheet" href="/workshop.css?v=9">
 <link rel="stylesheet" href="/interview.css?v=1" />
 <link rel="stylesheet" href="/onboarding.css?v=9" />
-<link rel="stylesheet" href="/splose-sync.css?v=4" />
+<link rel="stylesheet" href="/splose-sync.css?v=5" />
 <link rel="stylesheet" href="/onboarding-journey.css?v=43" />
 <link rel="stylesheet" href="/employees.css?v=2" />
 <link rel="stylesheet" href="/people.css?v=3" />
@@ -2317,13 +2317,14 @@ window.opIcon = function (name, size) {
   /* ─── Calendar colour legend ─── */
   .cal-legend-wrap { position: relative; }
   .cal-legend-btn {
-    display: inline-flex; align-items: center; gap: 5px;
-    padding: 5px 10px; border: 1px solid var(--border);
-    border-radius: 7px; background: var(--panel); color: var(--ink-soft);
-    font-size: 11px; font-weight: 500; cursor: pointer;
-    transition: background 0.12s;
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 32px; box-sizing: border-box; padding: 0 12px; border: 1px solid var(--border);
+    border-radius: 8px; background: var(--panel); color: var(--ink-soft);
+    font-family: inherit; font-size: 13px; font-weight: 500; line-height: 1; cursor: pointer;
+    white-space: nowrap;
+    transition: background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
   }
-  .cal-legend-btn:hover { background: var(--accent-soft); color: var(--accent-deep); }
+  .cal-legend-btn:hover { background: var(--panel-sunk); border-color: var(--border); color: var(--ink); }
   .cal-legend-popover {
     position: absolute; right: 0; top: calc(100% + 8px);
     background: var(--panel); border: 1px solid var(--border);
@@ -2364,32 +2365,35 @@ window.opIcon = function (name, size) {
   /* Primary add-event button in toolbar */
   .btn-add-event {
     display: inline-flex; align-items: center; gap: 6px;
-    padding: 6px 14px;
+    height: 32px; box-sizing: border-box; padding: 0 12px;
     background: var(--accent); color: white;
-    border: none; border-radius: 8px;
-    font-size: 13px; font-weight: 600;
-    cursor: pointer; transition: background 0.15s;
+    border: 1px solid var(--accent); border-radius: 8px;
+    font-family: inherit; font-size: 13px; font-weight: 600; line-height: 1;
+    cursor: pointer; transition: background var(--t-fast), border-color var(--t-fast);
     white-space: nowrap;
   }
-  .btn-add-event:hover { background: var(--accent-deep); }
+  .btn-add-event:hover { background: var(--accent-deep); border-color: var(--accent-deep); }
   .btn-add-event svg { width: 14px; height: 14px; stroke: white; stroke-width: 2.5; fill: none; flex-shrink: 0; }
 
   /* ─── Segmented view toggle ─── */
   .view-tabs {
     display: inline-flex; align-items: center;
+    height: 32px; box-sizing: border-box;
     background: var(--panel-sunk);
     border-radius: 8px;
     padding: 3px;
     gap: 1px;
   }
   .view-tab {
+    display: inline-flex; align-items: center;
+    height: 26px; box-sizing: border-box;
     background: transparent; border: none;
-    padding: 5px 12px;
-    font-size: 12.5px; font-weight: 500;
+    padding: 0 12px;
+    font-family: inherit; font-size: 13px; font-weight: 500; line-height: 1;
     color: var(--ink-faint);
     cursor: pointer;
     border-radius: 6px;
-    transition: background 0.12s, color 0.12s;
+    transition: background var(--t-fast), color var(--t-fast), box-shadow var(--t-fast);
     white-space: nowrap;
   }
   .view-tab:hover { background: rgba(255,255,255,0.7); color: var(--ink); }
@@ -2397,7 +2401,7 @@ window.opIcon = function (name, size) {
     background: var(--panel);
     color: var(--accent-deep);
     font-weight: 600;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.10), 0 0 0 1px rgba(0,0,0,0.04);
+    box-shadow: var(--shadow-sm), 0 0 0 1px rgba(36, 31, 26, 0.04);
   }
 
   .toolbar-divider {
@@ -2407,23 +2411,25 @@ window.opIcon = function (name, size) {
 
   /* Today button */
   .btn-today {
-    padding: 5px 12px;
+    display: inline-flex; align-items: center;
+    height: 32px; box-sizing: border-box; padding: 0 12px;
     border: 1px solid var(--border);
-    border-radius: 7px; background: var(--panel);
-    font-size: 12.5px; font-weight: 500; color: var(--ink);
-    cursor: pointer; transition: background 0.12s, border-color 0.12s;
+    border-radius: 8px; background: var(--panel);
+    font-family: inherit; font-size: 13px; font-weight: 500; line-height: 1; color: var(--ink);
+    cursor: pointer; transition: background var(--t-fast), border-color var(--t-fast);
   }
-  .btn-today:hover { background: var(--border-soft); border-color: #c7c0b5; }
+  /* One secondary hover for the whole calendar toolbar (U-12). */
+  .btn-today:hover { background: var(--panel-sunk); border-color: var(--border); }
 
   /* Nav arrows */
   .nav-arrow {
-    width: 30px; height: 30px; border-radius: 7px;
+    width: 32px; height: 32px; box-sizing: border-box; border-radius: 8px;
     border: 1px solid var(--border); background: var(--panel);
     display: inline-flex; align-items: center; justify-content: center;
-    color: var(--ink-soft); transition: background 0.12s, color 0.12s;
+    color: var(--ink-soft); transition: background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
     padding: 0;
   }
-  .nav-arrow:hover { background: var(--border-soft); color: var(--ink); }
+  .nav-arrow:hover { background: var(--panel-sunk); border-color: var(--border); color: var(--ink); }
   .nav-arrow svg { width: 16px; height: 16px; stroke: currentColor; stroke-width: 2; fill: none; }
 
   /* Outlook-only validation mode: hide app-generated/support blocks */
@@ -2608,9 +2614,11 @@ window.opIcon = function (name, size) {
   }
   .btn-cal-sidebar {
     display: none; align-items: center; justify-content: center;
-    background: none; border: 1px solid var(--border); border-radius: 7px;
-    width: 30px; height: 30px; cursor: pointer; color: var(--ink-soft);
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    width: 32px; height: 32px; box-sizing: border-box; padding: 0; cursor: pointer; color: var(--ink-soft);
+    transition: background var(--t-fast), color var(--t-fast);
   }
+  .btn-cal-sidebar:hover { background: var(--panel-sunk); color: var(--ink); }
   .mini-cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
   .mini-cal-head .nav-arrow { width: 22px; height: 22px; font-size: 13px; }
   .mini-cal-label { font-size: 12.5px; font-weight: 600; color: var(--ink); }
