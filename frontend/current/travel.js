@@ -315,7 +315,7 @@ function scheduleOverlayRefresh() {
 const TRAVEL_DRAG = { active: false, days: new Set(), pendingRefresh: false, leg: null };
 function _drawDayLegsOnly(day) {
   const col = document.getElementById('day-' + day);
-  if (!col) return;
+  if (!col || !travelCalculationEnabled()) return;
   _renderDayLegs(col, computeDayTravelSegments(day));
   col.querySelectorAll('.travel-overlay').forEach(el => el.classList.add('drag-preview'));
 }
@@ -2693,9 +2693,18 @@ function _renderDayLegs(col, segs) {
   try { segs.forEach(seg => renderSegmentOverlay(col, seg)); }
   finally { _LEG_REUSE = null; reuse.forEach(el => el.remove()); }
 }
+/* Settings › Enable travel calculation (21 Nov 2026 audit T-12). Off: no legs
+   are computed or drawn, nothing is routed, nothing is mirrored to Outlook. */
+function travelCalculationEnabled() {
+  return !(window.APP_SETTINGS && window.APP_SETTINGS.enableTravelCalculation === false);
+}
 function refreshDayOverlays(day) {
   const col = document.getElementById('day-' + day);
   if (!col) return;
+  if (!travelCalculationEnabled()) {
+    col.querySelectorAll('.travel-overlay:not(.preview), .travel-badge').forEach(el => el.remove());
+    return;
+  }
   // A leg being dragged in this column: redraw when it is let go, or the
   // drag (and its save) is lost under the redraw (audit T-11).
   if (TRAVEL_DRAG.leg && col.contains(TRAVEL_DRAG.leg)) { TRAVEL_DRAG.pendingRefresh = true; return; }
@@ -2923,7 +2932,7 @@ function travelDayIsPast(day) {
   return date < new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Perth' }).format(new Date());
 }
 function scheduleTravelOutlookSync(day, segs) {
-  if (typeof fetch !== 'function') return;
+  if (typeof fetch !== 'function' || !travelCalculationEnabled()) return;
   clearTimeout(TRAVEL_OUTLOOK_SYNC.timers[day]);
   TRAVEL_OUTLOOK_SYNC.timers[day] = setTimeout(() => runTravelOutlookSync(day, segs), TRAVEL_OUTLOOK_SYNC.delayMs);
 }
@@ -2941,7 +2950,7 @@ function travelMirrorReady(day, segs) {
 }
 const TRAVEL_MIRROR_HORIZON_DAYS = 14;   // today + 14 (owner decision 21 Nov 2026); the server enforces it too
 async function runTravelOutlookSync(day, segs) {
-  if (!travelMirrorReady(day, segs)) return null;
+  if (!travelCalculationEnabled() || !travelMirrorReady(day, segs)) return null;
   const payload = travelOutlookPayload(day, segs);
   if (!payload) return null;
   // Past days are history: the server leaves them alone, so don't ask. Days

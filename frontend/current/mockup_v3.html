@@ -171,7 +171,7 @@
      store and computeDayTravelSegments(), the calendar leg overlays and the
      travel details panel. Deferred and loaded ahead of profile.js and
      reports.js, both of which reach into it. -->
-<script src="/travel.js?v=67" defer></script>
+<script src="/travel.js?v=68" defer></script>
 <!-- Traffic alerts: a re-priced drive that now runs into a client session —
      point at it, offer Make room, Acknowledge or Ignore (today and tomorrow). -->
 <script src="/travel-alerts.js?v=1" defer></script>
@@ -2653,6 +2653,8 @@ window.opIcon = function (name, size) {
   .cal-grid.hide-cat-meeting .session[data-type="meeting"], .cal-grid.hide-cat-meeting .session[data-type="mdt"], .cal-grid.hide-cat-meeting .session[data-type="teams_meeting"],
   .cal-grid.hide-cat-other .session[data-type="outlook"], .cal-grid.hide-cat-other .session[data-type="leave"] { display: none !important; }
   .cal-grid.hide-cat-travel .travel-overlay { display: none !important; }
+  /* Settings › Show travel blocks off (applyUserSettings). */
+  .cal-grid.travel-hidden .travel-overlay, .cal-grid.travel-hidden .travel-badge { display: none !important; }
   /* Sidebar collapses into a drawer on smaller screens */
   @media (max-width: 1080px) {
     .btn-cal-sidebar { display: inline-flex; }
@@ -25371,24 +25373,24 @@ function applyUserSettings(s, os) {
   // ── ATO km rate (org setting wins) ──────────────────────────
   if (os.kilometreRate) window.ATO_RATE = parseFloat(os.kilometreRate);
 
-  // ── Travel calculation flag ──────────────────────────────────
-  if (typeof window.featureFlags === 'object') {
-    if (s.enableTravelCalculation === false) {
-      // Hide all travel overlays
-      document.querySelectorAll('.travel-overlay').forEach(function(el) { el.style.display = 'none'; });
-    } else {
-      document.querySelectorAll('.travel-overlay').forEach(function(el) { el.style.display = ''; });
-    }
-    if (os.featureFlags) {
-      window.featureFlags.outlookWriteBack = os.featureFlags.outlookWriteBack !== false;
-    }
+  if (typeof window.featureFlags === 'object' && os.featureFlags) {
+    window.featureFlags.outlookWriteBack = os.featureFlags.outlookWriteBack !== false;
   }
 
-  // ── Show/hide travel blocks on calendar ──────────────────────
+  // ── Travel settings (21 Nov 2026 audit T-12) ──────────────────
+  // Inline display:none on the legs of the moment was undone by the next
+  // redraw. Show travel blocks is a class on the grid, so every leg drawn
+  // later obeys it too; Enable travel calculation is read by travel.js
+  // (travelCalculationEnabled), which then draws, routes and mirrors nothing.
   var showTravel = s.showTravelBlocks !== false;
-  document.querySelectorAll('.travel-overlay').forEach(function(el) {
-    el.style.display = showTravel ? '' : 'none';
-  });
+  var calGrid = document.getElementById('cal-grid');
+  if (calGrid) calGrid.classList.toggle('travel-hidden', !showTravel);
+  var calcOn = s.enableTravelCalculation !== false;
+  if (window.__travelCalcApplied !== undefined && window.__travelCalcApplied !== calcOn && typeof refreshAllOverlays === 'function') {
+    window.__travelCalcApplied = calcOn;
+    refreshAllOverlays();
+  }
+  window.__travelCalcApplied = calcOn;
 
   // (Idle-gap overlay show/hide removed 2026-08-09 — the gap overlay no longer
   //  exists on the calendar; the showIdleGaps setting now only affects reports.)

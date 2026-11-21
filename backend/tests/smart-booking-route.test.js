@@ -2135,3 +2135,33 @@ describe('a leg drag survives a redraw', () => {
     expect(patch && patch.body.beforeOffsetMin).toBe(-55);           // 11:35 leg 30 min earlier = 11:05, vs the 12:00 arrival
   });
 });
+
+// 21 Nov 2026 audit T-12: Settings › Show travel blocks / Enable travel
+// calculation were applied as inline styles once, undone by the next redraw.
+describe('travel settings take effect and stay in effect', () => {
+  const HOME = { week: { mon: 'home-1' }, homes: [{ id: 'home-1', label: 'Home', addr: HOME_ADDR, suburb: 'Bull Creek', kind: 'local' }] };
+  test('calculation off: no legs drawn, no route asked, nothing mirrored — and back on, they return', () => {
+    const env = makeEnv(HOME);
+    env.ev(`SESSIONS.A = { id: 'A', day: 'mon', type: 'therapy', startH: 9, startM: 0, endH: 10, endM: 0, address: ${JSON.stringify(A_ADDR)}, patient: 'Ada', dbId: 'db-A' };
+      SESSIONS.B = { id: 'B', day: 'mon', type: 'therapy', startH: 12, startM: 0, endH: 13, endM: 0, address: ${JSON.stringify(CV_ADDR)}, patient: 'Ben', dbId: 'db-B' };`);
+    env.ev("refreshDayOverlays('mon')");
+    expect(env.win.document.querySelectorAll('#day-mon .travel-overlay').length).toBeGreaterThan(0);
+    env.ev('window.APP_SETTINGS = { enableTravelCalculation: false }');
+    const calls = env.routeCalls().length;
+    env.ev("refreshAllOverlays()");
+    expect(env.win.document.querySelectorAll('#day-mon .travel-overlay')).toHaveLength(0);
+    expect(env.routeCalls().length).toBe(calls);
+    expect(env.ev('travelCalculationEnabled()')).toBe(false);
+    env.ev('window.APP_SETTINGS = { enableTravelCalculation: true }');
+    env.ev("refreshAllOverlays()");
+    expect(env.win.document.querySelectorAll('#day-mon .travel-overlay').length).toBeGreaterThan(0);
+  });
+  test('the shell applies both settings as lasting state, not inline styles on the legs of the moment', () => {
+    const fn = SHELL.slice(SHELL.indexOf('function applyUserSettings('), SHELL.indexOf('// ── Show/hide Splose vs Outlook tiles'));
+    expect(fn).not.toMatch(/querySelectorAll\('\.travel-overlay'\)/);
+    expect(fn).toMatch(/calGrid\.classList\.toggle\('travel-hidden', !showTravel\)/);
+    expect(fn).toMatch(/refreshAllOverlays\(\)/);
+    expect(SHELL).toMatch(/\.cal-grid\.travel-hidden \.travel-overlay, \.cal-grid\.travel-hidden \.travel-badge \{ display: none !important; \}/);
+    expect(TRAVEL).toMatch(/function scheduleTravelOutlookSync\(day, segs\) \{\s*if \(typeof fetch !== 'function' \|\| !travelCalculationEnabled\(\)\) return;/);
+  });
+});
