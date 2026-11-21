@@ -171,7 +171,7 @@
      store and computeDayTravelSegments(), the calendar leg overlays and the
      travel details panel. Deferred and loaded ahead of profile.js and
      reports.js, both of which reach into it. -->
-<script src="/travel.js?v=63" defer></script>
+<script src="/travel.js?v=64" defer></script>
 <!-- Traffic alerts: a re-priced drive that now runs into a client session —
      point at it, offer Make room, Acknowledge or Ignore (today and tomorrow). -->
 <script src="/travel-alerts.js?v=1" defer></script>
@@ -3277,6 +3277,13 @@ window.opIcon = function (name, size) {
     cursor: pointer; user-select: none;
   }
   .travel-overlay:hover { filter: brightness(0.97); box-shadow: 0 2px 6px rgba(15,118,110,0.2); }
+  /* A redrawn leg is the same element (travel.js _legElement): when its route
+     lands it eases to the real size instead of jumping (audit T-14). Never
+     while dragged — direct manipulation is 1:1. Reduced motion collapses it. */
+  .travel-overlay:not(.drag-preview):not(.dragging):not(.preview) { transition: top 140ms var(--ease-out), height 140ms var(--ease-out); }
+  /* Priced from the suburb table, not a real route (yet): quieter and dashed
+     — provisional, like a skipped drive (T-19). */
+  .travel-overlay.estimate { border-left-style: dashed; opacity: .7; }
   .travel-overlay .t-ico { font-size: 11px; }
   .travel-overlay .t-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   /* Size tiers (travel.js _legTier, 21 Nov 2026 audit T-15/T-20): a leg under

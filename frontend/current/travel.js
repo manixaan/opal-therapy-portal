@@ -286,7 +286,13 @@ function scheduleOverlayRefresh() {
     _overlayRefreshTimer = null;
     // Mid-drag the legs show the dragged position; a route answer waits
     // for the drag to end (endTravelPreview runs it once).
-    if (TRAVEL_DRAG.active) { TRAVEL_DRAG.pendingRefresh = true; return; }
+    // The dragged day's preview is redrawn from the answers that landed, so
+    // the legs under the pointer are the ones the drop will show (T-14).
+    if (TRAVEL_DRAG.active) {
+      TRAVEL_DRAG.pendingRefresh = true;
+      if (TRAVEL_DRAG.moves) previewTravelForMoves(TRAVEL_DRAG.moves);
+      return;
+    }
     refreshAllOverlays();
   }, 250);
 }
@@ -302,8 +308,7 @@ const TRAVEL_DRAG = { active: false, days: new Set(), pendingRefresh: false };
 function _drawDayLegsOnly(day) {
   const col = document.getElementById('day-' + day);
   if (!col) return;
-  clearDayOverlays(day);
-  computeDayTravelSegments(day).forEach(seg => renderSegmentOverlay(col, seg));
+  _renderDayLegs(col, computeDayTravelSegments(day));
   col.querySelectorAll('.travel-overlay').forEach(el => el.classList.add('drag-preview'));
 }
 function previewTravelForMove(id, day, startMin, durationMin) {
@@ -314,6 +319,7 @@ function previewTravelForMoves(moves) {
   const S = window.SESSIONS || {};
   const real = [];
   TRAVEL_DRAG.active = true;
+  TRAVEL_DRAG.moves = moves;
   try {
     (moves || []).forEach(m => {
       const s = S[m.id];
@@ -361,7 +367,7 @@ function travelConflictsForMove(id, day, startMin, durationMin) {
 }
 function endTravelPreview(redraw) {
   const days = Array.from(TRAVEL_DRAG.days);
-  TRAVEL_DRAG.active = false; TRAVEL_DRAG.days.clear();
+  TRAVEL_DRAG.active = false; TRAVEL_DRAG.days.clear(); TRAVEL_DRAG.moves = null;
   if (redraw) days.forEach(d => refreshDayOverlays(d));
   if (TRAVEL_DRAG.pendingRefresh) { TRAVEL_DRAG.pendingRefresh = false; scheduleOverlayRefresh(); }
 }
@@ -2628,12 +2634,48 @@ function clearDayOverlays(day) {
   if (!col) return;
   col.querySelectorAll('.travel-overlay').forEach(el => el.remove());
 }
+/* Legs are keyed by their owner and side (or, for a marker with no owner, by
+   the stops it joins), and a redraw updates the leg already on screen rather
+   than removing and re-adding it. When a route answer lands, the leg eases to
+   its real size (CSS, 140 ms) instead of jumping (21 Nov 2026 audit T-14). */
+let _LEG_REUSE = null;
+function _legKey(seg) {
+  return seg.ownerSessionId ? seg.ownerSessionId + '|' + seg.ownerSide
+    : [seg.kind, seg.via || '', seg.fromSessionId || '', seg.toSessionId || ''].join('|');
+}
+function _legElement(seg) {
+  const key = _legKey(seg);
+  let el = _LEG_REUSE && _LEG_REUSE.get(key);
+  if (el) {
+    _LEG_REUSE.delete(key);
+    const top = el.style.top, height = el.style.height;
+    el.removeAttribute('style');
+    el.style.top = top; el.style.height = height;      // the geometry it eases from
+    ['title', 'tabindex', 'role', 'aria-label'].forEach(a => el.removeAttribute(a));
+    Object.keys(el.dataset).forEach(k => { delete el.dataset[k]; });
+    el.innerHTML = ''; el.onclick = null; el.__dragged = false;
+  } else {
+    el = document.createElement('div');
+    el.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); showTravelLegMenu(e.clientX, e.clientY, el.__seg); });
+  }
+  el.__seg = seg; el.__legKey = key;
+  return el;
+}
+function _renderDayLegs(col, segs) {
+  const reuse = new Map();
+  col.querySelectorAll('.travel-overlay').forEach(el => {
+    if (el.__legKey && !el.classList.contains('preview') && !reuse.has(el.__legKey)) reuse.set(el.__legKey, el);
+    else el.remove();
+  });
+  _LEG_REUSE = reuse;
+  try { segs.forEach(seg => renderSegmentOverlay(col, seg)); }
+  finally { _LEG_REUSE = null; reuse.forEach(el => el.remove()); }
+}
 function refreshDayOverlays(day) {
   const col = document.getElementById('day-' + day);
   if (!col) return;
-  clearDayOverlays(day);
   const segs = computeDayTravelSegments(day);
-  segs.forEach(seg => renderSegmentOverlay(col, seg));
+  _renderDayLegs(col, segs);
   decorateTravelBadges(day, segs);
   scheduleTravelOutlookSync(day, segs);
   // Traffic alerts (travel-alerts.js): today and tomorrow only.
@@ -2671,8 +2713,11 @@ function renderSegmentOverlay(col, seg) {
     seg = Object.assign({}, seg, { startMin: Math.max(seg.startMin, dayStart), endMin: Math.min(seg.endMin, dayEnd) });
     if (seg.endMin <= seg.startMin) return;
   }
-  const el = document.createElement('div');
+  const el = _legElement(seg);
   el.className = 'travel-overlay ' + seg.kind + (seg.moved ? ' moved' : '') + (seg.tight ? ' tight' : '');
+  // Priced from the suburb table, not a real route (yet): drawn as
+  // provisional, so a later change reads as settling (T-19).
+  if (seg.routeReal === false && seg.travelMin > 0) el.classList.add('estimate');
   el.style.top    = tToY(Math.floor(seg.startMin/60), seg.startMin%60) + 'px';
   // Always 4 px short of its slot, like a tile, so the gap to the appointment
   // is the same 4 px for every leg (21 Nov 2026 audit T-15). A tiny leg is a
@@ -2694,7 +2739,6 @@ function renderSegmentOverlay(col, seg) {
       el.style.height = '16px';
     }
   }
-  el.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); showTravelLegMenu(e.clientX, e.clientY, seg); });
   if (seg.skipped) {
     // Not driving this: a slim marker where the drive was, to bring it back.
     el.classList.add('skipped');
@@ -2704,7 +2748,7 @@ function renderSegmentOverlay(col, seg) {
     el.dataset.ownerSession = seg.ownerSessionId || '';
     el.dataset.ownerSide = seg.ownerSide || '';
     el.onclick = (ev) => { ev.stopPropagation(); openTravelPanel(seg); };
-    col.appendChild(el);
+    if (el.parentNode !== col) col.appendChild(el);
     return;
   }
   if (seg.tight) el.style.borderLeftColor = 'var(--danger, #9c3322)';
@@ -2779,7 +2823,7 @@ function renderSegmentOverlay(col, seg) {
     openTravelPanel(seg);
   };
   if (canMove) attachTravelLegDrag(el, seg);
-  col.appendChild(el);
+  if (el.parentNode !== col) col.appendChild(el);
   if (stayCompact) { el.innerHTML = ''; }
   else if (tier === 't-full' || seg.via === 'stay') _fitLegText(el);
 }
@@ -2999,9 +3043,15 @@ function attachTravelLegDrag(el, seg) {
   el.tabIndex = 0;
   el.setAttribute('role', 'button');
   el.setAttribute('aria-label', el.title + ' Arrow keys move it by ' + TRAVEL_DRAG_STEP_MIN + ' minutes.');
+  // A redrawn leg keeps its element (_legElement), so the handlers are bound
+  // once and read the leg's current segment from el.__seg.
+  if (el.__dragBound) return;
+  el.__dragBound = true;
+  if (!el.__seg) el.__seg = seg;
+  const movable = () => el.classList.contains('movable');
   let drag = null;
   el.addEventListener('pointerdown', (e) => {
-    if (e.button !== 0) return;
+    if (e.button !== 0 || !movable()) return;
     e.stopPropagation();                             // not the column's create-drag
     drag = { y: e.clientY, top: parseFloat(el.style.top) || 0, moved: false, id: e.pointerId };
     try { el.setPointerCapture(e.pointerId); } catch (_) { /* jsdom */ }
@@ -3024,14 +3074,15 @@ function attachTravelLegDrag(el, seg) {
     el.__dragged = true;
     const stepPx = TRAVEL_DRAG_STEP_MIN / 60 * HOUR_PX;
     const steps = Math.round((e.clientY - d.y) / stepPx);
-    if (steps) _commitLegMove(seg, seg.startMin + steps * TRAVEL_DRAG_STEP_MIN);
+    if (steps) _commitLegMove(el.__seg, el.__seg.startMin + steps * TRAVEL_DRAG_STEP_MIN);
   };
   el.addEventListener('pointerup', end);
   el.addEventListener('pointercancel', () => { if (drag) { el.style.top = drag.top + 'px'; el.classList.remove('dragging'); drag = null; } });
   el.addEventListener('keydown', (e) => {
     if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+    if (!movable()) return;
     e.preventDefault();
-    _commitLegMove(seg, seg.startMin + (e.key === 'ArrowUp' ? -1 : 1) * TRAVEL_DRAG_STEP_MIN);
+    _commitLegMove(el.__seg, el.__seg.startMin + (e.key === 'ArrowUp' ? -1 : 1) * TRAVEL_DRAG_STEP_MIN);
   });
 }
 
@@ -3226,7 +3277,7 @@ function _renderTravelPanel(seg) {
 
   // Source chip
   html += '<span class="tp-source-chip ' + sourceClass + '">' +
-    (isOutlook ? 'Outlook event' : 'Calculated route') + '</span>';
+    (isOutlook ? 'Outlook event' : seg.routeReal === false ? 'Estimate — route unavailable' : 'Calculated route') + '</span>';
 
   // Travel goes to Outlook from today on; past days are left as they were
   // (runTravelOutlookSync). Say so, instead of leaving it to look broken.

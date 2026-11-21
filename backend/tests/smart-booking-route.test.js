@@ -2042,3 +2042,49 @@ describe('same-place marker and overlapping legs stay out of the tiles', () => {
     expect(TRAVEL).toMatch(/const tier = seg\.via === 'stay' \? '' : overlaps \? 't-bar' : _legTier\(legH\);/);
   });
 });
+
+// 21 Nov 2026 audit T-14/T-19: a redraw updates the leg on screen (keyed by
+// owner + side) instead of remove + re-add, so a route answer eases it to its
+// real size; a leg priced from the suburb table looks provisional.
+describe('legs settle in place; estimates look provisional', () => {
+  const HOME = { week: { mon: 'home-1' }, homes: [{ id: 'home-1', label: 'Home', addr: HOME_ADDR, suburb: 'Bull Creek', kind: 'local' }] };
+  function day(env) {
+    env.ev(`SESSIONS.A = { id: 'A', day: 'mon', type: 'therapy', startH: 9, startM: 0, endH: 10, endM: 0, address: ${JSON.stringify(A_ADDR)}, patient: 'Ada', dbId: 'db-A' };
+      SESSIONS.B = { id: 'B', day: 'mon', type: 'therapy', startH: 12, startM: 0, endH: 13, endM: 0, address: ${JSON.stringify(CV_ADDR)}, patient: 'Ben', dbId: 'db-B' };`);
+  }
+  const leg = (env) => env.win.document.querySelector('#day-mon .travel-overlay.between');
+  test('an estimate is drawn as .estimate; once routed, the same element loses it and takes the real size', async () => {
+    const env = makeEnv(Object.assign({ routes: { [A_ADDR + '|' + CV_ADDR]: 25, [HOME_ADDR + '|' + A_ADDR]: 30, [CV_ADDR + '|' + HOME_ADDR]: 30 } }, HOME));
+    day(env);
+    env.ev("refreshDayOverlays('mon')");
+    const first = leg(env);
+    expect(first.classList.contains('estimate')).toBe(true);
+    await flush(50);                                               // the Routes answers land
+    env.ev("refreshDayOverlays('mon')");
+    await flush(50);
+    env.ev("refreshDayOverlays('mon')");
+    expect(leg(env)).toBe(first);                                   // updated in place
+    expect(first.classList.contains('estimate')).toBe(false);
+    expect(parseFloat(first.style.height)).toBeCloseTo(25 * 1.2 - 4);
+    expect(env.win.document.querySelectorAll('#day-mon .travel-overlay.between')).toHaveLength(1);
+  });
+  test('a reused leg takes its new segment: a drag commits from the current times', async () => {
+    const env = makeEnv(HOME);
+    day(env);
+    await warmRoutes(env, [[A_ADDR, CV_ADDR, 25], [HOME_ADDR, A_ADDR, 30], [CV_ADDR, HOME_ADDR, 30]]);
+    env.ev("refreshDayOverlays('mon')");
+    env.ev("SESSIONS.B.startH = 12; SESSIONS.B.startM = 30; SESSIONS.B.endH = 13; SESSIONS.B.endM = 30; refreshDayOverlays('mon')");
+    const el = leg(env);
+    expect(el.__seg.endMin).toBe(12 * 60 + 30);
+    el.dispatchEvent(new env.win.KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+    await flush();
+    const patch = env.log.filter((c) => c.method === 'PATCH' && c.url === '/api/events/db-B/travel').pop();
+    expect(patch.body.beforeOffsetMin).toBe(-25 - 5);              // 12:05 − 12:30 anchor, one step earlier
+  });
+  test('the CSS eases top/height (never while dragging) and styles the estimate; the panel never calls an estimate calculated', () => {
+    expect(SHELL).toMatch(/\.travel-overlay:not\(\.drag-preview\):not\(\.dragging\):not\(\.preview\) \{ transition: top 140ms var\(--ease-out\), height 140ms var\(--ease-out\); \}/);
+    expect(SHELL).toMatch(/\.travel-overlay\.estimate \{ border-left-style: dashed; opacity: \.7; \}/);
+    expect(TRAVEL).toContain("seg.routeReal === false ? 'Estimate — route unavailable' : 'Calculated route'");
+    expect(TRAVEL).not.toMatch(/function refreshDayOverlays\(day\) \{[^}]*clearDayOverlays\(day\)/);
+  });
+});
