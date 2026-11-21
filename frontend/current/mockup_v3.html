@@ -3085,6 +3085,9 @@ window.opIcon = function (name, size) {
      so events scroll underneath the sticky header rather than over it.          */
   .session { user-select: none; touch-action: none; transition: box-shadow 120ms, transform 120ms, filter 120ms; }
   .session:hover { filter: brightness(1.04); box-shadow: 0 3px 8px rgba(0,0,0,0.16); z-index: 4; }
+  /* A just-booked tile fades in where its proposal stood (C-13). */
+  .session.tile-new { animation: tileIn var(--t-fast) var(--ease-out); }
+  @keyframes tileIn { from { opacity: 0; } }
   .session.dragging { opacity: 0.85; z-index: 15; box-shadow: 0 10px 24px rgba(0,0,0,0.25); cursor: grabbing; filter: brightness(1.06); transform: scale(1.02); }
   .session.resizing { z-index: 15; box-shadow: 0 6px 18px rgba(0,0,0,0.22); filter: brightness(1.03); }
   .session.selected { box-shadow: 0 0 0 2px white, 0 0 0 4px var(--accent); z-index: 5; }
@@ -13285,9 +13288,10 @@ async function confirmBooking() {
         });
         if (_optId && SESSIONS[_optId]) {
           SESSIONS[_optId].outlookSynced = true;
-          if (SESSIONS[_optId].element) SESSIONS[_optId].element.dataset.outlookTile = '1';
+          if (SESSIONS[_optId].element) { SESSIONS[_optId].element.dataset.outlookTile = '1'; SESSIONS[_optId].element.classList.add('tile-new'); }
         }
-        if (typeof refreshAllOverlays === 'function') setTimeout(() => refreshAllOverlays(), 100);
+        // Only this day's legs change (C-13).
+        if (typeof refreshDayOverlays === 'function') setTimeout(() => refreshDayOverlays(t.day), 100);
       }
 
       // No success modal — land the user straight on the calendar with the
@@ -13297,7 +13301,10 @@ async function confirmBooking() {
       resetBtn();
       if (typeof resetWizard === 'function') resetWizard();
       if (typeof switchTab === 'function') { window.__viewManuallySet = true; switchTab('calendar'); }
-      if (t?.dateStr && typeof gotoWeekOf === 'function') gotoWeekOf(t.dateStr);
+      // Jump only when the day is not already on screen: a week render from
+      // the cache (which lacks the new row) blanked the new tile until the
+      // reload landed (C-13). The reload then redraws just the changed day.
+      if (t?.dateStr && typeof gotoWeekOf === 'function' && !__isVisibleWeekDate(t.dateStr)) gotoWeekOf(t.dateStr);
       if (typeof loadOutlookEventsToCalendar === 'function') loadOutlookEventsToCalendar();
       showToast(`${outlookTitle} added`, outlookId ? 'Also added to Outlook' : 'Saved in the portal calendar');
       if (newDbId && _repeatRuleNow && window.Recurrence) window.Recurrence.afterBooked(newDbId, _repeatRuleNow);
@@ -13522,9 +13529,10 @@ async function confirmBooking() {
         // drop this entry along with its tile, or a detached copy stays in
         // SESSIONS for travel, undo and the day report (10 Oct 2026).
         SESSIONS[_optId].outlookSynced = true;
-        if (SESSIONS[_optId].element) SESSIONS[_optId].element.dataset.outlookTile = '1';
+        if (SESSIONS[_optId].element) { SESSIONS[_optId].element.dataset.outlookTile = '1'; SESSIONS[_optId].element.classList.add('tile-new'); }
       }
-      if (typeof refreshAllOverlays === 'function') setTimeout(() => refreshAllOverlays(), 100);
+      // Only this day's legs change (C-13).
+      if (typeof refreshDayOverlays === 'function') setTimeout(() => refreshDayOverlays(slot.day), 100);
     }
 
     // No success modal — go straight to the calendar with the event in view.
@@ -13532,17 +13540,19 @@ async function confirmBooking() {
     resetBtn();
     if (typeof resetWizard === 'function') resetWizard();
     if (typeof switchTab === 'function') { window.__viewManuallySet = true; switchTab('calendar'); }
-    if (slot?.day && DAY_DATES?.[slot.day] && typeof gotoWeekOf === 'function') {
+    // Jump only when the day is not already on screen: a week render from the
+    // cache (which lacks the new row) blanked the new tile until the reload
+    // landed (C-13).
+    if (slot?.day && DAY_DATES?.[slot.day] && typeof gotoWeekOf === 'function' && !__isVisibleWeekDate(DAY_DATES[slot.day])) {
       gotoWeekOf(DAY_DATES[slot.day]);
     }
     // The row is already in the local DB (the POST writes it synchronously):
-    // reload so the saved appointment is what the grid shows. The week jump
-    // above re-renders from the cached list, which does not have it yet.
+    // reload so the saved appointment is what the grid shows; only the
+    // booked day is redrawn (renderWeekChanges), in one frame.
     if (typeof loadOutlookEventsToCalendar === 'function') loadOutlookEventsToCalendar();
     const _unsureEl = document.getElementById('bsp-location-unsure'); if (_unsureEl) _unsureEl.checked = false;
     showToast(_bookedFor ? `${_outlookTitle} added to ${_bookedFor}'s calendar` : `${_outlookTitle} added`,
       _bookedFor ? 'Open All therapists (Master view) to see it' : (outlookId ? 'Also added to Outlook' : 'Saved in the portal calendar'));
-    if (typeof refreshAllOverlays === 'function') setTimeout(() => refreshAllOverlays(), 150);
     // Repeat (recurrence.js): the repeats are booked by the server after this one.
     if (newDbId && _repeatRule && window.Recurrence) window.Recurrence.afterBooked(newDbId, _repeatRule);
     // Route-aware continuation (booking-route.js): "What would you like to do
@@ -18977,7 +18987,9 @@ function renderCurrentWeek() {
   const slice = __eventsInVisibleWeek();
   console.log(`📆 Rendering ${slice.length} events for week of ${__ymd(window.__currentWeekMonday)}`);
   const eventsByDay = groupEventsByDay(slice);
+  const _sigs = __weekEventSigs(eventsByDay);   // before the merge stamps sessionId on them
   mergeEventsIntoDayData(eventsByDay);
+  __recordWeekDrawn(_sigs);
   renderToday();
   __openPendingEventDetail();
   // Post-render decorations — run after all tiles are in the DOM
@@ -18991,6 +19003,98 @@ function renderCurrentWeek() {
     // (or week navigation) showed the sessions with no travel around them.
     if (typeof refreshAllOverlays === 'function') refreshAllOverlays();
   });
+}
+
+/* ── Redraw only what changed (C-13, P-04) ───────────────────────────────
+   renderCurrentWeek() clears and rebuilds every tile. A reload after a
+   booking, a move or the 2-minute poll usually changes one day or none, so
+   renderWeekChanges() compares each day's events — and the tiles actually in
+   that column — with what the last render drew, and rebuilds only the days
+   that differ (nothing at all when nothing changed). A different week, the
+   Outlook-only switch, the week start, colours or the hour scale fall back to
+   the full render. A column changed by hand (an optimistic tile, a failed
+   move or delete) no longer matches its record, so it is always redrawn. */
+var __weekDrawn = null;
+function __weekDrawKey() {
+  return [window.__currentWeekMonday ? __ymd(window.__currentWeekMonday) : '', window.OUTLOOK_ONLY ? 1 : 0,
+    __weekDayOrder().join(','), JSON.stringify(window.OUTLOOK_CATEGORY_COLOURS || {}),
+    typeof START_H !== 'undefined' ? START_H : '', typeof HOUR_PX !== 'undefined' ? HOUR_PX : ''].join('~');
+}
+function __weekEventSigs(eventsByDay) {
+  const sigs = {};
+  __ALL_DAYS.forEach(d => { try { sigs[d] = JSON.stringify((eventsByDay && eventsByDay[d]) || []); } catch (_) { sigs[d] = null; } });
+  return sigs;
+}
+function __dayTilesSig(day) {
+  const parts = [];
+  [document.getElementById('day-' + day), document.getElementById('allday-' + day)].forEach(box => {
+    if (!box) return;
+    box.querySelectorAll('[data-outlook-tile]').forEach(el => {
+      const s = SESSIONS[el.dataset.id || ''];
+      parts.push((el.dataset.id || el.id) + '@' + el.style.top + '/' + el.style.height
+        + (s && s.element === el ? ':' + s.startH + '.' + s.startM + '-' + s.endH + '.' + s.endM + '|' + (s.address || '') + '|' + (s.title || '') : '!'));
+    });
+  });
+  return parts.join(';');
+}
+function __recordWeekDrawn(sigs) {
+  const dom = {};
+  __ALL_DAYS.forEach(d => { dom[d] = __dayTilesSig(d); });
+  __weekDrawn = { key: __weekDrawKey(), sigs, dom };
+}
+// One day's share of __clearOutlookTiles: its stamped tiles, all-day chips and rows.
+function __clearOutlookTilesForDay(day) {
+  const col = document.getElementById('day-' + day), ad = document.getElementById('allday-' + day);
+  const inDay = (el) => (col && col.contains(el)) || (ad && ad.contains(el));
+  Object.keys(SESSIONS).forEach(id => {
+    const s = SESSIONS[id];
+    if (!s) return;
+    const el = s.element;
+    if (el && el.isConnected ? !inDay(el) : s.day !== day) return;
+    const stamped = !!(el && el.dataset && el.dataset.outlookTile);
+    if (s.outlookSynced || s.type === 'outlook' || stamped) {
+      if (el && el.parentNode) el.parentNode.removeChild(el);
+      delete SESSIONS[id];
+    }
+  });
+  [col, ad].forEach(box => { if (box) box.querySelectorAll('[data-outlook-tile]').forEach(el => el.remove()); });
+  if (DAY_DATA[day]) DAY_DATA[day].sessions = [];
+}
+function renderWeekChanges() {
+  const prev = __weekDrawn;
+  if (!prev || prev.key !== __weekDrawKey()) return renderCurrentWeek();
+  const eventsByDay = groupEventsByDay(__eventsInVisibleWeek());
+  const sigs = __weekEventSigs(eventsByDay);
+  const changed = __ALL_DAYS.filter(d => sigs[d] === null || sigs[d] !== prev.sigs[d] || __dayTilesSig(d) !== prev.dom[d]);
+  if (changed.length === __ALL_DAYS.length) return renderCurrentWeek();
+  __renderWeekHeader();
+  updateNowLine();
+  if (changed.length) {
+    const only = {};
+    changed.forEach(d => { __clearOutlookTilesForDay(d); only[d] = eventsByDay[d] || []; });
+    mergeEventsIntoDayData(only, changed);
+    renderToday();
+  }
+  __recordWeekDrawn(sigs);
+  __openPendingEventDetail();
+  if (!changed.length) return;
+  requestAnimationFrame(() => {
+    if (!window.OUTLOOK_ONLY) {
+      detectAndMarkCalendarConflicts();
+      detectAndMarkRuralTrips();
+    }
+    // Legs are per day: redraw only the days whose tiles were rebuilt.
+    if (typeof refreshDayOverlays === 'function') changed.forEach(d => refreshDayOverlays(d));
+    else if (typeof refreshAllOverlays === 'function') refreshAllOverlays();
+  });
+}
+// Is this Perth date (YYYY-MM-DD) one of the columns on screen?
+function __isVisibleWeekDate(ymd) {
+  const mon = window.__currentWeekMonday;
+  if (!mon || !ymd) return false;
+  const start = __weekStartDate(mon);
+  const end = new Date(start); end.setUTCDate(start.getUTCDate() + 7);
+  return ymd >= __ymd(start) && ymd < __ymd(end);
 }
 
 // --- Toolbar handlers (wired up in cal-toolbar) ---
@@ -19263,11 +19367,13 @@ async function loadOutlookEventsToCalendar() {
     } else if (window.__calendarMode === 'day') {
       const _dayKey = (typeof DAY_ORDER !== 'undefined' && typeof window.__currentDayOffset !== 'undefined')
         ? DAY_ORDER[window.__currentDayOffset] : 'mon';
+      renderWeekChanges();   // the day view is the week grid: keep it fresh too
       renderDay(_dayKey);
     } else if (window.__calendarMode === 'master') {
       if (window.OpalScheduler) window.OpalScheduler.refresh();
     } else {
-      renderCurrentWeek();
+      // Only the days whose events (or tiles) changed are rebuilt (C-13, P-04).
+      renderWeekChanges();
     }
 
     // After Outlook tiles are rendered, load Splose appointments and cross-reference
@@ -19657,9 +19763,14 @@ function _repairNoTitleTiles() {
 /**
  * Merge Outlook events into existing DAY_DATA AND add to week calendar via SESSIONS
  */
-function mergeEventsIntoDayData(eventsByDay) {
+function mergeEventsIntoDayData(eventsByDay, onlyDays) {
   console.log('🔀 Merging Outlook events into calendar...');
-  if (typeof clearAllDayChips === 'function') clearAllDayChips();
+  // onlyDays (renderWeekChanges): clear just those days' all-day chips.
+  if (onlyDays) {
+    onlyDays.forEach(d => document.querySelectorAll('#allday-' + d + ' .allday-chip').forEach(el => el.remove()));
+    const _g = document.getElementById('cal-grid');
+    if (_g) _g.classList.toggle('no-allday', !_g.querySelector('.allday-chip'));
+  } else if (typeof clearAllDayChips === 'function') clearAllDayChips();
   console.log('DAY_DATA keys:', Object.keys(DAY_DATA));
 
   Object.keys(eventsByDay).forEach(day => {
