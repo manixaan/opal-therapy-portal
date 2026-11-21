@@ -19200,6 +19200,9 @@ function groupEventsByDay(events) {
         grouped[dayOfWeek].push({
           start: perthTime,
           dur: calculateDuration(event.start_time, event.end_time),
+          // Whole minutes from the ISO pair — the tile's length (C-03). Seconds
+          // round to the nearest minute; no "30.5m" string round trip.
+          durMin: eventDurationMinutes(event.start_time, event.end_time),
           type: classified,
           title: event.title || '(No subject)',
           location: hasLocation ? rawLoc : null, // clean Outlook location string
@@ -19240,11 +19243,14 @@ function groupEventsByDay(events) {
 /**
  * Calculate duration between two timestamps
  */
+function eventDurationMinutes(startTime, endTime) {
+  const ms = new Date(endTime) - new Date(startTime);
+  return Number.isFinite(ms) ? Math.max(0, Math.round(ms / 60000)) : NaN;
+}
 function calculateDuration(startTime, endTime) {
   try {
-    const start = new Date(startTime);
-    const end = new Date(endTime);
-    const minutes = (end - start) / (1000 * 60);
+    const minutes = eventDurationMinutes(startTime, endTime);
+    if (!Number.isFinite(minutes)) return '60 min';
     const hours = Math.floor(minutes / 60);
     const mins = minutes % 60;
 
@@ -19457,7 +19463,12 @@ function mergeEventsIntoDayData(eventsByDay) {
           let endM = startM;
           const durStr = session.dur;
 
-          if (durStr.includes('h') && durStr.includes('m')) {
+          if (Number.isFinite(session.durMin)) {
+            // Whole minutes straight from the ISO pair (C-03).
+            const endTot = startH * 60 + startM + session.durMin;
+            endH = Math.floor(endTot / 60);
+            endM = endTot % 60;
+          } else if (durStr.includes('h') && durStr.includes('m')) {
             // Format: "1h 30m"
             const h = parseInt(durStr.match(/(\d+)h/)[1]);
             const m = parseInt(durStr.match(/(\d+)m/)[1]);
