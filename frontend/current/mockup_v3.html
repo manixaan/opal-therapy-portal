@@ -12890,12 +12890,31 @@ function _bspValidateTiming() {
 }
 
 /* ---------- Step 1: Capture form data and advance ---------- */
-/* A fresh id per deliberate Create: the server answers a repeat of it (double
-   click, network retry) with the first booking instead of writing a second. */
+/* One id per booking attempt: the server answers a repeat of it (double
+   click, a retry after a lost answer) with the first booking instead of
+   writing a second. The id is kept while the form is unchanged — a retry of
+   the same booking reuses it — and replaced when the form changes or after a
+   successful save (resetWizard). (Q-02) */
+function bookingRequestFingerprint(timing) {
+  const v = (id) => { const el = document.getElementById(id); return el ? String(el.value || '').trim() : ''; };
+  const client = bookingClientFor();
+  return JSON.stringify([
+    BOOKING_STATE.category, BOOKING_STATE.serviceType,
+    timing && timing.startISO, timing && timing.endISO,
+    client ? String(client.id) : null,
+    v('bsp-location'), v('custom-name'), v('email-title'), v('admin-task-type'),
+    (typeof _bspSelectedTherapist !== 'undefined' && _bspSelectedTherapist) ? _bspSelectedTherapist.userId || null : null,
+  ]);
+}
 function newBookingRequestId() {
   try { if (window.crypto && crypto.randomUUID) return crypto.randomUUID(); } catch (e) { /* older browser */ }
   return 'bk-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12);
 }
+/* A create whose answer never came (network drop) or came from a gateway
+   (502/503/504) may still have been saved: say so, never "not saved". */
+const BOOKING_UNKNOWN = '__unknown__';
+const BOOKING_UNKNOWN_MSG = 'Couldn\'t confirm the save — check the calendar before trying again.';
+function bookingOutcomeUnknown(status) { return status === 0 || status === 502 || status === 503 || status === 504; }
 /* The client a booking carries, by its type's rule — null when none is picked. */
 function bookingClientFor() {
   const p = (typeof getSelectedPatient === 'function') ? getSelectedPatient() : null;
@@ -12956,14 +12975,17 @@ async function createBookingNow() {
 
   // One surface, one action — create straight from the form.
   BOOKING_STATE.submitting = true;
-  BOOKING_STATE.requestId = newBookingRequestId();
+  const _fp = bookingRequestFingerprint(timing);
+  if (!BOOKING_STATE.requestId || BOOKING_STATE.requestFp !== _fp) {
+    BOOKING_STATE.requestId = newBookingRequestId();
+    BOOKING_STATE.requestFp = _fp;
+  }
   const btn = document.getElementById('create-booking-btn');
   if (btn) btn.disabled = true;
   try {
     await confirmBooking();
   } finally {
     BOOKING_STATE.submitting = false;
-    BOOKING_STATE.requestId = null;
     if (btn) btn.disabled = false;
     _bspValidateTiming();
   }
@@ -13172,11 +13194,18 @@ async function confirmBooking() {
           newDbId   = oResult.dbId || null;
           __registerBookingUndo(oResult.dbId, outlookTitle);
           if (window.SploseSync) window.SploseSync.refresh(); // the Sync Splose count follows at once
+        } else if (bookingOutcomeUnknown(oResp.status)) {
+          saveErr = BOOKING_UNKNOWN;
         } else {
           saveErr = oResult.error || ('HTTP ' + oResp.status);
         }
       } catch (oErr) {
-        saveErr = oErr.message || 'network error';
+        saveErr = BOOKING_UNKNOWN;   // no answer: it may have been saved
+      }
+      if (saveErr === BOOKING_UNKNOWN) {
+        showToast('May not have saved', BOOKING_UNKNOWN_MSG, 'warn');
+        resetBtn();
+        return;
       }
       if (saveErr) {
         showToast('Event not saved', saveErr, 'warn');
@@ -13390,6 +13419,10 @@ async function confirmBooking() {
           if (typeof bspCommitRelocate === 'function') await bspCommitRelocate();
         }
         console.log('✅ Outlook event created:', outlookId);
+      } else if (bookingOutcomeUnknown(oResp.status)) {
+        showToast('May not have saved', BOOKING_UNKNOWN_MSG, 'warn');
+        resetBtn();
+        return;
       } else {
         // The portal refused the booking itself — nothing was saved, so no tile.
         showToast('Appointment not saved', oResult.error || ('HTTP ' + oResp.status), 'warn');
@@ -13397,7 +13430,9 @@ async function confirmBooking() {
         return;
       }
     } catch (oErr) {
-      showToast('Appointment not saved', oErr.message || 'network error', 'warn');
+      // No answer at all: it may have been saved. The retry reuses the
+      // request id, so the server answers it with the first booking.
+      showToast('May not have saved', BOOKING_UNKNOWN_MSG, 'warn');
       resetBtn();
       return;
     }
@@ -13494,6 +13529,9 @@ async function confirmBooking() {
 
 /* ---------- Reset wizard (after successful booking) ---------- */
 function resetWizard() {
+  // Saved: the next Create is a new booking with a new request id (Q-02).
+  BOOKING_STATE.requestId = null;
+  BOOKING_STATE.requestFp = null;
   // Forget the last booking's type and its form text: a name left in the
   // custom form titled the next booking ("FCA" on a Resource Preparation),
   // and a stale highlighted leaf looked chosen while the category was not.

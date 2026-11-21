@@ -1011,6 +1011,14 @@ describe('grouped booking-type picker', () => {
     const body = HTML.slice(start, HTML.indexOf('/* ---------- Step 4', start));
     expect(body).toContain('if (BOOKING_STATE.submitting) return;');
     expect(body).toContain('BOOKING_STATE.requestId = newBookingRequestId();');
+    // Q-02 (21 Nov 2026): the id is kept while the form is unchanged, so a
+    // retry after a lost answer is deduped; an edit or a save replaces it.
+    expect(body).toContain('if (!BOOKING_STATE.requestId || BOOKING_STATE.requestFp !== _fp) {');
+    expect(body).not.toContain('BOOKING_STATE.requestId = null;');
+    expect(HTML).toMatch(/function resetWizard\(\) \{\s+\/\/ Saved[^\n]*\n\s+BOOKING_STATE\.requestId = null;/);
+    // A create with no answer says it may have saved — never "not saved".
+    expect(HTML).toContain("showToast('May not have saved', BOOKING_UNKNOWN_MSG, 'warn');");
+    expect(HTML).not.toContain("showToast('Appointment not saved', oErr.message || 'network error', 'warn');");
     expect(body).toMatch(/if \(btn\) btn\.disabled = true;\s+try \{\s+await confirmBooking\(\);/);
     // Both save paths send the request id the server dedupes on.
     expect((HTML.match(/requestId: BOOKING_STATE\.requestId/g) || []).length).toBe(2);
