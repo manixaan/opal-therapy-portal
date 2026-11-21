@@ -2837,6 +2837,7 @@ window.opIcon = function (name, size) {
   .now-line {
     position: absolute; left: 0; right: 0;
     border-top: 2px solid var(--now);
+    transform: translateY(-1px); /* the 2px rule is centred on its minute */
     z-index: 4;
   }
   .now-line::before {
@@ -14108,21 +14109,8 @@ function reflowDayOverlaps(col) {
   const days = ['mon','tue','wed','thu','fri','sat','sun'];
   days.forEach(d => paintHourLines(document.getElementById('day-' + d)));
 
-  // now-line on today's column so the user has a temporal anchor
-  // even when the calendar is otherwise empty.
-  const todayKey = (function() {
-    // Calendar now shows all 7 days (Mon–Sun) so every weekday key has a column.
-    const wk = ['sun','mon','tue','wed','thu','fri','sat'];
-    return wk[new Date().getDay()];
-  })();
-  const todayCol = document.getElementById('day-' + todayKey);
-  if (todayCol) {
-    const nl = document.createElement('div');
-    nl.className = 'now-line';
-    const now = new Date();
-    nl.style.top = tToY(now.getHours(), now.getMinutes()) + 'px';
-    todayCol.appendChild(nl);
-  }
+  // now-line: updateNowLine() (after renderCurrentWeek) draws it on today's
+  // column of the visible week, in Perth time, and moves it every minute.
 
   // Render the first-time empty-state if the week is blank.
   refreshCalendarEmptyState();
@@ -18390,6 +18378,7 @@ function gotoToday() {
     window.__currentDayOffset = focusIdx;
     renderCurrentWeek();
     __applyDayFocus(focusIdx);
+    scrollGridToNow();
     return;
   }
   return gotoThisWeek();
@@ -18750,9 +18739,44 @@ function __openPendingEventDetail() {
 }
 
 // Re-render the visible week from cache. Called by load + every nav action.
+/* The now-line (C-04): only on the column whose date is today in Perth, in the
+   week on screen; moved every minute. */
+function updateNowLine() {
+  document.querySelectorAll('#cal-grid .now-line').forEach(n => n.remove());
+  const mon = window.__currentWeekMonday;
+  if (!mon) return;
+  const now = new Date();
+  const p = __perthParts(now);
+  const today = `${p.year}-${p.month}-${p.day}`;
+  const keys = ['mon','tue','wed','thu','fri','sat','sun'];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(mon); d.setUTCDate(mon.getUTCDate() + i);
+    if (__ymd(d) !== today) continue;
+    const col = document.getElementById('day-' + keys[i]);
+    if (!col) return;
+    const nl = document.createElement('div');
+    nl.className = 'now-line';
+    nl.setAttribute('aria-hidden', 'true');
+    nl.style.top = tToY(parseInt(p.hour, 10) % 24, parseInt(p.minute, 10)) + 'px';
+    col.appendChild(nl);
+    return;
+  }
+}
+setInterval(updateNowLine, 60 * 1000);
+
+/* Today brings "now" into view: two hours of context above it (C-20). */
+function scrollGridToNow() {
+  const grid = document.getElementById('cal-grid');
+  if (!grid) return;
+  const p = __perthParts(new Date());
+  const top = Math.max(0, tToY(parseInt(p.hour, 10) % 24, parseInt(p.minute, 10)) - 2 * HOUR_PX);
+  try { grid.scrollTo({ top, behavior: 'smooth' }); } catch (_) { grid.scrollTop = top; }
+}
+
 function renderCurrentWeek() {
   __clearOutlookTiles();
   __renderWeekHeader();
+  updateNowLine();
   const slice = __eventsInVisibleWeek();
   console.log(`📆 Rendering ${slice.length} events for week of ${__ymd(window.__currentWeekMonday)}`);
   const eventsByDay = groupEventsByDay(slice);
@@ -18798,9 +18822,13 @@ function toggleOutlookOnly(btn) {
   renderCurrentWeek();
 }
 function gotoThisWeek() {
-  window.__currentWeekMonday = __thisMondayPerth();
+  const mon = __thisMondayPerth();
+  const same = window.__currentWeekMonday && __ymd(window.__currentWeekMonday) === __ymd(mon);
+  window.__currentWeekMonday = mon;
   _saveWeekPos();
-  renderCurrentWeek();
+  // Already on this week: nothing to redraw — just bring now into view.
+  if (same) updateNowLine(); else renderCurrentWeek();
+  scrollGridToNow();
 }
 function gotoWeekOf(isoDate) {
   window.__currentWeekMonday = __thisMondayPerth(new Date(isoDate));
