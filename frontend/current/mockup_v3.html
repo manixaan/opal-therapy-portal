@@ -13870,7 +13870,7 @@ function addSession(col, opts) {
           : (window.__titleRecoveryDone
               ? '<em style="opacity:0.5">Untitled event</em>'
               : '<em style="opacity:0.55">Syncing title…</em>'))
-    : typeFirstTitle(opts.title);
+    : escapeHtml(typeFirstTitle(opts.title));
   // Tile content: wrapping title, then location. The time span is kept for
   // move/resize bookkeeping but hidden by CSS — the time lives in the tooltip
   // and the detail panel.
@@ -13880,7 +13880,7 @@ function addSession(col, opts) {
     : '';
   el.innerHTML = `<span class="s-title">${displayTitle}</span>` +
                  (timeStr ? `<span class="s-time">${timeStr}</span>` : '') +
-                 `<span class="s-sub">${opts.sub || ''}</span>` + addrChip;
+                 `<span class="s-sub">${escapeHtml(opts.sub || '')}</span>` + addrChip;
   // Tooltip: time range, then full address, fall back to suburb, fall back to sub label.
   const locTip = opts.address || opts.suburb || opts.sub || '';
   let baseTip = opts.title + (timeStr ? ' · ' + timeStr : '') + ' · ' + (opts.sub || '') + (locTip ? ' · ' + locTip : '') +
@@ -15078,7 +15078,7 @@ function openBlockDetail(id) {
 
   if (s.note) {
     rows.push(row('<span class="section-head" style="margin:0;">Note</span>', '', true));
-    rows.push(`<div style="padding:8px 10px;background:var(--panel-soft);border-radius:6px;margin-top:4px;font-size:12.5px;color:var(--ink-soft);">${s.note}</div>`);
+    rows.push(`<div style="padding:8px 10px;background:var(--panel-soft);border-radius:6px;margin-top:4px;font-size:12.5px;color:var(--ink-soft);white-space:pre-wrap;">${escapeHtml(s.note)}</div>`);
   }
 
   document.getElementById('bd-body').innerHTML = (tags.length ? `<div class="detail-tags" style="margin-bottom:10px;">${tags.join('')}</div>` : '') + rows.join('');
@@ -15194,11 +15194,11 @@ function __bdLocationRows(rows, s, id) {
 
   // Splose venue name
   if (s.locationName) {
-    rows.push(row('Venue', `<span style="font-weight:500;">${s.locationName}</span>`));
+    rows.push(row('Venue', `<span style="font-weight:500;">${escapeHtml(s.locationName)}</span>`));
   }
   if (s.suburb) {
     const reg = (s.region || '').charAt(0).toUpperCase() + (s.region || '').slice(1);
-    rows.push(row('Suburb', s.suburb + (reg ? ` · <span style="color:var(--ink-soft);">${reg}</span>` : ''), true));
+    rows.push(row('Suburb', escapeHtml(s.suburb) + (reg ? ` · <span style="color:var(--ink-soft);">${reg}</span>` : ''), true));
   }
 
   // Source badge
@@ -15226,7 +15226,7 @@ function __bdLocationRows(rows, s, id) {
         <span>Address</span>${sourceBadge}
       </div>
       <div style="width:100%;background:var(--ok-soft);border:1.5px solid #bfdfc9;border-radius:8px;padding:9px 11px;display:flex;flex-direction:column;gap:5px;">
-        <div style="font-size:13px;font-weight:500;color:var(--ink,#241f1a);line-height:1.4;">${addr}</div>
+        <div style="font-size:13px;font-weight:500;color:var(--ink,#241f1a);line-height:1.4;">${escapeHtml(addr)}</div>
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
           <a href="${mapsUrl}" target="_blank" rel="noopener"
             style="font-size:11.5px;color:#3d6cae;text-decoration:none;padding:2px 7px;background:var(--info-soft);border-radius:4px;border:1px solid #c3d4ec;">
@@ -16473,7 +16473,7 @@ function openMoveImpact(id, newDay, newStartMin, durationMin, impact) {
   list.innerHTML = impact.impacts.length
     ? impact.impacts.map(i => `<li class="${cls[i.sev]||'i-info'}">
         <span class="ico">${ico[i.sev]||'•'}</span>
-        <div><span class="ttl">${i.ttl}</span><span class="sub">${i.sub}</span></div>
+        <div><span class="ttl">${escapeHtml(i.ttl)}</span><span class="sub">${escapeHtml(i.sub)}</span></div>
       </li>`).join('')
     : '<li class="i-ok"><span class="ico">✓</span><div><span class="ttl">No notable impact</span><span class="sub">Move is a clean shift. Confirm to write to Splose.</span></div></li>';
 
@@ -20594,8 +20594,8 @@ function renderFeed() {
         <div class="feed-item" onclick="${item.patientId ? `openClientProfile(${item.patientId})` : ''}">
           <div class="feed-icon ${item.iconCls}">${item.icon}</div>
           <div class="feed-body">
-            <div class="feed-title">${item.title}</div>
-            <div class="feed-sub">${item.sub} · ${fmtDate(item.date)} ${fmtTime(item.date)}</div>
+            <div class="feed-title">${escapeHtml(item.title)}</div>
+            <div class="feed-sub">${escapeHtml(item.sub)} · ${fmtDate(item.date)} ${fmtTime(item.date)}</div>
           </div>
           ${item.amount ? `<div class="feed-right"><div class="feed-amount">${fmtAmt(item.amount)}</div></div>` : ''}
         </div>`).join('')}

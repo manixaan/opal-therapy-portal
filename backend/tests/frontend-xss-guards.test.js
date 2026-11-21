@@ -73,6 +73,42 @@ describe('escaping guards on user-authored render sinks', () => {
   }
 });
 
+// Calendar event fields (21 Nov 2026 audit, Q-01). Titles and locations arrive
+// from Outlook, so anyone who can send the therapist a meeting invite controls
+// them. typeFirstTitle() returns any title containing '<' unchanged, so the
+// escape must wrap its result at the sink.
+describe('calendar event fields are escaped (tile, drawer, move impact, feed)', () => {
+  const MUST_CONTAIN = [
+    ': escapeHtml(typeFirstTitle(opts.title));',
+    '<span class="s-sub">${escapeHtml(opts.sub || \'\')}</span>',
+    '${escapeHtml(s.note)}</div>',
+    '<span style="font-weight:500;">${escapeHtml(s.locationName)}</span>',
+    "rows.push(row('Suburb', escapeHtml(s.suburb)",
+    'line-height:1.4;">${escapeHtml(addr)}</div>',
+    '<span class="ttl">${escapeHtml(i.ttl)}</span><span class="sub">${escapeHtml(i.sub)}</span>',
+    '<div class="feed-title">${escapeHtml(item.title)}</div>',
+  ];
+  for (const needle of MUST_CONTAIN) {
+    test(`sink escaped: ${needle.slice(0, 60)}`, () => {
+      expect(SRC).toContain(needle);
+    });
+  }
+  const MUST_NOT_CONTAIN = [
+    '    : typeFirstTitle(opts.title);\n',
+    '<span class="s-sub">${opts.sub || \'\'}</span>',
+    'color:var(--ink-soft);">${s.note}</div>',
+    '<span style="font-weight:500;">${s.locationName}</span>',
+    'line-height:1.4;">${addr}</div>',
+    '<span class="ttl">${i.ttl}</span>',
+    '<div class="feed-title">${item.title}</div>',
+  ];
+  for (const needle of MUST_NOT_CONTAIN) {
+    test(`raw sink absent: ${needle.slice(0, 50)}`, () => {
+      expect(SRC).not.toContain(needle);
+    });
+  }
+});
+
 describe('resource external_url is scheme-allowlisted', () => {
   test('href only rendered for http(s) URLs and escaped', () => {
     expect(SRC).toContain("/^https?:\\/\\//i.test(r.external_url || '')");
