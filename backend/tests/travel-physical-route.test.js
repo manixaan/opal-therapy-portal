@@ -337,6 +337,40 @@ describe('travel legs mirrored to Outlook', () => {
   });
 });
 
+// T-05 (owner decision 21 Nov 2026): a drive home that runs past midnight is
+// cut at 23:59 in Outlook, but its title keeps the real minutes and says so.
+describe('a late drive home past midnight', () => {
+  test('the Outlook block stops at 23:59 and the title keeps the real minutes', () => {
+    const c = load();
+    vm.runInContext("DAY_DATES = { mon: '2030-03-04' };", c);
+    add(c, { at: '22:40', to: '23:40', s: { address: JOONDALUP, patient: 'A' } });
+    const p = c.travelOutlookPayload('mon', c.computeDayTravelSegments('mon'));
+    const home = p.legs.find((l) => /\|after$/.test(l.key));
+    expect(home.end).toBe('2030-03-04T23:59:00+08:00');
+    expect(home.title).toBe('Travel home · 40 min · Joondalup → Willetton (continues past midnight)');
+    // The drive out ends well before midnight: no note.
+    expect(p.legs.find((l) => /\|before$/.test(l.key)).title).not.toMatch(/midnight/);
+    expect(JSON.stringify(p.legs.map((l) => l.title))).not.toMatch(/Example/);
+  });
+
+  test('the note always fits the server\'s 120-character title', () => {
+    const c = load();
+    vm.runInContext("DAY_DATES = { mon: '2030-03-04' };", c);
+    c.SESSIONS = { S1: { id: 'S1', dbId: 'db-1', day: 'mon' } };
+    const long = 'Abcdefghijklmnopqrstuvwxyzabcdefghij';
+    const p = c.travelOutlookPayload('mon', [{ kind: 'end', via: 'home-return', ownerSessionId: 'S1', ownerSide: 'after',
+      travelMin: 135, startMin: 23 * 60, endMin: 23 * 60 + 135, fromLoc: { suburb: long }, toLoc: { suburb: long + 'x' } }]);
+    const t = p.legs[0].title;
+    expect(t.length).toBeLessThanOrEqual(120);
+    expect(t).toMatch(/^Travel home · 135 min · /);
+    expect(t.endsWith(' (continues past midnight)')).toBe(true);
+    // A title that fits is left whole.
+    expect(c._travelLegTitle('Travel home · 40 min · Melville → Bull Creek', true))
+      .toBe('Travel home · 40 min · Melville → Bull Creek (continues past midnight)');
+    expect(c._travelLegTitle('Travel home · 40 min · Melville → Bull Creek', false)).toBe('Travel home · 40 min · Melville → Bull Creek');
+  });
+});
+
 // 21 Nov 2026 audit (T-06/T-07): a day drawn before its inputs arrived sent a
 // partial or empty leg set, and the server deleted the missing Outlook travel.
 describe('travel mirror waits until the day is real', () => {

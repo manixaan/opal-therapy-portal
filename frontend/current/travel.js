@@ -2907,6 +2907,17 @@ function _titlePlace(loc, fallback) {
   const sub = loc && loc.suburb ? addrSuburb(loc.suburb) : '';
   return sub && !/\d/.test(sub) ? sub : fallback;
 }
+/* A late drive home is cut at 23:59 in Outlook but keeps its real minutes,
+   so the title says it carries on (T-05, owner decision 21 Nov 2026). The
+   server keeps 120 characters of a title: the route is shortened, never the
+   note, so "(continues past midnight)" always survives. */
+const TRAVEL_TITLE_MAX = 120;
+const TRAVEL_PAST_MIDNIGHT = ' (continues past midnight)';
+function _travelLegTitle(title, pastMidnight) {
+  if (!pastMidnight) return title;
+  const room = TRAVEL_TITLE_MAX - TRAVEL_PAST_MIDNIGHT.length;
+  return (title.length > room ? title.slice(0, room - 1).trimEnd() + '…' : title) + TRAVEL_PAST_MIDNIGHT;
+}
 function travelOutlookPayload(day, segs) {
   const date = (typeof DAY_DATES !== 'undefined' && DAY_DATES) ? DAY_DATES[day] : null;
   if (!date || !window.SESSIONS) return null;
@@ -2927,7 +2938,7 @@ function travelOutlookPayload(day, segs) {
     legs.push({
       key: String(owner.dbId) + '|' + seg.ownerSide,
       start: _perthStamp(date, start), end: _perthStamp(date, end),
-      title: what + ' · ' + seg.travelMin + ' min · ' + from + ' → ' + to,
+      title: _travelLegTitle(what + ' · ' + seg.travelMin + ' min · ' + from + ' → ' + to, seg.endMin > 24 * 60 - 1),
       location: seg.toLoc.address || seg.toLoc.addr || seg.toLoc.suburb || '',
     });
   });
