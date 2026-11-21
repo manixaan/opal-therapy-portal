@@ -193,8 +193,8 @@ router.post('/api/invoicing/invoices/:id/finalise', uuidParam('id'), safe(async 
 
 // Voiding an invoice that is in Xero voids the Xero copy first; if Xero says no, nothing changes.
 async function voidInXeroFirst(req) {
-  const reason = String((req.body || {}).reason || '').trim();
-  if (reason.length < 3) throw Object.assign(new Error('A reason is required'), { status: 400, code: 'REASON_REQUIRED' });
+  // Everything Opal would refuse is refused before Xero is touched.
+  await Life.assertVoidable({ pool, orgId: orgId(req), invoiceId: req.params.id, reason: (req.body || {}).reason });
   await XP.beforeVoid({ pool, orgId: orgId(req), userId: req.user.id, invoiceId: req.params.id });
 }
 

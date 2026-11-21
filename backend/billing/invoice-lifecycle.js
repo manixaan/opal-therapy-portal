@@ -509,8 +509,12 @@ async function claimSend({ pool, orgId, invoiceId, resend = false, batchId = nul
   return withTx(pool, async tx => {
     const inv = await lockInvoice(tx, orgId, invoiceId);
     if (!FINAL_STATUSES.includes(inv.status)) throw err(409, 'Finalise the invoice before emailing it', 'NOT_FINAL');
-    if (inv.sent_status === 'SENDING' && inv.email_attempted_at && Date.now() - new Date(inv.email_attempted_at).getTime() < SENDING_STALE_MS) {
-      throw err(409, 'This invoice is being sent right now', 'SEND_IN_PROGRESS');
+    if (inv.sent_status === 'SENDING') {
+      if (inv.email_attempted_at && Date.now() - new Date(inv.email_attempted_at).getTime() < SENDING_STALE_MS) {
+        throw err(409, 'This invoice is being sent right now', 'SEND_IN_PROGRESS');
+      }
+      // An attempt that never finished: the email may have gone. Only a deliberate resend sends it.
+      if (!resend) throw err(409, 'An earlier send of this invoice did not finish, so it may already have been emailed. Check with the payer, then use Email invoice to resend.', 'SEND_OUTCOME_UNKNOWN');
     }
     if (inv.sent_status === 'SENT' && !resend) throw err(409, 'This invoice has already been sent', 'ALREADY_SENT');
     await tx.query(`UPDATE invoices SET sent_status = 'SENDING', email_attempted_at = NOW(), email_last_error = NULL,
@@ -613,6 +617,7 @@ async function sendBatch({ pool = defaultPool, orgId, userId, ids, mailer, pause
       if (!inv) { results.push({ ...base, outcome: 'skipped', code: 'NOT_FOUND', message: 'Invoice not found' }); continue; }
       if (inv.status === 'VOID') { results.push({ ...base, outcome: 'skipped', code: 'VOID', message: 'Voided' }); continue; }
       if (inv.sent_status === 'SENT') { results.push({ ...base, outcome: 'skipped', code: 'ALREADY_SENT', message: 'Already sent' }); continue; }
+      if (inv.sent_status === 'SENDING') { results.push({ ...base, outcome: 'skipped', code: 'SEND_OUTCOME_UNKNOWN', message: 'An earlier send did not finish — check, then resend it from the invoice' }); continue; }
       if (inv.status === 'NEEDS_ATTENTION') { results.push({ ...base, outcome: 'skipped', code: 'NEEDS_ATTENTION', message: 'Needs attention first' }); continue; }
       if (!inv.payer_email) { results.push({ ...base, outcome: 'skipped', code: 'NO_EMAIL', message: 'No email address for the payer' }); continue; }
       try {
@@ -631,12 +636,30 @@ async function sendBatch({ pool = defaultPool, orgId, userId, ids, mailer, pause
   return { batchId, sent: count('sent'), skipped: count('skipped'), failed: count('failed'), results };
 }
 
+/** Every reason voidInvoice would refuse, checked BEFORE anything is voided in Xero. */
+function voidRefusal(inv) {
+  if (inv.status === 'VOID') return err(409, 'Invoice is already void');
+  if (M.toCents(inv.amount_paid) > 0) return err(409, 'Refund or reverse the recorded payments before voiding', 'HAS_PAYMENTS');
+  if (inv.sent_status === 'SENDING') return err(409, 'This invoice is being emailed; void it once that has finished', 'SEND_IN_PROGRESS');
+  return null;
+}
+async function assertVoidable({ pool = defaultPool, orgId, invoiceId, reason }) {
+  requireReason(reason);
+  const { rows: [inv] } = await pool.query(`SELECT * FROM invoices WHERE id = $1 AND organisation_id = $2`, [invoiceId, orgId]);
+  if (!inv) throw err(404, 'Invoice not found');
+  const r = voidRefusal(inv);
+  if (r) throw r;
+}
+
 async function voidInvoice({ pool = defaultPool, orgId, userId, invoiceId, reason }) {
   const why = requireReason(reason);
   return withTx(pool, async tx => {
     const inv = await lockInvoice(tx, orgId, invoiceId);
-    if (inv.status === 'VOID') throw err(409, 'Invoice is already void');
-    if (M.toCents(inv.amount_paid) > 0) throw err(409, 'Refund or reverse the recorded payments before voiding', 'HAS_PAYMENTS');
+    const refusal = voidRefusal(inv);
+    if (refusal) throw refusal;
+    // An invoice copied to Xero is voided there first (xero-invoice-push beforeVoid); never leave a live Xero copy behind.
+    const { rows: [xl] } = await tx.query(`SELECT state FROM xero_invoice_links WHERE invoice_id = $1 FOR UPDATE`, [invoiceId]);
+    if (xl && (xl.state === 'PUSHED' || xl.state === 'PENDING')) throw err(409, 'This invoice is in Xero; void it through Opal so Xero is voided too', 'XERO_LINKED');
     await tx.query(`UPDATE invoices SET status = 'VOID', voided_at = NOW(), voided_by_user_id = $2, void_reason = $3, updated_at = NOW() WHERE id = $1`,
       [invoiceId, userId, why]);
     // Freeing the claims is what lets a corrected invoice be issued for the same events.
@@ -679,6 +702,6 @@ async function voidAndReissue({ pool = defaultPool, orgId, userId, invoiceId, re
 module.exports = {
   voidAndReissue,
   EDITABLE_STATUSES, FINAL_STATUSES, withTx, listInvoices, invoiceCounts, getInvoiceDetail, editLine, setLineStatus,
-  addManualLine, updateDraftHeader, currentPdf, readDocument, finalise, recordPayment, markSent, emailInvoice, sendBatch, claimSend,
+  addManualLine, updateDraftHeader, currentPdf, readDocument, finalise, recordPayment, markSent, emailInvoice, sendBatch, claimSend, assertVoidable,
   voidInvoice, statusForPaid, pdfViewModel,
 };
