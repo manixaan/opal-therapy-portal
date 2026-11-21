@@ -60,3 +60,24 @@ describe('calendar toolbar — one control height, radius and hover (U-04, U-12,
     expect(HTML).not.toContain('border-color: #c7c0b5');
   });
 });
+
+describe('focus — one ring that follows the control’s shape (U-05)', () => {
+  const FLIGHTS_CSS = fs.readFileSync(path.join(FE, 'flights.css'), 'utf8');
+  test('the shell focus rule never rewrites border-radius', () => {
+    const r = rule(HTML, '[tabindex]:focus-visible');
+    expect(r).toContain('box-shadow: var(--focus-ring);');
+    expect(r).not.toMatch(/border-radius\s*:/);
+  });
+  test('the active segment and selected chips restate the ring over their own shadow', () => {
+    expect(HTML).toContain('.view-tab.active:focus-visible { box-shadow: var(--focus-ring); }');
+    expect(HTML).toContain('.bsp-day-chip.active:focus-visible, .booking-cat-chip.active:focus-visible { box-shadow: var(--focus-ring); }');
+  });
+  test.each([
+    ['.cl-row-btn:focus-visible', HTML], ['.cl-swatch:focus-visible', HTML], ['.mm-cell:focus-visible', HTML],
+    ['.travel-overlay.movable:focus-visible', HTML], ['.travel-overlay .t-switch:focus-visible', HTML],
+    ['.cal-flight-btn:focus-visible', FLIGHTS_CSS],
+  ])('%s uses the ring, not a second outline', (sel, src) => {
+    const r = rule(src, sel);
+    expect(r).toContain('outline: none; box-shadow: var(--focus-ring);');
+  });
+});

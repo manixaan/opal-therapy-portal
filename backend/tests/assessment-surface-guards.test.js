@@ -762,7 +762,7 @@ describe('changed assets are cache-busted', () => {
       ['travel-block.js', 2],
       // 1: flights.js/.css are new — Calendar → Add a flight (lookup, check-in
       // buffer, drives either side) and live flight status (14 Nov 2026).
-      ['flights.js', 1], ['flights.css', 1],
+      ['flights.js', 1], ['flights.css', 2],
       // 1: splose-sync.js/.css are new — the Splose draft-and-publish sync
       // (Sync Splose button, review panel, unsynced tiles, tab-leave prompt,
       // Splose-side change alerts). A first pin is still a pin.

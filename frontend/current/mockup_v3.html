@@ -110,7 +110,7 @@
 <link rel="stylesheet" href="/booking-route.css?v=6" />
 <link rel="stylesheet" href="/recurrence.css?v=1" />
 <link rel="stylesheet" href="/nf2f.css?v=4" />
-<link rel="stylesheet" href="/flights.css?v=1" />
+<link rel="stylesheet" href="/flights.css?v=2" />
 <!-- Last stylesheet: night-mode token overrides must win over every feature sheet. -->
 <link rel="stylesheet" href="/theme.css?v=6" />
 <!-- The Library's document library (folders, list/tiles, bin, versions). Before
@@ -1860,7 +1860,8 @@ window.opIcon = function (name, size) {
   select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
     outline: none;
     box-shadow: var(--focus-ring);
-    border-radius: var(--radius-sm);
+    /* No border-radius here: the ring follows each control's own shape, so
+       pills stay pills and tiles stay tiles on focus (U-05). */
   }
 
   /* === Week view === */
@@ -2343,7 +2344,7 @@ window.opIcon = function (name, size) {
     padding: 5px 6px; border-radius: 6px; cursor: pointer;
   }
   .cl-row-btn:hover, .cl-row-btn.open { background: var(--panel-sunk); }
-  .cl-row-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .cl-row-btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
   .cl-label { flex: 1; }
   .cl-colour-name { font-size: 10.5px; color: var(--muted); }
   .cl-swatches {
@@ -2356,7 +2357,7 @@ window.opIcon = function (name, size) {
   }
   .cl-swatch:hover { transform: scale(1.08); }
   .cl-swatch.selected { box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--ink); }
-  .cl-swatch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .cl-swatch:focus-visible { outline: none; box-shadow: var(--focus-ring); }
   .cl-reset {
     grid-column: 1 / -1; justify-self: start; margin-top: 2px;
     border: none; background: none; padding: 0; cursor: pointer;
@@ -2403,6 +2404,8 @@ window.opIcon = function (name, size) {
     font-weight: 600;
     box-shadow: var(--shadow-sm), 0 0 0 1px rgba(36, 31, 26, 0.04);
   }
+  /* The active segment's own shadow outranks the shell focus rule — restate it. */
+  .view-tab.active:focus-visible { box-shadow: var(--focus-ring); }
 
   .toolbar-divider {
     width: 1px; height: 20px; background: var(--border);
@@ -2631,7 +2634,7 @@ window.opIcon = function (name, size) {
     font-variant-numeric: tabular-nums;
   }
   .mm-cell:hover { background: var(--accent-soft); }
-  .mm-cell:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .mm-cell:focus-visible { outline: none; box-shadow: var(--focus-ring); }
   .mm-cell.mm-out { color: var(--muted); opacity: 0.6; }
   .mm-cell.mm-sel { background: var(--accent-soft); border-radius: 6px; }
   .mm-cell.mm-today { background: var(--accent); color: white; font-weight: 700; }
@@ -3345,7 +3348,7 @@ window.opIcon = function (name, size) {
      therapist's; dragging stores it on the owning appointment. */
   .travel-overlay.movable { cursor: grab; touch-action: none; }
   .travel-overlay.movable.dragging { cursor: grabbing; opacity: .85; z-index: 6; box-shadow: 0 4px 12px rgba(0,0,0,.18); }
-  .travel-overlay.movable:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .travel-overlay.movable:focus-visible { outline: none; box-shadow: var(--focus-ring); }
   .travel-overlay.moved .t-ico::after { content: ' · moved'; font-weight: 500; }
   .travel-overlay.tight { border-left-color: #9c3322; }
   /* The one travel switch (travel.js renderSegmentOverlay, 6 Oct 2026): a leg
@@ -3357,7 +3360,7 @@ window.opIcon = function (name, size) {
     padding: 0 6px; cursor: pointer; white-space: nowrap;
   }
   .travel-overlay .t-switch:hover { background: rgba(255,255,255,.35); }
-  .travel-overlay .t-switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .travel-overlay .t-switch:focus-visible { outline: none; box-shadow: var(--focus-ring); }
   /* Legs redrawn while a session is dragged (travel.js previewTravelForMove):
      they follow the session and never catch the pointer mid-drag. */
   .travel-overlay.drag-preview { pointer-events: none; }
@@ -22904,6 +22907,8 @@ body.bsp-open #impact-modal    { z-index: 1201; }
   background: #3d6cae; border-color: #3d6cae;
   color: white; box-shadow: 0 1px 4px rgba(74,127,193,0.3);
 }
+/* Selected chips carry their own shadow, which outranks the shell focus rule. */
+.bsp-day-chip.active:focus-visible, .booking-cat-chip.active:focus-visible { box-shadow: var(--focus-ring); }
 
 /* Time row */
 .bsp-time-row {

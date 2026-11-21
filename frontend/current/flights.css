@@ -10,7 +10,7 @@
   font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; text-align: left;
 }
 .cal-flight-btn:hover { background: var(--accent-soft, #e6f2f1); border-color: var(--accent, #0f766e); }
-.cal-flight-btn:focus-visible { outline: 2px solid var(--accent, #0f766e); outline-offset: 1px; }
+.cal-flight-btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 .cal-flight-btn svg { width: 15px; height: 15px; flex-shrink: 0; color: var(--accent-deep, #0b5f59); }
 
 .flt-dialog { max-width: 580px; }
