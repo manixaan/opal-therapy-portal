@@ -22,8 +22,12 @@
  *   Rule 9: daily ceiling (N×CAP)+CAP; anything above it is unbilled, reported.
  *   Rule 2: never more than T.
  *   Rule 11: MMM6–7 has no cap: T÷N.
- *   Rule 10: a day mixing zone groups is drafted at the most conservative cap
- *           present and flagged for review (owner decision).
+ *   Rule 10 (owner, 21 Nov 2026): a day mixing MMM1–3 and MMM4–5 — each metro
+ *           client gets the LESSER of the drive actually made into them and
+ *           their normal commute from base (then the 30-min cap); the MMM4–5
+ *           clients share the rest of T by the rule book. Every comparison is a
+ *           reviewer note and the day is flagged for review. A day mixing
+ *           MMM6–7 with capped zones uses the smallest cap and is flagged.
  *   Rule 3: billed at the rate card's travel rate (50% of the session rate;
  *           MMM6–7 the remote loaded rate), on its own line.
  *   Rule 12/13: no non-labour (km) line in any zone here. MMM6–7 non-labour
@@ -110,39 +114,82 @@ function allocateDay(day) {
 
   const groups = new Set(sessions.map(s => zoneGroup(s.mmm)));
   const mixedZones = groups.size > 1;
-  const capped = sessions.filter(s => zoneGroup(s.mmm) !== 'R' && s.rule && s.rule.travelCapMinutesEachWay != null);
-  // Conservative on a mixed day: the smallest cap present (owner reviews it).
-  const CAP = capped.length ? Math.min(...capped.map(s => Number(s.rule.travelCapMinutesEachWay))) : null;
-  const group = CAP == null ? 'R' : (capped.some(s => zoneGroup(s.mmm) === 'A') ? 'A' : 'B');
-  const sameAddress = new Set(sessions.map(s => canonAddr(s.address || ''))).size <= 1;
-
+  const reviewNotes = [];
   const per = new Map();          // clientId → { base: R, ret: R }
-  let returnMinutes = R(0), rule = null, ceiling = null;
+  let returnMinutes = R(0), rule = null, ceiling = null, CAP = null;
+  const capOf = list => { const c = list.filter(s => s.rule && s.rule.travelCapMinutesEachWay != null); return c.length ? Math.min(...c.map(s => Number(s.rule.travelCapMinutesEachWay))) : null; };
+
   if (N === 0) {
     rule = 'no_clients';
-  } else if (CAP == null) {
-    rule = 'rule_11_uncapped_remote';
-    for (const c of clients) per.set(String(c.clientId), { base: R(T.n, T.d * BigInt(N)), ret: R(0) });
+  } else if (mixedZones && groups.has('A') && groups.has('B') && !groups.has('R')) {
+    // Rule 10, owner's answer (21 Nov 2026): a metro client is never charged for
+    // the therapist's choice to go rural that day. Each MMM1–3 client gets the
+    // LESSER of the drive actually made into them and their normal commute from
+    // the day's base, then the MMM1–3 cap. The MMM4–5 clients share the rest of
+    // the day's travel by the rule book (60-min cap + return, split equally).
+    rule = 'rule_10_mixed_metro_lesser_rural_pool';
+    const metro = clients.filter(c => zoneGroup(c.first.mmm) === 'A');
+    const rural = clients.filter(c => zoneGroup(c.first.mmm) === 'B');
+    const capA = capOf(metro.map(c => c.first)), capB = capOf(rural.map(c => c.first));
+    CAP = capB;
+    let metroTaken = R(0);
+    for (const c of metro) {
+      const ids = new Set(c.sessions.map(x => String(x.eventId)));
+      const inLegs = included.filter(l => l.kind !== LEG_KIND.RETURN && ids.has(String(l.toEventId)));
+      const outLegs = included.filter(l => l.kind === LEG_KIND.RETURN && ids.has(String(l.fromEventId)));
+      const inbound = inLegs.reduce((x, l) => x + e2(l.minutes), 0);
+      const away = outLegs.reduce((x, l) => x + e2(l.minutes), 0);
+      metroTaken = add(metroTaken, R(inbound + away, 100));      // these legs leave the rural pool either way
+      const commute = c.first.commuteMinutes != null ? e2(c.first.commuteMinutes) : null;
+      const lesser = commute != null && commute < inbound ? commute : inbound;
+      const capped = capA != null && lesser > capA * 100 ? capA * 100 : lesser;
+      per.set(String(c.clientId), { base: R(capped, 100), ret: R(0) });
+      reviewNotes.push(`${c.first.clientName || 'Metro client'} (MMM1–3): drive in ${inbound / 100} min${commute != null ? `, normal commute from base ${commute / 100} min` : ', no commute to compare'}; billed the lesser${capped < lesser ? `, capped at ${capA}` : ''} (${capped / 100} min).${away ? ` The drive home from this client (${away / 100} min) is not billed on a mixed day.` : ''}`);
+    }
+    const poolB = R(T.n * metroTaken.d - metroTaken.n * T.d, T.d * metroTaken.d);
+    const nb = rural.length;
+    ceiling = capB != null ? nb * capB + capB : null;
+    const nCap = R(nb * capB);
+    if (!lt(nCap, poolB)) {
+      for (const c of rural) per.set(String(c.clientId), { base: R(poolB.n, poolB.d * BigInt(nb)), ret: R(0) });
+      reviewNotes.push(`MMM4–5 clients share the remaining ${toFixed2(poolB)} min of travel: ${toFixed2(R(poolB.n, poolB.d * BigInt(nb)))} min each (within the ${capB}-min cap).`);
+    } else {
+      const over = R(poolB.n * nCap.d - nCap.n * poolB.d, poolB.d * nCap.d);
+      returnMinutes = lt(over, R(capB)) ? over : R(capB);
+      for (const c of rural) per.set(String(c.clientId), { base: R(capB), ret: R(returnMinutes.n, returnMinutes.d * BigInt(nb)) });
+      reviewNotes.push(`MMM4–5 clients share the remaining ${toFixed2(poolB)} min: ${capB} min each plus a ${toFixed2(returnMinutes)}-min return split equally.`);
+    }
   } else {
-    const nCap = R(N * CAP);
-    ceiling = N * CAP + CAP;
-    if (!lt(nCap, T)) {
-      rule = 'rule_6_within_caps';
+    const capped = sessions.filter(s => zoneGroup(s.mmm) !== 'R');
+    // A day mixing remote (MMM6–7) with capped zones: the most conservative cap present.
+    CAP = capOf(capped);
+    const group = CAP == null ? 'R' : (capped.some(s => zoneGroup(s.mmm) === 'A') ? 'A' : 'B');
+    const sameAddress = new Set(sessions.map(s => canonAddr(s.address || ''))).size <= 1;
+    if (mixedZones) reviewNotes.push(`Mixed day including MMM6–7: drafted at the ${CAP}-min cap; check by hand.`);
+    if (CAP == null) {
+      rule = 'rule_11_uncapped_remote';
       for (const c of clients) per.set(String(c.clientId), { base: R(T.n, T.d * BigInt(N)), ret: R(0) });
     } else {
-      // Rule 7: each CAP, plus return R = min(T − N×CAP, CAP).
-      const over = R(T.n * nCap.d - nCap.n * T.d, T.d * nCap.d);
-      returnMinutes = lt(over, R(CAP)) ? over : R(CAP);
-      let split;
-      if (group === 'B') split = 'rule_8a_equal';
-      else if (sameAddress) split = 'rule_8b_same_address_equal';
-      else split = 'rule_8c_last_client';
-      rule = 'rule_7_capped_with_return/' + split;
-      for (const c of clients) {
-        let ret = R(0);
-        if (split === 'rule_8c_last_client') { if (String(c.clientId) === lastClientId) ret = returnMinutes; }
-        else ret = R(returnMinutes.n, returnMinutes.d * BigInt(N));
-        per.set(String(c.clientId), { base: R(CAP), ret });
+      const nCap = R(N * CAP);
+      ceiling = N * CAP + CAP;
+      if (!lt(nCap, T)) {
+        rule = 'rule_6_within_caps';
+        for (const c of clients) per.set(String(c.clientId), { base: R(T.n, T.d * BigInt(N)), ret: R(0) });
+      } else {
+        // Rule 7: each CAP, plus return R = min(T − N×CAP, CAP).
+        const over = R(T.n * nCap.d - nCap.n * T.d, T.d * nCap.d);
+        returnMinutes = lt(over, R(CAP)) ? over : R(CAP);
+        let split;
+        if (group === 'B') split = 'rule_8a_equal';
+        else if (sameAddress) split = 'rule_8b_same_address_equal';
+        else split = 'rule_8c_last_client';
+        rule = 'rule_7_capped_with_return/' + split;
+        for (const c of clients) {
+          let ret = R(0);
+          if (split === 'rule_8c_last_client') { if (String(c.clientId) === lastClientId) ret = returnMinutes; }
+          else ret = R(returnMinutes.n, returnMinutes.d * BigInt(N));
+          per.set(String(c.clientId), { base: R(CAP), ret });
+        }
       }
     }
   }
@@ -168,7 +215,7 @@ function allocateDay(day) {
       directions: lt(R(0), p.ret) ? 2 : 1,
       allocatedMinutesBeforeCap: N ? M.rationalToFixed(T.n, T.d * BigInt(N), 2) : 0,
       capMinutes: CAP,
-      capApplied: rule != null && rule.startsWith('rule_7'),
+      capApplied: rule != null && (rule.startsWith('rule_7') || rule.startsWith('rule_10')),
       cappedMinutes: toFixed2(p.base),
       returnMinutes: toFixed2(p.ret),
       claimableMinutes: toFixed2(mins),
@@ -191,10 +238,10 @@ function allocateDay(day) {
   const report = {
     method: METHOD, rule, totalMinutes: totalMinutesE2 / 100, clients: N, cap: CAP, ceiling,
     returnMinutes: toFixed2(returnMinutes), billedMinutes: toFixed2(billed), unbilledMinutes: toFixed2(unbilled),
-    zoneGroups: [...groups], mixedZones, flags,
+    zoneGroups: [...groups], mixedZones, flags, reviewNotes,
   };
   for (const a of allocations) a.dayReport = report;
-  return { legs, totalMinutesE2, totalKmE3: 0, allocations, issues, report, returnInPool: lt(R(0), returnMinutes) };
+  return { legs, totalMinutesE2, totalKmE3: 0, allocations, issues, report, reviewNotes, returnInPool: lt(R(0), returnMinutes) };
 }
 
 module.exports = { LEG_KIND, METHOD, zoneGroup, classifyLegs, allocateDay };

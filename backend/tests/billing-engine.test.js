@@ -163,12 +163,24 @@ describe('travel allocation — the owner\'s NDIS rule book (21 Nov 2026)', () =
     expect(out.allocations.map(a => [a.eventId, a.claimableMinutes])).toEqual([['e1', 60], ['e2', 30]]);
     expect(out.report).toMatchObject({ clients: 2, unbilledMinutes: 0 });
   });
-  test('rule 10: a day mixing zone groups is drafted at the smallest cap and flagged', () => {
-    const out = T.allocateDay({ legs: day(150, ['e1', 'e2']), sessions: [
-      { eventId: 'e1', clientId: 'a', mmm: 1, address: 'X', rule: rule(rateFor(1)) },
-      { eventId: 'e2', clientId: 'b', mmm: 4, address: 'Y', rule: rule(rateFor(4)) }] });
-    expect(out.report).toMatchObject({ mixedZones: true, cap: 30 });
+  test('rule 10 (owner answer): metro client at the lesser of the drive in and the normal commute; rural clients share the rest', () => {
+    // 150 min: 75 out to the metro client, 75 home from the wheatbelt client.
+    const sessions = (commute) => [
+      { eventId: 'e1', clientId: 'a', clientName: 'Metro', mmm: 1, address: 'X', commuteMinutes: commute, rule: rule(rateFor(1)) },
+      { eventId: 'e2', clientId: 'b', clientName: 'Rural', mmm: 4, address: 'Y', rule: rule(rateFor(4)) }];
+    let out = T.allocateDay({ legs: day(150, ['e1', 'e2']), sessions: sessions(20) });
+    expect(out.report).toMatchObject({ rule: 'rule_10_mixed_metro_lesser_rural_pool', mixedZones: true });
     expect(out.report.flags).toContain('MIXED_ZONES');
+    // Metro: lesser of 75 in and 20 commute = 20. Rural pool 150 − 75 = 75 > 60: 60 + return 15.
+    expect(out.allocations.map(x => x.claimableMinutes)).toEqual([20, 75]);
+    expect(out.report.unbilledMinutes).toBe(55);
+    expect(out.reviewNotes[0]).toMatch(/drive in 75 min, normal commute from base 20 min; billed the lesser \(20 min\)/);
+    // A long commute: the drive in (75) is less, then the 30-min metro cap.
+    out = T.allocateDay({ legs: day(150, ['e1', 'e2']), sessions: sessions(90) });
+    expect(out.allocations[0].claimableMinutes).toBe(30);
+    expect(out.reviewNotes[0]).toMatch(/capped at 30/);
+    // Never more than T, never more than each zone's cap.
+    expect(out.allocations.reduce((x, a) => x + a.claimableMinutes, 0)).toBeLessThanOrEqual(150);
   });
   test('the trip home is always part of T; legs without route facts are excluded and reported', () => {
     const out = alloc(60, 1, 2);

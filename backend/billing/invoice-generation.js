@@ -430,16 +430,60 @@ async function prepare(q, orgId, opts) {
     activities.push(entry);
   }
 
-  // 4. Travel: one route per practitioner-day over its in-person sessions
+  // 4. Travel: one route per practitioner-day over its in-person sessions —
+  //    except remote (MMM6–7) sessions inside a trip with total travel hours
+  //    (migration 093, rule 11): the trip's hours ÷ clients seen on the trip.
+  const tripsWithHours = [];
+  {
+    const { rows } = await q.query(
+      `SELECT t.id, t.name, t.travel_hours, to_char(t.start_date,'YYYY-MM-DD') AS start_date, to_char(t.end_date,'YYYY-MM-DD') AS end_date,
+              ARRAY(SELECT tp.user_id::text FROM trip_practitioners tp WHERE tp.trip_id = t.id) AS practitioners
+         FROM trips t
+        WHERE t.organisation_id = $1 AND t.travel_hours IS NOT NULL AND t.start_date <= $3::date AND t.end_date >= $2::date`,
+      [orgId, opts.from, opts.to]);
+    tripsWithHours.push(...rows);
+  }
+  const tripOf = s => tripsWithHours.find(t => t.practitioners.includes(String(s.ev.user_id))
+    && s.ev.local_date >= t.start_date && s.ev.local_date <= t.end_date) || null;
+  const tripPools = new Map();
   const days = new Map();
   for (const s of sessions) {
     if (s.res.telehealth || !s.ev.client_id) continue;
+    const trip = s.mmm != null && T.zoneGroup(s.mmm) === 'R' ? tripOf(s) : null;
+    if (trip) {
+      // Billed by its trip (Generate Trip Invoices). A weekly run leaves its travel alone.
+      if (opts.trip && String(opts.trip.id) === String(trip.id)) {
+        if (!tripPools.has(trip.id)) tripPools.set(trip.id, { trip, list: [] });
+        tripPools.get(trip.id).list.push(s);
+      } else {
+        s.travelByTrip = trip.id;
+      }
+      continue;
+    }
     const key = `${s.ev.user_id}|${s.ev.local_date}`;
     if (!days.has(key)) days.set(key, []);
     days.get(key).push(s);
   }
   const dayPlans = [];
   const pairs = [];
+  // Desk work the therapist chose to do "at home" (travel.desk = 'home') is a mid-day detour.
+  const deskHome = new Map();
+  if (days.size) {
+    const users = [...new Set([...days.keys()].map(k => k.split('|')[0]))];
+    const { rows: desk } = await q.query(
+      `SELECT e.user_id, e.start_time, e.end_time,
+              to_char(((e.start_time AT TIME ZONE 'UTC') AT TIME ZONE $4)::date, 'YYYY-MM-DD') AS local_date
+         FROM events e
+        WHERE e.user_id = ANY($1::uuid[]) AND COALESCE(e.is_deleted, FALSE) = FALSE
+          AND e.custom_metadata->'travel'->>'desk' = 'home'
+          AND ((e.start_time AT TIME ZONE 'UTC') AT TIME ZONE $4)::date BETWEEN $2::date AND $3::date`,
+      [users, opts.from, opts.to, tz]);
+    for (const r of desk) {
+      const k = `${r.user_id}|${r.local_date}`;
+      if (!deskHome.has(k)) deskHome.set(k, []);
+      deskHome.get(k).push(r);
+    }
+  }
   for (const [key, list] of days) {
     const [userId, date] = key.split('|');
     const blocked = list.filter(s => s.blocked);
@@ -457,13 +501,19 @@ async function prepare(q, orgId, opts) {
     const candFacts = await RF.resolveRouteFacts(q, orgId, cand);
     const minutesFor = (o, d2) => { const f = candFacts.get(RF.routeKey(o, d2)); return f && f.status === 'ok' ? f.minutes : null; };
     // Rule book: travel time is client-to-client driving only (mid-day detours billed as the direct drive).
-    const route = DR.buildDayLegs({ user: list[0].ev, date, sessions: ordered, minutesFor, clientToClient: true });
+    const route = DR.buildDayLegs({ user: list[0].ev, date, sessions: ordered, minutesFor, clientToClient: true,
+      deskHome: deskHome.get(key) || [] });
     if (route.baseUnset) {
       issues.raise('WORK_LOCATION_NOT_SET', { practitionerId: userId, serviceDate: date, extraKey: userId,
         message: `No work location is set for ${list[0].ev.practitioner_name} on ${S.displayDate(date)}, so there is no start or return leg. Set it in My Profile → Work locations, then reprocess.`,
         fixTarget: { kind: 'work_location', userId, date } });
     }
     route.legs.forEach(l => pairs.push({ origin: l.origin, destination: l.destination }));
+    (route.detours || []).forEach(dt => dt.legs.forEach(l => pairs.push({ origin: l.origin, destination: l.destination })));
+    // Each client's normal commute from the day's base (a mixed-zone day compares against it).
+    if (route.base && !route.base.remote && route.base.address) {
+      for (const s of list) { const a = DR.eventAddress(s.ev); if (a) pairs.push({ origin: route.base.address, destination: a }); }
+    }
     dayPlans.push({ userId, date, list, route });
   }
   const facts = await RF.resolveRouteFacts(q, orgId, pairs);
@@ -493,7 +543,7 @@ async function prepare(q, orgId, opts) {
       if (f && f.status === 'ok') {
         leg.minutes = cal != null ? cal : f.minutes; leg.km = f.km; leg.provider = f.provider;
         leg.minutesSource = cal != null ? 'calendar' : 'route lookup';
-        if (cal == null && needed) estimated++;
+        if (cal == null && needed && !leg.detour) estimated++;   // a detour's direct drive is a comparison, not a drive
       }
       else if (needed) {
         failed = true;
@@ -504,6 +554,28 @@ async function prepare(q, orgId, opts) {
       }
     }
     if (failed) { d.failed = true; continue; }
+    // Mid-day detours: bill the LESSER of the direct drive and the detour (owner, 21 Nov 2026).
+    d.reviewNotes = [];
+    const minsOf = (o, de) => {
+      const c = CTM.minutesFor(dayCal, o, de);
+      if (c != null) return c;
+      const f = facts.get(RF.routeKey(o, de));
+      return f && f.status === 'ok' ? f.minutes : null;
+    };
+    const placeName = a => String(a || '').split(',').slice(-2, -1)[0]?.replace(/\b(WA|NSW|VIC|QLD|SA|TAS|NT|ACT)\b.*$/, '').trim() || String(a || '').split(',')[0];
+    for (const dt of d.route.detours || []) {
+      const parts = dt.legs.map(l => minsOf(l.origin, l.destination));
+      const detourMin = parts.some(m => m == null) ? null : parts.reduce((x, y) => x + y, 0);
+      const leg = d.route.legs.find(l => l.detour === dt);
+      const directMin = leg ? leg.minutes : 0;
+      const via = dt.via === 'home' ? 'home' : (dt.viaLabel || placeName(dt.viaAddress));
+      const fromS = d.list.find(x => x.ev.id === dt.fromEventId), toS = d.list.find(x => x.ev.id === dt.toEventId);
+      const fromP = placeName(fromS && DR.eventAddress(fromS.ev)), toP = placeName(toS && DR.eventAddress(toS.ev));
+      let billed = directMin, chose = 'direct';
+      if (detourMin != null && detourMin < directMin) { billed = detourMin; chose = 'detour'; }
+      if (leg) { leg.directMinutes = directMin; leg.detourMinutes = detourMin; leg.minutes = billed; leg.billedAs = chose; }
+      d.reviewNotes.push(`${S.displayDate(d.date)}: ${fromP} → ${via} → ${toP} = ${detourMin == null ? 'not priced' : detourMin + ' min'}; direct ${directMin} min; billed the lesser (${billed} min, ${chose}).`);
+    }
     if (estimated) {
       issues.raise('TRAVEL_MINUTES_NOT_FROM_CALENDAR', { practitionerId: d.userId, serviceDate: d.date, extraKey: d.userId,
         message: `${estimated} travel leg${estimated === 1 ? '' : 's'} on ${S.displayDate(d.date)} (${d.list[0].ev.practitioner_name}) ${estimated === 1 ? 'was' : 'were'} priced from the route lookup, because the calendar had not recorded ${estimated === 1 ? 'its' : 'their'} minutes. Open that day on the calendar while it shows the travel, then reprocess — or check the minutes on the draft.`,
@@ -512,11 +584,13 @@ async function prepare(q, orgId, opts) {
     const inOrder = [...d.list].sort((a, b) => new Date(a.ev.start_time) - new Date(b.ev.start_time));
     d.allocation = T.allocateDay({
       practitionerId: d.userId, date: d.date, legs: d.route.legs,
-      sessions: inOrder.map(s => ({ eventId: s.ev.id, clientId: s.ev.client_id, mmm: s.mmm, address: DR.eventAddress(s.ev), rule: {
+      sessions: inOrder.map(s => ({ eventId: s.ev.id, clientId: s.ev.client_id, clientName: s.ev.client_name || null, mmm: s.mmm, address: DR.eventAddress(s.ev),
+        commuteMinutes: d.route.base && d.route.base.address && !d.route.base.remote ? minsOf(d.route.base.address, DR.eventAddress(s.ev)) : null, rule: {
         travelRateCents: s.rate.travelRateCents, travelCapMinutesEachWay: s.rate.travelCapMinutesEachWay,
         rateCardId: s.rate.card.id, rateCardVersion: s.rate.card.version } })),
     });
     for (const a of d.allocation.allocations) {
+      a.reviewNotes = [...(d.reviewNotes || []), ...(d.allocation.reviewNotes || [])];
       const s = d.list.find(x => x.ev.id === a.eventId);
       s.travel = { allocation: a, legs: d.allocation.legs, dayPlan: d };
     }
@@ -529,10 +603,37 @@ async function prepare(q, orgId, opts) {
       // Rule 10 (owner decision): draft it, but leave it for review with a note.
       for (const s of d.list) {
         issues.raise('TRAVEL_MIXED_ZONE_DAY', { eventId: s.ev.id, clientId: s.ev.client_id, practitionerId: d.userId, serviceDate: d.date,
-          message: `${S.displayDate(d.date)} (${d.list[0].ev.practitioner_name}) mixes MMM zones (${rep.zoneGroups.map(g => ({ A: 'MMM1–3', B: 'MMM4–5', R: 'MMM6–7' })[g]).join(', ')}). Travel was drafted at the ${rep.cap == null ? 'uncapped' : rep.cap + '-minute'} cap — review it before sending.`,
+          message: `${S.displayDate(d.date)} (${d.list[0].ev.practitioner_name}) mixes MMM zones (${rep.zoneGroups.map(g => ({ A: 'MMM1–3', B: 'MMM4–5', R: 'MMM6–7' })[g]).join(', ')}). Travel was drafted with each metro client at the lesser of the drive in and their normal commute — see the reviewer notes on the travel line before sending.`,
           fixTarget: { kind: 'event', eventId: s.ev.id, date: d.date } });
       }
     }
+  }
+
+  // 4b. Remote trips with total travel hours: all of it ÷ clients seen on the trip (rule 11).
+  for (const { trip, list } of tripPools.values()) {
+    if (list.some(s => s.blocked)) {
+      for (const s of list.filter(x => !x.blocked)) {
+        issues.raise('TRAVEL_DAY_DEFERRED', { eventId: s.ev.id, clientId: s.ev.client_id, practitionerId: s.ev.user_id, serviceDate: s.ev.local_date,
+          message: `Travel for trip "${trip.name}" waits until every session on the trip is billable, so its ${trip.travel_hours} h are divided correctly.`,
+          fixTarget: { kind: 'trip', tripId: trip.id } });
+      }
+      continue;
+    }
+    const inOrder = [...list].sort((a, b) => new Date(a.ev.start_time) - new Date(b.ev.start_time));
+    const minutes = Math.round(Number(trip.travel_hours) * 6000) / 100;
+    const pool = T.allocateDay({
+      legs: [{ id: `trip:${trip.id}`, kind: 'OUTBOUND', toEventId: inOrder[0].ev.id, minutes, minutesSource: 'trip travel hours' }],
+      sessions: inOrder.map(s => ({ eventId: s.ev.id, clientId: s.ev.client_id, clientName: s.ev.client_name || null, mmm: s.mmm,
+        address: DR.eventAddress(s.ev), rule: { travelRateCents: s.rate.travelRateCents, travelCapMinutesEachWay: s.rate.travelCapMinutesEachWay,
+          rateCardId: s.rate.card.id, rateCardVersion: s.rate.card.version } })),
+    });
+    const note = `Trip "${trip.name}": ${trip.travel_hours} h of travel (flying + driving) ÷ ${pool.report.clients} client${pool.report.clients === 1 ? '' : 's'} seen on the trip (rule 11).`;
+    for (const a of pool.allocations) {
+      a.reviewNotes = [note];
+      const s = list.find(x => x.ev.id === a.eventId);
+      s.travel = { allocation: a, legs: pool.legs, dayPlan: null };
+    }
+    for (const s of list) if (!s.travel) s.travel = { allocation: null, legs: pool.legs, dayPlan: null };
   }
 
   // 5. Travel blocks (Smart Booking "Travel", event_type 'travel') are not

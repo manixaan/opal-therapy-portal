@@ -214,8 +214,10 @@ function buildTravelLines({ serviceDate, allocation, rate, practitionerName, leg
     clientsInDay: allocation.clientsInDay ?? null,
     rule: allocation.rule || null,
     dayReport: allocation.dayReport || null,
+    reviewNotes: allocation.reviewNotes || [],      // for the reviewer only: never printed, never sent to Xero
     legs: (legs || []).map(l => ({ id: l.id, kind: l.kind, included: l.included, reason: l.reason,
-      minutes: l.minutes, km: l.km, provider: l.provider || null, minutesSource: l.minutesSource || null })),
+      minutes: l.minutes, km: l.km, provider: l.provider || null, minutesSource: l.minutesSource || null,
+      directMinutes: l.directMinutes ?? null, detourMinutes: l.detourMinutes ?? null, billedAs: l.billedAs || null })),
     method: allocation.method || 'ndis_rule_book_2026_11',
   };
   if (allocation.labourCents > 0) {

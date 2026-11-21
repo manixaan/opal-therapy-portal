@@ -138,6 +138,8 @@ async function invoices(agent, q = '') {
 }
 async function detail(agent, id) {
   const res = await agent.get(`/api/invoicing/invoices/${id}`);
+  // Diagnostic for a rare, unreproduced 404 (seen 3 times, 21 Nov 2026): logs only when it happens.
+  if (res.status !== 200) { const { rows } = await db.pool.query('SELECT id, status, organisation_id FROM invoices WHERE id::text = $1', [String(id)]); console.log('DBG404', res.status, JSON.stringify(res.body), id, JSON.stringify(rows)); }
   expect(res.status).toBe(200);
   return res.body;
 }
@@ -381,18 +383,54 @@ describe('normal invoicing', () => {
     expect(s1.invoicesCreated).toBe(2);
     const iss = ((await agent.get('/api/invoicing/issues')).body.issues || []).filter((i) => i.issue_type === 'TRAVEL_MIXED_ZONE_DAY');
     expect(iss.map((i) => i.client_id).sort()).toEqual(['mx1', 'mx4']);
-    // Drafted at the smaller cap (30): T = 130 > 60 → 30 each + return 30 to the last client; 40 unbilled.
+    // T = 130. Metro: lesser of 20 in and 20 commute = 20. Wheatbelt pool 110 > 60: 60 + return 50 = 110.
     const labs = {};
     for (const inv of await invoices(agent)) labs[inv.client_id] = byComp((await detail(agent, inv.id)).lines, 'TRAVEL_LABOUR')[0];
-    expect(labs.mx1.calculation).toMatchObject({ claimableMinutes: 30, dayReport: { mixedZones: true, cap: 30, unbilledMinutes: 40 } });
-    expect(labs.mx4.calculation.claimableMinutes).toBe(60);
+    expect(labs.mx1.calculation).toMatchObject({ claimableMinutes: 20, dayReport: { mixedZones: true, unbilledMinutes: 0 } });
+    expect(labs.mx4.calculation.claimableMinutes).toBe(110);
+    expect(labs.mx1.calculation.reviewNotes.join(' ')).toMatch(/normal commute from base 20 min; billed the lesser/);
+    // Reviewer notes never reach the invoice face.
+    const pdf = await agent.get(`/api/invoicing/invoices/${(await invoices(agent)).find((i) => i.client_id === 'mx1').id}/pdf`).buffer(true);
+    expect(pdf.status).toBe(200);
+    expect(pdf.body.toString('latin1')).not.toMatch(/normal commute/);
 
     // The first drive marked "Not driving this": it leaves T (rule 2).
     await db.pool.query(`UPDATE events SET custom_metadata = '{"travel":{"noDriveBefore":true}}'::jsonb WHERE id = $1`, [e1]);
     await run(agent, d, d);
     for (const inv of await invoices(agent)) labs[inv.client_id] = byComp((await detail(agent, inv.id)).lines, 'TRAVEL_LABOUR')[0];
-    expect(labs.mx1.calculation.dayTotalMinutes).toBe(110);
-    expect(labs.mx1.calculation.legs.some((l) => l.kind === 'OUTBOUND')).toBe(false);
+    expect(labs.mx4.calculation.dayTotalMinutes).toBe(110);
+    expect(labs.mx4.calculation.legs.some((l) => l.kind === 'OUTBOUND')).toBe(false);
+  });
+
+  test('a mid-day detour bills the lesser of the direct drive and the detour, with a reviewer note', async () => {
+    const app = buildApp();
+    const org = await seedOrganisation();
+    const { agent } = await login(app, 'owner', org.id);
+    const d = day(3);
+    const pr = await practitioner(org.id, 'Det', 'Det Base, Perth WA 6000', [d]);
+    await profile(agent, 'da', planManaged('Det A', 1));
+    await profile(agent, 'db', planManaged('Det B', 1));
+    route('Det Base, Perth WA 6000', 'A Place, Perth WA 6000', 30, 20); route('A Place, Perth WA 6000', 'Det Base, Perth WA 6000', 30, 20);
+    route('A Place, Perth WA 6000', 'B Place, Perth WA 6000', 40, 30);
+    route('Det Base, Perth WA 6000', 'B Place, Perth WA 6000', 15, 10); route('B Place, Perth WA 6000', 'Det Base, Perth WA 6000', 15, 10);
+    const a = await event(pr, { clientId: 'da', clientName: 'Det A', date: d, start: '09:00', location: 'A Place, Perth WA 6000' });
+    await event(pr, { clientId: 'db', clientName: 'Det B', date: d, start: '14:00', location: 'B Place, Perth WA 6000' });
+    // Therapist went home in between: home detour 30 + 15 = 45, direct 40 → billed 40.
+    await db.pool.query(`UPDATE events SET custom_metadata = '{"travel":{"next":"home"}}'::jsonb WHERE id = $1`, [a]);
+    await run(agent, d, d);
+    let lab = byComp((await detail(agent, (await invoices(agent))[0].id)).lines, 'TRAVEL_LABOUR')[0];
+    let between = lab.calculation.legs.find((l) => l.kind === 'BETWEEN');
+    expect(between).toMatchObject({ minutes: 40, directMinutes: 40, detourMinutes: 45, billedAs: 'direct' });
+    expect(lab.calculation.reviewNotes.join(' ')).toMatch(/→ home → .* = 45 min; direct 40 min; billed the lesser \(40 min, direct\)/);
+    expect(lab.calculation.dayTotalMinutes).toBe(30 + 40 + 15);
+
+    // A detour shorter than the direct drive (heavy traffic on the direct road) is billed instead.
+    route('A Place, Perth WA 6000', 'B Place, Perth WA 6000', 60, 30);
+    await db.pool.query(`DELETE FROM travel_route_facts`);
+    await run(agent, d, d);
+    lab = byComp((await detail(agent, (await invoices(agent))[0].id)).lines, 'TRAVEL_LABOUR')[0];
+    between = lab.calculation.legs.find((l) => l.kind === 'BETWEEN');
+    expect(between).toMatchObject({ minutes: 45, directMinutes: 60, detourMinutes: 45, billedAs: 'detour' });
   });
 
   test('G — the trip home is always part of the day (rule book); the old setting changes nothing', async () => {
@@ -626,6 +664,44 @@ describe('lifecycle: edit, PDF, finalise, pay, void & reissue, calendar link', (
 });
 
 describe('J — rural trip', () => {
+  test('rule 11: a trip\'s total travel hours ÷ clients seen on the trip (migration 093); a weekly run leaves it to the trip', async () => {
+    const app = buildApp();
+    const org = await seedOrganisation();
+    const { agent } = await login(app, 'owner', org.id);
+    const dates = [day(0), day(1), day(2)];
+    const pr = await practitioner(org.id, 'Remote P', 'Kununurra motel, Kununurra WA 6743', dates);
+    for (const [i, id] of ['r1', 'r2', 'r3'].entries()) {
+      await profile(agent, id, planManaged(`Remote ${i}`, 7));
+      await event(pr, { clientId: id, clientName: `Remote ${i}`, date: day(i), start: '10:00', location: `${id} community, Kununurra WA 6743` });
+    }
+    await event(pr, { clientId: 'r1', clientName: 'Remote 0', date: day(2), start: '14:00', location: 'r1 community, Kununurra WA 6743' });
+
+    // A weekly run before the trip is generated: sessions bill, travel waits for the trip.
+    await agent.put('/api/invoicing/settings').send({ abn: '49699791958' });
+    const t = await agent.post('/api/invoicing/trips').send({ name: 'Kimberley run', startDate: day(0), endDate: day(2), practitionerIds: [pr.id], travelHours: '3' });
+    expect(t.status).toBe(201);
+    expect(t.body.trip.travel_hours).toBe('3.00');
+    expect((await agent.post('/api/invoicing/trips').send({ name: 'Bad', startDate: day(0), endDate: day(2), travelHours: '-1' })).status).toBe(400);
+    await run(agent, day(0), day(2));
+    for (const inv of await invoices(agent)) expect(byComp((await detail(agent, inv.id)).lines, 'TRAVEL_LABOUR')).toHaveLength(0);
+
+    // Generate the trip: 3 h = 180 min ÷ 3 clients (r1 seen twice counts once) = 60 min each at the MMM7 travel rate.
+    const gen = await agent.post(`/api/invoicing/trips/${t.body.trip.id}/generate`);
+    expect(gen.status).toBe(201);
+    const labs = [];
+    for (const inv of await invoices(agent)) labs.push(...byComp((await detail(agent, inv.id)).lines, 'TRAVEL_LABOUR'));
+    expect(labs).toHaveLength(3);
+    for (const l of labs) {
+      expect(l).toMatchObject({ unit_price: '145.50', quantity: '1.0000', amount: '145.50' });
+      expect(l.calculation.reviewNotes[0]).toMatch(/3\.00 h of travel \(flying \+ driving\) ÷ 3 clients/);
+    }
+    // Running the week again does not touch the trip's travel.
+    await run(agent, day(0), day(2));
+    const again = [];
+    for (const inv of await invoices(agent)) again.push(...byComp((await detail(agent, inv.id)).lines, 'TRAVEL_LABOUR'));
+    expect(again.map((l) => l.amount)).toEqual(['145.50', '145.50', '145.50']);
+  });
+
   test('15 clients, $6,000 eligible → $400 each, grouped per client, reconciles, no duplicates', async () => {
     const app = buildApp();
     const org = await seedOrganisation();
