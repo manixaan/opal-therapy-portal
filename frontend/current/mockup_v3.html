@@ -16416,51 +16416,61 @@ function evaluateMove(id, newDay, newStartMin, durationMin) {
     };
     const prevTravel = travelNeeded(prev);
     const nextTravel = travelNeeded(next);
+    // Where a stop is, in words: its suburb or address (s.region / s.suburb
+    // are retired fields — they printed "undefined", C-23).
+    const placeName = (x, fallback) => {
+      const loc = (typeof sessionLocation === 'function') ? sessionLocation(x) : null;
+      return (loc && (loc.suburb || loc.address)) || x.suburb || fallback;
+    };
+    // A neighbour the move overlaps (gap below zero) is already a blocker
+    // above — no travel line with a negative gap on top of it.
+    const prevGap = prev ? newStartMin - sessionEndMin(prev) : 0;
+    const nextGap = next ? sessionStartMin(next) - newEndMin : 0;
 
-    if (prevTravel > 0) {
-      const gap = newStartMin - sessionEndMin(prev);
+    if (prevTravel > 0 && prevGap >= 0) {
+      const gap = prevGap;
       if (gap < prevTravel) {
         impacts.push({
           sev: 'blocker',
           ttl: `Not enough travel time before (${gap} min gap, need ~${prevTravel})`,
-          sub: `Previous session ${prev.patient || prev.title} is in ${labelRegion(prev.region)} (${prev.suburb || '—'}). You need ~${prevTravel} min to get to ${labelRegion(s.region)} ${s.suburb}.`
+          sub: `Previous session ${prev.patient || prev.title} is in ${placeName(prev, 'another place')}. You need ~${prevTravel} min to get to ${placeName(s, 'this session')}.`
         });
         verdict = 'blocker';
       } else if (gap < prevTravel + 10) {
         impacts.push({
           sev: 'warn',
-          ttl: `Tight travel from ${labelRegion(prev.region)} (${gap} min · need ~${prevTravel})`,
+          ttl: `Tight travel from ${placeName(prev, 'the stop before')} (${gap} min · need ~${prevTravel})`,
           sub: `You'll need a billable travel Support-Activity inserted. Tap “Add travel + confirm” to auto-create it.`
         });
         if (verdict === 'ok') verdict = 'warn';
       } else {
         impacts.push({
           sev: 'info',
-          ttl: `Travel recommended: ${prevTravel} min from ${prev.suburb || labelRegion(prev.region)}`,
+          ttl: `Travel recommended: ${prevTravel} min from ${placeName(prev, 'the stop before')}`,
           sub: `Gap is ${gap} min — fits. Add as a billable Support-Activity when confirming.`
         });
       }
     }
-    if (nextTravel > 0) {
-      const gap = sessionStartMin(next) - newEndMin;
+    if (nextTravel > 0 && nextGap >= 0) {
+      const gap = nextGap;
       if (gap < nextTravel) {
         impacts.push({
           sev: 'blocker',
           ttl: `Not enough travel time after (${gap} min gap, need ~${nextTravel})`,
-          sub: `Next session ${next.patient || next.title} is in ${labelRegion(next.region)} (${next.suburb || '—'}). You need ~${nextTravel} min to get there.`
+          sub: `Next session ${next.patient || next.title} is in ${placeName(next, 'the next stop')}. You need ~${nextTravel} min to get there.`
         });
         verdict = 'blocker';
       } else if (gap < nextTravel + 10) {
         impacts.push({
           sev: 'warn',
-          ttl: `Tight travel to ${labelRegion(next.region)} after (${gap} min · need ~${nextTravel})`,
+          ttl: `Tight travel to ${placeName(next, 'the next stop')} after (${gap} min · need ~${nextTravel})`,
           sub: `Allow for unexpected delays — or reschedule ${next.patient || next.title}.`
         });
         if (verdict === 'ok') verdict = 'warn';
       } else {
         impacts.push({
           sev: 'info',
-          ttl: `Travel recommended: ${nextTravel} min to ${next.suburb || labelRegion(next.region)}`,
+          ttl: `Travel recommended: ${nextTravel} min to ${placeName(next, 'the next stop')}`,
           sub: `Gap is ${gap} min — fits. Add as billable Support-Activity when confirming.`
         });
       }
