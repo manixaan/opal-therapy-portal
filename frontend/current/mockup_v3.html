@@ -100,7 +100,7 @@
 <link rel="stylesheet" href="/workshop.css?v=9">
 <link rel="stylesheet" href="/interview.css?v=1" />
 <link rel="stylesheet" href="/onboarding.css?v=9" />
-<link rel="stylesheet" href="/splose-sync.css?v=5" />
+<link rel="stylesheet" href="/splose-sync.css?v=6" />
 <link rel="stylesheet" href="/onboarding-journey.css?v=43" />
 <link rel="stylesheet" href="/employees.css?v=2" />
 <link rel="stylesheet" href="/people.css?v=3" />
@@ -2441,7 +2441,6 @@ window.opIcon = function (name, size) {
   .cal-grid.outlook-only .travel-chip, .cal-grid.outlook-only .addr-chip { display: none !important; }
   .cal-outlook-only-btn.active { background: var(--accent); color: #fff; }
   /* Visual refresh: calmer, more Outlook-like tiles */
-  .session { border-radius: 4px; border-width: 1px; box-shadow: none; font-size: 11.5px; line-height: 1.25; padding: 2px 6px; border-left-width: 3px; }
   .session .session-title, .session b { font-weight: 600; }
   .cal-head { border-bottom: 1px solid var(--border); }
   .cal-grid {
@@ -2713,7 +2712,7 @@ window.opIcon = function (name, size) {
   .session {
     position: absolute; left: 3px; right: 3px;
     border-radius: 4px;
-    padding: 2px 6px 2px 5px;
+    padding: 2px 6px;
     background: var(--c-outlook-bg);
     color: var(--tile-fg);
     font-size: 11px;
@@ -2728,6 +2727,9 @@ window.opIcon = function (name, size) {
     min-height: 0; /* height comes from sessionTileHeight() — 5/10-min tiles differ */
     transition: box-shadow 0.15s ease;
     z-index: 2; /* sit above hour-line gridlines */
+    /* Its own width decides what a tile can carry (§7.8): the status corner
+       and the CONFLICT text only from 100 px wide (container query below). */
+    container-type: inline-size;
   }
   /* Outlook-category tiles: applyCategoryColour() supplies the three values.
      !important keeps the precedence the old inline styles had. */
@@ -2736,27 +2738,31 @@ window.opIcon = function (name, size) {
     border-left-color: var(--cat-border) !important;
     color: var(--cat-text) !important;
   }
-  .session:hover { box-shadow: 0 2px 8px rgba(15, 23, 42, 0.18); z-index: 3; }
   /* Outlook-style text: the title wraps onto as many lines as the tile has room
      for (the tile clips, it never grows). Titles read type first
      (typeFirstTitle): "Client Appointment - Name". */
+  /* Whole words, balanced lines, and only as many lines as the tile holds:
+     --lines comes from applySessionDensity, so a line is never cut through
+     the middle (C-15). */
   .session .s-title {
-    font-weight: 600; display: block; color: var(--tile-fg);
-    white-space: normal; overflow-wrap: anywhere;
+    font-weight: 600; display: -webkit-box; color: var(--tile-fg);
+    white-space: normal; overflow-wrap: break-word; word-break: normal; text-wrap: pretty;
+    -webkit-box-orient: vertical; -webkit-line-clamp: var(--lines, none); overflow: hidden;
   }
   /* The time is not shown on the tile — it is in the hover tooltip and the
      detail panel. The span stays in the DOM so move/resize keep it current. */
   .session .s-time { display: none; }
   .session .s-sub {
-    font-size: 10px; display: block; color: var(--tile-fg-soft);
-    white-space: normal; overflow-wrap: anywhere;
+    font-size: 10px; display: -webkit-box; color: var(--tile-fg-soft);
+    white-space: normal; overflow-wrap: break-word; word-break: normal; text-wrap: pretty;
+    -webkit-box-orient: vertical; -webkit-line-clamp: var(--sub-lines, 2); overflow: hidden;
   }
   /* Duration-aware density: ≤65 min drops the location line; <40 min also
      tightens the padding. Full details stay one click away in the detail
      panel (and in the hover tooltip). */
   .session.s-med .s-sub { display: none; }
   .session.s-compact .s-sub { display: none; }
-  .session.s-compact { padding: 0 6px 0 5px; font-size: 10.5px; line-height: 1.2; min-height: 0; }
+  .session.s-compact { padding: 0 6px; line-height: 1.2; min-height: 0; }
   /* Under 15 min the tile is too short for a line of text: a clean bar, the
      title stays in the hover tip and the detail panel (C-17). */
   .session.s-tiny .s-title, .session.s-tiny .s-sub, .session.s-tiny .travel-badge { display: none; }
@@ -2802,20 +2808,42 @@ window.opIcon = function (name, size) {
      Valid-address tiles carry no chip at all. Explanation + the Add/Fix
      address action live in the event detail panel. */
   .session .addr-chip {
-    position: absolute; top: 1px; right: 2px;
-    width: 12px; height: 12px; line-height: 12px; text-align: center;
+    position: absolute; top: 2px; right: 2px;
+    width: 14px; height: 14px; line-height: 14px; text-align: center;
     font-size: 9px; font-weight: 700;
     background: #9a5f0e; color: white; border-radius: 50%;
   }
+  /* ── One status corner (§7.8, C-16): top-right, 2 px inset, 14 px. At most
+     one item — missing address > Splose state > travel glyph — and none on
+     short (<40 min) or narrow (<100 px) tiles, whose ring/bar and the detail
+     panel carry the state. The title flows around the corner, never under it. */
+  .session:has(> .addr-chip) > .splose-chip,
+  .session:has(> .addr-chip) > .travel-badge,
+  .session:has(> .splose-chip) > .travel-badge,
+  .session:has(> .addr-chip, > .splose-chip, > .travel-badge)[data-type="outlook"]::before { display: none; }
+  .session.s-compact > :is(.addr-chip, .splose-chip, .travel-badge) { display: none; }
+  @container (max-width: 99.98px) {
+    /* .session.session: outranks the later .session .travel-badge rule. */
+    .session.session > :is(.addr-chip, .splose-chip, .travel-badge) { display: none; }
+    .session .conflict-badge { display: none; }
+  }
+  @container (min-width: 100px) {
+    .session:not(.s-compact):has(> .addr-chip, > .splose-chip, > .travel-badge) .s-title::before {
+      content: ''; float: right; width: 14px; height: 12px; margin-left: 2px;
+    }
+  }
 
   /* ── Conflict highlighting ─────────────────────────────────────────── */
+  /* The state is the inset ring + red bar; the text badge is extra, so it is
+     dropped on short and narrow tiles rather than spill out (C-14). */
   .session.conflict-tile {
-    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.9) inset, 0 2px 8px rgba(239,68,68,0.25) !important;
-    border-left-color: #c2412e !important;
+    box-shadow: inset 0 0 0 2px var(--danger) !important;
+    border-left-color: var(--danger) !important;
   }
+  .session.s-compact .conflict-badge { display: none; }
   .conflict-badge {
     display: inline-block;
-    background: #c2412e;
+    background: var(--danger);
     color: white;
     font-size: 9px;
     font-weight: 700;
@@ -3108,13 +3136,13 @@ window.opIcon = function (name, size) {
   /* IMPORTANT: All session z-index values must stay below .cal-head (z-index: 20)
      so events scroll underneath the sticky header rather than over it.          */
   .session { user-select: none; touch-action: none; transition: box-shadow 120ms, transform 120ms, filter 120ms; }
-  .session:hover { filter: brightness(1.04); box-shadow: 0 3px 8px rgba(0,0,0,0.16); z-index: 4; }
+  .session:hover { box-shadow: var(--shadow-md); z-index: 4; }
   /* A just-booked tile fades in where its proposal stood (C-13). */
   .session.tile-new { animation: tileIn var(--t-fast) var(--ease-out); }
   @keyframes tileIn { from { opacity: 0; } }
-  .session.dragging { opacity: 0.85; z-index: 15; box-shadow: 0 10px 24px rgba(0,0,0,0.25); cursor: grabbing; filter: brightness(1.06); transform: scale(1.02); }
+  .session.dragging { opacity: 0.85; z-index: 15; box-shadow: var(--shadow-lg); cursor: grabbing; transform: scale(1.02); }
   .session.resizing { z-index: 15; box-shadow: 0 6px 18px rgba(0,0,0,0.22); filter: brightness(1.03); }
-  .session.selected { box-shadow: 0 0 0 2px white, 0 0 0 4px var(--accent); z-index: 5; }
+  .session.selected { box-shadow: var(--focus-ring); z-index: 5; }
   /* Resize handles on top + bottom edges of each session */
   .session .resize-handle {
     position: absolute; left: 20%; right: 20%;
@@ -4254,10 +4282,10 @@ window.opIcon = function (name, size) {
 .tp-linked { font-size: 13px; margin-bottom: 4px; }
 .tp-timing { font-size: 12px; color: var(--muted); display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
 /* Travel badge on event tiles (travel.js decorateTravelBadges) */
-.session .travel-badge { position: absolute; bottom: 6px; right: 3px; width: 16px; height: 16px; padding: 0; display: inline-flex; align-items: center; justify-content: center;
+.session .travel-badge { position: absolute; top: 2px; right: 2px; width: 14px; height: 14px; padding: 0; display: inline-flex; align-items: center; justify-content: center;
   border-radius: 4px; border: 1px solid transparent; background: transparent; color: inherit; opacity: .55; cursor: pointer; z-index: 2; }
 .session .travel-badge:hover, .session .travel-badge:focus-visible { opacity: 1; border-color: currentColor; }
-.session .travel-badge.tb-on { opacity: .9; color: #0f7c6c; }
+.session .travel-badge.tb-on { opacity: .9; color: var(--accent); }
 .session .travel-badge.tb-add { opacity: .4; }
 .session .travel-badge.tb-add::after { content: ''; position: absolute; width: 14px; height: 1.5px; background: currentColor; transform: rotate(-45deg); }
 .cal-grid.outlook-only .travel-badge, .cal-grid.hide-cat-travel .travel-badge { display: none !important; }
@@ -13958,6 +13986,15 @@ function applySessionDensity(el, durationMin) {
   if (durationMin < 15) el.classList.add('s-compact', 's-tiny');
   else if (durationMin < 40) el.classList.add('s-compact');
   else if (durationMin <= 65) el.classList.add('s-med');
+  // Whole lines only (C-15): the title clamps to the lines the tile holds,
+  // leaving one for the location line when that shows (>65 min).
+  const h = parseFloat(el.style.height);
+  if (h > 0) {
+    const compact = durationMin < 40;
+    const lines = Math.max(1, Math.floor((h - (compact ? 0 : 4) + 0.5) / (compact ? 13.2 : 13.75)));
+    const sub = durationMin > 65 ? 1 : 0;
+    el.style.setProperty('--lines', String(Math.max(1, lines - sub)));
+  }
 }
 
 /* Missing-Outlook-title recovery: one bounded delta refresh per session.
@@ -14193,9 +14230,9 @@ function reflowDayOverlaps(col) {
   // Layout each cluster
   for (const grp of clusters) {
     if (grp.length === 1) {
-      // Solo — full width (reset any previous override)
-      grp[0].el.style.left  = '4px';
-      grp[0].el.style.right = '4px';
+      // Solo — full width, the CSS 3 px insets (reset any previous override)
+      grp[0].el.style.left  = '3px';
+      grp[0].el.style.right = '3px';
       grp[0].el.style.width = '';
       continue;
     }
@@ -14215,13 +14252,16 @@ function reflowDayOverlaps(col) {
     }
 
     const totalLanes = Math.max(...lane) + 1;
-    const GAP = 3; // px gap between side-by-side blocks
+    // 3 px column insets and a 4 px gap between lanes, every lane the same
+    // width (C-18: was 47.5/48.5/48.5 with 3 vs 4 px insets).
+    const INSET = 3, GAP = 4;
+    const spare = 2 * INSET + GAP * (totalLanes - 1);
 
     for (let i = 0; i < n; i++) {
       const l = lane[i];
       // Use percentage-based positioning relative to the column
-      grp[i].el.style.left  = `calc(${(l / totalLanes) * 100}% + ${l === 0 ? 4 : GAP}px)`;
-      grp[i].el.style.width = `calc(${(1 / totalLanes) * 100}% - ${l === 0 ? 4 + GAP : GAP * 2}px)`;
+      grp[i].el.style.left  = `calc((100% - ${spare}px) * ${l / totalLanes} + ${INSET + GAP * l}px)`;
+      grp[i].el.style.width = `calc((100% - ${spare}px) / ${totalLanes})`;
       grp[i].el.style.right = 'auto';
     }
   }

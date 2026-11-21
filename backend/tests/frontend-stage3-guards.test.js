@@ -706,7 +706,8 @@ describe('calendar clean status indicators', () => {
   test('short events keep a minimum height and never spill', () => {
     // 21 Nov 2026 (C-17): the floor is in sessionTileHeight(), not CSS — a fixed
     // 8px drew 5- and 10-min tiles the same and overlapped the next slot.
-    expect(HTML).toContain('.session.s-compact { padding: 0 6px 0 5px; font-size: 10.5px; line-height: 1.2; min-height: 0; }');
+    // Stage 3 tile anatomy (§7.8): compact tiles keep the 11 px title and 6 px insets.
+    expect(HTML).toContain('.session.s-compact { padding: 0 6px; line-height: 1.2; min-height: 0; }');
     expect(HTML).toContain('return Math.max(px - 4, Math.min(px - 1, 8));');
   });
 
@@ -3141,9 +3142,10 @@ describe('side-by-side layout follows the tiles (11 Oct 2026)', () => {
     const tick = () => new Promise((r) => setTimeout(r, 0));
     return { dom, col, mk, tick };
   }
-  // jsdom drops calc() widths; a shared lane is marked by right: auto, a solo tile by right: 4px.
+  // jsdom drops calc() widths; a shared lane is marked by right: auto, a solo tile by
+  // the tile's 3 px insets (Stage 3 §7.8 / C-18; was 4 px).
   const half = (el) => el.style.right === 'auto';
-  const full = (el) => el.style.left === '4px' && el.style.right === '4px';
+  const full = (el) => el.style.left === '3px' && el.style.right === '3px';
 
   test('a neighbour that leaves gives the full width back, with no explicit re-layout call', async () => {
     const { mk, tick } = env();

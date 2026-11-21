@@ -110,3 +110,50 @@ describe('teal is the only "selected" colour; travel matches its legend (U-06, V
     expect(THEME).toContain('--c-travel-ink: #e0d9ff;');
   });
 });
+
+describe('calendar tile anatomy (§7.8 — C-14, C-15, C-16, C-18, C-26)', () => {
+  test('one .session rule: padding 2px 6px, radius 4, 4 px bar, 11 px; no 11.5 px duplicate', () => {
+    expect(HTML).not.toContain('.session { border-radius: 4px; border-width: 1px; box-shadow: none; font-size: 11.5px');
+    const r = rule(HTML, '  .session');
+    expect(r).toContain('padding: 2px 6px;');
+    expect(r).toContain('border-radius: 4px;');
+    expect(r).toContain('border-left: 4px solid');
+    expect(r).toContain('font-size: 11px;');
+    expect(r).toContain('container-type: inline-size;');
+    expect(rule(HTML, '  .session.s-compact')).not.toMatch(/10\.5px/);
+  });
+  test('titles wrap whole words and clamp to whole lines (C-15)', () => {
+    const t = rule(HTML, '  .session .s-title');
+    expect(t).toContain('overflow-wrap: break-word; word-break: normal; text-wrap: pretty;');
+    expect(t).toContain('-webkit-line-clamp: var(--lines, none);');
+    expect(t).not.toContain('anywhere');
+    const fn = HTML.slice(HTML.indexOf('function applySessionDensity('), HTML.indexOf('function applySessionDensity(') + 1200);
+    expect(fn).toContain("el.style.setProperty('--lines'");
+  });
+  test('one status corner, top-right 2 px, 14 px, hidden on short or narrow tiles (C-16)', () => {
+    expect(HTML).toMatch(/\.session \.travel-badge \{ position: absolute; top: 2px; right: 2px; width: 14px; height: 14px;/);
+    expect(rule(HTML, '  .session .addr-chip')).toContain('top: 2px; right: 2px;');
+    expect(HTML).toContain('.session.s-compact > :is(.addr-chip, .splose-chip, .travel-badge) { display: none; }');
+    expect(HTML).toContain('@container (max-width: 99.98px)');
+    expect(HTML).toContain('.session.session > :is(.addr-chip, .splose-chip, .travel-badge) { display: none; }');
+    expect(HTML).toContain('.session:has(> .addr-chip) > .travel-badge');
+  });
+  test('conflict is the --danger ring + bar; the text badge never shows on short or narrow tiles (C-14)', () => {
+    const c = rule(HTML, '  .session.conflict-tile');
+    expect(c).toContain('box-shadow: inset 0 0 0 2px var(--danger) !important;');
+    expect(c).not.toMatch(/239,\s*68,\s*68/);
+    expect(HTML).toContain('.session.s-compact .conflict-badge { display: none; }');
+    expect(HTML).toMatch(/@container \(max-width: 99\.98px\) \{[\s\S]{0,300}\.session \.conflict-badge \{ display: none; \}/);
+  });
+  test('hover, selected and drag use the shadow/focus tokens (no brightness filter, no white halo)', () => {
+    expect(HTML).toContain('.session:hover { box-shadow: var(--shadow-md); z-index: 4; }');
+    expect(HTML).toContain('.session.selected { box-shadow: var(--focus-ring); z-index: 5; }');
+    expect(HTML).not.toContain('.session:hover { filter: brightness');
+  });
+  test('overlap lanes are equal width with 3 px insets and a 4 px gap (C-18)', () => {
+    const fn = HTML.slice(HTML.indexOf('function reflowDayOverlaps(col) {'), HTML.indexOf('function reflowDayOverlaps(col) {') + 3000);
+    expect(fn).toContain('const INSET = 3, GAP = 4;');
+    expect(fn).toContain('grp[i].el.style.width = `calc((100% - ${spare}px) / ${totalLanes})`;');
+    expect(fn).toContain("grp[0].el.style.left  = '3px';");
+  });
+});

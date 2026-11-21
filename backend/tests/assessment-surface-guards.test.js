@@ -779,7 +779,7 @@ describe('changed assets are cache-busted', () => {
       // 8: chips written only on change (no observer loop); the move toast names the Outlook status.
       // 9 (js) / 2 (css): match, link or ignore — each queued new appointment shows
       // whether Splose already holds it, with Link / Send / Ignore and bulk actions.
-      ['splose-sync.js', 15], ['splose-sync.css', 5],
+      ['splose-sync.js', 15], ['splose-sync.css', 6],
       // 1: Settings → Calendar sync — per-direction Outlook/Splose choices, the
       // Owner's practice limits and the Sync now preview (migration 081).
       ['sync-settings.js', 6], ['sync-settings.css', 3],
