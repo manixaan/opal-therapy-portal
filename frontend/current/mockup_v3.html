@@ -14120,7 +14120,23 @@ function __overlapTiles(col) {
 function __overlapSignature(col) {
   return __overlapTiles(col).map(el => (parseFloat(el.style.top) || 0) + ':' + (parseFloat(el.style.height) || 30)).join('|');
 }
+/* While a render inserts many tiles, each insert's reflow read computed
+   style straight after a DOM write — one forced style recalc per tile
+   (O(n²) per column, P-02). A render batches instead: columns are queued
+   and laid out once each when it finishes. Same lanes, same widths. */
+var __overlapBatch = null;
+function __withOverlapBatch(fn) {
+  if (__overlapBatch) return fn();
+  __overlapBatch = new Set();
+  try { return fn(); }
+  finally {
+    const cols = Array.from(__overlapBatch);
+    __overlapBatch = null;
+    cols.forEach(c => { try { reflowDayOverlaps(c); } catch (e) { /* layout only */ } });
+  }
+}
 function reflowDayOverlaps(col) {
+  if (__overlapBatch) { __overlapBatch.add(col); return; }
   col.__overlapSig = __overlapSignature(col);
   const blocks = __overlapTiles(col);
   if (blocks.length === 0) return;
@@ -18436,6 +18452,7 @@ function __renderWeekHeader() {
 }
 
 // Subset of __outlookEventsCache whose Perth-local date is within [Mon, next Mon).
+var __perthYmdMemo = new Map();
 function __eventsInVisibleWeek() {
   const monday = window.__currentWeekMonday;
   if (!monday) return [];
@@ -18449,10 +18466,17 @@ function __eventsInVisibleWeek() {
     ? (window.__outlookEventsCache || []).filter(e => e.source === 'outlook' && e.outlook_id)
     : (window.__outlookEventsCache || []);
   return __base.filter(e => {
-    const dt = new Date(e.start_time);
-    if (isNaN(dt.getTime())) return false;
-    const k = __perthDateStr(dt);
-    return k >= startKey && k < endKey;
+    // The Perth date per start time is memoised (P-01): this filter runs over
+    // the whole cache on every render, view switch and reload.
+    const _sk = String(e.start_time);
+    let k = __perthYmdMemo.get(_sk);
+    if (k === undefined) {
+      const dt = new Date(e.start_time);
+      k = isNaN(dt.getTime()) ? null : __perthDateStr(dt);
+      if (__perthYmdMemo.size > 20000) __perthYmdMemo.clear();
+      __perthYmdMemo.set(_sk, k);
+    }
+    return k !== null && k >= startKey && k < endKey;
   });
 }
 
@@ -18513,12 +18537,15 @@ function setCalendarMode(mode) {
   // load). After page initialisation __currentWeekMonday is always set, so
   // switching from Month → Week never re-rendered the grid. Always calling
   // renderCurrentWeek() here ensures the grid is fresh on every view switch.
+  // renderWeekChanges() keeps that guarantee but rebuilds nothing when the
+  // week and its events are what is already drawn — a Day/Week toggle is
+  // then a class change (P-01).
   if (!window.__currentWeekMonday) {
     window.__currentWeekMonday = window.__selectedDate
       ? __thisMondayPerth(window.__selectedDate)
       : __thisMondayPerth();
   }
-  renderCurrentWeek();
+  renderWeekChanges();
 
   // Day mode: focus the column matching __selectedDate (falls back to today, then Mon)
   document.querySelectorAll('.cal-head.is-focus, .cal-col.is-focus')
@@ -18988,7 +19015,7 @@ function renderCurrentWeek() {
   console.log(`📆 Rendering ${slice.length} events for week of ${__ymd(window.__currentWeekMonday)}`);
   const eventsByDay = groupEventsByDay(slice);
   const _sigs = __weekEventSigs(eventsByDay);   // before the merge stamps sessionId on them
-  mergeEventsIntoDayData(eventsByDay);
+  __withOverlapBatch(() => mergeEventsIntoDayData(eventsByDay));
   __recordWeekDrawn(_sigs);
   renderToday();
   __openPendingEventDetail();
@@ -19072,7 +19099,7 @@ function renderWeekChanges() {
   if (changed.length) {
     const only = {};
     changed.forEach(d => { __clearOutlookTilesForDay(d); only[d] = eventsByDay[d] || []; });
-    mergeEventsIntoDayData(only, changed);
+    __withOverlapBatch(() => mergeEventsIntoDayData(only, changed));
     renderToday();
   }
   __recordWeekDrawn(sigs);
@@ -19464,6 +19491,7 @@ function updateCalendarWeekToEvent(event) {
  * "DD/MM/YYYY" string as "MM/DD/YYYY", so day-of-month > 12 produced an
  * Invalid Date (event dropped) and days 1–12 landed on the wrong weekday.
  */
+var __perthPartsMemo = new Map();
 function groupEventsByDay(events) {
   const grouped = { mon: [], tue: [], wed: [], thu: [], fri: [], sat: [], sun: [] };
 
@@ -19482,9 +19510,15 @@ function groupEventsByDay(events) {
         return;
       }
 
-      const parts = Object.fromEntries(
-        perthFmt.formatToParts(utcDate).map(p => [p.type, p.value])
-      );
+      // Perth parts per start time are memoised: formatToParts was most of
+      // the cost of regrouping a week on every reload and view switch (P-01).
+      const _pk = String(event.start_time);
+      let parts = __perthPartsMemo.get(_pk);
+      if (!parts) {
+        parts = Object.fromEntries(perthFmt.formatToParts(utcDate).map(p => [p.type, p.value]));
+        if (__perthPartsMemo.size > 20000) __perthPartsMemo.clear();
+        __perthPartsMemo.set(_pk, parts);
+      }
 
       const dayOfWeek = (parts.weekday || '').toLowerCase(); // "mon".."sun"
       // Guard against the "24:00" some locales emit at Perth-midnight.
@@ -19557,7 +19591,6 @@ function groupEventsByDay(events) {
           // A repeating appointment's series (recurrence.js, migration 075).
           seriesId: event.series_id || null, seriesIndex: event.series_index != null ? event.series_index : null,
         });
-        console.log(`📍 ${dayOfWeek.toUpperCase()} ${parts.day}/${parts.month}: ${event.title} at ${perthTime} [${classified}]`);
       } else {
         // dayOfWeek didn't match any known key — should never happen with 7-day grid,
         // but log defensively in case Intl gives us an unexpected weekday string.

@@ -47,7 +47,8 @@ function load() {
       const byDay = groupEventsByDay(); const sigs = __weekEventSigs(byDay); mergeEventsIntoDayData(byDay); __recordWeekDrawn(sigs);
     }
   `);
-  ['var __weekDrawn = null;', 'function __weekDrawKey() {', 'function __weekEventSigs(', 'function __dayTilesSig(',
+  w.eval('var __overlapBatch = null; function reflowDayOverlaps() {}');
+  ['var __weekDrawn = null;', 'function __withOverlapBatch(fn) {', 'function __weekDrawKey() {', 'function __weekEventSigs(', 'function __dayTilesSig(',
     'function __recordWeekDrawn(', 'function __clearOutlookTilesForDay(', 'function renderWeekChanges() {', 'function __isVisibleWeekDate(']
     .forEach(h => w.eval(h.startsWith('var') ? h : fnSrc(h)));
   return w;
@@ -116,5 +117,32 @@ describe('wiring', () => {
     const r = fnSrc('function renderCurrentWeek() {');
     expect(r.indexOf('__weekEventSigs(eventsByDay)')).toBeLessThan(r.indexOf('mergeEventsIntoDayData(eventsByDay)'));
     expect(r).toContain('__recordWeekDrawn(_sigs);');
+  });
+});
+
+describe('P-01 / P-02 render cost', () => {
+  test('a Day/Week/Workweek toggle redraws only what changed', () => {
+    const m = fnSrc('function setCalendarMode(mode) {');
+    expect(m).toContain('renderWeekChanges();');
+    expect(m).not.toMatch(/\n  renderCurrentWeek\(\);/);
+  });
+  test('a render lays each column out once, after its tiles are in', () => {
+    expect(fnSrc('function renderCurrentWeek() {')).toContain('__withOverlapBatch(() => mergeEventsIntoDayData(eventsByDay));');
+    expect(fnSrc('function renderWeekChanges() {')).toContain('__withOverlapBatch(() => mergeEventsIntoDayData(only, changed));');
+    const dom = new JSDOM('<!doctype html><body><div class="cal-col" id="c1"></div><div class="cal-col" id="c2"></div></body>', { runScripts: 'outside-only' });
+    const w = dom.window;
+    w.eval('var calls = []; var __overlapBatch = null;' + fnSrc('function __withOverlapBatch(fn) {')
+      + 'function reflowDayOverlaps(col) { if (__overlapBatch) { __overlapBatch.add(col); return; } calls.push(col.id); }');
+    w.eval(`const a = document.getElementById('c1'), b = document.getElementById('c2');
+      __withOverlapBatch(() => { reflowDayOverlaps(a); reflowDayOverlaps(a); reflowDayOverlaps(b); __withOverlapBatch(() => reflowDayOverlaps(a)); });
+      reflowDayOverlaps(b);`);
+    expect(w.calls).toEqual(['c1', 'c2', 'c2']);
+    expect(w.eval('__overlapBatch')).toBe(null);
+    expect(fnSrc('function reflowDayOverlaps(col) {')).toContain('if (__overlapBatch) { __overlapBatch.add(col); return; }');
+  });
+  test('Perth dates are memoised per start time, declared before use', () => {
+    expect(HTML.indexOf('var __perthYmdMemo = new Map();')).toBeLessThan(HTML.indexOf('function __eventsInVisibleWeek() {'));
+    expect(HTML.indexOf('var __perthPartsMemo = new Map();')).toBeLessThan(HTML.indexOf('function groupEventsByDay(events) {'));
+    expect(fnSrc('function groupEventsByDay(events) {')).not.toContain('console.log(`📍');
   });
 });
