@@ -157,3 +157,38 @@ describe('calendar tile anatomy (§7.8 — C-14, C-15, C-16, C-18, C-26)', () =>
     expect(fn).toContain("grp[0].el.style.left  = '3px';");
   });
 });
+
+describe('sheet internals — one spec for the drawer and the booking panel (U-09, U-10, §7.2)', () => {
+  test('both sheets: 56 px header, 32 × 32 radius-8 close, 15/700 title', () => {
+    expect(rule(HTML, '  .detail-header')).toContain('min-height: 56px;');
+    expect(rule(HTML, '.bsp-header')).toContain('min-height: 56px;');
+    const dc = rule(HTML, '  .detail-close');
+    expect(dc).toContain('width: 32px; height: 32px;');
+    expect(dc).toMatch(RADIUS_8);
+    const bc = rule(HTML, '.bsp-close');
+    expect(bc).toContain('width: 32px; height: 32px;');
+    expect(bc).toMatch(RADIUS_8);
+    expect(HTML).toContain('.bsp-title { font-size: 15px; font-weight: 700;');
+  });
+  test('footer buttons are one 36 px size; Close is not the filled primary', () => {
+    const f = rule(HTML, '  .detail-footer .btn, .bsp-footer .btn');
+    expect(f).toContain('height: 36px;');
+    expect(f).toContain('font-size: 13px;');
+    expect(HTML).toContain('parts.push(`<button class="btn" onclick="closeBlockDetail()">Close</button>`);');
+    expect(HTML).not.toContain('<button class="btn primary" onclick="closeBlockDetail()">Close</button>');
+  });
+  test('fields are 34 px radius 8 in both sheets; inline actions 24 px', () => {
+    expect(rule(HTML, '  .time-edit input[type="time"]')).toMatch(/height: 34px;[^}]*border-radius: 8px;/);
+    expect(rule(HTML, '.bsp-time-field input[type="time"]')).toContain('height: 34px;');
+    expect(rule(HTML, '.bsp-loc-field input[type="text"]')).toContain('height: 34px;');
+    expect(HTML).toContain('#booking-side-panel .search-row input { height: 34px;');
+    expect(HTML).toContain('#booking-side-panel select { height: 34px;');
+    expect(HTML).toContain('.detail-drawer .btn.btn-xs { height: 24px;');
+    expect(HTML).not.toContain('style="font-size:11.5px;padding:2px 8px;"');
+    expect(HTML).not.toContain('rgba(111,93,212,0.15)); }\n  .time-edit .sep');
+  });
+  test('section labels share 11/700 and ink-soft, never info blue', () => {
+    expect(rule(HTML, '.bsp-section-title')).toContain('color: var(--ink-soft);');
+    expect(rule(HTML, '.bsp-t-label')).toContain('font-size: 11px; font-weight: 700;');
+  });
+});

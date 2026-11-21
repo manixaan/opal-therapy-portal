@@ -3227,20 +3227,27 @@ window.opIcon = function (name, size) {
   .detail-drawer.show { transform: none; transition: transform var(--t-panel) var(--ease-out); }
   .detail-header {
     display: flex; align-items: center; gap: 10px;
-    padding: 16px 20px 12px;
+    min-height: 56px; box-sizing: border-box;
+    padding: 12px 16px 12px 20px;
     border-bottom: 1px solid var(--border);
   }
   .detail-swatch { width: 14px; height: 38px; border-radius: 4px; flex-shrink: 0; }
   .detail-title { font-size: 15px; font-weight: 700; line-height: 1.2; }
   .detail-subtitle { font-size: 11px; color: var(--ink-soft); margin-top: 3px; }
+  /* One close button for both sheets (§7.2): 32 × 32, radius 8. */
   .detail-close {
-    margin-left: auto; background: none; border: none;
-    font-size: 22px; color: var(--ink-soft); cursor: pointer; line-height: 1;
+    margin-left: auto; flex-shrink: 0; align-self: flex-start;
+    width: 32px; height: 32px; padding: 0; box-sizing: border-box;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: none; border: none; border-radius: 8px;
+    font-size: 20px; color: var(--ink-faint); cursor: pointer; line-height: 1;
+    transition: background var(--t-fast), color var(--t-fast);
   }
+  .detail-close:hover { background: var(--panel-sunk); color: var(--ink); }
   .detail-body { overflow-y: auto; padding: 14px 20px 24px; flex: 1; font-size: 13px; }
   .detail-body .row {
-    display: grid; grid-template-columns: 120px 1fr;
-    gap: 10px; padding: 8px 0;
+    display: grid; grid-template-columns: 120px 1fr; align-items: baseline;
+    gap: 12px; padding: 8px 0;
     border-bottom: 1px dashed var(--border);
   }
   .detail-body .row:last-of-type { border-bottom: none; }
@@ -3262,6 +3269,13 @@ window.opIcon = function (name, size) {
     display: flex; gap: 8px; background: var(--panel-soft);
   }
   .detail-footer button { flex: 1; }
+  /* Sheet footers (drawer + booking panel): one 36 px button (§7.2 lg). */
+  .detail-footer .btn, .bsp-footer .btn {
+    height: 36px; box-sizing: border-box; padding: 0 14px; justify-content: center;
+    border-radius: 8px; font-size: 13px; font-weight: 500; line-height: 1; white-space: nowrap;
+  }
+  .detail-footer .btn.primary, .bsp-footer .btn.primary { font-weight: 600; }
+  .detail-footer .btn:not(.primary):hover { background: var(--panel-sunk); border-color: var(--border); }
   /* ── Detail drawer tabs ── */
   .detail-panel { display: none; flex: 1; flex-direction: column; overflow: hidden; }
   .detail-panel.active { display: flex; }
@@ -3269,7 +3283,7 @@ window.opIcon = function (name, size) {
 .bd-day-view { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .bd-day-view[hidden], .bd-day-edit[hidden] { display: none; }
   .bd-day-edit { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-  .bd-day-edit input[type=date] { height: 30px; padding: 0 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); color: var(--ink); font: inherit; font-size: 13px; }
+  .bd-day-edit input[type=date] { height: 34px; box-sizing: border-box; padding: 0 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); color: var(--ink); font: inherit; font-size: 13px; }
   .bd-day-note { flex-basis: 100%; font-size: 12px; color: var(--muted); }
   /* Details + notes scroll together; the notes card fills whatever is left
      below the details, so the panel has no empty middle (21 Nov 2026). */
@@ -3286,14 +3300,14 @@ window.opIcon = function (name, size) {
     padding: 6px 10px 4px; gap: 8px;
   }
   .bd-notes-label {
-    font-size: 11.5px; font-weight: 700; text-transform: uppercase;
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
     letter-spacing: 0.5px; color: var(--muted); white-space: nowrap;
   }
   .notes-toolbar {
     display: flex; gap: 2px; flex-wrap: wrap;
   }
   .notes-fmt-btn {
-    min-width: 24px; height: 22px; border: 1px solid var(--border); background: var(--panel);
+    min-width: 24px; height: 24px; box-sizing: border-box; border: 1px solid var(--border); background: var(--panel);
     border-radius: 4px; cursor: pointer; font-size: 11px; display: flex; align-items: center;
     justify-content: center; color: var(--ink); padding: 0 4px;
   }
@@ -3321,10 +3335,10 @@ window.opIcon = function (name, size) {
   .detail-body .row.time-edit-row { align-items: flex-start; padding: 10px 0; }
   .time-edit { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
   .time-edit input[type="time"] {
-    font: inherit; padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px;
+    font: inherit; height: 34px; box-sizing: border-box; padding: 0 8px; border: 1px solid var(--border); border-radius: 8px;
     background: var(--panel); color: var(--ink); font-variant-numeric: tabular-nums;
   }
-  .time-edit input[type="time"]:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 2px rgba(111,93,212,0.15); }
+  .time-edit input[type="time"]:focus { border-color: var(--accent); outline: none; }
   .time-edit .sep { color: var(--ink-soft); }
   .time-edit .dur-pill {
     background: var(--accent-soft); color: var(--accent-deep); padding: 3px 8px;
@@ -3332,6 +3346,9 @@ window.opIcon = function (name, size) {
   }
   .time-edit-actions { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
   .btn.btn-xs { padding: 4px 10px; font-size: 11px; }
+  /* In-sheet inline actions: one 24 px small control (§7.2 sm). */
+  .detail-drawer .btn.btn-xs { height: 24px; box-sizing: border-box; padding: 0 10px; font-size: 12px; border-radius: 8px; line-height: 1; }
+  .detail-drawer input[type="checkbox"], #booking-side-panel input[type="checkbox"] { accent-color: var(--accent); }
   .dur-delta { font-size: 11px; color: var(--accent-deep); font-weight: 600; }
   .dur-delta.warn { color: var(--warn-ink); }
   /* Travel overlay on calendar columns */
@@ -4230,9 +4247,12 @@ window.opIcon = function (name, size) {
   .bk-client-rule.required #bk-client-rule-text { color: var(--accent-deep); font-weight: 600; }
   .bk-client-none { margin-left: auto; font: inherit; font-size: 12px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface, transparent); color: inherit; cursor: pointer; }
   .bk-client-none:hover { border-color: var(--accent); color: var(--accent-deep); }
+  /* A single-leaf type is the same card as a group above it (U-09): same
+     border, radius, surface and the summary's 9/12 padding, so the rows of
+     the type list share one height. */
   .bk-item.bk-single {
     border: 1px solid var(--border-soft); border-radius: var(--radius-md);
-    background: var(--panel); padding-left: 12px; font-weight: 600; color: var(--ink);
+    background: var(--panel); padding: 9px 12px; font-weight: 600; color: var(--ink);
   }
   .bk-item.bk-single:hover { border-color: var(--accent); }
   .bk-item.bk-single.active { border-color: var(--accent); }
@@ -15383,7 +15403,8 @@ function openBlockDetail(id) {
   if (s.cancelled) {
     parts.push(`<button class="btn primary" onclick="closeBlockDetail(); switchTab('reschedule')">Open reschedule inbox</button>`);
   } else {
-    parts.push(`<button class="btn primary" onclick="closeBlockDetail()">Close</button>`);
+    // Close dismisses — no fill: the footer's emphasis is for an action (U-10).
+    parts.push(`<button class="btn" onclick="closeBlockDetail()">Close</button>`);
   }
   footer.innerHTML = parts.join('');
 
@@ -15484,7 +15505,7 @@ function __bdLocationRows(rows, s, id) {
             style="font-size:11.5px;color:#3d6cae;text-decoration:none;padding:2px 7px;background:var(--info-soft);border-radius:4px;border:1px solid #c3d4ec;">
             Open in Maps ↗
           </a>
-          <button class="btn btn-xs" style="font-size:11.5px;padding:2px 8px;"
+          <button class="btn btn-xs"
             onclick="document.getElementById('bd-addr-edit-section').style.display='flex';document.getElementById('bd-addr-input').focus();">
             Change address
           </button>
@@ -22677,20 +22698,21 @@ body.bsp-open #impact-modal    { z-index: 1201; }
 /* ── Panel header ── */
 .bsp-header {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 14px 16px 12px;
+  min-height: 56px; box-sizing: border-box;
+  padding: 12px 16px;
   background: var(--panel);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 .bsp-header-left { display: flex; align-items: center; gap: 8px; }
 .bsp-icon { width: 16px; height: 16px; stroke: var(--accent); }
-.bsp-title { font-size: 14px; font-weight: 600; color: var(--ink); }
+.bsp-title { font-size: 15px; font-weight: 700; color: var(--ink); }
 .bsp-close {
-  width: 30px; height: 30px; border: none; background: transparent;
-  border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center;
-  color: var(--ink-faint); transition: background 0.15s, color 0.15s;
+  width: 32px; height: 32px; padding: 0; box-sizing: border-box; border: none; background: transparent;
+  border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  color: var(--ink-faint); transition: background var(--t-fast), color var(--t-fast);
 }
-.bsp-close:hover { background: var(--panel-soft); color: var(--ink); }
+.bsp-close:hover { background: var(--panel-sunk); color: var(--ink); }
 .bsp-close svg { width: 15px; height: 15px; }
 
 /* ── Pre-fill strip ── */
@@ -22715,7 +22737,7 @@ body.bsp-open #impact-modal    { z-index: 1201; }
   background: var(--bg); flex-shrink: 0;
 }
 .bsp-t-label {
-  font-size: 10.5px; font-weight: 600; color: var(--ink-soft);
+  font-size: 11px; font-weight: 700; color: var(--ink-soft);
   text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap;
   margin-right: 2px;
 }
@@ -22921,7 +22943,7 @@ body.bsp-open #impact-modal    { z-index: 1201; }
 }
 .bsp-section-title {
   font-size: 11px; font-weight: 700; text-transform: uppercase;
-  letter-spacing: 0.5px; color: var(--info);
+  letter-spacing: 0.5px; color: var(--ink-soft);
   margin-bottom: 12px;
 }
 .bsp-field-label {
@@ -22960,7 +22982,7 @@ body.bsp-open #impact-modal    { z-index: 1201; }
 .bsp-time-error { margin-top: 6px; font-size: 12px; color: var(--danger, #c2412e); }
 .bsp-time-field input[type="time"][aria-invalid="true"] { border-color: var(--danger, #c2412e); }
 .bsp-time-field input[type="time"] {
-  width: 100%; padding: 8px 10px;
+  width: 100%; height: 34px; padding: 0 10px;
   font-size: 15px; font-weight: 600; color: var(--accent-ink);
   background: var(--accent-soft); border: 1.5px solid var(--border);
   border-radius: 8px; font-family: inherit;
@@ -23028,7 +23050,7 @@ body.bsp-open #impact-modal    { z-index: 1201; }
 
 /* Location field */
 .bsp-loc-field input[type="text"] {
-  width: 100%; padding: 8px 10px;
+  width: 100%; height: 34px; padding: 0 10px;
   font-size: 13px; color: var(--ink);
   border: 1.5px solid var(--border); border-radius: 8px;
   font-family: inherit; outline: none; background: var(--panel-soft);
@@ -23040,6 +23062,9 @@ body.bsp-open #impact-modal    { z-index: 1201; }
 
 /* cat-form spacing */
 .cat-form { padding: 0 0 4px 0; }
+/* One field height in the sheet (§7.2: 34 px, radius 8). */
+#booking-side-panel .search-row input { height: 34px; box-sizing: border-box; padding: 0 12px 0 36px; border-radius: 8px; }
+#booking-side-panel select { height: 34px; box-sizing: border-box; border-radius: 8px; }
 .cat-form .form-field.full { margin-bottom: 10px; }
 </style>
 
