@@ -171,7 +171,7 @@
      store and computeDayTravelSegments(), the calendar leg overlays and the
      travel details panel. Deferred and loaded ahead of profile.js and
      reports.js, both of which reach into it. -->
-<script src="/travel.js?v=65" defer></script>
+<script src="/travel.js?v=66" defer></script>
 <!-- Traffic alerts: a re-priced drive that now runs into a client session —
      point at it, offer Make room, Acknowledge or Ignore (today and tomorrow). -->
 <script src="/travel-alerts.js?v=1" defer></script>
@@ -3340,6 +3340,9 @@ window.opIcon = function (name, size) {
   .travel-overlay.overlaps { left: auto; right: 0; width: 3px; padding: 0; border-left: 0; border-radius: 2px;
     background: currentColor; z-index: 3; }
   .travel-overlay.overlaps.tight { color: var(--danger, #9c3322); }
+  /* …but still grabbable: an invisible 10 px hit area over the bar's edge. */
+  .travel-overlay.overlaps, .travel-overlay.stay.stay-compact { overflow: visible; }
+  .travel-overlay.overlaps::after, .travel-overlay.stay.stay-compact::after { content: ''; position: absolute; top: 0; bottom: 0; right: -1px; width: 10px; }
   /* (.gap-overlay.smart green-hatch highlight removed with the gap overlay, 2026-08-09) */
   /* Option scoring visuals inside the ranked-options panel */
   .gap-opt .g-score {

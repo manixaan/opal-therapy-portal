@@ -288,7 +288,7 @@ function scheduleOverlayRefresh() {
     // for the drag to end (endTravelPreview runs it once).
     // The dragged day's preview is redrawn from the answers that landed, so
     // the legs under the pointer are the ones the drop will show (T-14).
-    if (TRAVEL_DRAG.active) {
+    if (TRAVEL_DRAG.active || TRAVEL_DRAG.leg) {
       TRAVEL_DRAG.pendingRefresh = true;
       if (TRAVEL_DRAG.moves) previewTravelForMoves(TRAVEL_DRAG.moves);
       return;
@@ -304,7 +304,7 @@ function scheduleOverlayRefresh() {
    session's real times are put straight back, nothing is saved, nothing is
    mirrored to Outlook. Drop commits as before (commitMove redraws for real);
    a cancelled or unchanged drag puts the real legs back (endTravelPreview). */
-const TRAVEL_DRAG = { active: false, days: new Set(), pendingRefresh: false };
+const TRAVEL_DRAG = { active: false, days: new Set(), pendingRefresh: false, leg: null };
 function _drawDayLegsOnly(day) {
   const col = document.getElementById('day-' + day);
   if (!col) return;
@@ -2688,6 +2688,9 @@ function _renderDayLegs(col, segs) {
 function refreshDayOverlays(day) {
   const col = document.getElementById('day-' + day);
   if (!col) return;
+  // A leg being dragged in this column: redraw when it is let go, or the
+  // drag (and its save) is lost under the redraw (audit T-11).
+  if (TRAVEL_DRAG.leg && col.contains(TRAVEL_DRAG.leg)) { TRAVEL_DRAG.pendingRefresh = true; return; }
   const segs = computeDayTravelSegments(day);
   _renderDayLegs(col, segs);
   decorateTravelBadges(day, segs);
@@ -3076,13 +3079,21 @@ function attachTravelLegDrag(el, seg) {
     if (!drag.moved && Math.abs(dy) < 4) return;
     drag.moved = true;
     el.classList.add('dragging');
+    TRAVEL_DRAG.leg = el;
     const stepPx = TRAVEL_DRAG_STEP_MIN / 60 * HOUR_PX;
     el.style.top = (drag.top + Math.round(dy / stepPx) * stepPx) + 'px';
   });
+  // Let go (or cancelled): a redraw held back during the drag runs now.
+  const release = () => {
+    if (TRAVEL_DRAG.leg !== el) return;
+    TRAVEL_DRAG.leg = null;
+    if (TRAVEL_DRAG.pendingRefresh && !TRAVEL_DRAG.active) { TRAVEL_DRAG.pendingRefresh = false; scheduleOverlayRefresh(); }
+  };
   const end = (e) => {
     if (!drag) return;
     const d = drag; drag = null;
     el.classList.remove('dragging');
+    release();
     try { el.releasePointerCapture(d.id); } catch (_) { /* jsdom */ }
     if (!d.moved) return;
     el.__dragged = true;
@@ -3091,7 +3102,7 @@ function attachTravelLegDrag(el, seg) {
     if (steps) _commitLegMove(el.__seg, el.__seg.startMin + steps * TRAVEL_DRAG_STEP_MIN);
   };
   el.addEventListener('pointerup', end);
-  el.addEventListener('pointercancel', () => { if (drag) { el.style.top = drag.top + 'px'; el.classList.remove('dragging'); drag = null; } });
+  el.addEventListener('pointercancel', () => { if (drag) { el.style.top = drag.top + 'px'; el.classList.remove('dragging'); drag = null; release(); } });
   el.addEventListener('keydown', (e) => {
     if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
     if (!movable()) return;

@@ -2107,3 +2107,31 @@ describe('legs settle in place; estimates look provisional', () => {
     expect(TRAVEL).not.toMatch(/function refreshDayOverlays\(day\) \{[^}]*clearDayOverlays\(day\)/);
   });
 });
+
+// 21 Nov 2026 audit T-11: a redraw (a route answer, the 2-minute reload) that
+// lands while a leg is being dragged used to lose the drag and its save.
+describe('a leg drag survives a redraw', () => {
+  const HOME = { week: { mon: 'home-1' }, homes: [{ id: 'home-1', label: 'Home', addr: HOME_ADDR, suburb: 'Bull Creek', kind: 'local' }] };
+  test('redraws wait until the leg is let go; the drop is saved', async () => {
+    const env = makeEnv(HOME);
+    env.ev(`SESSIONS.A = { id: 'A', day: 'mon', type: 'therapy', startH: 9, startM: 0, endH: 10, endM: 0, address: ${JSON.stringify(A_ADDR)}, patient: 'Ada', dbId: 'db-A' };
+      SESSIONS.B = { id: 'B', day: 'mon', type: 'therapy', startH: 12, startM: 0, endH: 13, endM: 0, address: ${JSON.stringify(CV_ADDR)}, patient: 'Ben', dbId: 'db-B' };`);
+    await warmRoutes(env, [[A_ADDR, CV_ADDR, 25], [HOME_ADDR, A_ADDR, 30], [CV_ADDR, HOME_ADDR, 30]]);
+    env.ev("refreshDayOverlays('mon')");
+    const el = env.win.document.querySelector('#day-mon .travel-overlay.between');
+    const fire = (type, y) => el.dispatchEvent(Object.assign(new env.win.MouseEvent(type, { bubbles: true, clientY: y, button: 0 }), { pointerId: 1 }));
+    fire('pointerdown', 100);
+    fire('pointermove', 100 - 36);                                   // 30 min earlier
+    const topMid = el.style.top;
+    expect(el.classList.contains('dragging')).toBe(true);
+    env.ev("refreshAllOverlays()");                                  // what a route answer / the reload does
+    // The leg under the pointer is the same element, still where it is dragged.
+    expect(env.win.document.querySelector('#day-mon .travel-overlay.between')).toBe(el);
+    expect(el.style.top).toBe(topMid);
+    expect(el.classList.contains('dragging')).toBe(true);
+    fire('pointerup', 100 - 36);
+    await flush();
+    const patch = env.log.filter((c) => c.method === 'PATCH' && c.url === '/api/events/db-B/travel').pop();
+    expect(patch && patch.body.beforeOffsetMin).toBe(-55);           // 11:35 leg 30 min earlier = 11:05, vs the 12:00 arrival
+  });
+});
