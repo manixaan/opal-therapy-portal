@@ -5,7 +5,7 @@
 .splose-sync-btn {
   display: inline-flex; align-items: center; gap: 6px;
   height: 32px; box-sizing: border-box; padding: 0 12px;
-  border: 1px solid var(--border); border-radius: 8px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
   background: var(--panel); color: var(--ink-soft);
   /* Longhands: the old font shorthand with inherit was invalid and dropped whole (VD-19). */
   font-family: inherit; font-size: 13px; font-weight: 500; line-height: 1; white-space: nowrap; cursor: pointer;
@@ -14,20 +14,20 @@
 /* The calendar toolbar's one secondary hover (U-12); focus keeps the shell ring. */
 .splose-sync-btn:hover { background: var(--panel-sunk); border-color: var(--border); color: var(--ink); }
 .splose-sync-btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
-.splose-sync-btn.has-pending { border-color: var(--accent, #7a5cc4); color: var(--accent, #7a5cc4); background: color-mix(in srgb, var(--accent, #7a5cc4) 8%, var(--card, #fff)); }
+.splose-sync-btn.has-pending { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--card, #fff)); }
 .splose-sync-btn.publishing .lbl { opacity: .7; }
 .splose-sync-btn .cnt {
   min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
-  background: var(--accent, #7a5cc4); color: #fff; text-align: center;
+  background: var(--accent); color: #fff; text-align: center;
   font-family: inherit; font-size: 11px; font-weight: 600; line-height: 18px;
 }
 .splose-sync-btn[hidden] { display: none; }
 
 /* Unsynced tile chip */
-.session.splose-unsynced { outline: 1.5px dashed var(--accent, #7a5cc4); outline-offset: -1.5px; }
+.session.splose-unsynced { outline: 1.5px dashed var(--accent); outline-offset: -1.5px; }
 .session .splose-chip {
   position: absolute; top: 2px; right: 2px; width: 14px; height: 14px; border-radius: 50%;
-  background: var(--accent, #7a5cc4); color: #fff; font-family: inherit; font-size: 10px; font-weight: 700; line-height: 14px; text-align: center;
+  background: var(--accent); color: #fff; font-family: inherit; font-size: 10px; font-weight: 700; line-height: 14px; text-align: center;
   pointer-events: auto; z-index: 2;
 }
 .session .splose-chip.failed { background: var(--danger, #c2412e); }
@@ -42,7 +42,7 @@
   box-shadow: 0 24px 64px rgba(0,0,0,.28); display: flex; flex-direction: column; overflow: hidden;
 }
 .ssp-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 18px 20px 12px; border-bottom: 1px solid var(--border, #e6e1d9); }
-.ssp-eyebrow, .sa-eyebrow { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--accent, #7a5cc4); font-weight: 600; margin-bottom: 4px; }
+.ssp-eyebrow, .sa-eyebrow { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); font-weight: 600; margin-bottom: 4px; }
 .ssp-head h2, .sa-card h2 { margin: 0; font-size: 18px; line-height: 1.3; font-weight: 600; }
 .ssp-close { border: 0; background: transparent; font-size: 22px; line-height: 1; color: var(--ink-soft, #5c554d); cursor: pointer; padding: 2px 6px; border-radius: 6px; }
 .ssp-close:hover, .ssp-close:focus-visible { background: var(--border, #eee9e1); outline: none; }
@@ -74,7 +74,7 @@
 .ssp-discard:hover, .ssp-discard:focus-visible { color: var(--danger, #c2412e); background: var(--danger-soft, #fdf3f1); outline: none; }
 .ssp-progress { padding: 8px 0 4px; }
 .ssp-bar { height: 8px; border-radius: 999px; background: var(--border, #eee9e1); overflow: hidden; }
-.ssp-bar-fill { height: 100%; background: var(--accent, #7a5cc4); transition: width .4s; }
+.ssp-bar-fill { height: 100%; background: var(--accent); transition: width .4s; }
 .ssp-progress-text { margin: 10px 0; font-weight: 500; }
 
 /* Sync popup tabs (19 Nov 2026): Outlook | Splose | Portal */
@@ -82,10 +82,10 @@
 .ssp-tab { display: inline-flex; align-items: center; gap: 6px; padding: 10px 12px; margin-bottom: -1px; border: 0; border-bottom: 2px solid transparent;
   background: none; color: var(--ink-soft, #5c554d); font-family: inherit; font-weight: 600; font-size: 13px; line-height: 1; cursor: pointer; }
 .ssp-tab:hover { color: var(--ink, #241f1a); }
-.ssp-tab.active { color: var(--ink, #241f1a); border-bottom-color: var(--accent, #7a5cc4); }
-.ssp-tab:focus-visible { outline: 2px solid var(--accent, #7a5cc4); outline-offset: -2px; border-radius: 6px 6px 0 0; }
+.ssp-tab.active { color: var(--ink, #241f1a); border-bottom-color: var(--accent); }
+.ssp-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 6px 6px 0 0; }
 .ssp-tab .n { min-width: 18px; padding: 2px 6px; border-radius: 999px; font-size: 11px; text-align: center; background: var(--panel-sunk, #f1ede6); color: var(--ink-soft, #5c554d); }
-.ssp-tab .n.has { background: var(--accent, #7a5cc4); color: #fff; }
+.ssp-tab .n.has { background: var(--accent); color: #fff; }
 .ssp-tab .n.err { background: var(--danger-soft, #fbe9e5); color: var(--danger-ink, #8f2f22); }
 .ssp-tab .n[hidden] { display: none; }
 .ssp-foot { flex-wrap: wrap; }

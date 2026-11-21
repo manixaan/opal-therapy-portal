@@ -86,7 +86,7 @@
 <link rel="stylesheet" href="/resourcelibrary.css?v=4" />
 <link rel="stylesheet" href="/opa.css?v=5" />
 <link rel="stylesheet" href="/finance.css?v=2" />
-<link rel="stylesheet" href="/invoicing.css?v=4" />
+<link rel="stylesheet" href="/invoicing.css?v=5" />
 <link rel="stylesheet" href="/induction-assistant.css?v=4" />
 <link rel="stylesheet" href="/supportpop.css?v=2" />
 <link rel="stylesheet" href="/casenotes.css?v=3" />
@@ -100,7 +100,7 @@
 <link rel="stylesheet" href="/workshop.css?v=9">
 <link rel="stylesheet" href="/interview.css?v=1" />
 <link rel="stylesheet" href="/onboarding.css?v=9" />
-<link rel="stylesheet" href="/splose-sync.css?v=6" />
+<link rel="stylesheet" href="/splose-sync.css?v=7" />
 <link rel="stylesheet" href="/onboarding-journey.css?v=43" />
 <link rel="stylesheet" href="/employees.css?v=2" />
 <link rel="stylesheet" href="/people.css?v=3" />
@@ -269,8 +269,8 @@ window.opIcon = function (name, size) {
     --muted: #99928a;
     --border: #e9e3d9;
     --border-soft: #f4efe7;
-    --radius-sm: 7px;
-    --radius-md: 11px;
+    --radius-sm: 8px;         /* every control (§7.4) */
+    --radius-md: 12px;        /* cards, popovers */
     --radius-lg: 16px;
     --radius-xl: 22px;
     --shadow-sm: 0 1px 2px rgba(36, 31, 26, 0.05);
@@ -2192,14 +2192,14 @@ window.opIcon = function (name, size) {
     display: none;
     position: absolute; top: calc(100% + 6px); right: 0;
     background: var(--panel); border: 1px solid var(--border);
-    border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.10);
+    border-radius: var(--radius-md); box-shadow: var(--shadow-md);
     padding: 6px; min-width: 220px; z-index: 100;
   }
   .cal-sync-menu button {
     display: flex; align-items: center; gap: 8px;
     width: 100%; text-align: left;
     padding: 8px 10px; border: none; background: transparent;
-    border-radius: 7px; font-size: 12px; color: var(--ink);
+    border-radius: var(--radius-sm); font-size: 12px; color: var(--ink);
     cursor: pointer;
   }
   .cal-sync-menu button:hover { background: var(--border-soft); }
@@ -2233,7 +2233,7 @@ window.opIcon = function (name, size) {
     /* Row 1 = DOW header (auto/small); rows 2-7 = week cell rows (min 120px) */
     grid-template-rows: auto repeat(6, minmax(120px, auto));
     border: 1px solid var(--border);
-    border-radius: 12px;
+    border-radius: var(--radius-md);
     overflow: hidden;
     background: var(--border);
     gap: 1px; /* the gap renders the gridlines via the parent bg colour */
@@ -2321,7 +2321,7 @@ window.opIcon = function (name, size) {
   .cal-legend-btn {
     display: inline-flex; align-items: center; gap: 6px;
     height: 32px; box-sizing: border-box; padding: 0 12px; border: 1px solid var(--border);
-    border-radius: 8px; background: var(--panel); color: var(--ink-soft);
+    border-radius: var(--radius-sm); background: var(--panel); color: var(--ink-soft);
     font-family: inherit; font-size: 13px; font-weight: 500; line-height: 1; cursor: pointer;
     white-space: nowrap;
     transition: background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
@@ -2330,7 +2330,7 @@ window.opIcon = function (name, size) {
   .cal-legend-popover {
     position: absolute; right: 0; top: calc(100% + 8px);
     background: var(--panel); border: 1px solid var(--border);
-    border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+    border-radius: var(--radius-md); box-shadow: var(--shadow-md);
     padding: 14px 16px; z-index: 999; min-width: 220px;
   }
   .cl-title { font-size: 10px; font-weight: 700; text-transform: uppercase;
@@ -2342,7 +2342,7 @@ window.opIcon = function (name, size) {
   .cl-grid { gap: 2px; }
   .cl-row-btn {
     width: 100%; border: none; background: none; font: inherit; text-align: left;
-    padding: 5px 6px; border-radius: 6px; cursor: pointer;
+    padding: 5px 6px; border-radius: var(--radius-sm); cursor: pointer;
   }
   .cl-row-btn:hover, .cl-row-btn.open { background: var(--panel-sunk); }
   .cl-row-btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
@@ -2369,7 +2369,7 @@ window.opIcon = function (name, size) {
     display: inline-flex; align-items: center; gap: 6px;
     height: 32px; box-sizing: border-box; padding: 0 12px;
     background: var(--accent); color: white;
-    border: 1px solid var(--accent); border-radius: 8px;
+    border: 1px solid var(--accent); border-radius: var(--radius-sm);
     font-family: inherit; font-size: 13px; font-weight: 600; line-height: 1;
     cursor: pointer; transition: background var(--t-fast), border-color var(--t-fast);
     white-space: nowrap;
@@ -2382,7 +2382,7 @@ window.opIcon = function (name, size) {
     display: inline-flex; align-items: center;
     height: 32px; box-sizing: border-box;
     background: var(--panel-sunk);
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     padding: 3px;
     gap: 1px;
   }
@@ -2418,7 +2418,7 @@ window.opIcon = function (name, size) {
     display: inline-flex; align-items: center;
     height: 32px; box-sizing: border-box; padding: 0 12px;
     border: 1px solid var(--border);
-    border-radius: 8px; background: var(--panel);
+    border-radius: var(--radius-sm); background: var(--panel);
     font-family: inherit; font-size: 13px; font-weight: 500; line-height: 1; color: var(--ink);
     cursor: pointer; transition: background var(--t-fast), border-color var(--t-fast);
   }
@@ -2427,7 +2427,7 @@ window.opIcon = function (name, size) {
 
   /* Nav arrows */
   .nav-arrow {
-    width: 32px; height: 32px; box-sizing: border-box; border-radius: 8px;
+    width: 32px; height: 32px; box-sizing: border-box; border-radius: var(--radius-sm);
     border: 1px solid var(--border); background: var(--panel);
     display: inline-flex; align-items: center; justify-content: center;
     color: var(--ink-soft); transition: background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
@@ -2451,7 +2451,7 @@ window.opIcon = function (name, size) {
     overflow: hidden;
     background: var(--panel);
     position: relative;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+    box-shadow: var(--shadow-sm);
   }
   /* Work-week mode removed — use Week view */
   /* Day view: hide every day column except the focused one */
@@ -2725,7 +2725,7 @@ window.opIcon = function (name, size) {
        that ends exactly when the next begins. Tops stay time-accurate. */
     overflow: hidden;
     min-height: 0; /* height comes from sessionTileHeight() — 5/10-min tiles differ */
-    transition: box-shadow 0.15s ease;
+    transition: box-shadow var(--t-fast) ease;
     z-index: 2; /* sit above hour-line gridlines */
     /* Its own width decides what a tile can carry (§7.8): the status corner
        and the CONFLICT text only from 100 px wide (container query below). */
@@ -3239,7 +3239,7 @@ window.opIcon = function (name, size) {
     margin-left: auto; flex-shrink: 0; align-self: flex-start;
     width: 32px; height: 32px; padding: 0; box-sizing: border-box;
     display: inline-flex; align-items: center; justify-content: center;
-    background: none; border: none; border-radius: 8px;
+    background: none; border: none; border-radius: var(--radius-sm);
     font-size: 20px; color: var(--ink-faint); cursor: pointer; line-height: 1;
     transition: background var(--t-fast), color var(--t-fast);
   }
@@ -3272,7 +3272,7 @@ window.opIcon = function (name, size) {
   /* Sheet footers (drawer + booking panel): one 36 px button (§7.2 lg). */
   .detail-footer .btn, .bsp-footer .btn {
     height: 36px; box-sizing: border-box; padding: 0 14px; justify-content: center;
-    border-radius: 8px; font-size: 13px; font-weight: 500; line-height: 1; white-space: nowrap;
+    border-radius: var(--radius-sm); font-size: 13px; font-weight: 500; line-height: 1; white-space: nowrap;
   }
   .detail-footer .btn.primary, .bsp-footer .btn.primary { font-weight: 600; }
   .detail-footer .btn:not(.primary):hover { background: var(--panel-sunk); border-color: var(--border); }
@@ -3283,14 +3283,14 @@ window.opIcon = function (name, size) {
 .bd-day-view { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .bd-day-view[hidden], .bd-day-edit[hidden] { display: none; }
   .bd-day-edit { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-  .bd-day-edit input[type=date] { height: 34px; box-sizing: border-box; padding: 0 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); color: var(--ink); font: inherit; font-size: 13px; }
+  .bd-day-edit input[type=date] { height: 34px; box-sizing: border-box; padding: 0 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--panel); color: var(--ink); font: inherit; font-size: 13px; }
   .bd-day-note { flex-basis: 100%; font-size: 12px; color: var(--muted); }
   /* Details + notes scroll together; the notes card fills whatever is left
      below the details, so the panel has no empty middle (21 Nov 2026). */
   .bd-scroll { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; }
   .bd-scroll > .detail-body { flex: 0 0 auto; overflow: visible; padding-bottom: 8px; }
   .bd-notes-box {
-    margin: 4px 20px 16px; border: 1px solid var(--border); border-radius: 10px;
+    margin: 4px 20px 16px; border: 1px solid var(--border); border-radius: var(--radius-md);
     background: var(--panel-soft); overflow: hidden;
     flex: 1 0 auto; display: flex; flex-direction: column; min-height: 220px;
   }
@@ -3335,7 +3335,7 @@ window.opIcon = function (name, size) {
   .detail-body .row.time-edit-row { align-items: flex-start; padding: 10px 0; }
   .time-edit { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
   .time-edit input[type="time"] {
-    font: inherit; height: 34px; box-sizing: border-box; padding: 0 8px; border: 1px solid var(--border); border-radius: 8px;
+    font: inherit; height: 34px; box-sizing: border-box; padding: 0 8px; border: 1px solid var(--border); border-radius: var(--radius-sm);
     background: var(--panel); color: var(--ink); font-variant-numeric: tabular-nums;
   }
   .time-edit input[type="time"]:focus { border-color: var(--accent); outline: none; }
@@ -3347,7 +3347,7 @@ window.opIcon = function (name, size) {
   .time-edit-actions { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
   .btn.btn-xs { padding: 4px 10px; font-size: 11px; }
   /* In-sheet inline actions: one 24 px small control (§7.2 sm). */
-  .detail-drawer .btn.btn-xs { height: 24px; box-sizing: border-box; padding: 0 10px; font-size: 12px; border-radius: 8px; line-height: 1; }
+  .detail-drawer .btn.btn-xs { height: 24px; box-sizing: border-box; padding: 0 10px; font-size: 12px; border-radius: var(--radius-sm); line-height: 1; }
   .detail-drawer input[type="checkbox"], #booking-side-panel input[type="checkbox"] { accent-color: var(--accent); }
   .dur-delta { font-size: 11px; color: var(--accent-deep); font-weight: 600; }
   .dur-delta.warn { color: var(--warn-ink); }
@@ -3394,7 +3394,7 @@ window.opIcon = function (name, size) {
   /* Movable travel (travel.js attachTravelLegDrag): the leg's time is the
      therapist's; dragging stores it on the owning appointment. */
   .travel-overlay.movable { cursor: grab; touch-action: none; }
-  .travel-overlay.movable.dragging { cursor: grabbing; opacity: .85; z-index: 6; box-shadow: 0 4px 12px rgba(0,0,0,.18); }
+  .travel-overlay.movable.dragging { cursor: grabbing; opacity: .85; z-index: 6; box-shadow: var(--shadow-lg); }
   .travel-overlay.movable:focus-visible { outline: none; box-shadow: var(--focus-ring); }
   .travel-overlay.moved .t-ico::after { content: ' · moved'; font-weight: 500; }
   .travel-overlay.tight { border-left-color: var(--danger); }
@@ -22709,7 +22709,7 @@ body.bsp-open #impact-modal    { z-index: 1201; }
 .bsp-title { font-size: 15px; font-weight: 700; color: var(--ink); }
 .bsp-close {
   width: 32px; height: 32px; padding: 0; box-sizing: border-box; border: none; background: transparent;
-  border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  border-radius: var(--radius-sm); cursor: pointer; display: flex; align-items: center; justify-content: center;
   color: var(--ink-faint); transition: background var(--t-fast), color var(--t-fast);
 }
 .bsp-close:hover { background: var(--panel-sunk); color: var(--ink); }
@@ -22746,7 +22746,7 @@ body.bsp-open #impact-modal    { z-index: 1201; }
   padding: 3px 10px 3px 5px; border-radius: 16px;
   border: 2px solid var(--border); background: var(--panel);
   font-size: 12px; font-weight: 500; cursor: pointer;
-  transition: border-color 0.15s; line-height: 1.4;
+  transition: border-color var(--t-fast); line-height: 1.4;
 }
 .bsp-t-chip:hover { border-color: var(--accent); }
 .bsp-t-chip.selected { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-ink); }
@@ -22814,7 +22814,7 @@ body.bsp-open #impact-modal    { z-index: 1201; }
 .cal-proposed .cp-time { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; pointer-events: none; }
 .cal-proposed .cp-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; color: var(--ink-soft); pointer-events: none; }
 .cal-proposed .cp-tag { font-size: 10px; font-weight: 600; letter-spacing: .02em; color: var(--accent-ink); pointer-events: none; }
-.cal-preview-block { cursor: grab; transition: box-shadow 0.15s, opacity 0.15s; }
+.cal-preview-block { cursor: grab; transition: box-shadow var(--t-fast), opacity var(--t-fast); }
 .cal-preview-block:hover { opacity: 1; box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12); }
 .cal-preview-block.dragging { cursor: grabbing; opacity: 1; box-shadow: 0 6px 16px rgba(15, 23, 42, 0.18); }
 .cal-preview-block:not(.preview-selected) { opacity: 0.7; }
@@ -22865,9 +22865,9 @@ body.bsp-open #impact-modal    { z-index: 1201; }
   padding: 11px 13px;
   background: var(--panel);
   border: 1.5px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   cursor: pointer; text-align: left;
-  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+  transition: border-color var(--t-fast), background var(--t-fast), box-shadow var(--t-fast);
   width: 100%;
   box-sizing: border-box;
   /* Prevent text selection during rapid clicks */
@@ -22890,7 +22890,7 @@ body.bsp-open #impact-modal    { z-index: 1201; }
 
 /* Icon container with colour accent */
 .bcat-icon {
-  width: 38px; height: 38px; border-radius: 9px;
+  width: 38px; height: 38px; border-radius: var(--radius-md);
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
 }
@@ -22926,7 +22926,7 @@ body.bsp-open #impact-modal    { z-index: 1201; }
 .bcat-dur {
   font-size: 11px; font-weight: 600;
   color: var(--ink-faint);
-  background: var(--panel-sunk); border-radius: 6px;
+  background: var(--panel-sunk); border-radius: var(--radius-sm);
   padding: 2px 7px; white-space: nowrap; flex-shrink: 0;
 }
 .booking-cat-chip.active .bcat-dur {
@@ -22937,7 +22937,7 @@ body.bsp-open #impact-modal    { z-index: 1201; }
 .bsp-timing-section {
   background: var(--panel);
   border: 1.5px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   padding: 14px 16px;
   margin-top: 14px; margin-bottom: 16px;
 }
@@ -22961,9 +22961,9 @@ body.bsp-open #impact-modal    { z-index: 1201; }
   /* 40 px so all seven days stay on one row in the 440 px sheet */
   flex: 1; min-width: 40px;
   padding: 6px 2px; font-size: 12px; font-weight: 600;
-  border: 1.5px solid var(--border); border-radius: 7px;
+  border: 1.5px solid var(--border); border-radius: var(--radius-sm);
   background: var(--panel-soft); cursor: pointer; color: var(--ink-soft);
-  transition: all 0.15s; text-align: center;
+  transition: background var(--t-fast), border-color var(--t-fast), color var(--t-fast); text-align: center;
 }
 .bsp-day-chip:hover { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-ink); }
 .bsp-day-chip.active {
@@ -22985,9 +22985,9 @@ body.bsp-open #impact-modal    { z-index: 1201; }
   width: 100%; height: 34px; padding: 0 10px;
   font-size: 15px; font-weight: 600; color: var(--accent-ink);
   background: var(--accent-soft); border: 1.5px solid var(--border);
-  border-radius: 8px; font-family: inherit;
+  border-radius: var(--radius-sm); font-family: inherit;
   cursor: pointer; outline: none;
-  transition: border-color 0.15s;
+  transition: border-color var(--t-fast);
   box-sizing: border-box;
 }
 .bsp-time-field input[type="time"]:focus { border-color: var(--accent); }
@@ -23005,7 +23005,7 @@ body.bsp-open #impact-modal    { z-index: 1201; }
 }
 .bsp-dur-value {
   font-size: 13px; font-weight: 700; color: var(--accent-ink);
-  background: var(--accent-soft); padding: 2px 8px; border-radius: 6px;
+  background: var(--accent-soft); padding: 2px 8px; border-radius: var(--radius-sm);
 }
 
 /* Slider track & thumb */
@@ -23038,9 +23038,9 @@ body.bsp-open #impact-modal    { z-index: 1201; }
 .bsp-dur-preset {
   /* share the row evenly so all eight fit the 440 px sheet on one line */
   flex: 1 1 0; min-width: 0; padding: 4px 2px; font-size: 11px; font-weight: 600;
-  border: 1.5px solid var(--border); border-radius: 6px;
+  border: 1.5px solid var(--border); border-radius: var(--radius-sm);
   background: var(--panel-soft); color: var(--ink-faint);
-  cursor: pointer; transition: all 0.12s;
+  cursor: pointer; transition: background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
 }
 .bsp-dur-preset:hover { border-color: var(--accent); color: var(--accent-ink); background: var(--accent-soft); }
 .bsp-dur-preset.active {
@@ -23052,9 +23052,9 @@ body.bsp-open #impact-modal    { z-index: 1201; }
 .bsp-loc-field input[type="text"] {
   width: 100%; height: 34px; padding: 0 10px;
   font-size: 13px; color: var(--ink);
-  border: 1.5px solid var(--border); border-radius: 8px;
+  border: 1.5px solid var(--border); border-radius: var(--radius-sm);
   font-family: inherit; outline: none; background: var(--panel-soft);
-  transition: border-color 0.15s; box-sizing: border-box;
+  transition: border-color var(--t-fast); box-sizing: border-box;
 }
 .bsp-loc-field input[type="text"]:focus { border-color: var(--accent); background: var(--panel); }
 .bsp-loc-unsure { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 12px; color: var(--ink-soft, #5c554d); cursor: pointer; }
@@ -23063,8 +23063,8 @@ body.bsp-open #impact-modal    { z-index: 1201; }
 /* cat-form spacing */
 .cat-form { padding: 0 0 4px 0; }
 /* One field height in the sheet (§7.2: 34 px, radius 8). */
-#booking-side-panel .search-row input { height: 34px; box-sizing: border-box; padding: 0 12px 0 36px; border-radius: 8px; }
-#booking-side-panel select { height: 34px; box-sizing: border-box; border-radius: 8px; }
+#booking-side-panel .search-row input { height: 34px; box-sizing: border-box; padding: 0 12px 0 36px; border-radius: var(--radius-sm); }
+#booking-side-panel select { height: 34px; box-sizing: border-box; border-radius: var(--radius-sm); }
 .cat-form .form-field.full { margin-bottom: 10px; }
 </style>
 

@@ -178,7 +178,7 @@ describe('sheet internals — one spec for the drawer and the booking panel (U-0
     expect(HTML).not.toContain('<button class="btn primary" onclick="closeBlockDetail()">Close</button>');
   });
   test('fields are 34 px radius 8 in both sheets; inline actions 24 px', () => {
-    expect(rule(HTML, '  .time-edit input[type="time"]')).toMatch(/height: 34px;[^}]*border-radius: 8px;/);
+    expect(rule(HTML, '  .time-edit input[type="time"]')).toMatch(/height: 34px;[^}]*border-radius: (8px|var\(--radius-sm\));/);
     expect(rule(HTML, '.bsp-time-field input[type="time"]')).toContain('height: 34px;');
     expect(rule(HTML, '.bsp-loc-field input[type="text"]')).toContain('height: 34px;');
     expect(HTML).toContain('#booking-side-panel .search-row input { height: 34px;');
@@ -190,5 +190,21 @@ describe('sheet internals — one spec for the drawer and the booking panel (U-0
   test('section labels share 11/700 and ink-soft, never info blue', () => {
     expect(rule(HTML, '.bsp-section-title')).toContain('color: var(--ink-soft);');
     expect(rule(HTML, '.bsp-t-label')).toContain('font-size: 11px; font-weight: 700;');
+  });
+});
+
+describe('tokens where touched (§7.4, §7.5; R8)', () => {
+  test('--radius-sm is the 8 px control radius and --radius-md the 12 px card radius', () => {
+    expect(HTML).toMatch(/--radius-sm: 8px;/);
+    expect(HTML).toMatch(/--radius-md: 12px;/);
+  });
+  test('the calendar Sync button and chip have no purple fallback accent', () => {
+    expect(SYNC_CSS).not.toContain('#7a5cc4');
+  });
+  test('booking panel controls carry no literal 6/7/8 px radii or `transition: all`', () => {
+    const at = HTML.indexOf('#booking-side-panel {');
+    const panel = HTML.slice(at, HTML.indexOf('</style>', at));
+    expect(panel).not.toMatch(/border-radius: [678]px;/);
+    expect(panel).not.toMatch(/transition: all/);
   });
 });

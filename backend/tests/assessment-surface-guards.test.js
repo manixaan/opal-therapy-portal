@@ -779,7 +779,7 @@ describe('changed assets are cache-busted', () => {
       // 8: chips written only on change (no observer loop); the move toast names the Outlook status.
       // 9 (js) / 2 (css): match, link or ignore — each queued new appointment shows
       // whether Splose already holds it, with Link / Send / Ignore and bulk actions.
-      ['splose-sync.js', 15], ['splose-sync.css', 6],
+      ['splose-sync.js', 15], ['splose-sync.css', 7],
       // 1: Settings → Calendar sync — per-direction Outlook/Splose choices, the
       // Owner's practice limits and the Sync now preview (migration 081).
       ['sync-settings.js', 6], ['sync-settings.css', 3],
@@ -796,7 +796,7 @@ describe('changed assets are cache-busted', () => {
       // 1: Invoicing — calendar-driven NDIS invoices, travel and rural trip billing.
       // 4 (js): the session's MMM zone selector in the calendar billing box.
       // 5 (js): Complete invoicing counts non-face-to-face shares.
-      ['invoicing.js', 5], ['invoicing.css', 4],
+      ['invoicing.js', 5], ['invoicing.css', 5],
       ['induction-assistant.js', 3], ['induction-assistant.css', 4],
       // js 5: two-step editor panel, contents-mirroring outline with
       // drag-to-reorder, multi-article A4 pagination fix. css 5: the
