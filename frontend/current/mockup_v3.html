@@ -2699,6 +2699,41 @@ window.opIcon = function (name, size) {
   @media (max-width: 860px) {
     .cal-grid.view-week { min-width: 700px; }
   }
+  /* ── Responsive chrome (U-03, §7.11): header, nav and the calendar toolbar
+     below 1080 px. Existing controls only — a label collapses to its icon
+     with font-size:0, so the words stay the control's accessible name. ── */
+  @media (max-width: 1080px) {
+    #week-label { white-space: nowrap; }
+    /* Legend and Sync keep their icons; the toolbar fits on one row. */
+    .cal-legend-btn, #splose-sync-btn { font-size: 0; gap: 0; padding: 0; width: 32px; justify-content: center; }
+    #splose-sync-btn .cnt { font-size: 11px; margin-left: 2px; }
+    #splose-sync-btn:has(.cnt:not([hidden])) { width: auto; padding: 0 6px; }
+  }
+  @media (max-width: 860px) {
+    /* Identity once (the account chip); the sync pill is its dot. */
+    header .prac-badge { display: none; }
+    #hdr-sync-pill { font-size: 0; gap: 0; padding: 6px; }
+    #inv-cal-btn, .btn-add-event { font-size: 0; gap: 0; padding: 0; width: 32px; justify-content: center; }
+    /* The 700 px week scrolls sideways inside the calendar, never the page. */
+    #cal-view-week > .cal-shell { min-width: 0; overflow-x: auto; }
+  }
+  @media (max-width: 600px) {
+    header { gap: 4px; padding: 10px 12px; }
+    /* The pebble greeting, the wordmark and the theme button go (the theme
+       is in the account menu; Opa is the corner button). */
+    header .opa-greet-wrap, header .brand-opa, #theme-toggle { display: none; }
+    #app-user-chip { max-width: 96px !important; }
+    header > div:last-child { margin-left: 0 !important; padding-left: 6px !important; }
+    /* Nav: every tab but the open one shows its icon only. */
+    nav.tabs { padding: 5px 8px; gap: 2px; }
+    nav.tabs > .tab:not(.active) { font-size: 0; gap: 0; padding: 7px 9px; }
+    nav.tabs .tab { flex-shrink: 0; }
+    nav.tabs > .tab:not(.active) .tab-badge { font-size: 10px; margin-left: 2px; }
+    /* Toolbar: two rows — view switch + Today / dates + actions. */
+    .cal-topbar { flex-wrap: wrap; row-gap: 8px; column-gap: 6px; padding: 8px 12px; }
+    .cal-topbar .toolbar-divider { display: none; }
+    .view-tab { padding: 0 9px; }
+  }
   .nonworking-band {
     position: absolute; left: 0; right: 0;
     /* DISABLED: Therapist can now schedule at any time (flexible hours)
