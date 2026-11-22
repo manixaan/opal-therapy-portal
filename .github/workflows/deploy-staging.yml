@@ -13,10 +13,10 @@
 #  advisory-locked), so this workflow needs no database network access.
 #
 #  Speed: the gate runs in parallel (ci.yml: one unit job + four integration
-#  shards, ~4 min instead of 13). The copy to Azure is ~2 min when the app
-#  setting WEBSITE_RUN_FROM_PACKAGE=1 is on (the zip is mounted, not unpacked
-#  file by file onto the network share, which took ~21 min). With the setting
-#  off this workflow still works exactly as before, just slowly.
+#  shards, ~4 min instead of 13). The copy to Azure should be ~2 min: the app
+#  setting WEBSITE_RUN_FROM_PACKAGE=1 is on and the bundle goes through the
+#  legacy zipdeploy endpoint, which mounts the zip instead of rsyncing ~54k
+#  files onto the network share (~19 min via azure/webapps-deploy's OneDeploy).
 # ═══════════════════════════════════════════════════════════════════════════
 name: Deploy Staging
 
@@ -66,11 +66,21 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Deploy bundle
-        uses: azure/webapps-deploy@v3
-        with:
-          app-name: opal-portal-staging
-          package: deploy.zip
+      # Legacy /api/zipdeploy, not azure/webapps-deploy@v3. The action uses
+      # OneDeploy, which on this Linux app ignores WEBSITE_RUN_FROM_PACKAGE=1 and
+      # rsyncs all ~54k bundle files onto the /home share (~19 min, measured
+      # 22 Nov 2026). zipdeploy honours the setting: the zip is stored under
+      # /home/data/SitePackages and mounted read-only at wwwroot.
+      - name: Deploy bundle (zipdeploy — run from package)
+        run: |
+          set -e
+          start=$(date +%s)
+          az webapp deployment source config-zip \
+            --resource-group opal-portal-staging-rg \
+            --name opal-portal-staging \
+            --src deploy.zip \
+            --timeout 900
+          echo "zipdeploy took $(( $(date +%s) - start ))s"
 
       - name: Health gate — /health then /ready
         run: |

@@ -1577,6 +1577,11 @@ function runBspRoutePreview(opts) {
   if (!day || !startEl || !startEl.value) { setBspRouteStatus('hidden'); return; }
   const [sh, sm] = startEl.value.split(':').map(Number);
   const startMin = sh * 60 + (sm || 0);
+  // While the clinician is still typing the start, never rewrite it: a
+  // half-typed hour ("1" → 01:50) is earlier than the drive and was snapped
+  // back mid-keystroke, so 12:30 could not be typed (22 Nov 2026). The
+  // earliest-start check runs when the field is left (focusout below).
+  const typing = document.activeElement === startEl;
   const dur = parseInt((document.getElementById('bsp-dur-slider') || {}).value || '60', 10) || 60;
   // Make room belongs to one start on one day: another pick drops it.
   BOOKING_ROUTE.squeezePlan = null; BOOKING_ROUTE.squeezeOffer = null;
@@ -1759,7 +1764,7 @@ function runBspRoutePreview(opts) {
 
   // An explicit route moves the proposal; an implicit neighbour only advises.
   let shownStart = startMin;
-  if (pred.explicit && !hold && plan.startMin !== startMin) {
+  if (pred.explicit && !hold && !typing && plan.startMin !== startMin) {
     shownStart = plan.startMin;
     startEl.value = _hhmm(plan.startMin);
     if (typeof _bspRecomputeEnd === 'function') _bspRecomputeEnd();
@@ -1800,7 +1805,11 @@ function runBspRoutePreview(opts) {
   const notes = [];
   // A clamp is remembered until the clinician picks another start, so the
   // follow-up repaint (which now sees the clamped time) keeps the warning.
-  if (pred.explicit && !hold && plan.clampedFromMin != null) BOOKING_ROUTE.lastClamp = { from: plan.clampedFromMin, to: plan.startMin };
+  if (pred.explicit && !hold && !typing && plan.clampedFromMin != null) BOOKING_ROUTE.lastClamp = { from: plan.clampedFromMin, to: plan.startMin };
+  if (pred.explicit && !hold && typing && plan.clampedFromMin != null) {
+    kind = 'warn';
+    notes.push('Earliest start after the drive is ' + fmt(plan.earliestStartMin) + '.');
+  }
   const clamp = pred.explicit && !hold && BOOKING_ROUTE.lastClamp && BOOKING_ROUTE.lastClamp.to === shownStart ? BOOKING_ROUTE.lastClamp : null;
   if (clamp) { kind = 'warn'; notes.push(fmt(clamp.from) + ' is earlier than the drive allows — moved to ' + fmt(clamp.to) + '.'); }
   if (plan.movedForConflicts.length) notes.push('Moved to ' + fmt(plan.startMin) + ': ' + plan.movedForConflicts.map(b => esc(b.label)).join(', ') + ' is already booked then.');
@@ -2264,6 +2273,8 @@ document.addEventListener('click', e => {
   // A clinician-chosen start (typed, or a dragged proposal) is kept if the drive allows it.
   wrap('bspOnStartChange', () => { BOOKING_ROUTE.manualStart = true; BOOKING_ROUTE.lastClamp = null; });
   document.addEventListener('input',  e => { if (e.target && e.target.id === 'bsp-location') run(); });
+  // Leaving the start field applies the earliest-start check to what was typed.
+  document.addEventListener('focusout', e => { if (e.target && e.target.id === 'bsp-start') run(); });
   document.addEventListener('change', e => { if (e.target && (e.target.id === 'bsp-location' || e.target.id === 'bsp-location-unsure')) run(); });
 })();
 
@@ -3266,7 +3277,7 @@ function renderTravelOverlay(col, day, curr, next, from, to, gapStart, gapMin, t
   el.style.height = Math.min(Math.max(12, legacySlotPx - 4), Math.max(4, legacySlotPx - 2)) + 'px';
   const tight = gapMin < travel + 5;
   el.style.borderLeftColor = tight ? 'var(--danger, #9c3322)' : 'var(--accent, #0f7c6c)';
-  el.innerHTML = `<span class="t-ico" style="font-size: 10px; font-weight: 600; opacity: 0.7;">Travel</span>
+  el.innerHTML = `<span class="t-ico" style="font-size: 10px; font-weight: 600;">Travel</span>
     <span class="t-label">${travel} min · ${from.suburb} → ${to.suburb}</span>`;
   el.title = `Google Maps travel ${from.suburb} → ${to.suburb} ≈ ${travel} min. Gap is ${gapMin} min. Click for directions.`;
   el.onclick = (ev) => {
@@ -3451,14 +3462,11 @@ function _renderTravelPanel(seg) {
   html += '<span class="tp-source-chip ' + sourceClass + '">' +
     (isOutlook ? 'Outlook event' : seg.routeReal === false ? 'Estimate — route unavailable' : 'Calculated route') + '</span>';
 
-  // Travel goes to Outlook from today on; past days are left as they were
-  // (runTravelOutlookSync). Say so, instead of leaving it to look broken.
-  if (!isOutlook && travelDayIsPast(seg.day)) {
-    html += '<div class="tp-plan-hint tp-past-note">Past day: travel changes here are not sent to Outlook.</div>';
-  }
+  // The side panel carries no explanatory sub-text (22 Nov 2026): headings,
+  // values and choices only. The reasons stay in code comments.
 
   if (seg.skipped) {
-    html += '<div class="tp-plan-hint tp-skip-note">You are not driving this one — it blocks no time and is not sent to Outlook. ' +
+    html += '<div class="tp-plan-hint tp-skip-note">' +
       '<button type="button" class="tp-plan-opt" data-nodrive-restore>Drive this after all</button></div>';
   }
 
@@ -3489,32 +3497,27 @@ function _renderTravelPanel(seg) {
     // which way to drive — at home (this drive), where I am, or elsewhere.
     var dp = deskWorkPlan(gapTo);
     var deskAt = function (x) { return _tpEsc(_tpFmtTime(x.startH, x.startM || 0) + ' ' + (_stopName(x) || x.title || 'desk work')); };
-    var deskWhy = 'Your choice: at home.';
     html += '<div class="tp-section-title">Travel from ' + deskAt(gapFrom) + ' to Home · ' + deskAt(gapTo) + '</div>';
     html += '<div class="tp-plan-opts tp-desk" data-desk-session="' + _tpEsc(gapTo.id) + '">' +
       '<button type="button" class="tp-plan-opt on" data-desk="home">Do it at home</button>' +
       '<button type="button" class="tp-plan-opt" data-desk="here">Do it here (no drive)</button>' +
       '<button type="button" class="tp-plan-opt" data-desk-else>Somewhere else…</button>' +
-      '</div><div class="tp-plan-hint">' + _tpEsc(deskWhy) + '</div>' +
+      '</div>' +
       '<div class="tp-plan-oneoff tp-desk-else" hidden><input type="text" class="tp-addr" data-desk-addr placeholder="Where will you do it? Type an address" aria-label="Where this desk work happens" autocomplete="off">' +
-      '<div class="tp-plan-hint">Pick a suggestion or press Enter. It is saved on ' + _tpEsc(gapTo.title || 'the block') + ' and travel is recalculated.</div></div>';
+      '</div>';
   } else if (gapFrom && gapTo && seg.toHome) {
     // The next stop IS home: one drive home, no Direct / Via home choice.
     var homeAt = function (x) { return _tpEsc(_tpFmtTime(x.startH, x.startM || 0) + ' ' + (_stopName(x) || 'session')); };
     html += '<div class="tp-section-title">Travel from ' + homeAt(gapFrom) + ' to Home · ' + homeAt(gapTo) + '</div>';
     html += '<div class="tp-plan-opts tp-between" data-between="' + _tpEsc(gapFrom.id) + '">' +
       '<button type="button" class="tp-plan-opt" data-else-open>Go somewhere else in between</button>' +
-      '</div><div class="tp-plan-hint">' + _tpEsc((_stopName(gapTo) || 'The next appointment') + ' is at home, so this is the drive home.') + '</div>' +
+      '</div>' +
       '<div class="tp-plan-oneoff tp-else" hidden><input type="text" class="tp-addr" data-else-addr placeholder="Where are you going? Type an address" aria-label="Place to go in between" autocomplete="off">' +
-      '<div class="tp-plan-hint">Pick a suggestion or press Enter. Travel there and on home is recalculated.</div></div>';
+      '</div>';
   } else if (gapFrom && gapTo) {
     var plan = betweenTravelPlan(gapFrom, gapTo, dayAnchorBase(seg.day));
     var goingHome = !!plan.home;
     var placeName = plan.placeAvailable ? plan.placeLabel || 'the saved place' : '';
-    var why = plan.mode === 'elsewhere' ? 'Going to ' + placeName + ' in between (chosen with Go Somewhere Else).'
-      : !plan.homeAvailable ? 'No home base set for this day (or a stop is at home), so it is a direct drive.'
-      : plan.auto ? 'Direct — you only go home in between if you choose Via home.'
-      : 'Your choice.';
     // The two appointments either side of the gap, by time: the same client
     // twice in a day read as "Noah Mathew and Noah Mathew".
     var stopAt = function (x) { return _tpEsc(_tpFmtTime(x.startH, x.startM || 0) + ' ' + (_stopName(x) || 'session')); };
@@ -3527,9 +3530,9 @@ function _renderTravelPanel(seg) {
       (plan.placeAvailable ? '<button type="button" class="tp-plan-opt' + (plan.mode === 'elsewhere' ? ' on' : '') + '" data-mode="">Go to ' + _tpEsc(placeName) + ' in between</button>' : '') +
       // A new place, typed here (11 Oct 2026): the drive there and on to the next client are redrawn.
       '<button type="button" class="tp-plan-opt" data-else-open>' + (plan.placeAvailable ? 'Somewhere else…' : 'Go somewhere else in between') + '</button>' +
-      '</div><div class="tp-plan-hint">' + _tpEsc(why) + '</div>' +
+      '</div>' +
       '<div class="tp-plan-oneoff tp-else" hidden><input type="text" class="tp-addr" data-else-addr placeholder="Where are you going? Type an address" aria-label="Place to go in between" autocomplete="off">' +
-      '<div class="tp-plan-hint">Pick a suggestion or press Enter. Travel there and on to ' + _tpEsc(_stopName(gapTo) || 'the next client') + ' is recalculated.</div></div>';
+      '</div>';
   }
 
   html += _deskHereList(seg);
@@ -3539,11 +3542,8 @@ function _renderTravelPanel(seg) {
   var owner = seg.ownerSessionId && window.SESSIONS ? window.SESSIONS[seg.ownerSessionId] : null;
   if (owner) {
     html += '<div class="tp-section-title">Linked to</div>';
-    html += '<div class="tp-linked"><strong>' + _tpEsc(owner.patient || owner.title || 'Appointment') + '</strong> · ' +
-      (seg.ownerSide === 'after' ? 'travel after this appointment' : 'travel to this appointment') + '</div>';
-    html += '<div class="tp-timing">' + (seg.moved
-      ? 'You set this time. <button type="button" class="tp-plan-reset" data-timing="reset">Use calculated time</button>'
-      : (owner.dbId ? 'Calculated time — drag the block on the calendar to travel at another time.' : 'Calculated time.')) + '</div>';
+    html += '<div class="tp-linked"><strong>' + _tpEsc(owner.patient || owner.title || 'Appointment') + '</strong></div>';
+    if (seg.moved) html += '<div class="tp-timing"><button type="button" class="tp-plan-reset" data-timing="reset">Use calculated time</button></div>';
   }
 
   // Before / After — the session's own answer to where the day starts or ends.
@@ -3567,14 +3567,14 @@ function _renderTravelPanel(seg) {
     // A one-off address for this day only — the base itself is left alone.
     html += '<div class="tp-plan-oneoff"><label>' + (side === 'before' ? 'Or start this day from' : 'Or finish this day at') +
       ' <input type="text" class="tp-addr" data-plan="address" autocomplete="off" placeholder="Start typing an address…" value="' + _tpEsc(current && current.kind === 'address' ? current.address : '') + '"></label>' +
-      '<div class="tp-plan-hint">Pick from the suggestions. Changes this day only; your travel bases in My Profile stay as they are.</div></div>';
+      '</div>';
     if (side === 'after') {
       var pts = (window.PATIENTS || []).slice().sort(function (a, b) { return ((a.last || '') + (a.first || '')).localeCompare((b.last || '') + (b.first || '')); });
       html += '<div class="tp-plan-stop"><label>Or add a stop at another client ';
       html += '<select data-plan="stop"' + (pts.length ? '' : ' disabled') + '><option value="">' + (pts.length ? 'Choose from my caseload…' : 'No clients in your caseload yet') + '</option>' +
         pts.map(function (p) { return '<option value="' + _tpEsc(p.id) + '">' + _tpEsc((p.first || '') + ' ' + (p.last || '')) + (p.suburb ? ' · ' + _tpEsc(p.suburb) : '') + '</option>'; }).join('') +
         '</select></label>';
-      html += '<div class="tp-plan-hint">' + (pts.length ? 'Picking a client opens Smart Booking at the earliest start the travel allows.' : 'A client appears once they have an open case with you in Splose.') + '</div></div>';
+      html += '</div>';
     }
     html += '</div>';
   }
@@ -3592,7 +3592,6 @@ function _renderTravelPanel(seg) {
     else h += '<div class="tp-location-name">' + _tpEsc(loc.label || sub) + '</div>';
     if (isClient && sess.dbId) {
       h += '<label class="tp-addr-edit">Client location <input type="text" class="tp-addr" data-session-addr="' + _tpEsc(sess.id) + '" autocomplete="off" placeholder="Start typing the client\'s address…" value="' + _tpEsc(addr) + '"></label>';
-      h += '<div class="tp-plan-hint">Saved to this appointment (and its Outlook copy). Travel recalculates.</div>';
     } else {
       h += '<div class="tp-location-addr">' + _tpEsc(addr || (sub ? sub + ' WA' : 'Address not set')) + '</div>';
     }
@@ -3750,12 +3749,9 @@ function _deskHereList(seg) {
   if (!rows.length) return '';
   var html = '<div class="tp-section-title">Desk work in this gap</div><div class="tp-desk-here">';
   rows.forEach(function (x) {
-    var p = deskWorkPlan(x);
-    var why = p.reason === 'chosen' ? 'done where you are — your choice'
-      : 'done where you are — nothing is driven unless you choose "Do it at home"';
     html += '<div class="tp-desk-row" data-desk-session="' + _tpEsc(x.id) + '">' +
       '<div><strong>' + _tpEsc(_tpFmtTime(x.startH, x.startM || 0) + ' ' + (x.title || 'Desk work')) + '</strong>' +
-      '<div class="tp-plan-hint">' + _tpEsc(why) + '</div></div>' +
+      '</div>' +
       '<button type="button" class="tp-plan-opt" data-desk-set="home">Do it at home</button>' +
       '</div>';
   });
