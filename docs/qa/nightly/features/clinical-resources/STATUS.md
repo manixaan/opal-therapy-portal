@@ -3,7 +3,7 @@
 - Tracker stage: **idea**
 - Tracker environment: **none**
 - Evidence label: **proven**
-- Addressed since the last audit (2026-11-20..2026-11-21): **no**
+- Addressed since the last audit (2026-11-21..2026-11-22): **no**
 - Created (any located code): **yes**
 
 ## Located files
@@ -23,13 +23,13 @@ OK — requireAuth + requireRole('owner') / requireManager on writes, re-confirm
 e2e/tests/portal.spec.js:116 still has the Resource Hub assertion ("Resource Hub shows approved starter content, no authoring, no public URLs") — real E2E coverage of the tab, confirmed present tonight.
 
 ## Recency
-Not touched since the last audit (2026-11-20) — none of the 77 commits that landed in `backend/` or `frontend/current/` between 18:52 UTC 2026-11-20 and tonight's audit touched any Resource Hub file (that window was calendar/booking/travel/Splose-sync and invoicing/billing/Xero work only).
+Not touched since the last audit (2026-11-21 18:36 UTC) — none of tonight's 7 commits (calendar/booking/travel UI polish plus a Settings gear-icon swap) touched any Resource Hub file.
 
 ## Open tasks (from the tracker)
 (no tasks recorded on this card)
 
 ## Reason for the label
-Code located, guarded, every test passes, no open task (0 tasks on this card), no TODO/FIXME found, and the tracker's own next_action already says "No action needed — evidence supports moving this card's stage up." Unchanged from last night.
+Code located, guarded, every test passes, no open task (0 tasks on this card), no TODO/FIXME found, and the tracker's own next_action already says "No action needed — evidence supports moving this card's stage up." Unchanged from last night, now confirmed eight nights running.
 
 ## Disagreement with the tracker
 Opposite-direction disagreement: the tracker stage ("idea") badly UNDER-claims maturity — this remains the one card in the whole snapshot that evidence says is actually done.

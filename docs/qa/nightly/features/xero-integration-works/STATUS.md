@@ -3,7 +3,7 @@
 - Tracker stage: **idea**
 - Tracker environment: **none**
 - Evidence label: **tab-unproven**
-- Addressed since the last audit (2026-11-20..2026-11-21): **yes — heavily**
+- Addressed since the last audit (2026-11-21..2026-11-22): **no**
 - Created (any located code): **yes**
 
 ## Located files
@@ -29,14 +29,14 @@ OK — `accounting-routes.js` and `finance-routes.js` are `ownerOnly` throughout
 docs/qa/BROWSER_QA_RESULTS.md row H (owner-gated, Xero connected:false) — dated 2026-08-01, stale relative to this window, but exists.
 
 ## Recency
-**Heavily addressed tonight.** 14 commits in the window touch billing/invoicing/Xero specifically: a new NDIS travel-billing rule book (detours, mixed zones, trip hours — e.g. "a metro client's drive home is billed on a mixed-zone day"), batch invoice sending ("tick invoices and send them all, each exactly once"), one-Xero-copy-per-invoice ("every sent invoice is copied to Xero once, with the same number"), a new payer directory, and a follow-up fixing "the Xero and email gaps found in review". Unit test count rose from 81 (7 files) to 215 (12 files); integration rose from 63 (5 files) to 90 (6 files) — all green, no regression.
+Not touched since the last audit (2026-11-21 18:36 UTC) — none of tonight's 7 commits (calendar/booking/travel UI polish plus a Settings gear-icon swap) touched billing/invoicing/Xero. A quiet night after last night's heavy landing (new NDIS travel-billing rule book, batch invoice sending, one-Xero-copy-per-invoice, a payer directory) — test counts unchanged: 215 unit (12 files), 90 integration (6 files).
 
 ## Open tasks (from the tracker)
 - Financial Dashboard — todo
 - Payroll Automation — todo
 
 ## Reason for the label
-Tonight's work substantially deepened the invoicing/billing logic and it is fully guarded and heavily tested — but every Xero-touching test mocks the Xero client, so no real/sandbox Xero call has ever been exercised. The "never confirmed live in a browser" gap from every prior night stands exactly as before, which is why this stays `tab-unproven` rather than moving to `proven`.
+The invoicing/billing logic is fully guarded and heavily tested — but every Xero-touching test mocks the Xero client, so no real/sandbox Xero call has ever been exercised. The "never confirmed live in a browser" gap from every prior night stands exactly as before, which is why this stays `tab-unproven` rather than moving to `proven`. Unchanged from last night.
 
 ## Disagreement with the tracker
 Tracker stage is "idea" while the backend is built and now even more heavily tested than last night — the tracker under-describes how much exists.

@@ -4,7 +4,7 @@ One row per tracker idea. Rewritten nightly. See scripts/nightly-audit/PROMPT.md
 
 | Feature | Tracker stage | Evidence label | Addressed this window | Start |
 |---|---|---|---|---|
-| Xero Integration Works | idea | tab-unproven | yes | [xero-integration-works/START.md](xero-integration-works/START.md) |
+| Xero Integration Works | idea | tab-unproven | no | [xero-integration-works/START.md](xero-integration-works/START.md) |
 | Update Opal Docs Register | idea | untouched | no | [update-opal-docs-register/START.md](update-opal-docs-register/START.md) |
 | Report Templates | idea | tab-unproven | no | [report-templates/START.md](report-templates/START.md) |
 | Password Master Document | idea | untouched | no | [password-master-document/START.md](password-master-document/START.md) |

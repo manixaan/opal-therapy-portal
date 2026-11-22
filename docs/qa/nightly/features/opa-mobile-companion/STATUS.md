@@ -3,7 +3,7 @@
 - Tracker stage: **idea**
 - Tracker environment: **none**
 - Evidence label: **needs-refinement**
-- Addressed since the last audit (2026-11-20..2026-11-21): **no**
+- Addressed since the last audit (2026-11-21..2026-11-22): **no**
 - Created (any located code): **yes**
 
 ## Located files
@@ -24,7 +24,7 @@ OK — self-scoped by design (mobile-routes.js header documents own-day/own-user
 N/A — mobile client is outside this repo.
 
 ## Recency
-Not touched since the last audit (2026-11-20) — none of the 77 commits that landed in `backend/` or `frontend/current/` between 18:52 UTC 2026-11-20 and tonight's audit touched `backend/mobile-routes.js` or `backend/case-note-routes.js` (that window was calendar/booking/travel/Splose-sync and invoicing/billing/Xero work only). AI-gateway boundary re-confirmed clean tonight — no stray provider-SDK `require` outside `backend/ai/`.
+Not touched since the last audit (2026-11-21 18:36 UTC) — none of tonight's 7 commits (calendar/booking/travel UI polish plus a Settings gear-icon swap) touched `backend/mobile-routes.js` or `backend/case-note-routes.js`. AI-gateway boundary re-confirmed clean tonight — no stray provider-SDK `require` outside `backend/ai/`.
 
 ## Open tasks (from the tracker)
 - Case Noting — todo

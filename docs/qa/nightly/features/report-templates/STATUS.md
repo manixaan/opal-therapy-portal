@@ -3,7 +3,7 @@
 - Tracker stage: **idea**
 - Tracker environment: **none**
 - Evidence label: **tab-unproven**
-- Addressed since the last audit (2026-11-20..2026-11-21): **no**
+- Addressed since the last audit (2026-11-21..2026-11-22): **no**
 - Created (any located code): **yes**
 
 ## Located files
@@ -26,7 +26,7 @@ OK — requireClinicalRead/Write (fca/letter) and requireTemplateRead/Write (tem
 None found — no tab banner, no E2E spec, no browser QA entry names FCA/Letter/Agreement.
 
 ## Recency
-Mostly untouched — of the 77 commits landed between 18:52 UTC 2026-11-20 and tonight's audit, one made a cosmetic 2-line change to `frontend/current/reports.js`: its `_rptFmtTime` helper now delegates to the shell's shared `fmtTime` when available (part of an unrelated calendar time-format consolidation, U-11). It does not touch FCA, Progress Letter, Client Agreement Form, or any of the Report Templates routes/logic — confirmed no functional change and no test regression.
+Not touched since the last audit (2026-11-21 18:36 UTC) — none of tonight's 7 commits (calendar/booking/travel UI polish plus a Settings gear-icon swap) touch FCA, Progress Letter, Client Agreement Form, or any Report Templates route/logic.
 
 ## Open tasks (from the tracker)
 - FCA — todo

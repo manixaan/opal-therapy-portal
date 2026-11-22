@@ -3,7 +3,7 @@
 - Tracker stage: **idea**
 - Tracker environment: **none**
 - Evidence label: **built-untested**
-- Addressed since the last audit (2026-11-20..2026-11-21): **no**
+- Addressed since the last audit (2026-11-21..2026-11-22): **no**
 - Created (any located code): **yes**
 
 ## Located files
@@ -25,7 +25,7 @@ OK — backend/profile-routes.js is requireAuth router-wide + inline canApprove(
 Resource Hub has E2E proof (portal.spec.js) but that is a different subsystem; there is still no dedicated "Professional Development" tab/page proof under its real home (My Profile).
 
 ## Recency
-Not touched since the last audit (2026-11-20) — none of the 77 commits that landed in `backend/` or `frontend/current/` between 18:52 UTC 2026-11-20 and tonight's audit touched `backend/profile-routes.js` or the CPD section (that window was calendar/booking/travel/Splose-sync and invoicing/billing/Xero work only).
+Not touched since the last audit (2026-11-21 18:36 UTC) — none of tonight's 7 commits (calendar/booking/travel UI polish plus a Settings gear-icon swap) touched `backend/profile-routes.js` or the CPD section.
 
 ## Open tasks (from the tracker)
 (no tasks recorded on this card)

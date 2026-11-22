@@ -3,7 +3,7 @@
 - Tracker stage: **idea**
 - Tracker environment: **none**
 - Evidence label: **tab-unproven**
-- Addressed since the last audit (2026-11-20..2026-11-21): **no**
+- Addressed since the last audit (2026-11-21..2026-11-22): **no**
 - Created (any located code): **yes**
 
 ## Located files
@@ -14,14 +14,14 @@
 OK — requireClinicalRead/Write throughout, re-confirmed.
 
 ## Tests run
-- unit: `assessment-catalogue.test.js, assessment-surface-guards.test.js, whodas-external-completion.test.js, whodas-frontend-guards.test.js, whodas-scoring.test.js, whodas-templates.test.js` — **pass** (6 files / 484 tests — re-run fresh tonight; the +2 vs last night's 482 comes from `assessment-surface-guards.test.js` picking up unrelated `?v=` asset-pin changes from tonight's calendar work, not an assessments change)
+- unit: `assessment-catalogue.test.js, assessment-surface-guards.test.js, whodas-external-completion.test.js, whodas-frontend-guards.test.js, whodas-scoring.test.js, whodas-templates.test.js` — **pass** (6 files / 484 tests — re-run fresh tonight, unchanged from last night)
 - integration: `assessments.itest.js, whodas.itest.js` — **pass** (2 files / 81 tests)
 
 ## Tab / browser proof
 None found — no dedicated Assessment tab banner (re-confirmed tonight), no E2E, no browser QA entry.
 
 ## Recency
-Not touched since the last audit (2026-11-20) — none of the 77 commits that landed in `backend/` or `frontend/current/` between 18:52 UTC 2026-11-20 and tonight's audit touched WHODAS/assessment code directly (that window was calendar/booking/travel/Splose-sync and invoicing/billing/Xero work only; the asset-pin guard test above moved only because it tracks a shared pin list).
+Not touched since the last audit (2026-11-21 18:36 UTC) — none of tonight's 7 commits (calendar/booking/travel UI polish plus a Settings gear-icon swap) touched WHODAS/assessment code.
 
 ## Open tasks (from the tracker)
 - Assessment Review — todo
