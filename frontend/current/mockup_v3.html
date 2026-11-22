@@ -145,7 +145,7 @@
 <link rel="stylesheet" href="/nf2f.css?v=5" />
 <link rel="stylesheet" href="/flights.css?v=2" />
 <!-- Last stylesheet: night-mode token overrides must win over every feature sheet. -->
-<link rel="stylesheet" href="/theme.css?v=7" />
+<link rel="stylesheet" href="/theme.css?v=8" />
 <!-- The Library's document library (folders, list/tiles, bin, versions). Before
      resourcehub.js, which mounts it into #rhl-root inside the Library view. -->
 <script src="/resourcelibrary.js?v=3" defer></script>
@@ -204,7 +204,7 @@
      store and computeDayTravelSegments(), the calendar leg overlays and the
      travel details panel. Deferred and loaded ahead of profile.js and
      reports.js, both of which reach into it. -->
-<script src="/travel.js?v=73" defer></script>
+<script src="/travel.js?v=74" defer></script>
 <!-- Traffic alerts: a re-priced drive that now runs into a client session —
      point at it, offer Make room, Acknowledge or Ignore (today and tomorrow). -->
 <script src="/travel-alerts.js?v=1" defer></script>
@@ -3469,13 +3469,12 @@ window.opIcon = function (name, size) {
   /* Travel overlay on calendar columns */
   /* Travel is one family in the legend's colour (--c-travel, VD-11/T-21):
      teal stays the app's "selected" accent. Start/between/end differ by bar
-     style, not hue. */
+     style, not hue. Legs are solid like a Travel block, not a faint hatch —
+     therapists asked for travel to read as bold (22 Nov 2026). */
   .travel-overlay {
     position: absolute; left: 4px; right: 4px; z-index: 1;
     border-left: 3px solid var(--c-travel);
-    background: repeating-linear-gradient(45deg,
-      color-mix(in srgb, var(--c-travel) 10%, transparent) 0 5px,
-      color-mix(in srgb, var(--c-travel) 18%, transparent) 5px 10px);
+    background: var(--c-travel-bg);
     border-radius: 4px; padding: 2px 6px; font-size: 10px; color: var(--c-travel-ink); font-weight: 600;
     display: flex; align-items: center; gap: 4px; overflow: hidden;
     cursor: pointer; user-select: none;
@@ -3485,9 +3484,9 @@ window.opIcon = function (name, size) {
      lands it eases to the real size instead of jumping (audit T-14). Never
      while dragged — direct manipulation is 1:1. Reduced motion collapses it. */
   .travel-overlay:not(.drag-preview):not(.dragging):not(.preview) { transition: top 140ms var(--ease-out), height 140ms var(--ease-out); }
-  /* Priced from the suburb table, not a real route (yet): quieter and dashed
-     — provisional, like a skipped drive (T-19). */
-  .travel-overlay.estimate { border-left-style: dashed; opacity: .7; }
+  /* Priced from the suburb table, not a real route (yet): a dashed bar marks
+     it provisional (T-19); the fill stays solid (22 Nov 2026). */
+  .travel-overlay.estimate { border-left-style: dashed; }
   .travel-overlay .t-ico { font-size: 11px; }
   .travel-overlay .t-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   /* Size tiers (travel.js _legTier, 21 Nov 2026 audit T-15/T-20): a leg under
@@ -3498,7 +3497,7 @@ window.opIcon = function (name, size) {
   .travel-overlay.t-mins { padding: 1px 6px; line-height: 12px; }
   .travel-overlay.t-mins .t-label, .travel-overlay.t-full .t-label,
   .travel-overlay.t-full .t-ico { flex-shrink: 0; overflow: visible; }
-  .travel-overlay.t-full .t-ico { font-size: 10px; font-weight: 500; opacity: .75; white-space: nowrap; }
+  .travel-overlay.t-full .t-ico { font-size: 10px; font-weight: 600; white-space: nowrap; }
   .travel-overlay.t-no-ico .t-ico, .travel-overlay.t-no-switch .t-switch,
   .travel-overlay.t-no-dest .t-dest { display: none; }
   /* Idle-gap overlay CSS REMOVED (2026-08-09): the free-time/gap overlay no

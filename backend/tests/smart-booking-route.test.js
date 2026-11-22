@@ -588,6 +588,29 @@ describe('Book Another Client — Client A → travel → proposed Client B', ()
     expect(status(env).textContent).toMatch(/earlier than the drive allows/);
   });
 
+  test('typing the start is never rewritten mid-keystroke; leaving the field applies the drive check', async () => {
+    // 22 Nov 2026: a half-typed hour ("1" reads 01:00) is earlier than the
+    // drive, and was snapped back to the earliest start on every keystroke,
+    // so 12:30 could not be typed after Book Another Client.
+    const env = makeEnv({ routes });
+    continueFrom(env);
+    await chooseLocation(env, CV_ADDR);
+    const el = env.$('bsp-start');
+    el.focus();
+    el.value = '01:00'; env.ev('bspOnStartChange()'); await flush();
+    expect(start(env)).toBe('01:00');                                   // left as typed
+    expect(status(env).textContent).not.toMatch(/earlier than the drive allows/);
+    el.value = '12:30'; env.ev('bspOnStartChange()'); await flush();
+    expect(start(env)).toBe('12:30');
+    el.blur(); await flush();
+    expect(start(env)).toBe('12:30');                                   // later than the drive: kept
+    el.focus(); el.value = '10:00'; env.ev('bspOnStartChange()'); await flush();
+    expect(start(env)).toBe('10:00');
+    el.blur(); await flush();
+    expect(start(env)).toBe('10:25');                                   // clamped once the field is left
+    expect(status(env).textContent).toMatch(/earlier than the drive allows/);
+  });
+
   test('a routing failure keeps the booking, invents no duration, and Retry recovers', async () => {
     const env = makeEnv({ routes: { [A_ADDR + '|' + CV_ADDR]: 'fail' } });
     continueFrom(env);
@@ -2117,7 +2140,7 @@ describe('legs settle in place; estimates look provisional', () => {
   });
   test('the CSS eases top/height (never while dragging) and styles the estimate; the panel never calls an estimate calculated', () => {
     expect(SHELL).toMatch(/\.travel-overlay:not\(\.drag-preview\):not\(\.dragging\):not\(\.preview\) \{ transition: top 140ms var\(--ease-out\), height 140ms var\(--ease-out\); \}/);
-    expect(SHELL).toMatch(/\.travel-overlay\.estimate \{ border-left-style: dashed; opacity: \.7; \}/);
+    expect(SHELL).toMatch(/\.travel-overlay\.estimate \{ border-left-style: dashed; \}/);   // solid fill, dashed bar (22 Nov 2026)
     expect(TRAVEL).toContain("seg.routeReal === false ? 'Estimate — route unavailable' : 'Calculated route'");
     expect(TRAVEL).not.toMatch(/function refreshDayOverlays\(day\) \{[^}]*clearDayOverlays\(day\)/);
   });

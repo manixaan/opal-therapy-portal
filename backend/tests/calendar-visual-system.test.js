@@ -105,6 +105,10 @@ describe('teal is the only "selected" colour; travel matches its legend (U-06, V
     const base = rule(HTML, '  .travel-overlay');
     expect(base).toContain('border-left: 3px solid var(--c-travel);');
     expect(base).toContain('color: var(--c-travel-ink);');
+    // Solid like a Travel block, not a faint hatch (22 Nov 2026).
+    expect(base).toContain('background: var(--c-travel-bg);');
+    expect(base).not.toContain('repeating-linear-gradient');
+    expect(rule(HTML, '  .travel-overlay.estimate')).not.toMatch(/opacity/);
     expect(HTML).not.toMatch(/\.travel-overlay\.(start|end)\s*\{[^}]*border-left-color/);
     expect(HTML).toContain('.travel-overlay.start:not(.estimate), .travel-overlay.end:not(.estimate) { border-left-style: double;');
     expect(THEME).toContain('--c-travel-ink: #e0d9ff;');

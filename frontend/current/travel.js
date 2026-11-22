@@ -1577,6 +1577,11 @@ function runBspRoutePreview(opts) {
   if (!day || !startEl || !startEl.value) { setBspRouteStatus('hidden'); return; }
   const [sh, sm] = startEl.value.split(':').map(Number);
   const startMin = sh * 60 + (sm || 0);
+  // While the clinician is still typing the start, never rewrite it: a
+  // half-typed hour ("1" → 01:50) is earlier than the drive and was snapped
+  // back mid-keystroke, so 12:30 could not be typed (22 Nov 2026). The
+  // earliest-start check runs when the field is left (focusout below).
+  const typing = document.activeElement === startEl;
   const dur = parseInt((document.getElementById('bsp-dur-slider') || {}).value || '60', 10) || 60;
   // Make room belongs to one start on one day: another pick drops it.
   BOOKING_ROUTE.squeezePlan = null; BOOKING_ROUTE.squeezeOffer = null;
@@ -1759,7 +1764,7 @@ function runBspRoutePreview(opts) {
 
   // An explicit route moves the proposal; an implicit neighbour only advises.
   let shownStart = startMin;
-  if (pred.explicit && !hold && plan.startMin !== startMin) {
+  if (pred.explicit && !hold && !typing && plan.startMin !== startMin) {
     shownStart = plan.startMin;
     startEl.value = _hhmm(plan.startMin);
     if (typeof _bspRecomputeEnd === 'function') _bspRecomputeEnd();
@@ -1800,7 +1805,11 @@ function runBspRoutePreview(opts) {
   const notes = [];
   // A clamp is remembered until the clinician picks another start, so the
   // follow-up repaint (which now sees the clamped time) keeps the warning.
-  if (pred.explicit && !hold && plan.clampedFromMin != null) BOOKING_ROUTE.lastClamp = { from: plan.clampedFromMin, to: plan.startMin };
+  if (pred.explicit && !hold && !typing && plan.clampedFromMin != null) BOOKING_ROUTE.lastClamp = { from: plan.clampedFromMin, to: plan.startMin };
+  if (pred.explicit && !hold && typing && plan.clampedFromMin != null) {
+    kind = 'warn';
+    notes.push('Earliest start after the drive is ' + fmt(plan.earliestStartMin) + '.');
+  }
   const clamp = pred.explicit && !hold && BOOKING_ROUTE.lastClamp && BOOKING_ROUTE.lastClamp.to === shownStart ? BOOKING_ROUTE.lastClamp : null;
   if (clamp) { kind = 'warn'; notes.push(fmt(clamp.from) + ' is earlier than the drive allows — moved to ' + fmt(clamp.to) + '.'); }
   if (plan.movedForConflicts.length) notes.push('Moved to ' + fmt(plan.startMin) + ': ' + plan.movedForConflicts.map(b => esc(b.label)).join(', ') + ' is already booked then.');
@@ -2264,6 +2273,8 @@ document.addEventListener('click', e => {
   // A clinician-chosen start (typed, or a dragged proposal) is kept if the drive allows it.
   wrap('bspOnStartChange', () => { BOOKING_ROUTE.manualStart = true; BOOKING_ROUTE.lastClamp = null; });
   document.addEventListener('input',  e => { if (e.target && e.target.id === 'bsp-location') run(); });
+  // Leaving the start field applies the earliest-start check to what was typed.
+  document.addEventListener('focusout', e => { if (e.target && e.target.id === 'bsp-start') run(); });
   document.addEventListener('change', e => { if (e.target && (e.target.id === 'bsp-location' || e.target.id === 'bsp-location-unsure')) run(); });
 })();
 
@@ -3266,7 +3277,7 @@ function renderTravelOverlay(col, day, curr, next, from, to, gapStart, gapMin, t
   el.style.height = Math.min(Math.max(12, legacySlotPx - 4), Math.max(4, legacySlotPx - 2)) + 'px';
   const tight = gapMin < travel + 5;
   el.style.borderLeftColor = tight ? 'var(--danger, #9c3322)' : 'var(--accent, #0f7c6c)';
-  el.innerHTML = `<span class="t-ico" style="font-size: 10px; font-weight: 600; opacity: 0.7;">Travel</span>
+  el.innerHTML = `<span class="t-ico" style="font-size: 10px; font-weight: 600;">Travel</span>
     <span class="t-label">${travel} min · ${from.suburb} → ${to.suburb}</span>`;
   el.title = `Google Maps travel ${from.suburb} → ${to.suburb} ≈ ${travel} min. Gap is ${gapMin} min. Click for directions.`;
   el.onclick = (ev) => {

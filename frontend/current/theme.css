@@ -141,7 +141,7 @@ html:root[data-theme="dark"] select:not([multiple]) {
   --tr: 179, 162, 250;
   color: #e0d9ff;
   border-left-color: rgb(var(--tr));
-  background: repeating-linear-gradient(45deg, rgba(var(--tr), 0.20), rgba(var(--tr), 0.20) 5px, rgba(var(--tr), 0.32) 5px, rgba(var(--tr), 0.32) 10px);
+  background: var(--c-travel-bg);
   box-shadow: inset 0 0 0 1px rgba(var(--tr), 0.30);
 }
 :root[data-theme="dark"] .travel-overlay.tight { border-left-color: #ff7a63; }

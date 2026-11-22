@@ -737,7 +737,7 @@ describe('changed assets are cache-busted', () => {
       // Via home switch; the panel names the real next stop (28 Oct 2026).
       // 52: drives priced at their own departure time; right-click › Not driving
       // this; the traffic-alert hook; Make room's apply shared (29 Oct 2026).
-      ['travel.js', 73],
+      ['travel.js', 74],
       // 1: traffic alerts — a re-priced drive running into a client session.
       ['travel-alerts.js', 1], ['travel-alerts.css', 2],
       // 1: booking-route.js/.css are new — client location selector, the
@@ -806,7 +806,7 @@ describe('changed assets are cache-busted', () => {
       // 1: day / night mode — theme.js stamps data-theme before first paint
       // (auto follows the clock), theme.css re-values the shell tokens.
       // css 5: month chips take the category colour by night too (14 Nov 2026).
-      ['theme.js', 2], ['theme.css', 7],
+      ['theme.js', 2], ['theme.css', 8],
     ]) {
       const ext = file.endsWith('.css') ? 'href' : 'src';
       expect(`${file}:${SHELL.includes(`${ext}="/${file}?v=${version}"`)}`).toBe(`${file}:true`);
