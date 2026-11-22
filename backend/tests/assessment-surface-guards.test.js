@@ -737,7 +737,9 @@ describe('changed assets are cache-busted', () => {
       // Via home switch; the panel names the real next stop (28 Oct 2026).
       // 52: drives priced at their own departure time; right-click › Not driving
       // this; the traffic-alert hook; Make room's apply shared (29 Oct 2026).
-      ['travel.js', 74],
+      // 74: start time not snapped back while typing; solid travel legs. 75: the
+      // travel panel drops its grey explanatory sub-text (22 Nov 2026).
+      ['travel.js', 75],
       // 1: traffic alerts — a re-priced drive running into a client session.
       ['travel-alerts.js', 1], ['travel-alerts.css', 2],
       // 1: booking-route.js/.css are new — client location selector, the

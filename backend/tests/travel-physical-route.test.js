@@ -716,7 +716,7 @@ describe('the travel panel names the real next stop (28 Oct 2026)', () => {
     expect(html).toContain('to Home · 11:00');
     expect(html).toContain('>Do it at home</button>');
     expect(html).toContain('>Do it here (no drive)</button>');
-    expect(html).toContain('Your choice: at home.');
+    expect(html).not.toContain('tp-plan-hint');   // no explanatory sub-text (22 Nov 2026)
     expect(html).not.toContain('data-mode="home"');
     expect(html).not.toMatch(/next client/);
   });
@@ -726,7 +726,7 @@ describe('the travel panel names the real next stop (28 Oct 2026)', () => {
     add(c, { at: '10:40', to: '11:30', s: { title: 'Case Noting', booking: { kind: 'case-noting', group: 'nf2f' }, type: 'custom' } });
     const html = panelFor(c, (x) => x.kind === 'end');
     expect(html).toContain('Desk work in this gap');
-    expect(html).toContain('nothing is driven unless you choose &quot;Do it at home&quot;');
+    expect(html).not.toContain('tp-plan-hint');
     expect(html).toContain('data-desk-set="home"');
   });
   test('between two clients the direct option names the next client', () => {
@@ -734,6 +734,15 @@ describe('the travel panel names the real next stop (28 Oct 2026)', () => {
     add(c, { at: '10:00', to: '11:00', s: { address: OSBORNE, patient: 'A' } });
     const b = add(c, { at: '12:00', to: '13:00', s: { address: JOONDALUP, patient: 'Sam Pell' } });
     expect(panelFor(c, (x) => x.kind === 'between' && x.toSessionId === b.id)).toContain('>Go direct to Sam Pell</button>');
+  });
+  test('the travel panel shows no grey sub-text: no direct-drive reason, no "Saved to this appointment", no calculated-time note (22 Nov 2026)', () => {
+    const c = load();
+    add(c, { at: '10:00', to: '11:00', s: { address: OSBORNE, patient: 'A', dbId: 11 } });
+    const b = add(c, { at: '12:00', to: '13:00', s: { address: JOONDALUP, patient: 'Sam Pell', dbId: 12 } });
+    const html = panelFor(c, (x) => x.kind === 'between' && x.toSessionId === b.id);
+    expect(html).toContain('>Go direct to Sam Pell</button>');
+    expect(html).not.toContain('tp-plan-hint');
+    expect(html).not.toMatch(/so it is a direct drive|Saved to this appointment|Calculated time|travel to this appointment|not sent to Outlook/);
   });
 });
 
