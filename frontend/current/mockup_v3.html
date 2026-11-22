@@ -23035,6 +23035,15 @@ body.bsp-open #impact-modal    { z-index: 1201; }
   overflow: hidden;
 }
 #booking-side-panel.open { transform: none; transition: transform var(--t-panel) var(--ease-out); }
+/* Docked left (22 Nov 2026): a time picked on a day the right-hand sheet
+   would cover (Fri/Sat/Sun in the week view) opens the sheet from the left,
+   over the early week, so the picked day and its preview stay in sight. */
+#booking-side-panel.dock-left {
+  right: auto; left: 0;
+  transform: translateX(-102%);
+  box-shadow: 6px 0 24px rgba(36, 31, 26, 0.13);
+}
+#booking-side-panel.dock-left.open { transform: none; }
 
 /* ── Panel header ── */
 .bsp-header {
@@ -23447,6 +23456,59 @@ function initBookingPanel() {
   }
 }
 
+/* Which side the sheet opens on (22 Nov 2026). Measured, not a list of
+   days: the sheet docks left when the picked day's column would sit under
+   it on the right and less of it sits under it on the left — Fri/Sat/Sun in
+   a week view, nothing in the day view (one column either way). An opener
+   without a day keeps the side it is already on (re-open) or goes right. */
+function _bspSideFor(day) {
+  if (!day) return null;
+  const col = document.querySelector(`#cal-grid .cal-col[data-day="${day}"]`);
+  const panel = document.getElementById('booking-side-panel');
+  if (!col || !panel) return null;
+  const r = col.getBoundingClientRect();
+  if (!r.width) return null;
+  const vw = window.innerWidth;
+  const w = panel.offsetWidth || 440;
+  if (w >= vw * 0.75) return 'right';   // phone / narrow window: the sheet is the screen
+  const over = (a0, a1) => Math.max(0, Math.min(r.right, a1) - Math.max(r.left, a0));
+  // A sliver clipped off the column's edge is no reason to move: most of
+  // the day must be hidden on the right, and less of it on the left.
+  const onRight = over(vw - w, vw), onLeft = over(0, w);
+  return onRight > r.width * 0.35 && onRight > onLeft ? 'left' : 'right';
+}
+
+function _bspPlacePanel(opts) {
+  const panel = document.getElementById('booking-side-panel');
+  if (!panel) return;
+  const wasOpen = panel.classList.contains('open');
+  const isLeft = panel.classList.contains('dock-left');
+  const side = _bspSideFor(opts.day) || (wasOpen ? (isLeft ? 'left' : 'right') : 'right');
+  if ((side === 'left') === isLeft) return;
+  const flip = () => {
+    // Closed, the sheet waits off-screen on its own side: switch sides with
+    // no transition, or it sweeps across the calendar on the way.
+    panel.style.transition = 'none';
+    panel.classList.toggle('dock-left', side === 'left');
+    void panel.offsetWidth;
+    panel.style.transition = '';
+  };
+  const still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (!wasOpen || still || !panel.animate) { flip(); return; }
+  // Already open and the new pick is on the other half of the week: a quick
+  // fade across, never a close — the form, route preview and the 'open'
+  // state the travel code checks all stay put.
+  const nudge = isLeft ? '-16px' : '16px';
+  panel.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: `translateX(${nudge})` }],
+    { duration: 120, easing: 'ease-in' }).onfinish = () => {
+      flip();
+      panel.animate([{ opacity: 0, transform: `translateX(${side === 'left' ? '-16px' : '16px'})` }, { opacity: 1, transform: 'none' }],
+        { duration: 200, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' });
+    };
+  // Hold it invisible between the two halves (onfinish runs a frame later).
+  panel.animate([{ opacity: 0 }, { opacity: 0 }], { duration: 140, delay: 120 });
+}
+
 function openBookingPanel(opts = {}) {
   // Re-picking a time on the calendar while the panel is already open keeps
   // what was filled in: the grid callers pass keepState themselves. It is not
@@ -23462,6 +23524,7 @@ function openBookingPanel(opts = {}) {
     }
   }
 
+  _bspPlacePanel(opts);
   document.getElementById('booking-side-panel').classList.add('open');
   document.getElementById('booking-panel-backdrop').classList.add('open');
   document.body.classList.add('bsp-open');
