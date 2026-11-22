@@ -35,6 +35,19 @@ test('Fri, Sat and Sun dock the sheet left; Mon–Thu keep it on the right', () 
   expect(['fri', 'sat', 'sun'].map(d => sideFor(d))).toEqual(['left', 'left', 'left']);
 });
 
+test('Fri, Sat and Sun dock left on a wide monitor too, where the sheet stops short of them', () => {
+  // 2560 px: seven ~326 px columns; the 440 px sheet only reaches Sunday.
+  const days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+  const cols = Object.fromEntries(days.map((d, i) => [d, [275 + i * 326, 275 + (i + 1) * 326]]));
+  expect(days.map(d => sideFor(d, { vw: 2560, cols }))).toEqual(['right', 'right', 'right', 'right', 'left', 'left', 'left']);
+});
+
+test('a narrow window also docks left for a weekday the sheet would mostly cover', () => {
+  // 1024 px: Thursday (469–605) loses ~20 px — stays right; at 900 px it loses most.
+  expect(sideFor('thu', { vw: 1024, cols: { thu: [469, 605] } })).toBe('right');
+  expect(sideFor('thu', { vw: 900, cols: { thu: [420, 540] } })).toBe('left');
+});
+
 test('a sliver clipped off a column does not move the sheet', () => {
   // 1024 px: the sheet clips only ~20 px off Thursday.
   const cols = { thu: [469, 605], sat: [740, 876] };

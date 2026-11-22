@@ -23471,6 +23471,11 @@ function _bspSideFor(day) {
   const vw = window.innerWidth;
   const w = panel.offsetWidth || 440;
   if (w >= vw * 0.75) return 'right';   // phone / narrow window: the sheet is the screen
+  if (r.width >= vw * 0.5) return 'right';   // day view: one wide column, either side covers it
+  // Fri/Sat/Sun always open on the left in a multi-day view (Antony, 22 Nov
+  // 2026) — on a wide monitor the right-hand sheet stops short of Friday,
+  // but the late week is where the eye is, so it gets the room.
+  if (day === 'fri' || day === 'sat' || day === 'sun') return 'left';
   const over = (a0, a1) => Math.max(0, Math.min(r.right, a1) - Math.max(r.left, a0));
   // A sliver clipped off the column's edge is no reason to move: most of
   // the day must be hidden on the right, and less of it on the left.
