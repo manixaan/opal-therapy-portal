@@ -69,11 +69,21 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Deploy bundle
-        uses: azure/webapps-deploy@v3
-        with:
-          app-name: opal-portal-prod
-          package: deploy.zip
+      # Legacy /api/zipdeploy, not azure/webapps-deploy@v3. The action uses
+      # OneDeploy, which on this Linux app ignores WEBSITE_RUN_FROM_PACKAGE=1 and
+      # rsyncs all ~54k bundle files onto the /home share (~28 min here). zipdeploy
+      # honours the setting: the zip is stored under /home/data/SitePackages and
+      # mounted read-only at wwwroot (staging: 85 s, proven 22 Nov 2026, f0f2bc9).
+      - name: Deploy bundle (zipdeploy — run from package)
+        run: |
+          set -e
+          start=$(date +%s)
+          az webapp deployment source config-zip \
+            --resource-group opal-portal-prod-rg \
+            --name opal-portal-prod \
+            --src deploy.zip \
+            --timeout 900
+          echo "zipdeploy took $(( $(date +%s) - start ))s"
 
       - name: Health gate — /health then /ready
         run: |
