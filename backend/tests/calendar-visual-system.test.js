@@ -101,6 +101,12 @@ describe('teal is the only "selected" colour; travel matches its legend (U-06, V
     expect(rule(HTML, '.bsp-prefill-strip')).toContain('background: var(--info-soft);');
     expect(HTML).not.toContain('.cal-head.today .day-num { background:#3d6cae');
   });
+  test('booking context cards stay hidden until a client is picked (22 Nov 2026)', () => {
+    expect(HTML).toContain('<div class="panel ndis-card" id="ctx-ndis-card" style="display:none">');
+    expect(HTML).toContain('<div class="panel ndis-card" id="ctx-region-card" style="display:none">');
+    expect(HTML).toContain("if (card) card.style.display = patient ? '' : 'none';");
+    expect(HTML).not.toMatch(/Pick a patient (on step 1 )?to see (plan details|region info)/);
+  });
   test('travel legs are drawn from --c-travel, one hue for start/between/end', () => {
     const base = rule(HTML, '  .travel-overlay');
     expect(base).toContain('border-left: 3px solid var(--c-travel);');

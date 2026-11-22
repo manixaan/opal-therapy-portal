@@ -5168,18 +5168,16 @@ window.opIcon = function (name, size) {
 
     <!-- Right context (dynamic — populated by renderRightContext()) -->
     <div class="ctx-stack" id="book-ctx-stack">
-      <div class="panel ndis-card" id="ctx-ndis-card">
+      <!-- Hidden until a client is picked: an empty "Pick a patient…" card
+           was only noise (22 Nov 2026). renderRightContext() shows them. -->
+      <div class="panel ndis-card" id="ctx-ndis-card" style="display:none">
         <h3 id="ctx-ndis-title">NDIS plan</h3>
-        <div id="ctx-ndis-body">
-          <div class="micro">Pick a patient to see plan details.</div>
-        </div>
+        <div id="ctx-ndis-body"></div>
       </div>
 
-      <div class="panel ndis-card" id="ctx-region-card">
+      <div class="panel ndis-card" id="ctx-region-card" style="display:none">
         <h3>Region clustering</h3>
-        <div id="ctx-region-body">
-          <div class="micro">Pick a patient to see region info.</div>
-        </div>
+        <div id="ctx-region-body"></div>
       </div>
 
     </div>
@@ -10850,6 +10848,11 @@ function renderRightContext() {
   const ndisBody = document.getElementById('ctx-ndis-body');
   const ndisTitle = document.getElementById('ctx-ndis-title');
   const regionBody = document.getElementById('ctx-region-body');
+  // Both cards only appear once a client is picked (22 Nov 2026).
+  ['ctx-ndis-card', 'ctx-region-card'].forEach(id => {
+    const card = document.getElementById(id);
+    if (card) card.style.display = patient ? '' : 'none';
+  });
 
   // NDIS card
   if (patient) {
@@ -10863,7 +10866,7 @@ function renderRightContext() {
     `;
   } else {
     ndisTitle.textContent = 'NDIS plan';
-    ndisBody.innerHTML = '<div class="micro">Pick a patient on step 1 to see plan details.</div>';
+    ndisBody.innerHTML = '';
   }
 
   // Region clustering card
@@ -10882,7 +10885,7 @@ function renderRightContext() {
                      : `<div class="micro" style="margin-top:8px;">No other ${labelRegion(patient.region)} clients booked this week — this booking would anchor a future cluster.</div>`}
     `;
   } else {
-    regionBody.innerHTML = '<div class="micro">Pick a patient on step 1 to see region info.</div>';
+    regionBody.innerHTML = '';
   }
 
 }
