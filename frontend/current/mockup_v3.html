@@ -11985,7 +11985,54 @@ function initCalColInteractions() {
     col.addEventListener('pointermove', _calColPointerMove);
     col.addEventListener('pointerup',   _calColPointerUp);
     col.addEventListener('pointercancel', () => cancelActiveGesture());
+    // Right-click on empty time gets the portal's own menu, never the
+    // browser's (22 Nov 2026). Tiles and travel legs have their own menus and
+    // stop the event before it reaches here.
+    col.addEventListener('contextmenu', _calColContextMenu);
   });
+}
+
+/* Empty-slot right-click: book at that time, or open the day. Same time
+   rule as a plain click (15-min floor, an hour long, never past midnight). */
+function _calColContextMenu(e) {
+  e.preventDefault();
+  const col = e.currentTarget;
+  const day = col.dataset.day;
+  const startMin = calYToMinutes(col, e.clientY, 'floor');
+  const endMin = Math.min(startMin + 60, 24 * 60 - 1);
+  const date = (typeof DAY_DATES !== 'undefined' && DAY_DATES) ? DAY_DATES[day] : null;
+  const when = fmtTime(Math.floor(startMin / 60), startMin % 60);
+  const dayName = date
+    ? new Date(date + 'T12:00:00').toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })
+    : day;
+  window._calSlotMenuBook = () => {
+    closeCalContextMenu();
+    openBookingPanel({ day, date, startH: Math.floor(startMin / 60), startM: startMin % 60,
+                       endH: Math.floor(endMin / 60), endM: endMin % 60, keepState: _bspOpen });
+  };
+  window._calSlotMenuDay = () => {
+    closeCalContextMenu();
+    if (date) switchToCalDay(new Date(date + 'T00:00:00Z'));
+  };
+  closeCalContextMenu();
+  const menu = document.createElement('div');
+  menu.className = 'cal-ctx-menu';
+  menu.id = 'cal-ctx-menu-active';
+  menu.innerHTML = `
+    <div class="cal-ctx-menu-item" onclick="_calSlotMenuBook()">
+      <span class="ctx-icon">${opIcon('calendar', 13)}</span> Book at ${escapeHtml(when)}
+    </div>
+    ${window.__calendarMode !== 'day' && date ? `<div class="cal-ctx-menu-item" onclick="_calSlotMenuDay()">
+      <span class="ctx-icon">${opIcon('clock', 13)}</span> Open ${escapeHtml(dayName)} in Day view
+    </div>` : ''}
+  `;
+  document.body.appendChild(menu);
+  menu.style.left = e.clientX + 'px';
+  menu.style.top  = e.clientY + 'px';
+  const r = menu.getBoundingClientRect();
+  if (r.right  > window.innerWidth)  menu.style.left = (e.clientX - r.width)  + 'px';
+  if (r.bottom > window.innerHeight) menu.style.top  = (e.clientY - r.height) + 'px';
+  setTimeout(() => document.addEventListener('click', closeCalContextMenu, { once: true }), 0);
 }
 
 // Also keep handleCalendarSlotClick as a no-op stub in case anything still calls it
