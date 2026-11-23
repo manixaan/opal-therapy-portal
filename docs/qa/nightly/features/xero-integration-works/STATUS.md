@@ -3,7 +3,7 @@
 - Tracker stage: **idea**
 - Tracker environment: **none**
 - Evidence label: **tab-unproven**
-- Addressed since the last audit (2026-11-21..2026-11-22): **no**
+- Addressed since the last audit (2026-11-22..2026-11-23): **no**
 - Created (any located code): **yes**
 
 ## Located files
@@ -22,14 +22,14 @@ A Xero sandbox connection has still not been confirmed live in a browser this ru
 OK — `accounting-routes.js` and `finance-routes.js` are `ownerOnly` throughout, including the Xero OAuth callback (can't use router-level middleware since it's a redirect target, but does an explicit `req.user?.role !== 'owner'` check plus CSRF `state` validation before touching tokens). `invoicing-routes.js` is `requireAuth` + `requirePermission('manage_billing')` router-wide, with one documented exception: `/api/mmm-zone/lookup` is requireAuth-only, code-commented as an intentional read-only lookup any signed-in user may hit to book — not a gap. Xero-gateway boundary check: `require('./xero-api')` appears only in `accounting-routes.js` and `finance-routes.js` — no stray imports elsewhere, re-confirmed tonight. No TODO/FIXME found. `node --check` clean on all 14 core files.
 
 ## Tests run
-- unit: `billing-engine, splose-billing-source, travel-parity, finance-flags, finance-routes, invoicing-billing-mark, pricing-engine, reconciliation-engine, xero-payroll-api, xero-payroll-mapping, xero-payroll-sync, mmm-locality` — **pass** (12 files / 215 tests)
-- integration: `invoicing-splose, invoicing, accounting-routes, accounting-phase2, finance-routes, onboarding-payroll-xero` — **pass** (6 files / 90 tests, includes expected "Xero offline in test" warnings — correct fail-closed behaviour, not failures). First attempt against the shared `DB_NAME=therapy_scheduler_audit` showed 46/51 failures (deadlocks) because a sibling audit worker (the Splose-Outlook-feature fork) was running its own integration suite against the same database name concurrently — a cross-process DB collision, not a code defect. Re-run against an isolated database name gave a clean pass. **Flagged in the brief's Technical detail: tonight's bootstrap should give each verification worker its own `DB_NAME` suffix.**
+- unit: `billing-engine, splose-billing-source, travel-parity, finance-flags, finance-routes, invoicing-billing-mark, pricing-engine, reconciliation-engine, xero-payroll-api, xero-payroll-mapping, xero-payroll-sync, mmm-locality` — **pass** (12 files / 215 tests, re-run fresh tonight)
+- integration: `invoicing-splose, invoicing, accounting-routes, accounting-phase2, finance-routes, onboarding-payroll-xero` — **pass** (6 files / 90 tests, re-run fresh tonight on an isolated `DB_NAME`, includes expected "Xero offline in test" / "recurring invoices unavailable" warnings — correct fail-closed behaviour, not failures)
 
 ## Tab / browser proof
 docs/qa/BROWSER_QA_RESULTS.md row H (owner-gated, Xero connected:false) — dated 2026-08-01, stale relative to this window, but exists.
 
 ## Recency
-Not touched since the last audit (2026-11-21 18:36 UTC) — none of tonight's 7 commits (calendar/booking/travel UI polish plus a Settings gear-icon swap) touched billing/invoicing/Xero. A quiet night after last night's heavy landing (new NDIS travel-billing rule book, batch invoice sending, one-Xero-copy-per-invoice, a payer directory) — test counts unchanged: 215 unit (12 files), 90 integration (6 files).
+Not touched since the last audit — tonight was the quietest window this audit has seen: **zero commits** landed in `backend/` or `frontend/current/` between 18:13 UTC 2026-11-22 (last audit) and tonight's run — test counts unchanged: 215 unit (12 files), 90 integration (6 files).
 
 ## Open tasks (from the tracker)
 - Financial Dashboard — todo

@@ -3,7 +3,7 @@
 - Tracker stage: **idea**
 - Tracker environment: **none**
 - Evidence label: **tab-unproven**
-- Addressed since the last audit (2026-11-21..2026-11-22): **no**
+- Addressed since the last audit (2026-11-22..2026-11-23): **no**
 - Created (any located code): **yes**
 
 ## Located files
@@ -21,7 +21,7 @@ OK — requireClinicalRead/Write throughout, re-confirmed.
 None found — no dedicated Assessment tab banner (re-confirmed tonight), no E2E, no browser QA entry.
 
 ## Recency
-Not touched since the last audit (2026-11-21 18:36 UTC) — none of tonight's 7 commits (calendar/booking/travel UI polish plus a Settings gear-icon swap) touched WHODAS/assessment code.
+Not touched since the last audit — tonight was the quietest window this audit has seen: **zero commits** landed in `backend/` or `frontend/current/` between 18:13 UTC 2026-11-22 (last audit) and tonight's run.
 
 ## Open tasks (from the tracker)
 - Assessment Review — todo

@@ -3,7 +3,7 @@
 - Tracker stage: **idea**
 - Tracker environment: **none**
 - Evidence label: **needs-refinement**
-- Addressed since the last audit (2026-11-21..2026-11-22): **no**
+- Addressed since the last audit (2026-11-22..2026-11-23): **no**
 - Created (any located code): **yes**
 
 ## Located files
@@ -17,14 +17,14 @@ The mobile app's own frontend code lives outside this repository (native app) �
 OK — self-scoped by design (mobile-routes.js header documents own-day/own-user scoping), re-confirmed.
 
 ## Tests run
-- unit: `mobile-routes.test.js, case-note-routes.test.js, casenotes-compose.test.js, casenotes-helpers.test.js, casenotes-workspace.test.js` — **pass** (5 files / 171 tests)
+- unit: `mobile-routes.test.js, case-note-routes.test.js, casenotes-compose.test.js, casenotes-helpers.test.js, casenotes-workspace.test.js` — **pass** (5 files / 171 tests, re-run fresh tonight)
 - integration: `case-note-approval-edit.itest.js, case-note-client-link.itest.js, case-note-deidentification.itest.js, case-note-workspace.itest.js` — **pass** (4 files / 13 tests)
 
 ## Tab / browser proof
 N/A — mobile client is outside this repo.
 
 ## Recency
-Not touched since the last audit (2026-11-21 18:36 UTC) — none of tonight's 7 commits (calendar/booking/travel UI polish plus a Settings gear-icon swap) touched `backend/mobile-routes.js` or `backend/case-note-routes.js`. AI-gateway boundary re-confirmed clean tonight — no stray provider-SDK `require` outside `backend/ai/`.
+Not touched since the last audit — tonight was the quietest window this audit has seen: **zero commits** landed in `backend/` or `frontend/current/` between 18:13 UTC 2026-11-22 (last audit) and tonight's run. AI-gateway boundary re-confirmed clean tonight (`ai-gateway-boundary.test.js`, `ai-single-gateway-guards.test.js` — 30/30 pass) — no stray provider-SDK `require` outside `backend/ai/`.
 
 ## Open tasks (from the tracker)
 - Case Noting — todo
