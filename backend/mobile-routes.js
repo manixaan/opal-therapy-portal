@@ -24,6 +24,11 @@
  * validated as a real IANA name but day boundaries ALWAYS use Perth so a
  * travelling device cannot shift them. Timestamps in responses are UTC ISO.
  *
+ * ONE exception to "read only" (23 Nov 2026): POST /api/mobile/appointments/
+ * :id/move. It never calls Splose or Outlook itself — it saves the portal row
+ * and hands the change to event-move.js, the SAME road a portal drag takes
+ * (Splose draft queue + Outlook mirror under the user's sync settings).
+ *
  * read_only: GETs allowed; writes blocked by permissions.requireAuth.
  * Audit: voice-note create/update/review/archive/delete with ids-only
  * metadata — never transcript content. camelCase in, camelCase out.
@@ -33,7 +38,9 @@ const express = require('express');
 const router = express.Router();
 const db = require('./database');
 const { pool } = require('./database');
-const { requireAuth } = require('./permissions');
+const { requireAuth, requireAnyPermission, hasPermission } = require('./permissions');
+const mobileCal = require('./mobile-calendar');
+const calendarMinutes = require('./billing/calendar-travel-minutes');
 const { VIRTUAL_RE } = require('./geo');
 const dayRoute = require('./billing/day-route');
 const log = require('./logger').createLogger('mobile');
@@ -129,8 +136,15 @@ const isTravelMirror = (ev) => !!(ev && ev.custom_metadata && ev.custom_metadata
 const ALL_DAY_MS = 23 * 3600 * 1000;
 const isAllDayEvent = (ev) => new Date(ev.end_time) - new Date(ev.start_time) >= ALL_DAY_MS;
 
-/** Compact appointment shape for mobile lists. No raw sync payloads. */
-function formatMobileAppointment(ev) {
+/** May this caller move events from the phone at all? */
+const canScheduleOwn = (user) => !!user
+  && (hasPermission(user, 'manage_own_schedule') || hasPermission(user, 'manage_all_schedules'));
+
+/**
+ * Compact appointment shape for mobile lists. No raw sync payloads.
+ * `ctx` ({ user, now }) adds canMove — the same rule the move route enforces.
+ */
+function formatMobileAppointment(ev, ctx = null) {
   const address = bestAddress(ev);
   const virtual = VIRTUAL_RE.test(String(address || ''));
   return {
@@ -149,6 +163,8 @@ function formatMobileAppointment(ev) {
     needsAddressReview: ev.event_type === 'therapy' && !virtual && !isRoutableAddress(address),
     canOpenInMaps: !virtual && isRoutableAddress(address),
     source: ev.source || 'local',
+    linkedTo: ev.event_type === 'travel' && ev.related_event_id ? ev.related_event_id : null,
+    ...(ctx ? { canMove: canScheduleOwn(ctx.user) && mobileCal.canMoveEvent(ev, ctx.user.id, ctx.now).ok } : {}),
   };
 }
 
@@ -199,7 +215,8 @@ async function loadOwnAppointments(req, date, days = 1) {
       [req.user.id]);
     if (!any.rows.length) warnings = ['no_therapist_profile'];
   }
-  return { appointments: kept.map(formatMobileAppointment), rawEvents: kept, warnings };
+  const ctx = { user: req.user, now: new Date() };
+  return { appointments: kept.map((ev) => formatMobileAppointment(ev, ctx)), rawEvents: kept, warnings };
 }
 
 // ── Travel derivation (local data only — never recalculated externally) ──────
@@ -447,6 +464,40 @@ router.get('/api/mobile/today', safe(async (req, res) => {
   });
 }));
 
+// ── Travel legs (the portal's own priced minutes — nothing is fetched) ───────
+
+const shiftYmd = (ymd, n) => new Date(Date.parse(`${ymd}T00:00:00Z`) + n * 86400000).toISOString().slice(0, 10);
+
+/**
+ * What the leg builder needs for some Perth dates: the caller's work bases
+ * and the minutes the portal calendar priced for those days (migration 090).
+ * Fails soft — no context means legs come back unpriced, never a 500.
+ */
+async function loadTravelContext(req, dates) {
+  try {
+    const [u, minutes] = await Promise.all([
+      pool.query('SELECT id, work_location_schedule, default_work_location FROM users WHERE id = $1', [req.user.id]),
+      calendarMinutes.loadForDays(pool, dates.map((date) => ({ userId: req.user.id, date }))),
+    ]);
+    return { user: u.rows[0] || null, minutes };
+  } catch (err) {
+    log.warn('mobile travel context failed', { error: err.message });
+    return { user: null, minutes: new Map() };
+  }
+}
+
+function legsForDay(ctx, date, events) {
+  if (!ctx || !ctx.user) return [];
+  try {
+    const dayMap = ctx.minutes.get(`${ctx.user.id}|${date}`);
+    return mobileCal.buildTravelLegs({ user: ctx.user, date, events, virtualRe: VIRTUAL_RE,
+      minutesFor: (o, d) => calendarMinutes.minutesFor(dayMap, o, d) });
+  } catch (err) {
+    log.warn('mobile travel legs failed', { error: err.message });
+    return [];
+  }
+}
+
 // ═══ GET /api/mobile/calendar?date=&range=day|week ═══════════════════════════
 
 router.get('/api/mobile/calendar', safe(async (req, res) => {
@@ -461,14 +512,17 @@ router.get('/api/mobile/calendar', safe(async (req, res) => {
   }
   const dayCount = range === 'week' ? 7 : 1;
 
-  const { appointments, warnings } = await loadOwnAppointments(req, date, dayCount);
+  const [{ appointments, rawEvents, warnings }, travelCtx] = await Promise.all([
+    loadOwnAppointments(req, date, dayCount),
+    loadTravelContext(req, Array.from({ length: dayCount }, (_, i) => shiftYmd(date, i))),
+  ]);
 
   // Group by Perth calendar day so the client renders lists without TZ maths.
   const days = [];
   for (let i = 0; i < dayCount; i++) {
     const d = new Date(Date.parse(`${date}T00:00:00Z`) + i * 24 * 3600 * 1000)
       .toISOString().slice(0, 10);
-    days.push({ date: d, appointments: [] });
+    days.push({ date: d, appointments: [], travelLegs: [] });
   }
   const byDate = new Map(days.map((d) => [d.date, d]));
   // An event that crosses midnight (or spans days) belongs to every Perth day
@@ -481,6 +535,11 @@ router.get('/api/mobile/calendar', safe(async (req, res) => {
       const { startUtc: ds, endUtc: de } = perthDayWindow(d.date);
       if (startMs < de.getTime() && lastMs >= ds.getTime()) byDate.get(d.date).appointments.push(a);
     }
+  }
+
+  // The day's travel legs, timed as the portal draws them (mobile-calendar.js).
+  for (const d of days) {
+    d.travelLegs = legsForDay(travelCtx, d.date, rawEvents.filter((e) => mobileCal.perthDate(e.start_time) === d.date));
   }
 
   res.json({
@@ -528,6 +587,133 @@ router.get('/api/mobile/appointments/:id', safe(async (req, res) => {
     voiceNoteCount: notes.rows.length,
   });
 }));
+
+// ═══ POST /api/mobile/appointments/:id/move — drag-to-move from the phone ════
+//
+// Body { start, end, expectedStart, expectedEnd } (ISO with offset). The
+// session and the travel blocks booked for it (related_event_id) move by the
+// same amount in ONE transaction, guarded by their stored times (optimistic
+// lock). Then each row goes down event-move.js — Splose draft queue + Outlook
+// mirror — exactly as a portal drag. Own rows only (user_id, as the portal's
+// PATCH). Errors carry a code, never internals. Outlook's copies of the
+// portal-drawn travel legs refresh the next time the portal draws that day.
+router.post('/api/mobile/appointments/:id/move',
+  requireAnyPermission('manage_own_schedule', 'manage_all_schedules'),
+  safe(async (req, res) => {
+    const id = req.params.id;
+    if (!isUuid(id)) return res.status(404).json({ error: 'Not found', code: 'not_found' });
+    const { rows } = await pool.query(
+      `SELECT * FROM events WHERE id = $1 AND user_id = $2 AND (is_deleted IS NULL OR is_deleted = FALSE)`,
+      [id, req.user.id]);
+    const ev = rows[0];
+    if (!ev) return res.status(404).json({ error: 'Not found', code: 'not_found' });
+
+    const linkedQ = await pool.query(
+      `SELECT * FROM events WHERE related_event_id = $1 AND user_id = $2 AND event_type = 'travel'
+          AND (is_deleted IS NULL OR is_deleted = FALSE) AND (status IS NULL OR status <> 'cancelled')`,
+      [id, req.user.id]);
+    const linked = linkedQ.rows;
+
+    // Everything the caller has on the target day(s), for overlap + travel.
+    const body = req.body || {};
+    const startMs = Date.parse(body.start);
+    let dayEvents = [], legsAfter = null;
+    if (!Number.isNaN(startMs)) {
+      const target = mobileCal.perthDate(startMs);
+      const first = shiftYmd(target, -1);               // linked travel can start the evening before
+      const { rawEvents } = await loadOwnAppointments(req, first, 3);
+      dayEvents = rawEvents;
+      const travelCtx = await loadTravelContext(req, [target]);
+      legsAfter = (movedRows) => {
+        const byId = new Map(movedRows.map((r) => [String(r.id), r]));
+        const after = rawEvents.map((e) => byId.get(String(e.id)) || e);
+        for (const r of movedRows) if (!after.some((e) => String(e.id) === String(r.id))) after.push(r);
+        return legsForDay(travelCtx, target, after.filter((e) => mobileCal.perthDate(e.start_time) === target));
+      };
+    }
+
+    const verdict = mobileCal.checkMove({ ev, userId: req.user.id, body, linked, dayEvents, legsAfter,
+      now: new Date(), virtualRe: VIRTUAL_RE });
+    if (!verdict.ok) {
+      return res.status(verdict.status).json({ error: verdict.error, code: verdict.code,
+        ...(verdict.reason ? { reason: verdict.reason } : {}), ...(verdict.conflict ? { conflict: verdict.conflict } : {}) });
+    }
+
+    // eslint-disable-next-line global-require
+    const eventMove = require('./event-move');
+    const deps = eventMove.defaultDeps();
+    const originals = new Map([ev, ...linked].map((r) => [String(r.id), r]));
+    const plans = new Map();
+    for (const r of verdict.moved) {
+      const o = originals.get(String(r.id));
+      // eslint-disable-next-line no-await-in-loop
+      plans.set(String(r.id), await eventMove.mirrorPlan(deps, req.user.id, o.outlook_id || null));
+    }
+
+    // 1. One transaction, each row guarded by the time the phone saw.
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      for (const r of verdict.moved) {
+        const o = originals.get(String(r.id));
+        const plan = plans.get(String(r.id));
+        // ISO strings, never Date objects: node-postgres would serialise a Date
+        // with the machine's offset, which TIMESTAMP silently drops.
+        // eslint-disable-next-line no-await-in-loop
+        const u = await client.query(
+          `UPDATE events
+              SET start_time = $1, end_time = $2,
+                  sync_status = COALESCE($3, sync_status),
+                  last_modified_by = 'app', last_modified_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+            WHERE id = $4 AND user_id = $5 AND start_time = $6 AND end_time = $7
+              AND (is_deleted IS NULL OR is_deleted = FALSE)`,
+          [r.start_time, r.end_time, eventMove.localSyncStatus(o.outlook_id, plan.mirrorToOutlook) || null,
+            r.id, req.user.id, new Date(o.start_time).toISOString(), new Date(o.end_time).toISOString()]);
+        if (u.rowCount !== 1) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ error: 'This appointment changed since you loaded it.', code: 'changed' });
+        }
+      }
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+    }
+
+    // 2. Pass each row on, the portal's way. Never fails the move: the rows are saved.
+    const results = [];
+    for (const r of verdict.moved) {
+      const o = originals.get(String(r.id));
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        results.push(await eventMove.moveEvent({ userId: req.user.id, actorId: req.user.id, dbId: r.id,
+          outlookId: o.outlook_id || null, writeLocal: false,
+          fields: { startTime: r.start_time, endTime: r.end_time } }, deps));
+      } catch (err) {
+        log.warn('mobile move sync step failed', { error: err.message });
+        results.push({ savedToOutlook: false, outlookStatus: 'failed', splose: 'not_linked' });
+      }
+    }
+
+    await db.logAuditEvent({
+      action: 'mobile_event_moved', targetType: 'event', targetId: ev.id,
+      actorUserId: req.user.id, organisationId: orgOf(req), ipAddress: req.ip,
+      metadata: { id: ev.id, deltaMinutes: Math.round(verdict.delta / 60000), linkedMoved: linked.map((l) => l.id) },
+    }).catch(() => {});
+
+    const fresh = await pool.query('SELECT * FROM events WHERE id = $1', [ev.id]);
+    const main = results[0] || {};
+    res.json({
+      ok: true,
+      appointment: formatMobileAppointment(fresh.rows[0] || { ...ev, ...verdict.moved[0] }, { user: req.user, now: new Date() }),
+      linkedMoved: linked.map((l) => l.id),
+      sync: { splose: main.splose || 'off', outlook: main.outlookStatus || 'not_linked' },
+      outlookTravelStale: true,
+      warnings: verdict.warnings,
+    });
+  }));
 
 // ═══ GET /api/mobile/travel?date= ════════════════════════════════════════════
 
