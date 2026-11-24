@@ -103,6 +103,34 @@ function emailOf(claims) {
   return e && /^[^@\s]+@[^@\s]+$/.test(e) ? String(e).trim().toLowerCase() : null;
 }
 
+const TOKEN_CODES = ['malformed', 'bad_alg', 'unknown_kid', 'bad_signature', 'bad_issuer', 'bad_audience', 'bad_tenant', 'expired', 'not_yet_valid'];
+
+/** Map a validate() failure onto the code a client may see. */
+function refusalCode(err) {
+  return TOKEN_CODES.includes(err && err.message) ? err.message : 'entra_unavailable';
+}
+
+/**
+ * The portal account validated claims belong to — or why there is none.
+ * Shared by the bearer path below and the Outlook-tab session exchange
+ * (outlook-embed.js) so both refuse exactly the same people. Never creates
+ * an account and never widens a role.
+ * Resolves { user } or { status, code, error }.
+ */
+async function resolveAccount(claims) {
+  const email = emailOf(claims);
+  if (!email) return { status: 401, code: 'entra_no_email', error: 'Token carries no email' };
+  const db = require('../database');
+  const { getPermissions } = require('../permissions');
+  const user = await db.getUserByEmail(email);
+  if (!user || user.is_active === false) return { status: 401, code: 'entra_no_account', error: 'No active portal account for this Microsoft sign-in' };
+  if (user.must_change_password === true || user.role === 'pre_employee' || (user.account_status && user.account_status !== 'active')) {
+    return { status: 403, code: 'entra_account_not_ready', error: 'Finish setting up your portal account first' };
+  }
+  user.permissions = getPermissions(user.role, user.permissions || []);
+  return { user };
+}
+
 /**
  * Express middleware. With no bearer header (or no configuration) it does
  * nothing, so the ordinary session path runs. With one, it either sets
@@ -115,25 +143,16 @@ function entraBearerAuth(req, res, next) {
   if (!isConfigured()) return res.status(401).json({ error: 'Microsoft sign-in is not configured for this portal', code: 'entra_not_configured' });
   const token = h.replace(/^Bearer\s+/i, '').trim();
   validate(token).then(async (claims) => {
-    const email = emailOf(claims);
-    if (!email) return res.status(401).json({ error: 'Token carries no email', code: 'entra_no_email' });
-    const db = require('../database');
-    const { getPermissions } = require('../permissions');
-    const user = await db.getUserByEmail(email);
-    if (!user || user.is_active === false) return res.status(401).json({ error: 'No active portal account for this Microsoft sign-in', code: 'entra_no_account' });
-    if (user.must_change_password === true || user.role === 'pre_employee' || (user.account_status && user.account_status !== 'active')) {
-      return res.status(403).json({ error: 'Finish setting up your portal account first', code: 'entra_account_not_ready' });
-    }
-    user.permissions = getPermissions(user.role, user.permissions || []);
-    req.user = user;
+    const r = await resolveAccount(claims);
+    if (!r.user) return res.status(r.status).json({ error: r.error, code: r.code });
+    req.user = r.user;
     req.authVia = 'entra';
     next();
   }).catch((err) => {
-    const code = ['malformed', 'bad_alg', 'unknown_kid', 'bad_signature', 'bad_issuer', 'bad_audience', 'bad_tenant', 'expired', 'not_yet_valid'].includes(err.message) ? err.message : 'entra_unavailable';
-    res.status(401).json({ error: 'Microsoft sign-in was not accepted', code });
+    res.status(401).json({ error: 'Microsoft sign-in was not accepted', code: refusalCode(err) });
   });
 }
 
 function _setFetchForTests(fn) { _fetchImpl = fn; _keys = null; }
 
-module.exports = { validate, emailOf, entraBearerAuth, isConfigured, _setFetchForTests };
+module.exports = { validate, emailOf, resolveAccount, refusalCode, entraBearerAuth, isConfigured, _setFetchForTests };
