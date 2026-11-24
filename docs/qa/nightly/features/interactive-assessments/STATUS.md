@@ -3,7 +3,7 @@
 - Tracker stage: **idea**
 - Tracker environment: **none**
 - Evidence label: **tab-unproven**
-- Addressed since the last audit (2026-11-22..2026-11-23): **no**
+- Addressed since the last audit (2026-11-23..2026-11-24): **no**
 - Created (any located code): **yes**
 
 ## Located files
@@ -21,7 +21,7 @@ OK — requireClinicalRead/Write throughout, re-confirmed.
 None found — no dedicated Assessment tab banner (re-confirmed tonight), no E2E, no browser QA entry.
 
 ## Recency
-Not touched since the last audit — tonight was the quietest window this audit has seen: **zero commits** landed in `backend/` or `frontend/current/` between 18:13 UTC 2026-11-22 (last audit) and tonight's run.
+Not touched since the last audit. Two commits landed elsewhere in the repo tonight (21:42 UTC 2026-11-23, after last night's 18:35 UTC audit): the mobile drag-to-move feature and the `event-move.js` calendar-save refactor (see Opa Mobile Companion and Portal - Splose - Outlook's folders) — neither touched this subsystem's files.
 
 ## Open tasks (from the tracker)
 - Assessment Review — todo

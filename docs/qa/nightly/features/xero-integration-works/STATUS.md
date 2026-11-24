@@ -3,7 +3,7 @@
 - Tracker stage: **idea**
 - Tracker environment: **none**
 - Evidence label: **tab-unproven**
-- Addressed since the last audit (2026-11-22..2026-11-23): **no**
+- Addressed since the last audit (2026-11-23..2026-11-24): **no**
 - Created (any located code): **yes**
 
 ## Located files
@@ -29,7 +29,7 @@ OK — `accounting-routes.js` and `finance-routes.js` are `ownerOnly` throughout
 docs/qa/BROWSER_QA_RESULTS.md row H (owner-gated, Xero connected:false) — dated 2026-08-01, stale relative to this window, but exists.
 
 ## Recency
-Not touched since the last audit — tonight was the quietest window this audit has seen: **zero commits** landed in `backend/` or `frontend/current/` between 18:13 UTC 2026-11-22 (last audit) and tonight's run — test counts unchanged: 215 unit (12 files), 90 integration (6 files).
+Not touched since the last audit. Two commits landed elsewhere in the repo tonight (21:42 UTC 2026-11-23, after last night's 18:35 UTC audit): the mobile drag-to-move feature and the `event-move.js` calendar-save refactor (see Opa Mobile Companion and Portal - Splose - Outlook's folders) — neither touched this subsystem's files — test counts unchanged: 215 unit (12 files), 90 integration (6 files).
 
 ## Open tasks (from the tracker)
 - Financial Dashboard — todo

@@ -3,7 +3,7 @@
 - Tracker stage: **idea**
 - Tracker environment: **none**
 - Evidence label: **built-untested**
-- Addressed since the last audit (2026-11-22..2026-11-23): **no**
+- Addressed since the last audit (2026-11-23..2026-11-24): **no**
 - Created (any located code): **yes**
 
 ## Located files
@@ -18,16 +18,16 @@ OK functionally — requireAuth router-wide plus an inline canApprove(req.user) 
 - integration: none found that exercises /api/profile/leave or /api/profile/cpd (re-confirmed by fresh grep tonight; no hits at all this time — not even the prior nights' incidental `scheduler-availability.itest.js` hit surfaced in this grep) — **no test exists** (—)
 
 ## Tab / browser proof
-PROFILE TAB exists; no E2E spec. **New tonight**: `docs/qa/BROWSER_QA_RESULTS.md` row I ("Leave/CPD/documents", dated 2026-08-01, missed by prior audit nights) does exist and is nominally about this tab — but it only confirms the setup card and profile sections render and that *disabled* features honestly read "Coming soon"/"Preview only — not saved" rather than faking success. It does not exercise the leave/CPD approval round trip itself, and predates whatever current state `backend/profile-routes.js` is in — so it does not move this label toward `proven`, but it is worth citing as the closest thing to tab-level evidence that exists.
+PROFILE TAB exists; no E2E spec. **Found 2026-11-23**: `docs/qa/BROWSER_QA_RESULTS.md` row I ("Leave/CPD/documents", dated 2026-08-01, missed by earlier audit nights) does exist and is nominally about this tab — but it only confirms the setup card and profile sections render and that *disabled* features honestly read "Coming soon"/"Preview only — not saved" rather than faking success. It does not exercise the leave/CPD approval round trip itself, and predates whatever current state `backend/profile-routes.js` is in — so it does not move this label toward `proven`, but it is worth citing as the closest thing to tab-level evidence that exists.
 
 ## Recency
-Not touched since the last audit — tonight was the quietest window this audit has seen: **zero commits** landed in `backend/` or `frontend/current/` between 18:13 UTC 2026-11-22 (last audit) and tonight's run.
+Not touched since the last audit. Two commits landed elsewhere in the repo tonight (21:42 UTC 2026-11-23, after last night's 18:35 UTC audit): the mobile drag-to-move feature and the `event-move.js` calendar-save refactor (see Opa Mobile Companion and Portal - Splose - Outlook's folders) — neither touched this subsystem's files.
 
 ## Open tasks (from the tracker)
 - Review Portal Structure — todo
 
 ## Reason for the label
-Code is built, guarded, and used by real people, but no test — unit or integration — exercises the leave/CPD approval round trip itself (confirmed again tonight). That is a test-coverage gap on a specific workflow, `built-untested` rather than `needs-refinement`. Unchanged from last night, now confirmed nine nights running.
+Code is built, guarded, and used by real people, but no test — unit or integration — exercises the leave/CPD approval round trip itself (confirmed again tonight). That is a test-coverage gap on a specific workflow, `built-untested` rather than `needs-refinement`. Unchanged from last night, now confirmed ten nights running.
 
 ## Disagreement with the tracker
 None — the tracker's own words already match the evidence.

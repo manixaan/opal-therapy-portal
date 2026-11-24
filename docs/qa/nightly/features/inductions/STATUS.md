@@ -3,7 +3,7 @@
 - Tracker stage: **idea**
 - Tracker environment: **none**
 - Evidence label: **needs-refinement**
-- Addressed since the last audit (2026-11-22..2026-11-23): **no**
+- Addressed since the last audit (2026-11-23..2026-11-24): **no**
 - Created (any located code): **yes**
 
 ## Located files
@@ -24,7 +24,7 @@ OK — requireAuth + requireRole('owner'), re-confirmed.
 e2e/tests/tutorials.spec.js still exists and still covers the learner-side flow end-to-end (start, highlight, advance, pause, resume across reload/re-login, complete, restart). No coverage of the creator/builder or AI-helper side.
 
 ## Recency
-Not touched since the last audit — tonight was the quietest window this audit has seen: **zero commits** landed in `backend/` or `frontend/current/` between 18:13 UTC 2026-11-22 (last audit) and tonight's run.
+Not touched since the last audit. Two commits landed elsewhere in the repo tonight (21:42 UTC 2026-11-23, after last night's 18:35 UTC audit): the mobile drag-to-move feature and the `event-move.js` calendar-save refactor (see Opa Mobile Companion and Portal - Splose - Outlook's folders) — neither touched this subsystem's files.
 
 ## Open tasks (from the tracker)
 - Induction Playground — todo
