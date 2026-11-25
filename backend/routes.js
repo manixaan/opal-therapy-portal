@@ -2819,17 +2819,33 @@ router.patch('/api/outlook/events/:dbId', requireAuth, async (req, res) => {
  */
 router.delete('/api/outlook/events/:dbId', requireAuth, async (req, res) => {
   try {
-    const { dbId } = req.params;
-    const dryRun = req.query.dryRun === '1' || req.query.dryRun === 'true';
-    // ?cascade=0 — a "Swap type" replacement (25 Nov 2026): the new booking
-    // sits in the very same slot, so the travel around it still serves it.
-    const noCascade = req.query.cascade === '0' || req.query.cascade === 'false';
+    const r = await deleteEventCore(req, req.params.dbId, {
+      dryRun: req.query.dryRun === '1' || req.query.dryRun === 'true',
+      // ?cascade=0 — a "Swap type" replacement (25 Nov 2026): the new booking
+      // sits in the very same slot, so the travel around it still serves it.
+      noCascade: req.query.cascade === '0' || req.query.cascade === 'false',
+      reasonId: req.body && req.body.reasonId,
+    });
+    res.status(r.status).json(r.body);
+  } catch (err) {
+    console.error('Outlook delete error:', err.response?.data || err.message);
+    res.status(500).json({ error: 'Failed to delete event', details: err.message });
+  }
+});
 
+/**
+ * Remove one of the caller's events (the DELETE route above, and the phone's
+ * rebook — mobile-event-edit.js). Same order as ever: Splose cancel queued,
+ * Outlook copies removed best-effort, local soft-delete, audit.
+ * Returns { status, body }; throws only for an unexpected failure.
+ */
+async function deleteEventCore(req, dbId, { dryRun = false, noCascade = false, reasonId = null } = {}) {
+  {
     const ev = await db.pool.query(
       'SELECT outlook_id, title, start_time, end_time, splose_id, user_id FROM events WHERE id = $1 AND user_id = $2',
       [dbId, req.session.userId]
     );
-    if (!ev.rows.length) return res.status(404).json({ error: 'Event not found' });
+    if (!ev.rows.length) return { status: 404, body: { error: 'Event not found' } };
 
     const { outlook_id: outlookId, title, start_time: startTime, end_time: endTime } = ev.rows[0];
     const sploseLinkedId = ev.rows[0].splose_id;
@@ -2871,12 +2887,12 @@ router.delete('/api/outlook/events/:dbId', requireAuth, async (req, res) => {
     const travelBlockTitles = cascade.map((b) => b.title);
 
     if (dryRun) {
-      return res.json({
+      return { status: 200, body: {
         ok: true, dryRun: true, title,
         deleted: 0,
         travelBlocksDeleted: cascade.length,
         travelBlockIds, travelBlockTitles,
-      });
+      } };
     }
 
     // Draft-and-publish (058): cancelling a Splose-linked appointment queues a
@@ -2893,7 +2909,7 @@ router.delete('/api/outlook/events/:dbId', requireAuth, async (req, res) => {
         if (sploseLinkedId || live.rows.length) {
           const qrow = await draftSync.enqueueChange(db, {
             userId: req.session.userId, createdBy: req.session.userId, eventId: dbId, action: 'cancel',
-            payload: { reasonId: req.body && req.body.reasonId ? Number(req.body.reasonId) : null, summary: title,
+            payload: { reasonId: reasonId ? Number(reasonId) : null, summary: title,
                        start: startTime ? new Date(startTime).toISOString() : null, end: endTime ? new Date(endTime).toISOString() : null },
           });
           if (qrow) require('./splose-sync-routes').notifyQueued(req.session.userId);
@@ -2964,17 +2980,14 @@ router.delete('/api/outlook/events/:dbId', requireAuth, async (req, res) => {
       metadata: { travelBlocksDeleted: travelBlockIds.length, travelBlockIds },
     }).catch(() => {});
 
-    res.json({
+    return { status: 200, body: {
       ok: true, deletedFromOutlook, outlookStatus, title,
       deleted: 1,
       travelBlocksDeleted: travelBlockIds.length,
       travelBlockIds, travelBlockTitles,
-    });
-  } catch (err) {
-    console.error('Outlook delete error:', err.response?.data || err.message);
-    res.status(500).json({ error: 'Failed to delete event', details: err.message });
+    } };
   }
-});
+}
 
 /**
  * POST /api/outlook/events/:dbId/restore
@@ -3235,3 +3248,4 @@ module.exports = router;
 module.exports.cleanTravelSpec = cleanTravelSpec;
 module.exports.getValidAccessToken = getValidAccessToken;
 module.exports.createBookingCore = createBookingCore;
+module.exports.deleteEventCore = deleteEventCore;

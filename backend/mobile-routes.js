@@ -45,6 +45,7 @@ const { VIRTUAL_RE } = require('./geo');
 const dayRoute = require('./billing/day-route');
 const log = require('./logger').createLogger('mobile');
 const notesOwing = require('./mobile-notes-owing');
+const eventEdit = require('./mobile-event-edit');
 
 router.use('/api/mobile', requireAuth);
 
@@ -165,7 +166,10 @@ function formatMobileAppointment(ev, ctx = null) {
     canOpenInMaps: !virtual && isRoutableAddress(address),
     source: ev.source || 'local',
     linkedTo: ev.event_type === 'travel' && ev.related_event_id ? ev.related_event_id : null,
-    ...(ctx ? { canMove: canScheduleOwn(ctx.user) && mobileCal.canMoveEvent(ev, ctx.user.id, ctx.now).ok } : {}),
+    ...(ctx ? {
+      canMove: canScheduleOwn(ctx.user) && mobileCal.canMoveEvent(ev, ctx.user.id, ctx.now).ok,
+      canEdit: canScheduleOwn(ctx.user) && eventEdit.canEditEvent(ev, ctx.user.id, ctx.now).ok,
+    } : {}),
   };
 }
 
@@ -717,6 +721,253 @@ router.post('/api/mobile/appointments/:id/move',
       sync: { splose: main.splose || 'off', outlook: main.outlookStatus || 'not_linked' },
       outlookTravelStale: true,
       warnings: verdict.warnings,
+    });
+  }));
+
+// ═══ Edit client / session type / address from the phone (25 Nov 2026) ══════
+//
+// GET  …/:id/edit     what the edit sheet shows: the event's type, client,
+//                     address, and the types it can become.
+// PATCH …/:id/details { kind?, clientId?, address?, useClientAddress?,
+//                     expectedStart, expectedEnd } — address only → saved in
+//                     place, drives re-priced; client or type → rebooked the
+//                     way the portal's Swap type does. See mobile-event-edit.js.
+const EDIT_REFUSED = {
+  not_owner: 'Change this one in the portal.', travel_mirror: 'Change this one in the portal.',
+  cancelled: 'This appointment is cancelled.', all_day: 'Change all-day events in the portal.',
+  type: 'Change this one in the portal.', started: 'This appointment has already started — change it in the portal.',
+};
+
+async function loadEditable(req) {
+  const id = req.params.id;
+  if (!isUuid(id)) return { status: 404, body: { error: 'Not found', code: 'not_found' } };
+  const { rows } = await pool.query(
+    `SELECT * FROM events WHERE id = $1 AND user_id = $2 AND (is_deleted IS NULL OR is_deleted = FALSE)`, [id, req.user.id]);
+  const ev = rows[0];
+  if (!ev) return { status: 404, body: { error: 'Not found', code: 'not_found' } };
+  return { ev };
+}
+
+router.get('/api/mobile/appointments/:id/edit',
+  requireAnyPermission('manage_own_schedule', 'manage_all_schedules'),
+  safe(async (req, res) => {
+    const { ev, status, body } = await loadEditable(req);
+    if (!ev) return res.status(status).json(body);
+    const v = eventEdit.canEditEvent(ev, req.user.id, new Date());
+    const kind = eventEdit.currentKind(ev);
+    const address = bestAddress(ev);
+    res.json({
+      canEdit: v.ok,
+      ...(v.ok ? {} : { reason: v.reason, message: EDIT_REFUSED[v.reason] || 'Change this one in the portal.' }),
+      kind,
+      kindLabel: kind ? eventEdit.KINDS[kind].label : null,
+      client: eventEdit.currentClient(ev),
+      address,
+      isVirtual: VIRTUAL_RE.test(String(address || '')),
+      start: ev.start_time, end: ev.end_time,
+      kinds: eventEdit.kindList(),
+    });
+  }));
+
+// The address on file for one of the caller's clients — offered as a choice
+// when the client changes. Same caseload rule as the picker.
+router.get('/api/mobile/clients/:id/address', safe(async (req, res) => {
+  // eslint-disable-next-line global-require
+  const caseload = require('./splose-caseload');
+  try {
+    const c = await caseload.loadOwnClient(req, req.params.id);
+    if (!c) return res.status(404).json({ error: 'Not found', code: 'not_found' });
+    res.json({ address: c.formattedAddress || null });
+  } catch (err) {
+    if (err instanceof caseload.CaseloadError) return res.status(err.status).json({ error: err.message, code: err.code });
+    log.warn('mobile client address lookup failed', { error: err.message });
+    res.status(502).json({ error: "Couldn't reach Splose just now.", code: 'client_lookup_failed' });
+  }
+}));
+
+router.patch('/api/mobile/appointments/:id/details',
+  requireAnyPermission('manage_own_schedule', 'manage_all_schedules'),
+  safe(async (req, res) => {
+    const loaded = await loadEditable(req);
+    if (!loaded.ev) return res.status(loaded.status).json(loaded.body);
+    const ev = loaded.ev;
+    const now = new Date();
+    const v = eventEdit.canEditEvent(ev, req.user.id, now);
+    if (!v.ok) return res.status(409).json({ error: EDIT_REFUSED[v.reason] || 'Change this one in the portal.', code: 'not_editable', reason: v.reason });
+
+    const b = req.body || {};
+    // Optimistic lock: the phone's view must still be the row's.
+    const sameTime = (a, x) => !Number.isNaN(Date.parse(a)) && Date.parse(a) === new Date(x).getTime();
+    if (!sameTime(b.expectedStart, ev.start_time) || !sameTime(b.expectedEnd, ev.end_time)) {
+      return res.status(409).json({ error: 'This appointment changed since you loaded it.', code: 'changed' });
+    }
+
+    const curKind = eventEdit.currentKind(ev);
+    const curClient = eventEdit.currentClient(ev);
+    if (b.kind !== undefined && b.kind !== null && !Object.prototype.hasOwnProperty.call(eventEdit.KINDS, b.kind)) {
+      return res.status(400).json({ error: 'Unknown session type', code: 'bad_kind' });
+    }
+    const kind = b.kind || curKind;
+    const wantsClient = b.clientId !== undefined;
+    const clientId = wantsClient ? (b.clientId === null || b.clientId === '' ? null : String(b.clientId)) : (curClient ? curClient.id : null);
+    const kindChanged = !!b.kind && b.kind !== curKind;
+    const clientChanged = wantsClient && String(clientId || '') !== String(curClient ? curClient.id : '');
+    let addr = eventEdit.cleanAddressInput(b.address);
+    if (addr && addr.error) return res.status(400).json({ error: addr.error, code: 'bad_address' });
+
+    // The client: from the caller's own caseload, never trusted from the phone.
+    let client = curClient;
+    if (clientChanged) {
+      client = null;
+      if (clientId) {
+        // eslint-disable-next-line global-require
+        const caseload = require('./splose-caseload');
+        try {
+          const c = await caseload.loadOwnClient(req, clientId);
+          if (!c) return res.status(404).json({ error: 'That client is not in your caseload.', code: 'client_not_found' });
+          client = { id: c.id, name: c.fullName, formattedAddress: c.formattedAddress };
+        } catch (err) {
+          if (err instanceof caseload.CaseloadError) return res.status(err.status).json({ error: err.message, code: err.code });
+          log.warn('mobile edit client lookup failed', { error: err.message });
+          return res.status(502).json({ error: "Couldn't reach Splose to check the client. Nothing was changed.", code: 'client_lookup_failed' });
+        }
+      }
+    }
+    if (b.useClientAddress === true) {
+      if (!client || !client.id) return res.status(400).json({ error: 'Choose a client first', code: 'bad_address' });
+      let onFile = client.formattedAddress;
+      if (onFile === undefined) {
+        // eslint-disable-next-line global-require
+        const c = await require('./splose-caseload').loadOwnClient(req, client.id).catch(() => null);
+        onFile = c ? c.formattedAddress : null;
+      }
+      if (!onFile) return res.status(409).json({ error: 'This client has no address on file.', code: 'no_client_address' });
+      addr = { address: onFile, lat: null, lng: null };
+    }
+
+    const oldAddress = bestAddress(ev);
+    const addressChanged = addr !== undefined
+      && (addr.clear ? !!oldAddress : String(addr.address).trim() !== String(oldAddress || '').trim());
+    const date = mobileCal.perthDate(ev.start_time);
+
+    // ── Rebook: client or type changed ───────────────────────────────────────
+    if (kindChanged || clientChanged) {
+      if (!kind) return res.status(400).json({ error: 'Choose the session type', code: 'bad_kind' });
+      const rule = eventEdit.CLIENT_RULE[eventEdit.KINDS[kind].group];
+      if (rule === 'required' && !(client && client.id)) {
+        return res.status(400).json({ error: 'Choose the client for this session', code: 'client_required' });
+      }
+      const useClient = rule === 'none' ? null : client;
+      const address = addr === undefined ? oldAddress : (addr.clear ? null : addr.address);
+      const body = eventEdit.composeBooking({ kind, client: useClient, address,
+        startTime: new Date(ev.start_time).toISOString(), endTime: new Date(ev.end_time).toISOString() });
+
+      // eslint-disable-next-line global-require
+      const { createBookingCore, deleteEventCore } = require('./routes');
+      const made = await createBookingCore(req, body);
+      if (made.status !== 201 || !made.body || !made.body.dbId) {
+        return res.status(made.status >= 400 && made.status < 500 ? made.status : 502)
+          .json({ error: (made.body && made.body.error) || 'Could not save the change', code: 'rebook_failed' });
+      }
+      const newId = made.body.dbId;
+
+      // Carry over what belongs to the slot, not the booking type.
+      const m = (ev.custom_metadata && typeof ev.custom_metadata === 'object') ? ev.custom_metadata : {};
+      const carry = {};
+      for (const k of ['travel', 'notes']) if (m[k] !== undefined) carry[k] = m[k];
+      if (Object.keys(carry).length) {
+        await pool.query(`UPDATE events SET custom_metadata = COALESCE(custom_metadata, '{}'::jsonb) || $2::jsonb WHERE id = $1`,
+          [newId, JSON.stringify(carry)]).catch((e) => log.warn('rebook metadata carry failed', { error: e.message }));
+      }
+      if (address && addr && !addr.clear) {
+        await db.updateEventManualLocation(newId, { address, lat: addr.lat, lng: addr.lng, suburb: eventEdit.extractSuburb(address) || null })
+          .catch((e) => log.warn('rebook address pin failed', { error: e.message }));
+      } else if (address && ev.manual_location && addr === undefined) {
+        await pool.query(`UPDATE events SET manual_location = $2, is_manual_location_override = TRUE WHERE id = $1`,
+          [newId, typeof ev.manual_location === 'string' ? ev.manual_location : JSON.stringify(ev.manual_location)]).catch(() => {});
+      }
+      await pool.query(`UPDATE events SET related_event_id = $1 WHERE related_event_id = $2 AND user_id = $3`, [newId, ev.id, req.user.id]).catch(() => {});
+      await pool.query(`UPDATE voice_notes SET linked_event_id = $1 WHERE linked_event_id = $2 AND user_id = $3`, [newId, ev.id, req.user.id]).catch(() => {});
+      await pool.query(`UPDATE case_note_drafts SET linked_event_id = $1 WHERE linked_event_id = $2 AND user_id = $3`, [newId, ev.id, req.user.id]).catch(() => {});
+
+      // The old one goes only now the new one is saved; its travel stays.
+      let oldRemoved = false;
+      try {
+        const del = await deleteEventCore(req, ev.id, { noCascade: true });
+        oldRemoved = del.status === 200;
+      } catch (err) {
+        log.warn('rebook: old event not removed', { error: err.message });
+      }
+
+      await db.logAuditEvent({
+        action: 'mobile_event_rebooked', targetType: 'event', targetId: newId,
+        actorUserId: req.user.id, organisationId: orgOf(req), ipAddress: req.ip,
+        metadata: { id: newId, replaced: ev.id, oldRemoved, kindChanged, clientChanged, addressChanged },
+      }).catch(() => {});
+
+      let travel = { priced: 0, recorded: false };
+      if (addressChanged) {
+        // eslint-disable-next-line global-require
+        travel = await eventEdit.repriceDay({ pool, userId: req.user.id, date, now,
+          provider: require('./billing/maps-adapter').getMapsProvider(), minutesStore: calendarMinutes });
+      }
+      const fresh = await pool.query('SELECT * FROM events WHERE id = $1', [newId]);
+      return res.json({
+        ok: true, mode: 'rebook', id: newId, replacedId: ev.id, oldRemoved,
+        appointment: formatMobileAppointment(fresh.rows[0], { user: req.user, now }),
+        sync: { splose: made.body.sploseQueued ? 'queued' : 'off', outlook: made.body.outlookStatus || 'not_linked' },
+        travel: { repriced: travel.recorded },
+      });
+    }
+
+    // ── Address only ─────────────────────────────────────────────────────────
+    if (!addressChanged) return res.json({ ok: true, mode: 'unchanged', id: ev.id, appointment: formatMobileAppointment(ev, { user: req.user, now }) });
+
+    // eslint-disable-next-line global-require
+    const eventMove = require('./event-move');
+    const deps = eventMove.defaultDeps();
+    const plan = await eventMove.mirrorPlan(deps, req.user.id, ev.outlook_id || null);
+    const pending = eventMove.localSyncStatus(ev.outlook_id, plan.mirrorToOutlook) || null;
+    if (addr.clear) {
+      await pool.query(
+        `UPDATE events SET manual_location = NULL, is_manual_location_override = TRUE, location = '',
+                sync_status = COALESCE($2, sync_status), last_modified_by = 'app', last_modified_at = CURRENT_TIMESTAMP,
+                updated_at = CURRENT_TIMESTAMP
+          WHERE id = $1 AND user_id = $3`, [ev.id, pending, req.user.id]);
+    } else {
+      await db.updateEventManualLocation(ev.id, { address: addr.address, lat: addr.lat, lng: addr.lng, suburb: eventEdit.extractSuburb(addr.address) || null });
+      await pool.query(
+        `UPDATE events SET sync_status = COALESCE($2, sync_status), last_modified_by = 'app', last_modified_at = CURRENT_TIMESTAMP
+          WHERE id = $1`, [ev.id, pending]);
+    }
+    // A zone picked at booking was for the old address; billing re-reads the new one.
+    // eslint-disable-next-line global-require
+    await require('./billing/session-mmm-store').clearBookingZone(pool, { eventId: ev.id, userId: req.user.id })
+      .catch((e) => log.warn('mobile edit: MMM zone not cleared', { error: e.message }));
+
+    let outlook = ev.outlook_id ? 'held' : 'not_linked';
+    if (plan.mirrorToOutlook) {
+      const r = await eventMove.mirrorOutlook(deps, { userId: req.user.id, dbId: ev.id, outlookId: ev.outlook_id,
+        fields: { location: addr.clear ? '' : addr.address } });
+      outlook = r.outlookStatus || (r.savedToOutlook ? 'saved' : 'failed');
+    }
+
+    // eslint-disable-next-line global-require
+    const travel = await eventEdit.repriceDay({ pool, userId: req.user.id, date, now,
+      provider: require('./billing/maps-adapter').getMapsProvider(), minutesStore: calendarMinutes });
+
+    await db.logAuditEvent({
+      action: 'mobile_event_address_changed', targetType: 'event', targetId: ev.id,
+      actorUserId: req.user.id, organisationId: orgOf(req), ipAddress: req.ip,
+      metadata: { id: ev.id, cleared: !!addr.clear, travelRepriced: travel.recorded },
+    }).catch(() => {});
+
+    const fresh = await pool.query('SELECT * FROM events WHERE id = $1', [ev.id]);
+    res.json({
+      ok: true, mode: 'address', id: ev.id,
+      appointment: formatMobileAppointment(fresh.rows[0], { user: req.user, now }),
+      sync: { splose: 'off', outlook },
+      travel: { repriced: travel.recorded },
     });
   }));
 
