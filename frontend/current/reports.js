@@ -257,18 +257,84 @@ function _rptUpdateHeader() {
 
 // ── Data helpers ─────────────────────────────────────────────
 
+// The PERTH date (25 Nov 2026): toISOString() gave the UTC date, so before
+// 8am the panel showed yesterday as "Today" and the week shifted a day.
+var _rptPerthFmt = null;
 function _rptDateKey(date) {
   var d = (date instanceof Date) ? date : new Date(date);
-  return d.toISOString().slice(0, 10);
+  try {
+    if (!_rptPerthFmt) _rptPerthFmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Perth', year: 'numeric', month: '2-digit', day: '2-digit' });
+    return _rptPerthFmt.format(d);
+  } catch (_) { return d.toISOString().slice(0, 10); }
 }
 
+// DAY_DATES is the shell's top-level const — never on window, so the
+// window lookup always missed (no travel, no gaps in the snapshot).
+function _rptDayDates() {
+  return (typeof DAY_DATES !== 'undefined' && DAY_DATES) ? DAY_DATES : (window.DAY_DATES || null);
+}
 function _rptDayKey(dateStr) {
-  if (!window.DAY_DATES) return null;
+  var dd = _rptDayDates();
+  if (!dd) return null;
   var found = null;
-  Object.keys(window.DAY_DATES).forEach(function(k) {
-    if (window.DAY_DATES[k] === dateStr) found = k;
+  Object.keys(dd).forEach(function(k) {
+    if (dd[k] === dateStr) found = k;
   });
   return found;
+}
+
+/* ── Billable hours, as invoicing counts them (25 Nov 2026) ──────────────
+   Owner: whatever we invoice is billable. The server applies the invoicing
+   rules (GET /api/snapshot/billable-hours, billing/snapshot-hours.js) and
+   returns per Perth day: billable work, client travel, cancellations. The
+   panel never works billable hours out itself any more. Fetched a Mon–Sun
+   week at a time, kept for a minute; the panel redraws when it lands. */
+var _rptHours = {};          // 'YYYY-MM-DD' → day from the server
+var _rptHoursAt = {};        // week start → fetched at (ms) / 'loading'
+function _rptWeekKeyFor(dateStr) {
+  var d = new Date(dateStr + 'T00:00:00Z');
+  var dow = d.getUTCDay();
+  d.setUTCDate(d.getUTCDate() + (dow === 0 ? -6 : 1 - dow));
+  return d.toISOString().slice(0, 10);
+}
+function _rptEnsureHours(dateStr) {
+  var from = _rptWeekKeyFor(dateStr);
+  var at = _rptHoursAt[from];
+  if (at === 'loading' || (typeof at === 'number' && Date.now() - at < 60000)) return;
+  var end = new Date(from + 'T00:00:00Z'); end.setUTCDate(end.getUTCDate() + 6);
+  var to = end.toISOString().slice(0, 10);
+  _rptHoursAt[from] = 'loading';
+  fetch('/api/snapshot/billable-hours?from=' + from + '&to=' + to, { credentials: 'include' })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (j) {
+      _rptHoursAt[from] = Date.now();
+      if (j && j.days) Object.keys(j.days).forEach(function (k) { _rptHours[k] = j.days[k]; });
+      if (_reportOpen) { try { renderReportPanel(); } catch (_) {} }
+    })
+    .catch(function () { _rptHoursAt[from] = Date.now() - 50000; });   // retry in ~10 s
+}
+/* The day's hours on a metrics object: billableMin = work + client travel. */
+function _rptApplyHours(metrics, dateStr) {
+  var h = _rptHours[dateStr];
+  _rptEnsureHours(dateStr);
+  metrics.hoursLoaded = !!h;
+  metrics.workMin = h ? h.workMin : 0;
+  metrics.clientTravelMin = h ? h.travelMin : 0;
+  metrics.cancelledMin = h ? h.cancelledMin : 0;
+  metrics.cancelledCount = h ? h.cancelledCount : 0;
+  metrics.billableMin = metrics.workMin + metrics.clientTravelMin;
+  metrics.nonBillableMin = Math.max(0, metrics.totalMin - metrics.workMin - metrics.cancelledMin);
+  metrics.billingNotes = h ? { issues: h.issueCount || 0, untimed: h.untimedBlocks || 0, unpriced: h.unpricedLegs || 0, dna: h.dnaCount || 0 } : null;
+  return metrics;
+}
+function _rptHoursCell(metrics, min) { return metrics.hoursLoaded ? _rptFmtH(min) : '…'; }
+function _rptBillingNotes(n) {
+  if (!n) return '';
+  var out = [];
+  if (n.issues) out.push(n.issues + ' session' + (n.issues === 1 ? ' needs' : 's need') + ' billing details before invoicing');
+  if (n.untimed) out.push(n.untimed + ' non-face-to-face block' + (n.untimed === 1 ? '' : 's') + ' with no time entered');
+  if (n.unpriced) out.push(n.unpriced + ' drive' + (n.unpriced === 1 ? '' : 's') + ' not yet priced by the calendar');
+  return out.length ? '<div class="rpt-billing-notes">' + out.join(' · ') + '</div>' : '';
 }
 
 // Classify an Outlook event into a report type based on its categories array.
@@ -277,9 +343,13 @@ function _rptClassifyType(cats, eventType) {
   if (lc.some(function(c) { return c === 'travel'; }))                               return 'travel';
   if (lc.some(function(c) { return c.includes('client') || c.includes('appoint'); })) return 'therapy';
   if (lc.some(function(c) { return c.includes('report'); }))                          return 'report';
+  // Case Management is billable work, not admin (backend sync-utils agrees).
+  if (lc.some(function(c) { return c.includes('case management'); }))                 return 'report';
   if (lc.some(function(c) { return c.includes('case') || c.includes('admin'); }))     return 'admin';
   if (lc.some(function(c) { return c.includes('cpd') || c.includes(' pd'); }))        return 'cpd';
-  if (lc.some(function(c) { return c.includes('meeting') || c.includes('mdt'); }))    return 'mdt';
+  // Only an MDT is billable; a staff "Meetings" block is not (25 Nov 2026).
+  if (lc.some(function(c) { return c.includes('mdt'); }))                             return 'mdt';
+  if (lc.some(function(c) { return c.includes('meeting'); }))                         return 'meeting';
   if (lc.some(function(c) { return c.includes('leave') || c.includes('sick') || c.includes('annual'); })) return 'leave';
   return eventType || 'outlook';
 }
@@ -976,7 +1046,7 @@ function buildDailyReportHTML(date, role) {
   var dateStr   = _rptDateKey(date);
   var dayKey    = _rptDayKey(dateStr);
   var sessions  = _rptSessionsForDate(dateStr);
-  var metrics   = _rptMetrics(sessions);
+  var metrics   = _rptApplyHours(_rptMetrics(sessions), dateStr);
   var travel    = _inclTravel ? _rptTravel(dayKey) : { travelMin: 0, legs: [], kmTotal: 0 };
   var gaps      = _inclGaps   ? _rptGaps(dayKey)   : [];
   var missing   = _rptMissingLocs(sessions);
@@ -1006,8 +1076,9 @@ function buildDailyReportHTML(date, role) {
   // Summary cards
   html += '<div class="rpt-summary-cards">';
   html += _rptCard('', metrics.appts, 'Appointments', metrics.uniqueClients + 'client'+ (metrics.uniqueClients !== 1 ? 's': ''), '#3d6cae');
-  html += _rptCard('', billableH.toFixed(1) + 'h', 'Billable', 'of '+ targetH + 'h target', '#2f7d4f');
-  html += _rptCard('', _rptFmtH(travel.travelMin), 'Travel', travel.legs.length + ' leg' + (travel.legs.length !== 1 ? 's' : ''), '#b06e12');
+  html += _rptCard('', _rptHoursCell(metrics, metrics.workMin), 'Billable work', 'sessions + client notes', '#2f7d4f');
+  html += _rptCard('', _rptHoursCell(metrics, metrics.clientTravelMin), 'Client travel', 'billable travel', '#b06e12');
+  html += _rptCard('', _rptHoursCell(metrics, metrics.cancelledMin), 'Cancellations', metrics.cancelledCount + ' session' + (metrics.cancelledCount !== 1 ? 's' : ''), '#c2412e');
   html += _rptCard('', gaps.length, 'Free gaps', gaps.length >0 ? 'available today': 'none found', '#8b80c8');
   if (attn.length >0) html += _rptCard('', attn.length, 'Attention', 'item'+ (attn.length !== 1 ? 's': '') + 'to review', '#c2412e');
   html += '</div>';
@@ -1017,9 +1088,10 @@ function buildDailyReportHTML(date, role) {
   html += '<span>Start <strong>'+ startT + '</strong></span>';
   html += '<span>Finish <strong>'+ endT + '</strong></span>';
   html += '<span>Booked <strong>'+ _rptFmtH(metrics.totalMin) + '</strong></span>';
-  html += '<span>Billable <strong>'+ _rptFmtH(metrics.billableMin) + '</strong></span>';
-  if (metrics.nonBillableMin >0) html += '<span>Admin <strong>'+ _rptFmtH(metrics.nonBillableMin) + '</strong></span>';
+  html += '<span>Billable <strong>'+ _rptHoursCell(metrics, metrics.billableMin) + '</strong></span>';
+  if (metrics.nonBillableMin >0) html += '<span>Not billed <strong>'+ _rptFmtH(metrics.nonBillableMin) + '</strong></span>';
   html += '</div>';
+  html += _rptBillingNotes(metrics.billingNotes);
 
   // Visual Gantt strip — horizontal day bar
   (function() {
@@ -1078,6 +1150,7 @@ function buildDailyReportHTML(date, role) {
     html += '</svg>';
     html += '<div class="rpt-ring-info">';
     html += '<div class="rpt-ring-headline">' + billableH.toFixed(1) + 'h <small>of ' + targetH + 'h target</small></div>';
+    html += '<div class="rpt-ring-split">' + _rptHoursCell(metrics, metrics.workMin) + ' work + ' + _rptHoursCell(metrics, metrics.clientTravelMin) + ' client travel</div>';
     html += '<div class="rpt-ring-sub">'+ (targetPct >= 100 ? 'Daily target reached!': ''+ (targetH - billableH).toFixed(1) + 'h remaining to hit target') + '</div>';
     if (targetPct < 100) {
       html += '<div class="rpt-ring-bar"><div class="rpt-ring-bar-fill" style="width:' + targetPct + '%;background:' + ringColor + '"></div></div>';
@@ -1230,17 +1303,23 @@ function buildWeeklyReportHTML(date, role) {
   var _inclCpdW    = _rptPrefsW.includeCpdSuggestions  !== false;
 
   var weekStart = _rptWeekStart(date);
-  var dayNames  = ['Monday','Tuesday','Wednesday','Thursday','Friday'];
+  var dayNames  = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
   var weekData  = [];
   var totalBillMin = 0, totalTravelMin = 0, totalAppts = 0, totalGaps = 0, totalMissing = 0;
+  var totalWorkMin = 0, totalClientTravelMin = 0, totalCancelMin = 0, totalCancelCount = 0, hoursLoaded = true;
+  var weekNotes = { issues: 0, untimed: 0, unpriced: 0, dna: 0 };
   var allClients = new Set();
 
-  for (var i = 0; i < 5; i++) {
+  for (var i = 0; i < 7; i++) {
     var d = new Date(weekStart); d.setDate(weekStart.getDate() + i);
     var dateStr  = _rptDateKey(d);
     var dayKey   = _rptDayKey(dateStr);
     var sessions = _rptSessionsForDate(dateStr);
-    var metrics  = _rptMetrics(sessions);
+    var metrics  = _rptApplyHours(_rptMetrics(sessions), dateStr);
+    if (!metrics.hoursLoaded) hoursLoaded = false;
+    totalWorkMin += metrics.workMin; totalClientTravelMin += metrics.clientTravelMin;
+    totalCancelMin += metrics.cancelledMin; totalCancelCount += metrics.cancelledCount;
+    if (metrics.billingNotes) Object.keys(weekNotes).forEach(function (k) { weekNotes[k] += metrics.billingNotes[k] || 0; });
     var travel   = _inclTravelW ? _rptTravel(dayKey || '') : { travelMin: 0, legs: [], kmTotal: 0 };
     var gaps     = _inclGapsW   ? _rptGaps(dayKey || '')   : [];
     var missing  = _rptMissingLocs(sessions);
@@ -1258,7 +1337,8 @@ function buildWeeklyReportHTML(date, role) {
   var billableH   = totalBillMin / 60;
   var targetPct   = Math.min(100, Math.round(billableH / weekTarget * 100));
 
-  if (totalAppts === 0) {
+  var wk = { hoursLoaded: hoursLoaded };
+  if (totalAppts === 0 && !totalWorkMin && !totalCancelMin) {
     return _rptEmpty('No appointments this week', 'No sessions found for the week of ' + _rptDateKey(weekStart) + '. If you expect appointments, check that the Outlook sync has run and events have loaded into the calendar.');
   }
 
@@ -1271,12 +1351,14 @@ function buildWeeklyReportHTML(date, role) {
   // Summary cards
   var fillColor = targetPct >= 100 ? '#2f7d4f' : targetPct >= 70 ? '#b06e12' : '#c2412e';
   html += '<div class="rpt-summary-cards">';
-  html += _rptCard('', billableH.toFixed(1) + 'h', 'Billable', 'of '+ weekTarget + 'h target', '#2f7d4f');
+  html += _rptCard('', _rptHoursCell(wk, totalWorkMin), 'Billable work', 'sessions + client notes', '#2f7d4f');
+  html += _rptCard('', _rptHoursCell(wk, totalClientTravelMin), 'Client travel', 'billable travel', '#b06e12');
+  html += _rptCard('', _rptHoursCell(wk, totalCancelMin), 'Cancellations', totalCancelCount + ' session' + (totalCancelCount !== 1 ? 's' : ''), '#c2412e');
   html += _rptCard('', totalAppts, 'Appointments', allClients.size + 'clients', '#3d6cae');
-  html += _rptCard('', _rptFmtH(totalTravelMin), 'Travel', 'this week', '#b06e12');
-  html += _rptCard('', totalGaps, 'Free gaps', 'across Mon–Fri', '#8b80c8');
+  html += _rptCard('', totalGaps, 'Free gaps', 'across the week', '#8b80c8');
   if (totalMissing >0) html += _rptCard('', totalMissing, 'Missing addr', 'location'+ (totalMissing >1 ? 's': '') + 'missing', '#c2412e');
   html += '</div>';
+  html += _rptBillingNotes(hoursLoaded ? weekNotes : null);
 
   // Weekly target progress — SVG ring
   if (role !== 'admin') {
@@ -1295,6 +1377,7 @@ function buildWeeklyReportHTML(date, role) {
     html += '</svg>';
     html += '<div class="rpt-ring-info">';
     html += '<div class="rpt-ring-headline">' + billableH.toFixed(1) + 'h <small>of ' + weekTarget + 'h target</small></div>';
+    html += '<div class="rpt-ring-split">' + _rptHoursCell(wk, totalWorkMin) + ' work + ' + _rptHoursCell(wk, totalClientTravelMin) + ' client travel</div>';
     html += '<div class="rpt-ring-sub">'+ (targetPct >= 100 ? 'Weekly target reached!': ''+ (weekTarget - billableH).toFixed(1) + 'h remaining') + '</div>';
     if (targetPct < 100) {
       html += '<div class="rpt-ring-bar"><div class="rpt-ring-bar-fill" style="width:' + targetPct + '%;background:' + wRingColor + '"></div></div>';
@@ -1330,8 +1413,9 @@ function buildWeeklyReportHTML(date, role) {
     html += '<div class="rpt-day-card-name">' + day.dayName.slice(0,3) + '<span class="rpt-day-date">' + day.date.toLocaleDateString('en-AU',{day:'numeric',month:'short'}) + '</span></div>';
     html += '<div class="rpt-day-card-metrics">';
     html += '<div class="rpt-day-stat"><strong>' + day.metrics.appts + '</strong><span>appts</span></div>';
-    html += '<div class="rpt-day-stat"><strong>' + (day.metrics.billableMin / 60).toFixed(1) + 'h</strong><span>billable</span></div>';
-    if (day.travel.travelMin > 0) html += '<div class="rpt-day-stat"><strong>' + day.travel.travelMin + 'm</strong><span>travel</span></div>';
+    html += '<div class="rpt-day-stat"><strong>' + _rptHoursCell(day.metrics, day.metrics.workMin) + '</strong><span>work</span></div>';
+    if (day.metrics.clientTravelMin > 0) html += '<div class="rpt-day-stat"><strong>' + _rptFmtH(day.metrics.clientTravelMin) + '</strong><span>client travel</span></div>';
+    if (day.metrics.cancelledMin > 0) html += '<div class="rpt-day-stat"><strong>' + _rptFmtH(day.metrics.cancelledMin) + '</strong><span>cancelled</span></div>';
     if (day.gaps.length > 0)      html += '<div class="rpt-day-stat"><strong>' + day.gaps.length + '</strong><span>gaps</span></div>';
     html += '</div>';
     if (hasIssues) html += '<div class="rpt-day-card-warn">'+ day.missing.length + 'missing address</div>';
@@ -1344,24 +1428,27 @@ function buildWeeklyReportHTML(date, role) {
   html += '<div class="rpt-section"><div class="rpt-section-title">Workload Mix</div><div class="rpt-mix-bars">';
   var REF_MIN = 480; // 8h reference bar
   weekData.forEach(function(day) {
-    if (day.metrics.appts === 0 && day.travel.travelMin === 0) return;
-    var bPct = Math.min(95, Math.round(day.metrics.billableMin    / REF_MIN * 100));
-    var nPct = Math.min(95, Math.round(day.metrics.nonBillableMin / REF_MIN * 100));
-    var tPct = Math.min(95, Math.round(day.travel.travelMin       / REF_MIN * 100));
+    if (day.metrics.appts === 0 && !day.metrics.billableMin && !day.metrics.cancelledMin) return;
+    var bPct = Math.min(95, Math.round(day.metrics.workMin         / REF_MIN * 100));
+    var nPct = Math.min(95, Math.round(day.metrics.nonBillableMin  / REF_MIN * 100));
+    var tPct = Math.min(95, Math.round(day.metrics.clientTravelMin / REF_MIN * 100));
+    var cPct = Math.min(95, Math.round(day.metrics.cancelledMin    / REF_MIN * 100));
     html += '<div class="rpt-mix-row">';
     html += '<div class="rpt-mix-label">' + day.dayName.slice(0,3) + '</div>';
     html += '<div class="rpt-mix-bar-track">';
-    if (bPct > 0) html += '<div class="rpt-mix-fill billable"    style="width:' + bPct + '%" title="Billable: '     + _rptFmtH(day.metrics.billableMin)    + '"></div>';
-    if (nPct > 0) html += '<div class="rpt-mix-fill nonbillable" style="width:' + nPct + '%" title="Admin: '        + _rptFmtH(day.metrics.nonBillableMin) + '"></div>';
-    if (tPct > 0) html += '<div class="rpt-mix-fill travel"      style="width:' + tPct + '%" title="Travel: '       + _rptFmtH(day.travel.travelMin)       + '"></div>';
+    if (bPct > 0) html += '<div class="rpt-mix-fill billable"    style="width:' + bPct + '%" title="Billable work: '  + _rptFmtH(day.metrics.workMin)         + '"></div>';
+    if (tPct > 0) html += '<div class="rpt-mix-fill travel"      style="width:' + tPct + '%" title="Client travel: ' + _rptFmtH(day.metrics.clientTravelMin) + '"></div>';
+    if (nPct > 0) html += '<div class="rpt-mix-fill nonbillable" style="width:' + nPct + '%" title="Not billed: '     + _rptFmtH(day.metrics.nonBillableMin)  + '"></div>';
+    if (cPct > 0) html += '<div class="rpt-mix-fill cancelled"   style="width:' + cPct + '%" title="Cancellations: '  + _rptFmtH(day.metrics.cancelledMin)    + '"></div>';
     html += '</div>';
-    html += '<div class="rpt-mix-total">' + _rptFmtH(day.metrics.totalMin + day.travel.travelMin) + '</div>';
+    html += '<div class="rpt-mix-total">' + _rptFmtH(day.metrics.billableMin) + '</div>';
     html += '</div>';
   });
   html += '<div class="rpt-mix-legend">';
-  html += '<span><span class="rpt-legend-dot billable"></span>Billable</span>';
-  html += '<span><span class="rpt-legend-dot nonbillable"></span>Admin</span>';
-  html += '<span><span class="rpt-legend-dot travel"></span>Travel</span>';
+  html += '<span><span class="rpt-legend-dot billable"></span>Billable work</span>';
+  html += '<span><span class="rpt-legend-dot travel"></span>Client travel</span>';
+  html += '<span><span class="rpt-legend-dot nonbillable"></span>Not billed</span>';
+  html += '<span><span class="rpt-legend-dot cancelled"></span>Cancellations</span>';
   html += '</div></div></div>';
 
   // Needs attention
