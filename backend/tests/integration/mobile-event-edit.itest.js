@@ -124,6 +124,9 @@ test('GET …/edit tells the phone the type, client, address and what it can bec
   const byId = Object.fromEntries(cal.body.days[0].appointments.map((a) => [a.id, a]));
   expect(byId[s.id].canEdit).toBe(true);
   expect(byId[t.id].canEdit).toBe(false);
+
+  const detail = await agent.get(`/api/mobile/appointments/${s.id}`);
+  expect(detail.body.appointment).toMatchObject({ canEdit: true, canMove: true });
 });
 
 test('a new address is saved in place, mirrored to Outlook, and the day’s drives are re-priced', async () => {

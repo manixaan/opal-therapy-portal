@@ -580,7 +580,9 @@ router.get('/api/mobile/appointments/:id', safe(async (req, res) => {
     `SELECT * FROM voice_notes WHERE user_id = $1 AND linked_event_id = $2
       ORDER BY created_at DESC LIMIT 50`, [req.user.id, ev.id]);
 
-  const base = formatMobileAppointment(ev);
+  // canMove / canEdit: the phone's Edit button follows the same rule the
+  // edit route enforces.
+  const base = formatMobileAppointment(ev, { user: req.user, now: new Date() });
   res.json({
     appointment: {
       ...base,
