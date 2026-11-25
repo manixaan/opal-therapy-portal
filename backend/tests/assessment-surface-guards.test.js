@@ -739,7 +739,7 @@ describe('changed assets are cache-busted', () => {
       // this; the traffic-alert hook; Make room's apply shared (29 Oct 2026).
       // 74: start time not snapped back while typing; solid travel legs. 75: the
       // travel panel drops its grey explanatory sub-text (22 Nov 2026).
-      ['travel.js', 75],
+      ['travel.js', 76],
       // 1: traffic alerts — a re-priced drive running into a client session.
       ['travel-alerts.js', 1], ['travel-alerts.css', 2],
       // 1: booking-route.js/.css are new — client location selector, the
@@ -748,7 +748,7 @@ describe('changed assets are cache-busted', () => {
       // 7 (js) / 2 (css): the MMM zone under the session address, sent with Create appointment.
       // 8 (js): the typed start snaps to 15 min on blur, not per keystroke.
       // 9 (js): no Return Home when a no-address booking leaves you at home already.
-      ['booking-route.js', 15], ['booking-route.css', 7],
+      ['booking-route.js', 16], ['booking-route.css', 7],
       // 1: recurrence.js/.css are new — Repeat in Smart Booking, the event panel and delete scope.
       ['recurrence.js', 1], ['recurrence.css', 2],
       // 1: nf2f.js/.css are new — several clients on a non-face-to-face block, its billing timer and allocation.
@@ -944,7 +944,10 @@ describe('calendar move persistence — the shell state splose-sync.js depends o
   // broad type 'report'; the event drawer must name the booking, not the type.
   test('the event drawer and move dialog label a block by its booking leaf, not its broad type', () => {
     expect(SHELL).toMatch(/function sessionKindLabel\(s\)/);
-    expect(SHELL).toMatch(/rows\.push\(row\('Session type', escapeHtml\(sessionKindLabel\(s\)\)\)\);/);
+    // + the Swap type button (25 Nov 2026) on events that can be rebooked.
+    expect(SHELL).toMatch(/rows\.push\(row\('Session type', escapeHtml\(sessionKindLabel\(s\)\) \+ \(bdCanSwapType\(s\)/);
+    expect(SHELL).toMatch(/function __bspFinishSwap\(newDbId\)/);
+    expect(SHELL).toContain('?cascade=0');
     expect(SHELL).not.toMatch(/rows\.push\(row\('Session type', TYPE_LABEL\[s\.type\]/);
     expect(SHELL).toMatch(/'case-management': \{[^}]*label: 'Case Management'/);
   });

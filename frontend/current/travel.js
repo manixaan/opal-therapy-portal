@@ -599,6 +599,19 @@ function isPhysicalStop(s) {
   return !!s && !isTravelBlock(s) && isPhysicalLocation(sessionLocation(s));
 }
 
+/* An address saved on an event (detail panel, travel panel, undo) carries
+   its own suburb: the suburb a booking was made with (the client's) used to
+   stay behind, so the legs kept naming the old place until a reload
+   (25 Nov 2026). Re-derive suburb / region from the new address. */
+function refreshSessionPlace(s) {
+  if (!s) return;
+  const sub = s.address && isPlaceAddress(s.address) ? stripSuburb(addrSuburb(s.address) || '') : '';
+  s.suburb = sub || null;
+  if (sub) s.region = suburbRegion(sub) || s.region;
+  if (s.address) s.locationUnknown = false;
+  delete s.__loc;
+}
+
 function sessionLocation(s) {
   // Desk work is not cached: where it happens follows the day (its base, and
   // whether there is time to get there from the stop before).
@@ -930,7 +943,8 @@ function captureSessionAddress(s) {
   if (!s) return null;
   return { id: s.id, dbId: s.dbId || null, sploseId: s.sploseId || null, address: s.address || '',
            lat: s.lat || null, lng: s.lng || null, location: s.location, addressSource: s.addressSource,
-           locationObj: s.locationObj };
+           locationObj: s.locationObj, suburb: s.suburb || null, region: s.region || null,
+           locationUnknown: !!s.locationUnknown };
 }
 function registerSessionAddressUndo(s, was) {
   if (!window.OpalUndo || !s || !was) return;
@@ -948,6 +962,7 @@ function registerSessionAddressUndo(s, was) {
     const replaced = cur.address;
     cur.address = was.address; cur.lat = was.lat; cur.lng = was.lng;
     cur.location = was.location; cur.addressSource = was.addressSource; cur.locationObj = was.locationObj;
+    cur.suburb = was.suburb; cur.region = was.region; cur.locationUnknown = was.locationUnknown;
     delete cur.__loc;
     invalidateRouteCacheFor(replaced); invalidateRouteCacheFor(was.address);
     try {
@@ -3877,7 +3892,7 @@ async function saveSessionAddress(sessionId, newAddr, lat, lng) {
   s.location = newAddr;
   s.locationObj = { formattedAddress: newAddr, latitude: lat, longitude: lng, source: 'manual', isMissing: false, isManualOverride: true,
                     isValidForRouting: (typeof isValidRoutingLocation === 'function' ? isValidRoutingLocation(newAddr) : true) || fromPlaces };
-  delete s.__loc;
+  refreshSessionPlace(s);
   invalidateRouteCacheFor(oldAddr); invalidateRouteCacheFor(newAddr);
   try {
     var key = s.sploseId ? 'manual_addr_splose_' + s.sploseId : (s.dbId ? 'manual_addr_db_' + s.dbId : null);

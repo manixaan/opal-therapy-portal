@@ -2821,6 +2821,9 @@ router.delete('/api/outlook/events/:dbId', requireAuth, async (req, res) => {
   try {
     const { dbId } = req.params;
     const dryRun = req.query.dryRun === '1' || req.query.dryRun === 'true';
+    // ?cascade=0 — a "Swap type" replacement (25 Nov 2026): the new booking
+    // sits in the very same slot, so the travel around it still serves it.
+    const noCascade = req.query.cascade === '0' || req.query.cascade === 'false';
 
     const ev = await db.pool.query(
       'SELECT outlook_id, title, start_time, end_time, splose_id, user_id FROM events WHERE id = $1 AND user_id = $2',
@@ -2837,7 +2840,7 @@ router.delete('/api/outlook/events/:dbId', requireAuth, async (req, res) => {
     // rule needs the neighbouring non-travel events too). Selection itself is
     // pure — see travel-cascade.js.
     let cascade = [];
-    try {
+    if (!noCascade) try {
       const params = [req.session.userId, dbId];
       let windowSql = '';
       if (startTime && endTime) {

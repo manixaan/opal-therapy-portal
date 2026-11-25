@@ -204,14 +204,14 @@
      store and computeDayTravelSegments(), the calendar leg overlays and the
      travel details panel. Deferred and loaded ahead of profile.js and
      reports.js, both of which reach into it. -->
-<script src="/travel.js?v=75" defer></script>
+<script src="/travel.js?v=76" defer></script>
 <!-- Traffic alerts: a re-priced drive that now runs into a client session —
      point at it, offer Make room, Acknowledge or Ignore (today and tomorrow). -->
 <script src="/travel-alerts.js?v=1" defer></script>
 <!-- Route-aware Smart Booking: client location selector, work-location
      notice, and the "What next?" continuation after a booking. Extends the
      booking panel; the route maths live in travel.js, loaded just above. -->
-<script src="/booking-route.js?v=15" defer></script>
+<script src="/booking-route.js?v=16" defer></script>
 <script src="/recurrence.js?v=1" defer></script>
 <script src="/nf2f.js?v=9" defer></script>
 <!-- Travel block: a billable start → end drive, priced by Google Maps. -->
@@ -13564,6 +13564,7 @@ async function confirmBooking() {
       // No success modal — land the user straight on the calendar with the
       // new event in view; a quiet toast confirms the write.
       if (newDbId && _chainNc && typeof travelChainInherit === 'function') await travelChainInherit(newDbId, _chainNc);
+      if (window.__bspSwap) __bspFinishSwap(newDbId);
       WIZARD_BOOKED = true;
       resetBtn();
       if (typeof resetWizard === 'function') resetWizard();
@@ -13805,6 +13806,8 @@ async function confirmBooking() {
       if (typeof refreshDayOverlays === 'function') setTimeout(() => refreshDayOverlays(slot.day), 100);
     }
 
+    // Swap type: only a booking on the viewer's own calendar replaces theirs.
+    if (window.__bspSwap) { if (_bookedFor) window.__bspSwap = null; else __bspFinishSwap(newDbId); }
     // No success modal — go straight to the calendar with the event in view.
     WIZARD_BOOKED = true;
     resetBtn();
@@ -15657,7 +15660,12 @@ function openBlockDetail(id) {
   if (s.cancelled) tags.push('<span class="detail-tag" style="background:var(--danger-soft);color:var(--danger-ink);">Cancelled</span>');
 
   const rows = [];
-  rows.push(row('Session type', escapeHtml(sessionKindLabel(s))));
+  // Swap type (25 Nov 2026): booked as the wrong type (Case Noting for a
+  // session) — rebook the same slot as the right one; the old goes once the new saves.
+  rows.push(row('Session type', escapeHtml(sessionKindLabel(s)) + (bdCanSwapType(s)
+    ? ` <button type="button" class="btn btn-xs" id="bd-swap-btn" onclick="bdSwapType('${id}')">Swap type</button>
+       <div id="bd-swap" hidden style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;"></div>`
+    : '')));
   // Day, with "Change" (19 Nov 2026): move the event to another date — same
   // start time, same duration.
   const _canMoveDay = MOVABLE_TYPES.has(s.type) && !s.cancelled && !s.allDay && s.endH < 24 && !!s.dbId && !!s.startTimeIso;
@@ -15807,6 +15815,91 @@ function bdDeleteEvent(id) {
   const s = SESSIONS[id];
   if (!s || !s.dbId) return;
   deleteEventFlow(id);
+}
+
+/* ── Swap type (25 Nov 2026) ─────────────────────────────────────────────
+   An event booked as the wrong type is rebooked as the right one through
+   Smart Booking — same day, time, length, client and address — so every
+   booking rule (client required, Splose draft, billing) is the one a new
+   booking gets. The old event is removed only once the new one has saved
+   (__bspFinishSwap); closing the panel instead leaves it as it was. */
+function bdCanSwapType(s) {
+  if (!s || !s.dbId || !s.startTimeIso || s.cancelled || s.allDay || !(s.endH < 24)) return false;
+  if (typeof isTravelBlock === 'function' && isTravelBlock(s)) return false;
+  if (s.booking && s.booking.group === 'travel') return false;
+  return !!(window.BookingRoute && typeof BookingRoute.openPrefilled === 'function');
+}
+function bdSwapClientId(s) {
+  const b = s.booking || {};
+  if (s.patientId != null) return String(s.patientId);
+  if (b.clientId != null) return String(b.clientId);
+  const c = Array.isArray(b.clients) && b.clients[0];
+  return c && c.clientId != null ? String(c.clientId) : null;
+}
+function bdSwapType(id) {
+  const s = SESSIONS[id], box = document.getElementById('bd-swap');
+  if (!s || !box) return;
+  if (!box.hidden) { box.hidden = true; return; }
+  const cur = s.booking && s.booking.kind;
+  const GROUPS = [['direct', 'Direct services'], ['report', 'Requested reports'], ['nf2f', 'Non-face-to-face'], ['other', 'Non-billable']];
+  const opts = GROUPS.map(([g, label]) => {
+    const leaves = Object.keys(BOOKING_LEAVES).filter(k => {
+      const l = BOOKING_LEAVES[k];
+      return l.group === g && k !== cur && !(l.group === 'direct' && !l.serviceId);
+    });
+    return leaves.length ? `<optgroup label="${label}">${leaves.map(k => `<option value="${k}">${escapeHtml(BOOKING_LEAVES[k].label)}</option>`).join('')}</optgroup>` : '';
+  }).join('');
+  box.innerHTML = `<select id="bd-swap-kind" aria-label="New type" style="flex:1;min-width:0;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--panel);color:var(--ink);font:inherit;font-size:12.5px;">
+      <option value="">Swap to…</option>${opts}</select>
+    <button type="button" class="btn btn-xs primary" onclick="bdSwapGo('${id}')">Continue</button>`;
+  box.hidden = false;
+  const sel = document.getElementById('bd-swap-kind'); if (sel) sel.focus();
+}
+function bdSwapGo(id) {
+  const s = SESSIONS[id], sel = document.getElementById('bd-swap-kind');
+  const leaf = sel && sel.value;
+  if (!s || !leaf || !BOOKING_LEAVES[leaf]) { showToast('Pick a type', 'Choose what this should have been booked as.', 'warn'); return; }
+  const pad = n => String(n).padStart(2, '0');
+  const addr = s.address && (typeof isPlaceAddress !== 'function' || isPlaceAddress(s.address)) ? s.address : null;
+  const oldLabel = sessionDrawerTitle(s);
+  const swap = { sessionId: id, dbId: s.dbId, label: oldLabel };
+  closeBlockDetail();
+  BookingRoute.openPrefilled({
+    day: s.day, start: pad(s.startH) + ':' + pad(s.startM || 0), dur: durMin(s), leaf,
+    patientId: BOOKING_LEAVES[leaf].client === 'none' ? null : bdSwapClientId(s),
+    location: addr ? { value: addr, lat: s.lat || '', lng: s.lng || '' } : null,
+    unsure: false, home: false,
+  }, () => {
+    window.__bspSwap = swap;
+    const text = document.getElementById('bsp-prefill-text'), strip = document.getElementById('bsp-prefill-strip');
+    if (text && strip) { strip.style.display = 'flex'; text.textContent = 'Swapping ' + oldLabel + ' — Create replaces it'; }
+  });
+}
+/* The new booking saved: remove the one it replaces. Travel around the slot
+   stays (?cascade=0) — it serves the new booking just the same. */
+async function __bspFinishSwap(newDbId) {
+  const sw = window.__bspSwap; window.__bspSwap = null;
+  if (!sw || !sw.dbId || !newDbId || String(sw.dbId) === String(newDbId)) return;
+  const tid = Object.keys(SESSIONS).find(k => SESSIONS[k] && String(SESSIONS[k].dbId) === String(sw.dbId));
+  try {
+    const r = await fetch(`/api/outlook/events/${encodeURIComponent(sw.dbId)}?cascade=0`, { method: 'DELETE', credentials: 'include' });
+    if (!r.ok) throw new Error(((await r.json().catch(() => ({}))).error) || ('HTTP ' + r.status));
+    if (tid) { const cols = new Set(); __removeSessionTile(tid, cols); cols.forEach(c => { if (typeof reflowDayOverlaps === 'function' && c) reflowDayOverlaps(c); }); }
+    if (typeof refreshAllOverlays === 'function') refreshAllOverlays();
+    if (window.OpalUndo) {
+      OpalUndo.register({ group: 'calendar', label: 'Swap type — ' + sw.label, undo: async () => {
+        const rr = await fetch(`/api/outlook/events/${encodeURIComponent(sw.dbId)}/restore`, {
+          method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ travelBlockIds: [] }) });
+        if (!rr.ok) throw new Error(((await rr.json().catch(() => ({}))).error) || 'restore failed');
+        const dr = await fetch(`/api/outlook/events/${encodeURIComponent(newDbId)}?cascade=0`, { method: 'DELETE', credentials: 'include' });
+        if (!dr.ok) throw new Error('the old one is back, but the new one could not be removed');
+        if (typeof loadOutlookEventsToCalendar === 'function') loadOutlookEventsToCalendar();
+      } });
+    }
+    showToast('Type swapped', sw.label + ' was replaced.');
+  } catch (e) {
+    showToast('Old event not removed', 'The new booking is saved, but ' + sw.label + ' could not be removed (' + e.message + '). Delete it from its panel.', 'warn');
+  }
 }
 
 // ── Location section builder ───────────────────────────────────────────────
@@ -16011,7 +16104,11 @@ function bdSaveAddress(id) {
     isManualOverride: true,
     isValidForRouting: isValidRoutingLocation(newAddr) || fromPlaces,
   };
-  delete s.__loc; // bust sessionLocation() cache so next call re-derives
+  s.location = newAddr;
+  // The new address's own suburb / region, not the one it was booked with —
+  // the travel legs name and price the stop from these (travel.js).
+  if (typeof refreshSessionPlace === 'function') refreshSessionPlace(s);
+  else delete s.__loc; // bust sessionLocation() cache so next call re-derives
 
   // ── Persist manual address to localStorage so it survives page reload ──────
   // Splose sessions have no dbId (they're not in the local DB), so we key by
@@ -23638,6 +23735,7 @@ function closeBookingPanel(confirmIfDirty = false) {
   _bspOpen = false;
   _bspDirty = false;
   _bspPrefill = null;
+  window.__bspSwap = null; // a swap ends with its panel: the old event stays
   clearPreviewBlocks();
 }
 
