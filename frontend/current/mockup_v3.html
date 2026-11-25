@@ -13912,7 +13912,17 @@ function resetWizard() {
 }
 
 /* ---------- Calendar rendering ---------- */
-const HOUR_PX = 72;    // pixels per hour — 15-min slots stay readable without a marathon scroll
+// Pixels per hour — 72 keeps 15-min slots readable without a marathon scroll.
+// A trackpad pinch over the week grid changes it (calendar zoom, 25 Nov 2026),
+// remembered per browser. Everything that draws reads HOUR_PX at draw time.
+const HOUR_PX_DEFAULT = 72, HOUR_PX_MIN = 36, HOUR_PX_MAX = 216;
+let HOUR_PX = (function () {
+  try {
+    const v = parseFloat(localStorage.getItem('opal.calendar.hourPx'));
+    if (Number.isFinite(v)) return Math.min(HOUR_PX_MAX, Math.max(HOUR_PX_MIN, v));
+  } catch (_) { /* storage unavailable */ }
+  return HOUR_PX_DEFAULT;
+})();
 var START_H   = 0;     // visible grid start — full 24-hour day (midnight). Calendar always shows 0→24.
 var END_H     = 24;    // visible grid end   — midnight (full 24-hour day)
 var WORK_S    = 8;     // soft working-hours start for non-working band
@@ -13992,6 +14002,79 @@ rebuildCalendarGrid();
   } else {
     wire();
   }
+})();
+
+/* ── Pinch to zoom the time axis (25 Nov 2026) ─────────────────────────────
+   Two fingers moving apart on the trackpad over the week grid stretch the
+   hours (and every event with them); pinching squeezes them — the same
+   gesture as the Opa app. No click needed. Chrome / Edge / Firefox send a
+   trackpad pinch as a ctrl+wheel; Safari sends gesture events. The time
+   under the pointer stays where it is. While the fingers move, only the
+   tiles and hour lines are repositioned; travel legs and the now line are
+   redrawn once the pinch stops. */
+function setCalendarHourPx(px, clientY) {
+  px = Math.round(Math.min(HOUR_PX_MAX, Math.max(HOUR_PX_MIN, px)) * 10) / 10;
+  if (!Number.isFinite(px) || px === HOUR_PX) return false;
+  const grid = document.getElementById('cal-grid');
+  const col = document.querySelector('#cal-grid .cal-col');
+  let anchorY = null, anchorMin = null;
+  if (grid && col) {
+    const r = col.getBoundingClientRect(), g = grid.getBoundingClientRect();
+    anchorY = (clientY != null ? clientY : g.top + g.height / 2) - r.top;
+    anchorMin = anchorY / HOUR_PX * 60;
+  }
+  HOUR_PX = px;
+  rebuildCalendarGrid();
+  Object.keys(SESSIONS).forEach(id => {
+    const s = SESSIONS[id], el = s && s.element;
+    if (!el || !el.isConnected || !el.closest('#cal-grid .cal-col') || s.allDay) return;
+    el.style.top = tToY(s.startH, s.startM || 0) + 'px';
+    el.style.height = sessionTileHeight(durMin(s), sessionStartMin(s)) + 'px';
+  });
+  if (grid && anchorMin != null) grid.scrollTop += anchorMin / 60 * HOUR_PX - anchorY;
+  try { localStorage.setItem('opal.calendar.hourPx', String(px)); } catch (_) { /* storage unavailable */ }
+  return true;
+}
+(function initCalendarPinchZoom() {
+  let settle = null, raf = null, pending = null, gestureStart = null;
+  function afterPinch() {
+    clearTimeout(settle);
+    settle = setTimeout(() => {
+      // Legs and the now line follow the new scale. Mid-drag, leave them be.
+      if (typeof TRAVEL_DRAG !== 'undefined' && (TRAVEL_DRAG.active || TRAVEL_DRAG.leg)) return;
+      if (typeof updateNowLine === 'function') updateNowLine();
+      if (typeof refreshAllOverlays === 'function') refreshAllOverlays();
+    }, 160);
+  }
+  function schedule(px, y) {
+    pending = { px, y };
+    if (raf) return;
+    raf = requestAnimationFrame(() => {
+      raf = null;
+      const p = pending; pending = null;
+      if (p && setCalendarHourPx(p.px, p.y)) afterPinch();
+    });
+  }
+  function wire() {
+    const grid = document.getElementById('cal-grid');
+    if (!grid) return;
+    grid.addEventListener('wheel', e => {
+      if (!e.ctrlKey) return;            // a plain scroll stays a scroll
+      e.preventDefault();                // not the browser's page zoom
+      const base = pending ? pending.px : HOUR_PX;
+      const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1;
+      schedule(base * Math.exp(-e.deltaY * unit * 0.01), e.clientY);
+    }, { passive: false });
+    // Safari (macOS): pinch arrives as gesturestart / gesturechange.
+    grid.addEventListener('gesturestart', e => { e.preventDefault(); gestureStart = HOUR_PX; }, { passive: false });
+    grid.addEventListener('gesturechange', e => {
+      e.preventDefault();
+      if (gestureStart != null && Number.isFinite(e.scale)) schedule(gestureStart * e.scale, e.clientY);
+    }, { passive: false });
+    grid.addEventListener('gestureend', e => { e.preventDefault(); gestureStart = null; }, { passive: false });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire);
+  else wire();
 })();
 
 /* Skip to calendar (Q-07): Enter puts focus on the first appointment of the

@@ -190,7 +190,7 @@ describe('installable web app', () => {
 // ── Compact calendar week view (2026-08-06) ──────────────────────────────────
 describe('compact calendar week view', () => {
   test('hour height is 72px (readable 15-min slots) and coordinate math uses the constant', () => {
-    expect(HTML).toContain('const HOUR_PX = 72;');
+    expect(HTML).toContain('const HOUR_PX_DEFAULT = 72, HOUR_PX_MIN = 36, HOUR_PX_MAX = 216;') // pinch zoom (25 Nov 2026) starts here;
     // No stray hardcoded per-hour math reintroduced alongside the constant
     expect(HTML).not.toMatch(/const HOUR_PX = (48|60)/);
   });
