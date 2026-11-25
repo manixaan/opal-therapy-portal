@@ -2727,6 +2727,18 @@ function _renderDayLegs(col, segs) {
   try { segs.forEach(seg => renderSegmentOverlay(col, seg)); }
   finally { _LEG_REUSE = null; reuse.forEach(el => el.remove()); }
 }
+/* Pinch zoom (25 Nov 2026): redraw every day's legs at the current HOUR_PX
+   from the segments already worked out — no routing, no Outlook / minutes
+   sync — so the legs follow the hours frame by frame while the fingers move.
+   The pinch's end runs the full refresh once. A leg being dragged is left. */
+function redrawTravelLegsFromCache() {
+  if (!travelCalculationEnabled()) return;
+  document.querySelectorAll('#cal-grid .cal-col[data-day]').forEach(col => {
+    const segs = DAY_SEGMENTS.get(col.dataset.day);
+    if (!segs || (TRAVEL_DRAG.leg && col.contains(TRAVEL_DRAG.leg))) return;
+    _renderDayLegs(col, segs);
+  });
+}
 /* Settings › Enable travel calculation (21 Nov 2026 audit T-12). Off: no legs
    are computed or drawn, nothing is routed, nothing is mirrored to Outlook. */
 function travelCalculationEnabled() {

@@ -93,6 +93,16 @@ describe('the gesture wiring', () => {
     expect(src).toContain("e.preventDefault();                // not the browser's page zoom");
     expect(src).toMatch(/addEventListener\('wheel', e => \{[\s\S]*?\}, \{ passive: false \}\);/);
   });
+  test('travel legs follow the pinch live, from cache, with no easing lag', () => {
+    expect(fnSrc('setCalendarHourPx')).toContain('redrawTravelLegsFromCache()');
+    expect(HTML).toContain('#cal-grid.cal-zooming .travel-overlay { transition: none !important; }');
+    const travel = fs.readFileSync(path.join(__dirname, '../../frontend/current/travel.js'), 'utf8');
+    const at = travel.indexOf('function redrawTravelLegsFromCache(');
+    expect(at).toBeGreaterThan(-1);
+    const body = travel.slice(at, travel.indexOf('\n}\n', at));
+    expect(body).toContain('DAY_SEGMENTS.get(col.dataset.day)');   // cached segments: no routing
+    expect(body).not.toMatch(/computeDayTravelSegments|scheduleCalendarMinutes|scheduleTravelOutlookSync/);
+  });
   test('Safari pinch (gesture events) scales from where the pinch began', () => {
     expect(HTML).toContain("schedule(gestureStart * e.scale, e.clientY)");
   });

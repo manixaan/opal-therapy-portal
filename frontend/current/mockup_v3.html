@@ -204,7 +204,7 @@
      store and computeDayTravelSegments(), the calendar leg overlays and the
      travel details panel. Deferred and loaded ahead of profile.js and
      reports.js, both of which reach into it. -->
-<script src="/travel.js?v=76" defer></script>
+<script src="/travel.js?v=77" defer></script>
 <!-- Traffic alerts: a re-priced drive that now runs into a client session —
      point at it, offer Make room, Acknowledge or Ignore (today and tomorrow). -->
 <script src="/travel-alerts.js?v=1" defer></script>
@@ -3488,6 +3488,8 @@ window.opIcon = function (name, size) {
      lands it eases to the real size instead of jumping (audit T-14). Never
      while dragged — direct manipulation is 1:1. Reduced motion collapses it. */
   .travel-overlay:not(.drag-preview):not(.dragging):not(.preview) { transition: top 140ms var(--ease-out), height 140ms var(--ease-out); }
+  /* Pinch zoom: legs move with the hours, not 140 ms behind them. */
+  #cal-grid.cal-zooming .travel-overlay { transition: none !important; }
   /* Priced from the suburb table, not a real route (yet): a dashed bar marks
      it provisional (T-19); the fill stays solid (22 Nov 2026). */
   .travel-overlay.estimate { border-left-style: dashed; }
@@ -14035,6 +14037,9 @@ function setCalendarHourPx(px, clientY) {
     el.style.top = tToY(s.startH, s.startM || 0) + 'px';
     el.style.height = sessionTileHeight(durMin(s), sessionStartMin(s)) + 'px';
   });
+  // Travel legs and the now line follow live, from what is already computed.
+  if (typeof redrawTravelLegsFromCache === 'function') { try { redrawTravelLegsFromCache(); } catch (_) { /* never break the zoom */ } }
+  if (typeof updateNowLine === 'function') updateNowLine();
   if (grid && anchorMin != null) grid.scrollTop += anchorMin / 60 * HOUR_PX - anchorY;
   try { localStorage.setItem('opal.calendar.hourPx', String(px)); } catch (_) { /* storage unavailable */ }
   return true;
@@ -14043,10 +14048,13 @@ function setCalendarHourPx(px, clientY) {
   let settle = null, raf = null, pending = null, gestureStart = null;
   function afterPinch() {
     clearTimeout(settle);
+    const grid = document.getElementById('cal-grid');
+    if (grid) grid.classList.add('cal-zooming');
     settle = setTimeout(() => {
-      // Legs and the now line follow the new scale. Mid-drag, leave them be.
+      if (grid) grid.classList.remove('cal-zooming');
+      // The full refresh once the pinch stops (legs were redrawn live from
+      // cache; this re-prices them and records the minutes). Mid-drag, leave it.
       if (typeof TRAVEL_DRAG !== 'undefined' && (TRAVEL_DRAG.active || TRAVEL_DRAG.leg)) return;
-      if (typeof updateNowLine === 'function') updateNowLine();
       if (typeof refreshAllOverlays === 'function') refreshAllOverlays();
     }, 160);
   }

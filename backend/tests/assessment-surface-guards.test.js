@@ -739,7 +739,7 @@ describe('changed assets are cache-busted', () => {
       // this; the traffic-alert hook; Make room's apply shared (29 Oct 2026).
       // 74: start time not snapped back while typing; solid travel legs. 75: the
       // travel panel drops its grey explanatory sub-text (22 Nov 2026).
-      ['travel.js', 76],
+      ['travel.js', 77],
       // 1: traffic alerts — a re-priced drive running into a client session.
       ['travel-alerts.js', 1], ['travel-alerts.css', 2],
       // 1: booking-route.js/.css are new — client location selector, the
