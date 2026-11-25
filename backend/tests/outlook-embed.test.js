@@ -33,9 +33,14 @@ function makeApp() {
   app.use(express.json());
   const store = new session.MemoryStore();
   const normal = session({ store, secret: 's', resave: false, saveUninitialized: false, cookie: { sameSite: 'lax', httpOnly: true } });
-  app.use(embed.createSessionDispatcher({ session, normal, store, secret: 's', ttlMs: 60000 }));
+  app.use(embed.createSessionDispatcher({ session, normal, normalStore: store, embedStore: new session.MemoryStore(), secret: 's', ttlMs: 60000 }));
   app.use(embed.embedGuards);
   app.post('/test/normal-login', (req, res) => { req.session.userId = 'n1'; res.json({ ok: true }); });
+  // The real password sign-in regenerates the session (auth.js) — the path
+  // that picked up the embed cookie's options when the store was shared.
+  app.post('/test/normal-login-regenerate', (req, res) => req.session.regenerate(() => {
+    req.session.userId = 'n1'; res.json({ ok: true });
+  }));
   app.use('/', embed.createRouter({ frontendPath: __dirname, db }));
   app.get('/whoami', (req, res) => res.json({ userId: req.session && req.session.userId || null, embed: !!req.isEmbed }));
   app.post('/write', (req, res) => res.json({ ok: true }));
@@ -155,4 +160,20 @@ test('a framed navigation is recognised only when the feature is on', () => {
 test('the Teams SDK is pinned by exact version and integrity hash', () => {
   expect(embed.TEAMS_JS.src).toMatch(/^https:\/\/res\.cdn\.office\.net\/teams-js\/\d+\.\d+\.\d+\//);
   expect(embed.TEAMS_JS.integrity).toMatch(/^sha384-/);
+});
+
+test('a regenerated ordinary session keeps its own Lax cookie — over http too', async () => {
+  const app = makeApp();
+  await signIn(app); // the embed middleware has run at least once
+  const res = await request(app).post('/test/normal-login-regenerate');
+  const cookie = cookieOf(res, 'connect.sid');
+  expect(cookie).toBeDefined();
+  expect(cookie).toMatch(/SameSite=Lax/i);
+  expect(cookie).not.toMatch(/SameSite=None|Partitioned|Secure/i);
+});
+
+test('sharing one store between the two sessions is refused', () => {
+  const store = new session.MemoryStore();
+  expect(() => embed.createSessionDispatcher({ session, normal: () => {}, normalStore: store, embedStore: store, secret: 's', ttlMs: 1 }))
+    .toThrow(/own store/);
 });

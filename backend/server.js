@@ -258,7 +258,10 @@ const normalSessionMiddleware = session({
 // OPAL_OUTLOOK_TAB_ENABLED=true and the Entra settings exist.
 const outlookEmbed = require('./outlook-embed');
 const sessionMiddleware = outlookEmbed.createSessionDispatcher({
-  session, normal: normalSessionMiddleware, store: SESSION_STORE, secret: SESSION_SECRET, ttlMs: SESSION_TTL_MS,
+  session, normal: normalSessionMiddleware, normalStore: SESSION_STORE,
+  // Same table, separate object — see createSessionDispatcher.
+  embedStore: new PgSessionStore(dbPool, SESSION_TTL_MS),
+  secret: SESSION_SECRET, ttlMs: SESSION_TTL_MS,
 });
 app.use(sessionMiddleware);
 app.use(outlookEmbed.embedGuards);

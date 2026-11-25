@@ -75,10 +75,19 @@ const pathOf = (req) => String(req.originalUrl || req.url || '').split('?')[0];
  * is used only for the exchange itself or a request carrying the embed cookie
  * and no ordinary one. When the feature is off, the embed session never runs.
  */
-function createSessionDispatcher({ session, normal, store, secret, ttlMs }) {
+function createSessionDispatcher({ session, normal, normalStore, embedStore, secret, ttlMs }) {
+  // Its OWN store object, never the ordinary session's. express-session
+  // installs `store.generate` on whatever store it is given, and the last
+  // middleware built wins: sharing one store made every regenerated ordinary
+  // session (i.e. every password sign-in) carry THIS cookie's options —
+  // Secure + SameSite=None + Partitioned on connect.sid. Over http (local)
+  // no cookie was set at all; over https the main cookie lost SameSite=Lax.
+  if (!embedStore || embedStore === normalStore) {
+    throw new Error('outlook-embed: the embed session needs its own store instance');
+  }
   const embed = session({
     name: EMBED_COOKIE,
-    store,
+    store: embedStore,
     secret,
     resave: false,
     saveUninitialized: false,
