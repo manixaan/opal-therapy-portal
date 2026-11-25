@@ -3,66 +3,102 @@
 - Tracker stage: **idea**
 - Tracker environment: **none**
 - Evidence label: **needs-refinement**
-- Addressed since the last audit (2026-11-23..2026-11-24): **yes** — drag-to-move landed for the Calendar View task
+- Addressed since the last audit (2026-11-24..2026-11-25): **yes** — a large addition: edit client/session/address from the phone, a client card, notes owing, and push notifications
 - Created (any located code): **yes**
 
 ## Located files
-- backend/mobile-routes.js — `POST /api/mobile/appointments/:id/move` (new tonight, 23 Nov commit)
-  is guarded by `requireAuth` (router-wide) **plus** `requireAnyPermission('manage_own_schedule',
-  'manage_all_schedules')` and every query scoped to `user_id = req.user.id` — stronger than the
-  self-scoped-by-design exception the rest of this router relies on for its GETs.
-- backend/mobile-calendar.js (new tonight) — pure rules module: `canMoveEvent`, `checkMove`,
-  `buildTravelLegs`. No DB, no clock argument (caller passes `now`), fully unit-testable.
-- backend/event-move.js (new tonight) — the one shared save road for a calendar edit (local-first
-  write, Splose draft-queue, Outlook mirror with graceful degradation), extracted out of
-  `PATCH /api/outlook/events/:dbId` so the phone's move and a portal drag take the same path. Also
-  the located file for Portal - Splose - Outlook (see that folder).
-- backend/case-note-routes.js `generateGovernedDraft()` — mobile voice notes (voiceNoteId) link into
-  the same governed AI case-note generation pathway used by the desktop Case Notes workspace.
+- backend/mobile-routes.js — every route sits behind `router.use('/api/mobile', requireAuth)`; five
+  routes new or changed tonight:
+  - `POST …/:id/move` (yesterday) now also returns `canEdit`/`canMove` on the formatted appointment.
+  - `GET …/:id/edit`, `GET /clients/:id/address`, `PATCH …/:id/details` (new) — the edit sheet: change
+    address in place, or change client/type (rebooks the slot the way the portal's Swap type does).
+  - `GET …/:id/client` (new) — the client card: contacts, own session history, own last case-note
+    excerpt. `read_only` refused.
+  - `GET /notes-owing`, `POST/DELETE /notes-owing/:id/dismiss` (new) — own finished sessions with no
+    case note yet.
+  - `POST/DELETE /push-devices` (new) — registers/removes an APNs device token.
+- backend/mobile-event-edit.js (new) — `canEditEvent`, `currentKind`/`currentClient`, `composeBooking`,
+  `repriceDay`, address cleaning. Pure rules + one DB call (`repriceDay`); no route of its own.
+- backend/mobile-notes-owing.js (new) — `listOwed`, `ownSession`, `dismiss`/`undismiss`; every query
+  scoped by `req.user` (`e.user_id = $n` or `therapist_profile_id`), matching the snapshot-routes.js
+  self-scoped exception.
+- backend/push/apns.js (new) — sends straight to Apple over HTTP/2 with an ES256 provider JWT
+  (`node:crypto`, no dependency). No route; called only by push-jobs.js.
+- backend/push/push-jobs.js (new) — a 2-minute job: "time to leave" and a 5:30pm Perth notes-owing
+  digest. Claims a `mobile_push_sent` row before sending (no double-send across a re-run or a second
+  instance); disables a token Apple reports gone.
+- backend/migrations/094_mobile_push_and_notes_owing.sql (new) — `mobile_push_devices`,
+  `mobile_push_sent`, `case_note_owed_dismissals`. Applied cleanly tonight on an isolated database
+  (`DB_NAME=therapy_scheduler_audit_test`), `IF NOT EXISTS` throughout, no `CONCURRENTLY`.
+- backend/.env.example documents the four env vars that keep push inert
+  (`PUSH_NOTIFICATIONS_ENABLED`, `APNS_KEY_P8`/`APNS_KEY_ID`/`APNS_TEAM_ID`/`APNS_BUNDLE_ID`).
+- backend/event-move.js, backend/routes.js's `createBookingCore`/`deleteEventCore` — the shared
+  save/rebook road this edit now reuses (see Portal - Splose - Outlook's folder for the same files).
+- backend/case-note-routes.js `generateGovernedDraft()` — mobile voice notes still link into the same
+  governed AI case-note pathway as the desktop Case Notes workspace (unchanged tonight).
 
 ## Could not locate / notable gaps
 The mobile app's own frontend code lives outside this repository (native app) — nothing here can
-prove it renders or runs on a device, drag-to-move included.
+prove any of tonight's additions actually render or run on a device: not the edit sheet, not the
+client card, not notes owing, not a push notification arriving.
 
 ## Guard check
-OK. `router.use('/api/mobile', requireAuth)` covers the whole prefix; the new move route additionally
-requires `manage_own_schedule` or `manage_all_schedules` and every read/write is scoped to
-`user_id = req.user.id`. `node --check` clean on `mobile-calendar.js`, `mobile-routes.js`,
-`event-move.js`, `routes.js`. No TODO/FIXME in any of the four changed/new files. The move is
-audited as `mobile_event_moved` with ids and minutes only (no clinical/employee data in the
-metadata).
+OK. Every route is under `/api/mobile` and `router.use('/api/mobile', requireAuth)`; the write routes
+(`move`, `edit`, `details`) additionally require `manage_own_schedule`/`manage_all_schedules`. Every
+query in the new files is scoped to `user_id = req.user.id` (or `therapist_profile_id`), including the
+client card's own-appointment check (404 on someone else's row, 403 for `read_only`), the edit sheet's
+`loadEditable()` (`user_id = $2` on the SELECT), and `mobile-notes-owing.js`'s own-rows filter.
+`node --check` clean on `mobile-routes.js`, `mobile-event-edit.js`, `mobile-notes-owing.js`,
+`push/apns.js`, `push/push-jobs.js`, `server.js`. No TODO/FIXME in any of the five new/changed files.
+The client card, the rebook, and the address change are each audited
+(`mobile.client_card_viewed`, `mobile_event_rebooked`, `mobile_event_address_changed`) with ids and
+flags only — no clinical or employee data in any metadata payload, read by inspection of every
+`logAuditEvent` call in the new code. Push is fail-closed: `push/push-jobs.js`'s `off unless enabled`
+path is itself asserted by `mobile-crm.itest.js`, and the feature stays inert without all four env
+vars. The client picker reads only from the caller's own caseload (`splose-caseload.js`'s
+`loadOwnClient`), never trusting a client id from the phone directly.
 
 ## Tests run
-- unit: `mobile-routes.test.js, mobile-calendar.test.js, mobile-move.test.js, event-move.test.js,
-  case-note-routes.test.js, casenotes-compose.test.js, casenotes-helpers.test.js,
-  casenotes-workspace.test.js` — **pass** (8 files / 219 tests, run fresh tonight; the four
-  mobile/event-move files are new tonight and this is their first run under this audit)
-- integration: `mobile-move.itest.js, case-note-approval-edit.itest.js, case-note-client-link.itest.js,
-  case-note-deidentification.itest.js, case-note-workspace.itest.js` — **pass** (5 files / 17 tests;
-  `mobile-move.itest.js` is new tonight)
+- unit: `mobile-routes.test.js, mobile-calendar.test.js, mobile-move.test.js, mobile-event-edit.test.js,
+  event-move.test.js, push-apns.test.js, case-note-routes.test.js, casenotes-compose.test.js,
+  casenotes-helpers.test.js, casenotes-workspace.test.js` — **pass** (10 files / 228 tests, run fresh
+  tonight; `mobile-event-edit.test.js` and `push-apns.test.js` are new tonight and this is their first
+  run under this audit)
+- integration: `mobile-move.itest.js, mobile-event-edit.itest.js, mobile-crm.itest.js,
+  case-note-approval-edit.itest.js, case-note-client-link.itest.js, case-note-deidentification.itest.js,
+  case-note-workspace.itest.js` — **pass** (7 files / 34 tests, run fresh tonight on an isolated
+  `DB_NAME`, migration 094 applied cleanly; `mobile-event-edit.itest.js` and `mobile-crm.itest.js` are
+  new tonight). Both new integration files assert the guard paths, not only the happy path: stranger's
+  row → 404, stale view → 409, missing required client → 400, unknown type → 400, `read_only` → 403,
+  malformed push token → 400, Apple "gone" token → disabled not reused.
 
 ## Tab / browser proof
-N/A — mobile client is outside this repo. Server-side, the move is now guarded and tested; nothing
-in this repository can prove the phone's drag gesture itself works.
+N/A — mobile client is outside this repo. Server-side, every one of tonight's additions is guarded,
+audited and tested; nothing in this repository can prove the phone's own UI (the edit sheet, the
+client card, a push notification, drag-to-move) actually works on a device.
 
 ## Recency
-**Addressed tonight.** Two commits landed at 21:42 UTC 2026-11-23 (after last night's 18:35 UTC audit,
-so first seen this run): `feat(mobile): drag-to-move from Opa` (mobile-calendar.js, mobile-routes.js)
-and `refactor(calendar): one save road for a calendar edit — event-move.js` (extracted from
-`backend/routes.js`, shared by the portal's own drag-to-move PATCH). The commit's own message flags
-a known gap: Outlook copies of portal-drawn travel legs refresh only when the portal next draws that
-day — not fixed by this change, not a regression either.
+**Addressed tonight**, heavily. Four commits landed 2026-11-25 (see the brief's "What changed since
+last audit"): `feat(mobile): client card, notes owing, push to APNs (migration 094)`,
+`feat(mobile): change client, session type or address from the phone`,
+`feat(mobile): appointment detail reports canEdit/canMove for the Edit button`, and the fix to
+`outlook-tab.html`'s head is unrelated to this feature. The commits' own risk notes: contact details
+now reach the phone for the caller's own appointments only; APNs is a new outbound destination
+carrying no client data; push is "not exercised against real APNs (no key yet)" and the M365/Outlook
+embed work landing the same night is "not exercised against a real Outlook host yet" — both genuine,
+named gaps, not found independently by this audit.
 
 ## Open tasks (from the tracker)
 - Case Noting — todo
 - Calendar View — todo
 
 ## Reason for the label
-Case Noting's device walkthrough is still open (unchanged). Calendar View moved from read-only
-(GET endpoints only, as of last night) to a guarded, audited, tested write path tonight — real
-progress — but the tracker task itself is still `todo` and the next_action (manual device
-walkthrough) is still open, so the label stays `needs-refinement` rather than moving toward `proven`.
+Calendar View now has a large, guarded, audited, heavily tested write surface (move, edit, client
+card, notes owing, push) — real progress again tonight — but the tracker task itself is still `todo`,
+the next_action (manual device walkthrough) is still open, and push has never been exercised against
+real APNs. `needs-refinement` rather than `proven`: the gap is the device/real-service proof, not
+missing code.
 
 ## Disagreement with the tracker
-Tracker "idea" stage vs. a now-larger, built, tested, AI-governed (Case Noting) and guarded
-(Calendar View) backend pathway for this feature.
+Tracker "idea" stage vs. a now much larger, built, tested, audited backend pathway for this feature —
+the widest gap of any card in the tracker given how much landed in two nights.

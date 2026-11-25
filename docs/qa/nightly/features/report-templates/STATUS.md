@@ -3,7 +3,7 @@
 - Tracker stage: **idea**
 - Tracker environment: **none**
 - Evidence label: **tab-unproven**
-- Addressed since the last audit (2026-11-23..2026-11-24): **no**
+- Addressed since the last audit (2026-11-24..2026-11-25): **no**
 - Created (any located code): **yes**
 
 ## Located files
@@ -19,14 +19,14 @@ CLAUDE.md's repo map names backend/service-agreement-routes.js; that file still 
 OK — requireClinicalRead/Write (fca/letter) and requireTemplateRead/Write (templates-routes.js), re-confirmed.
 
 ## Tests run
-- unit: `templates-routes.test.js, templates-service-agreement-map.test.js, letter-template-map.test.js, templates-clinical-maps.test.js, templates-export-boundary.test.js, templates-appendices.test.js, fca-docx-engine.test.js, fca-frontend-helpers.test.js, fca-preview-lifecycle.test.js, fca-preview-pages.test.js, fca-resolve-scalars.test.js, fca-wizard-behaviour.test.js, letter-docx-engine.test.js, letter-frontend-helpers.test.js` — **pass** (14 files / 598 tests, re-run fresh tonight as part of a 78-file batch). `fca-wizard-behaviour.test.js` (the file that flaked once under combined-run load on 2026-11-23) came back clean this time — no flake tonight; no commit touched this file or FCA code tonight.
-- integration: `templates.itest.js` — **pass** (1 file / 27 tests, re-run fresh tonight)
+- unit: `templates-routes.test.js, templates-service-agreement-map.test.js, letter-template-map.test.js, templates-clinical-maps.test.js, templates-export-boundary.test.js, templates-appendices.test.js, templates-frontend-guards.test.js, fca-docx-engine.test.js, fca-frontend-helpers.test.js, fca-preview-lifecycle.test.js, fca-preview-pages.test.js, fca-resolve-scalars.test.js, fca-wizard-behaviour.test.js, letter-docx-engine.test.js, letter-frontend-helpers.test.js` — **pass** (15 files / 626 tests, re-run fresh tonight as a standalone batch). `fca-wizard-behaviour.test.js` stayed clean again tonight; no commit touched this file or FCA code tonight.
+- integration: `templates.itest.js` — **pass** (1 file / 27 tests, re-run fresh tonight as part of an 18-file batch)
 
 ## Tab / browser proof
-None found — no tab banner, no E2E spec, no browser QA entry names FCA/Letter/Agreement.
+None found — no tab banner, no E2E spec, no browser QA entry names FCA/Letter/Agreement (re-confirmed by a fresh grep tonight).
 
 ## Recency
-Not touched since the last audit. Two commits landed elsewhere in the repo tonight (21:42 UTC 2026-11-23, after last night's 18:35 UTC audit): the mobile drag-to-move feature and the `event-move.js` calendar-save refactor (see Opa Mobile Companion and Portal - Splose - Outlook's folders) — neither touched this subsystem's files.
+Not touched since the last audit. Ten commits landed elsewhere in the repo tonight (2026-11-25, see the brief's "What changed since last audit") — none touched this subsystem's files.
 
 ## Open tasks (from the tracker)
 - FCA — todo

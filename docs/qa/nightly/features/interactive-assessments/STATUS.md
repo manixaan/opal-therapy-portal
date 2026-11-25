@@ -3,7 +3,7 @@
 - Tracker stage: **idea**
 - Tracker environment: **none**
 - Evidence label: **tab-unproven**
-- Addressed since the last audit (2026-11-23..2026-11-24): **no**
+- Addressed since the last audit (2026-11-24..2026-11-25): **no**
 - Created (any located code): **yes**
 
 ## Located files
@@ -14,14 +14,14 @@
 OK — requireClinicalRead/Write throughout, re-confirmed.
 
 ## Tests run
-- unit: `assessment-catalogue.test.js, assessment-surface-guards.test.js, whodas-external-completion.test.js, whodas-frontend-guards.test.js, whodas-scoring.test.js, whodas-templates.test.js` — **pass** (6 files / 484 tests — re-run fresh tonight, unchanged from last night)
-- integration: `assessments.itest.js, whodas.itest.js` — **pass** (2 files / 81 tests)
+- unit: `assessment-catalogue.test.js, assessment-surface-guards.test.js, whodas-external-completion.test.js, whodas-frontend-guards.test.js, whodas-scoring.test.js, whodas-templates.test.js` — **pass** (6 files / 484 tests — re-run fresh tonight, unchanged from last night). `assessment-surface-guards.test.js` is the one file in this set that also changed tonight (a cache-bust version-pin bump only, for the calendar pinch-zoom/swap-type/snapshot changes elsewhere — not an assessment code change; `scripts/check-asset-pins.js` confirms every pin matches).
+- integration: `assessments.itest.js, whodas.itest.js` — **pass** (2 files / 81 tests, re-run fresh tonight as part of an 18-file batch)
 
 ## Tab / browser proof
-None found — no dedicated Assessment tab banner (re-confirmed tonight), no E2E, no browser QA entry.
+None found — no dedicated Assessment tab banner (re-confirmed by a fresh grep tonight), no E2E, no browser QA entry.
 
 ## Recency
-Not touched since the last audit. Two commits landed elsewhere in the repo tonight (21:42 UTC 2026-11-23, after last night's 18:35 UTC audit): the mobile drag-to-move feature and the `event-move.js` calendar-save refactor (see Opa Mobile Companion and Portal - Splose - Outlook's folders) — neither touched this subsystem's files.
+Not touched since the last audit. Ten commits landed elsewhere in the repo tonight (2026-11-25, see the brief's "What changed since last audit") — none touched this subsystem's own code; one shared frontend guard test it is listed under (`assessment-surface-guards.test.js`) was re-pinned for an unrelated calendar/snapshot version bump.
 
 ## Open tasks (from the tracker)
 - Assessment Review — todo

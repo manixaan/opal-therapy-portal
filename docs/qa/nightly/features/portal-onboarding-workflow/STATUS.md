@@ -3,7 +3,7 @@
 - Tracker stage: **idea**
 - Tracker environment: **none**
 - Evidence label: **needs-refinement**
-- Addressed since the last audit (2026-11-23..2026-11-24): **no**
+- Addressed since the last audit (2026-11-24..2026-11-25): **no**
 - Created (any located code): **yes**
 
 ## Located files
@@ -23,14 +23,14 @@
 OK — requireAuth + requirePermission('onboarding.*') per route throughout, re-confirmed file by file.
 
 ## Tests run
-- unit: 27 `tests/onboarding-*.test.js` files run (`onboarding-security.test.js` is also counted under Employee Personal Page; `onboarding-payroll.test.js` under Xero — cross-listed, not double work): 26 passed, 1 FAILED — `tests/onboarding-document-reader.test.js`: "Cannot find module '@tesseract.js-data/eng/package.json'". This is the SAME environment/install artifact confirmed independently every audit night since 2026-11-15 (tenth night running now); `@tesseract.js-data/eng` is declared in backend/package.json but genuinely absent from backend/node_modules in this sandbox (re-confirmed by a fresh `ls backend/node_modules` check tonight). Not fixable from inside this audit (no npm install). 653 of 654 tests in this run passed, identical to last night. — **fail (1 of 27 files, known environment artifact)**
-- integration: `onboarding-defaults.itest.js, onboarding-journey.itest.js, onboarding-pack.itest.js, onboarding-portal-route.itest.js, onboarding-returns.itest.js, onboarding-wizard-link.itest.js, onboarding-workflow.itest.js, onboarding.itest.js` — **pass** (8 files / 208 tests, re-run fresh tonight on an isolated `DB_NAME`)
+- unit: 25 `tests/onboarding-*.test.js` files run (`onboarding-security.test.js` is counted under Employee Personal Page; `onboarding-payroll.test.js` under Xero — cross-listed, not double work): 24 passed, 1 FAILED — `tests/onboarding-document-reader.test.js`: "Cannot find module '@tesseract.js-data/eng/package.json'". This is the SAME environment/install artifact confirmed independently every audit night since 2026-11-15 (eleventh night running now); `@tesseract.js-data/eng` is declared in backend/package.json but genuinely absent from backend/node_modules in this sandbox (re-confirmed by a fresh `ls` check tonight). Not fixable from inside this audit (no npm install). 604 of 605 tests in this batch passed; combined with the two cross-listed files' own counts this still totals 653 of 654, identical to last night. — **fail (1 of 25 files run here, known environment artifact)**
+- integration: `onboarding-defaults.itest.js, onboarding-journey.itest.js, onboarding-pack.itest.js, onboarding-portal-route.itest.js, onboarding-returns.itest.js, onboarding-wizard-link.itest.js, onboarding-workflow.itest.js, onboarding.itest.js` — **pass** (8 files / 208 tests, re-run fresh tonight on an isolated `DB_NAME`; migration 094 applied cleanly ahead of this run)
 
 ## Tab / browser proof
-docs/qa/BROWSER_QA_RESULTS.md row C (onboarding/profile chain) — dated 2026-08-01, stale but present; e2e/tests/portal.spec.js also touches the invite flow.
+docs/qa/BROWSER_QA_RESULTS.md row C (onboarding/profile chain) — dated 2026-08-01, stale but present; e2e/tests/portal.spec.js also touches the invite flow (both re-confirmed by a fresh grep tonight).
 
 ## Recency
-Not touched since the last audit. Two commits landed elsewhere in the repo tonight (21:42 UTC 2026-11-23, after last night's 18:35 UTC audit): the mobile drag-to-move feature and the `event-move.js` calendar-save refactor (see Opa Mobile Companion and Portal - Splose - Outlook's folders) — neither touched this subsystem's files.
+Not touched since the last audit. Ten commits landed elsewhere in the repo tonight (2026-11-25, see the brief's "What changed since last audit") — none touched this subsystem's files.
 
 ## Open tasks (from the tracker)
 - Stage 1 — todo

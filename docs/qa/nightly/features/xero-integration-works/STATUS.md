@@ -3,7 +3,7 @@
 - Tracker stage: **idea**
 - Tracker environment: **none**
 - Evidence label: **tab-unproven**
-- Addressed since the last audit (2026-11-23..2026-11-24): **no**
+- Addressed since the last audit (2026-11-24..2026-11-25): **no**
 - Created (any located code): **yes**
 
 ## Located files
@@ -16,20 +16,20 @@
 - Migrations touched this window: `082_invoicing_splose_source.sql`, `083_billing_payer_directory.sql`, `091_invoice_email_send_state.sql`, `092_xero_invoice_links.sql`, `093_trip_travel_hours.sql` (not run beyond the integration suite's own migration runner)
 
 ## Could not locate / notable gaps
-A Xero sandbox connection has still not been confirmed live in a browser this run (no browser access; every test that touches Xero mocks `xero-api`/`xero-payroll-api`/`xero-payroll-connection` — confirmed by grep across `finance-routes.test.js` and the integration suites).
+A Xero sandbox connection has still not been confirmed live in a browser this run (no browser access; a fresh grep tonight finds 4 test files explicitly `jest.mock`-ing `xero-api`/`xero-payroll-*`; the integration run's own "xero offline in test" warnings confirm the rest fail closed to the mock rather than attempting a real call).
 
 ## Guard check
 OK — `accounting-routes.js` and `finance-routes.js` are `ownerOnly` throughout, including the Xero OAuth callback (can't use router-level middleware since it's a redirect target, but does an explicit `req.user?.role !== 'owner'` check plus CSRF `state` validation before touching tokens). `invoicing-routes.js` is `requireAuth` + `requirePermission('manage_billing')` router-wide, with one documented exception: `/api/mmm-zone/lookup` is requireAuth-only, code-commented as an intentional read-only lookup any signed-in user may hit to book — not a gap. Xero-gateway boundary check: `require('./xero-api')` appears only in `accounting-routes.js` and `finance-routes.js` — no stray imports elsewhere, re-confirmed tonight. No TODO/FIXME found. `node --check` clean on all 14 core files.
 
 ## Tests run
-- unit: `billing-engine, splose-billing-source, travel-parity, finance-flags, finance-routes, invoicing-billing-mark, pricing-engine, reconciliation-engine, xero-payroll-api, xero-payroll-mapping, xero-payroll-sync, mmm-locality` — **pass** (12 files / 215 tests, re-run fresh tonight)
-- integration: `invoicing-splose, invoicing, accounting-routes, accounting-phase2, finance-routes, onboarding-payroll-xero` — **pass** (6 files / 90 tests, re-run fresh tonight on an isolated `DB_NAME`, includes expected "Xero offline in test" / "recurring invoices unavailable" warnings — correct fail-closed behaviour, not failures)
+- unit: `billing-engine, splose-billing-source, travel-parity, finance-flags, finance-routes, invoicing-billing-mark, pricing-engine, reconciliation-engine, xero-payroll-api, xero-payroll-mapping, xero-payroll-sync, mmm-locality` — **pass** (12 files / 215 tests, re-run fresh tonight across three batches: 9 files with the entra-auth unit batch, `travel-parity.test.js` with the Portal-Splose-Outlook batch, and `pricing-engine`/`reconciliation-engine`/`mmm-locality` on their own)
+- integration: `invoicing-splose, invoicing, accounting-routes, accounting-phase2, finance-routes, onboarding-payroll-xero` — **pass** (6 files / 90 tests, re-run fresh tonight as part of an 18-file batch on an isolated `DB_NAME`, includes expected "Xero offline in test" / "recurring invoices unavailable" warnings — correct fail-closed behaviour, not failures)
 
 ## Tab / browser proof
-docs/qa/BROWSER_QA_RESULTS.md row H (owner-gated, Xero connected:false) — dated 2026-08-01, stale relative to this window, but exists.
+docs/qa/BROWSER_QA_RESULTS.md row H (owner-gated, Xero connected:false) — dated 2026-08-01, stale relative to this window, but exists (re-confirmed by a fresh grep tonight).
 
 ## Recency
-Not touched since the last audit. Two commits landed elsewhere in the repo tonight (21:42 UTC 2026-11-23, after last night's 18:35 UTC audit): the mobile drag-to-move feature and the `event-move.js` calendar-save refactor (see Opa Mobile Companion and Portal - Splose - Outlook's folders) — neither touched this subsystem's files — test counts unchanged: 215 unit (12 files), 90 integration (6 files).
+Not touched since the last audit. Ten commits landed elsewhere in the repo tonight (2026-11-25, see the brief's "What changed since last audit") — none touched this subsystem's files — test counts unchanged: 215 unit (12 files), 90 integration (6 files).
 
 ## Open tasks (from the tracker)
 - Financial Dashboard — todo

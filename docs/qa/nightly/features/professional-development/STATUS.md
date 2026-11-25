@@ -3,7 +3,7 @@
 - Tracker stage: **idea**
 - Tracker environment: **none**
 - Evidence label: **built-untested**
-- Addressed since the last audit (2026-11-23..2026-11-24): **no**
+- Addressed since the last audit (2026-11-24..2026-11-25): **no**
 - Created (any located code): **yes**
 
 ## Located files
@@ -18,13 +18,13 @@ OK — backend/profile-routes.js is requireAuth router-wide + inline canApprove(
 
 ## Tests run
 - unit: the same 4 files that cover profile-routes.js generally — `credential-surface-guards.test.js, security.test.js, smart-route-backend.test.js, onboarding-security.test.js` — **pass** (4 files / 94 tests, re-run fresh tonight), but none of these test the CPD routes specifically; they are indirect/partial coverage (credentials, work-schedule scoping, leave route existence).
-- integration: no test exercises `/api/profile/cpd` specifically — confirmed by a fresh grep tonight (no hits at all this time) — **no test exists** (—)
+- integration: no test exercises `/api/profile/cpd` specifically — confirmed by a fresh grep tonight (no hits) — **no test exists** (—)
 
 ## Tab / browser proof
 Resource Hub has E2E proof (portal.spec.js) but that is a different subsystem. **Found 2026-11-23**: `docs/qa/BROWSER_QA_RESULTS.md` row I ("Leave/CPD/documents", dated 2026-08-01) covers the same My Profile tab this card's CPD section lives in, but only confirms the sections render and disabled features honestly read "Coming soon"/"Preview only — not saved" — it does not exercise the CPD round trip itself, so it does not prove this feature specifically.
 
 ## Recency
-Not touched since the last audit. Two commits landed elsewhere in the repo tonight (21:42 UTC 2026-11-23, after last night's 18:35 UTC audit): the mobile drag-to-move feature and the `event-move.js` calendar-save refactor (see Opa Mobile Companion and Portal - Splose - Outlook's folders) — neither touched this subsystem's files.
+Not touched since the last audit. Ten commits landed elsewhere in the repo tonight (2026-11-25, see the brief's "What changed since last audit") — none touched this subsystem's files.
 
 ## Open tasks (from the tracker)
 (no tasks recorded on this card)
