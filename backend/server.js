@@ -1247,6 +1247,10 @@ require('./assist/warmup').start();
   setInterval(run, 24 * 60 * 60 * 1000).unref();
 }
 
+// ── Opa push notifications (leave-now + evening notes owing) ───────────────
+// Inert unless PUSH_NOTIFICATIONS_ENABLED=true and APNS_* are set.
+require('./push/push-jobs').start();
+
 // ===== FRIDAY LOCATION ALARM CRON =====
 // Fires every Friday at 16:00 AWST (08:00 UTC, since AWST = UTC+8).
 // For each user whose notification_preferences.locationAlarm is not false,

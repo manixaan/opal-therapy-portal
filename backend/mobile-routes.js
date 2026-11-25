@@ -44,6 +44,7 @@ const calendarMinutes = require('./billing/calendar-travel-minutes');
 const { VIRTUAL_RE } = require('./geo');
 const dayRoute = require('./billing/day-route');
 const log = require('./logger').createLogger('mobile');
+const notesOwing = require('./mobile-notes-owing');
 
 router.use('/api/mobile', requireAuth);
 
@@ -435,6 +436,9 @@ router.get('/api/mobile/today', safe(async (req, res) => {
         ORDER BY created_at DESC LIMIT 5`, [req.user.id]),
     loadDayBase(req, date),
   ]);
+  // Fail-soft: a count that can't be read shows as none, never a 500.
+  const owedCount = await notesOwing.listOwed(req.user, { limit: 200 })
+    .then((r) => r.length).catch(() => 0);
 
   const now = new Date();
   const upcoming = appointments.filter((a) => !a.isCancelled);
@@ -459,6 +463,7 @@ router.get('/api/mobile/today', safe(async (req, res) => {
       dueReminderCount: remindersQ.rows.length,
       travelMinutes: travelSummary.totalMinutes,
       needsReviewCount: travelSummary.needsReviewCount,
+      notesOwingCount: owedCount,
     },
     ...(warnings.length ? { warnings } : {}),
   });
@@ -868,6 +873,179 @@ router.delete('/api/mobile/voice-notes/:id', safe(async (req, res) => {
   }
   await pool.query('DELETE FROM voice_notes WHERE id = $1 AND user_id = $2', [row.id, req.user.id]);
   await audit(req, 'mobile.voice_note_deleted', row.id);
+  res.json({ ok: true });
+}));
+
+// ═══ GET /api/mobile/appointments/:id/client — the client card ═════════════
+//
+// Who the caller is about to see: how to reach them, where, and the caller's
+// own history with them. Authorised by the APPOINTMENT — an event on the
+// caller's own diary (same owner rule as GET /api/mobile/appointments/:id,
+// which already shows the client's name and address). read_only is refused
+// like every Splose client read. Contact details come live from Splose (the
+// source of truth; there is no local client table). History and the last
+// note are the caller's own rows only — never another therapist's notes.
+// Audited with ids only.
+
+const PHONE_FIELDS = [
+  ['mobilePhone', 'Mobile'], ['homePhone', 'Home'], ['workPhone', 'Work'], ['phone', 'Phone'],
+];
+const NOTE_EXCERPT_CHARS = 280;
+
+router.get('/api/mobile/appointments/:id/client', safe(async (req, res) => {
+  if (req.user.role === 'read_only') {
+    return res.status(403).json({ error: 'Read-only accounts cannot see client details', code: 'splose_read_only_denied' });
+  }
+  const id = req.params.id;
+  if (!isUuid(id)) return res.status(404).json({ error: 'Not found' });
+  const params = [id, req.user.id];
+  let where = 'user_id = $2';
+  if (req.user.therapist_profile_id) {
+    params.push(req.user.therapist_profile_id);
+    where = '(user_id = $2 OR therapist_profile_id = $3)';
+  }
+  const { rows: [ev] } = await pool.query(
+    `SELECT * FROM events WHERE id = $1 AND ${where} AND (is_deleted IS NULL OR is_deleted = FALSE)`, params);
+  if (!ev) return res.status(404).json({ error: 'Not found' });
+
+  // eslint-disable-next-line global-require
+  const caseload = require('./splose-caseload');
+  const clientId = ev.client_id ? String(ev.client_id) : null;
+  if (!clientId || !caseload.isSploseClientId(clientId)) {
+    return res.json({ client: null, reason: 'no_client_linked' });
+  }
+
+  // eslint-disable-next-line global-require
+  const sploseApi = require('./splose-api');
+  let patient = sploseApi.peekPatient ? sploseApi.peekPatient(clientId) : null;
+  if (!patient) {
+    try {
+      patient = await sploseApi.getPatient(clientId);
+    } catch (err) {
+      if (err?.response?.status === 404) return res.json({ client: null, reason: 'client_not_found' });
+      log.warn('client card lookup failed', { status: err?.response?.status || null });
+      return res.status(502).json({ error: "Couldn't load this client from Splose just now.", code: 'client_lookup_failed' });
+    }
+  }
+  if (!patient || patient._raw?.archived || patient._raw?.deletedAt) {
+    return res.json({ client: null, reason: 'client_not_found' });
+  }
+
+  const raw = patient._raw || {};
+  const seen = new Set();
+  const phones = PHONE_FIELDS
+    .map(([k, label]) => ({ label, number: String((k === 'mobilePhone' ? patient.mobilePhone : raw[k]) || '').trim() }))
+    .filter((p) => p.number && /\d{6,}/.test(p.number.replace(/\D/g, '')) && !seen.has(p.number) && seen.add(p.number));
+
+  const histParams = [clientId, req.user.id];
+  let histOwner = 'user_id = $2';
+  if (req.user.therapist_profile_id) {
+    histParams.push(req.user.therapist_profile_id);
+    histOwner = '(user_id = $2 OR therapist_profile_id = $3)';
+  }
+  const [historyQ, noteQ] = await Promise.all([
+    pool.query(
+      `SELECT id, title, start_time, end_time, status FROM events
+        WHERE client_id = $1 AND ${histOwner} AND event_type = 'therapy'
+          AND (is_deleted IS NULL OR is_deleted = FALSE)
+        ORDER BY start_time DESC LIMIT 60`, histParams),
+    pool.query(
+      `SELECT c.id, c.created_at, c.note_body, c.linked_event_id FROM case_note_drafts c
+        WHERE c.user_id = $2 AND c.status <> 'archived'
+          AND (c.splose_patient_id = $1
+               OR c.linked_event_id IN (SELECT id FROM events WHERE client_id = $1))
+        ORDER BY c.created_at DESC LIMIT 1`, [clientId, req.user.id]),
+  ]);
+  const now = new Date();
+  const visit = (r) => ({ id: r.id, title: r.title, start: r.start_time, end: r.end_time, isCancelled: r.status === 'cancelled' });
+  const sessions = historyQ.rows;
+  const past = sessions.filter((r) => new Date(r.start_time) < now && r.id !== ev.id).slice(0, 3).map(visit);
+  const next = sessions.filter((r) => new Date(r.start_time) > new Date(ev.start_time) && r.status !== 'cancelled')
+    .sort((a, b) => new Date(a.start_time) - new Date(b.start_time))[0];
+  const note = noteQ.rows[0];
+  const body = note ? String(note.note_body || '').replace(/\s+/g, ' ').trim() : '';
+
+  await db.logAuditEvent({
+    action: 'mobile.client_card_viewed', targetType: 'client', targetId: clientId,
+    actorUserId: req.user.id, organisationId: orgOf(req), ipAddress: req.ip,
+    metadata: { eventId: ev.id },
+  }).catch(() => {});
+
+  res.json({
+    client: {
+      id: clientId,
+      fullName: patient.fullName || ev.client_name || null,
+      firstName: patient.firstname || null,
+      phones,
+      email: patient.email || null,
+      address: patient.formattedAddress || null,
+      pastSessions: past,
+      nextSession: next ? visit(next) : null,
+      sessionCount: sessions.filter((r) => r.status !== 'cancelled' && new Date(r.start_time) < now).length,
+      lastNote: note ? {
+        id: note.id,
+        createdAt: note.created_at,
+        excerpt: body.length > NOTE_EXCERPT_CHARS ? `${body.slice(0, NOTE_EXCERPT_CHARS - 1)}…` : body,
+      } : null,
+    },
+  });
+}));
+
+// ═══ Notes owing — finished sessions with no case note (mobile-notes-owing) ═══
+
+router.get('/api/mobile/notes-owing', safe(async (req, res) => {
+  const rows = await notesOwing.listOwed(req.user, { limit: 100 });
+  res.json({
+    sessions: rows.map((r) => ({
+      id: r.id, title: r.title, start: r.start_time, end: r.end_time, clientName: r.client_name || null,
+    })),
+    count: rows.length,
+    windowDays: notesOwing.WINDOW_DAYS,
+  });
+}));
+
+/** "Written in Splose" — stop listing it. Own therapy sessions only. */
+router.post('/api/mobile/notes-owing/:id/dismiss', safe(async (req, res) => {
+  if (!isUuid(req.params.id)) return res.status(404).json({ error: 'Not found' });
+  const own = await notesOwing.ownSession(req.user, req.params.id);
+  if (!own) return res.status(404).json({ error: 'Not found' });
+  await notesOwing.dismiss(req.user, own.id);
+  res.json({ ok: true });
+}));
+
+router.delete('/api/mobile/notes-owing/:id/dismiss', safe(async (req, res) => {
+  if (!isUuid(req.params.id)) return res.status(404).json({ error: 'Not found' });
+  await notesOwing.undismiss(req.user, req.params.id);
+  res.json({ ok: true });
+}));
+
+// ═══ Push devices — the phone's APNs token (push/apns.js sends) ══════════════
+//
+// A token belongs to whoever signed in on that phone last: registering it
+// moves it to the caller. Sign-out deletes it. Nothing here sends anything.
+
+const APNS_TOKEN_RE = /^[0-9a-f]{64,200}$/i;
+
+router.post('/api/mobile/push-devices', safe(async (req, res) => {
+  const token = String(req.body?.token || '').trim();
+  const environment = req.body?.environment === 'sandbox' ? 'sandbox' : 'production';
+  const appVersion = req.body?.appVersion ? String(req.body.appVersion).slice(0, 40) : null;
+  if (!APNS_TOKEN_RE.test(token)) return res.status(400).json({ error: 'token must be an APNs device token', code: 'invalid_token' });
+  await pool.query(
+    `INSERT INTO mobile_push_devices (user_id, token, environment, app_version)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (token) DO UPDATE
+       SET user_id = EXCLUDED.user_id, environment = EXCLUDED.environment,
+           app_version = EXCLUDED.app_version, last_seen_at = NOW(),
+           disabled_at = NULL, disabled_reason = NULL`,
+    [req.user.id, token.toLowerCase(), environment, appVersion]);
+  res.json({ ok: true });
+}));
+
+router.delete('/api/mobile/push-devices/:token', safe(async (req, res) => {
+  const token = String(req.params.token || '').trim();
+  if (!APNS_TOKEN_RE.test(token)) return res.status(400).json({ error: 'token must be an APNs device token', code: 'invalid_token' });
+  await pool.query('DELETE FROM mobile_push_devices WHERE token = $1 AND user_id = $2', [token.toLowerCase(), req.user.id]);
   res.json({ ok: true });
 }));
 
