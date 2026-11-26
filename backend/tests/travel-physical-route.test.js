@@ -172,7 +172,7 @@ describe('between two sessions: straight on, or home in between', () => {
     add(c, { at: '12:00', to: '13:00', s: { address: JOONDALUP, patient: 'B' } });   // 60 min < 25 + 30 + 40
     const L = legs(c).filter((x) => x.kind === 'between');
     expect(L).toHaveLength(1);
-    expect([L[0].via, L[0].homeAvailable]).toEqual([null, true]);
+    expect([L[0].via, L[0].homeAvailable]).toEqual([null, false]);   // 26 Nov 2026: home is offered only when it fits
   });
 
   test('the session\'s choice wins: "direct" keeps a long gap direct, "home" goes home anyway', () => {
