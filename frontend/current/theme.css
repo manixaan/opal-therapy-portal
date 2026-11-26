@@ -145,6 +145,7 @@ html:root[data-theme="dark"] select:not([multiple]) {
   box-shadow: inset 0 0 0 1px rgba(var(--tr), 0.30);
 }
 :root[data-theme="dark"] .travel-overlay.tight { border-left-color: #ff7a63; }
+:root[data-theme="dark"] .travel-overlay.stay { background: var(--panel); box-shadow: none; }
 :root[data-theme="dark"] .travel-overlay.skipped { background: transparent; box-shadow: none; }
 :root[data-theme="dark"] .travel-overlay.preview.placeholder {
   color: #e0d9ff;
