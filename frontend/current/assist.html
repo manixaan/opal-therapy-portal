@@ -62,10 +62,10 @@
             <label class="sr-only" for="oa-input">Message Opal Assist</label>
             <textarea class="oa-textarea" id="oa-input" rows="1" placeholder="Ask Opal Assist, or paste what you want rephrased…"></textarea>
             <div class="oa-composer-bar">
-              <button class="oa-icon-btn" id="oa-attach" type="button" title="Attach a file (.txt, .docx, .pdf) — read on this computer, names hidden before sending" aria-label="Attach a file" hidden>
+              <button class="oa-icon-btn" id="oa-attach" type="button" title="Attach a file or picture (.txt, .docx, .pdf, photos, screenshots) — only the text is used, names hidden before sending" aria-label="Attach a file" hidden>
                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
               </button>
-              <input type="file" id="oa-file" accept=".txt,.md,.csv,.docx,.pdf,text/plain" multiple hidden>
+              <input type="file" id="oa-file" accept=".txt,.md,.csv,.docx,.pdf,text/plain,image/*" multiple hidden>
               <button class="oa-icon-btn" id="oa-mic" type="button" aria-label="Dictate" aria-pressed="false" hidden>
                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
               </button>
@@ -100,7 +100,7 @@
   </script>
   <script src="/assist-doc.js?v=1"></script>
   <script src="/assist-export.js?v=1"></script>
-  <script src="/assist-composer.js?v=2"></script>
+  <script src="/assist-composer.js?v=3"></script>
   <script src="/assist.js?v=17"></script>
 </body>
 </html>

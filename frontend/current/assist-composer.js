@@ -4,6 +4,9 @@
  * One rounded box, like a modern chat composer:
  *   - the text area grows as you type (to about 40% of the window, then it
  *     scrolls) and shrinks back after sending;
+ *   - + attaches a picture (chosen, dropped or pasted): shrunk here, its TEXT
+ *     read by the portal's own OCR (no AI), and attached as text — the picture
+ *     itself never reaches the model;
  *   - + attaches a file: .txt .md .csv .docx .pdf, READ IN THIS BROWSER (the
  *     portal's own pdf.js and jszip) — only the text is kept, and it goes
  *     through the same name check as the message before anything is sent;
@@ -81,20 +84,59 @@
       return chain.then(function () { var t = pages.join('\n\n').trim(); if (!t) throw new Error('This PDF has no text to read (it may be a scan).'); return t; });
     });
   }
+  // Pictures: shrunk and re-encoded HERE (any format this browser can show —
+  // HEIC on a Mac, WebP, GIF — becomes a JPEG of at most 2400 px), then read by
+  // the portal's own OCR on the server (read-image: no AI, nothing stored). Only
+  // the TEXT is attached, so it is checked for names like any other file; the
+  // picture itself never goes to the AI.
+  var IMAGE_EXT = ['png', 'jpg', 'jpeg', 'heic', 'heif', 'webp', 'gif', 'bmp'];
+  var MAX_IMAGE_SIDE = 2400;
+  function isImage(file) { return /^image\//.test(file.type || '') || IMAGE_EXT.indexOf(((file.name || '').split('.').pop() || '').toLowerCase()) >= 0; }
+  function imageToJpeg(file) {
+    var bitmap = global.createImageBitmap ? global.createImageBitmap(file).catch(function () { return null; }) : Promise.resolve(null);
+    return bitmap.then(function (bmp) {
+      if (bmp) return bmp;
+      return new Promise(function (resolve, reject) {
+        var url = URL.createObjectURL(file); var img = new Image();
+        img.onload = function () { URL.revokeObjectURL(url); resolve(img); };
+        img.onerror = function () { URL.revokeObjectURL(url); reject(new Error((file.name || 'This picture') + ' could not be opened in this browser.')); };
+        img.src = url;
+      });
+    }).then(function (src) {
+      var w = src.width; var h = src.height; var k = Math.min(1, MAX_IMAGE_SIDE / Math.max(w, h));
+      var c = document.createElement('canvas'); c.width = Math.round(w * k); c.height = Math.round(h * k);
+      var g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(src, 0, 0, c.width, c.height);
+      if (src.close) src.close();
+      return new Promise(function (resolve, reject) { c.toBlob(function (b) { if (b) resolve(b); else reject(new Error('This picture could not be prepared.')); }, 'image/jpeg', 0.92); });
+    });
+  }
+  function readImage(file) {
+    return imageToJpeg(file).then(function (jpeg) {
+      return fetch('/api/assist/read-image', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'image/jpeg' }, body: jpeg });
+    }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (j) {
+        if (!res.ok) throw new Error(j.message || j.answer || 'This picture could not be read just now.');
+        return { text: j.text || '', confidence: j.confidence };
+      });
+    });
+  }
+
   function readFile(file) {
     var name = file.name || 'file'; var ext = (name.split('.').pop() || '').toLowerCase();
     if (file.size > 15 * 1024 * 1024) return Promise.reject(new Error(name + ' is too large to attach.'));
+    if (isImage(file)) return readImage(file);
     if (ext === 'docx') return readDocx(file);
     if (ext === 'pdf') return readPdf(file);
     if (['txt', 'md', 'csv', 'text'].indexOf(ext) >= 0 || /^text\//.test(file.type)) return file.text();
-    return Promise.reject(new Error(name + ': only .txt, .md, .csv, .docx and .pdf files can be attached.'));
+    return Promise.reject(new Error(name + ': only pictures and .txt, .md, .csv, .docx and .pdf files can be attached.'));
   }
   function usedAttachmentChars() { return C.attachments.reduce(function (n, a) { return n + a.text.length; }, 0); }
   function addFiles(files) {
     Array.prototype.forEach.call(files || [], function (file) {
-      var item = { name: file.name, text: '', loading: true };
+      var item = { name: file.name || 'Pasted picture', text: '', loading: true, picture: isImage(file) };
       C.attachments.push(item); renderAttachments();
       readFile(file).then(function (text) {
+        if (text && typeof text === 'object') { item.confidence = text.confidence; text = text.text; }
         var room = C.maxAttachmentChars - usedAttachmentChars();
         item.loading = false;
         if (room <= 0) { item.error = 'No room left: attachments are limited to ' + C.maxAttachmentChars.toLocaleString() + ' characters a message.'; }
@@ -106,7 +148,9 @@
   function renderAttachments() {
     var el = $('oa-attachments'); if (!el) return;
     el.innerHTML = C.attachments.map(function (a, i) {
-      var meta = a.loading ? 'Reading…' : a.error ? esc(a.error) : (a.text.length.toLocaleString() + ' characters' + (a.cut ? ' (cut to fit)' : ''));
+      var meta = a.loading ? (a.picture ? 'Reading the text in this picture…' : 'Reading…') : a.error ? esc(a.error)
+        : ((a.picture ? 'Text read from picture: ' : '') + a.text.length.toLocaleString() + ' characters' + (a.cut ? ' (cut to fit)' : '')
+          + (a.picture && a.confidence != null && a.confidence < 70 ? ' — hard to read, check the reply' : ''));
       return '<span class="oa-att' + (a.error ? ' bad' : '') + '"><span class="oa-att-name">' + esc(a.name) + '</span><small>' + meta + '</small>'
         + '<button type="button" data-att-remove="' + i + '" aria-label="Remove ' + esc(a.name) + '">×</button></span>';
     }).join('');
@@ -114,7 +158,9 @@
   }
   /** The attached text as one block for the check, or ''. */
   function attachmentsText() {
-    return C.attachments.filter(function (a) { return a.text && !a.error; }).map(function (a) { return '--- Attached file: ' + a.name + ' ---\n' + a.text; }).join('\n\n');
+    return C.attachments.filter(function (a) { return a.text && !a.error; }).map(function (a) {
+      return (a.picture ? '--- Text read from attached picture: ' : '--- Attached file: ') + a.name + ' ---\n' + a.text;
+    }).join('\n\n');
   }
   function clearAttachments() { C.attachments = []; renderAttachments(); changed(); }
 
@@ -210,6 +256,11 @@
       box.addEventListener('dragover', function (e) { if (e.dataTransfer && Array.prototype.indexOf.call(e.dataTransfer.types, 'Files') >= 0) { e.preventDefault(); box.classList.add('drop'); } });
       box.addEventListener('dragleave', function () { box.classList.remove('drop'); });
       box.addEventListener('drop', function (e) { if (e.dataTransfer && e.dataTransfer.files.length) { e.preventDefault(); box.classList.remove('drop'); addFiles(e.dataTransfer.files); } });
+      // A pasted screenshot or copied photo attaches like a chosen picture; pasted text is left alone.
+      ta.addEventListener('paste', function (e) {
+        var files = Array.prototype.filter.call((e.clipboardData && e.clipboardData.files) || [], isImage);
+        if (files.length) { e.preventDefault(); addFiles(files); }
+      });
       $('oa-attachments').addEventListener('click', function (e) { var b = e.target.closest('[data-att-remove]'); if (b) { C.attachments.splice(+b.dataset.attRemove, 1); renderAttachments(); changed(); } });
     }
     $('oa-mic').addEventListener('click', function () { if (C.listening) stopDictation(); else startDictation(); });
