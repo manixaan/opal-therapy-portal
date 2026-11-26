@@ -2878,13 +2878,15 @@ function renderSegmentOverlay(col, seg) {
   // A drive that does not fit its gap (26 Nov 2026): the bare red gutter bar
   // said nothing. A short note sits on the boundary, in the earlier tile's
   // bottom-right corner, saying what is wrong.
+  let flag = null, flagTile = null;
   if (overlaps && seg.tight && seg.kind === 'between' && seg.via !== 'home-out' && seg.via !== 'place-out' && seg.gapFromSessionId && seg.gapToSessionId && window.SESSIONS) {
     const ga = window.SESSIONS[seg.gapFromSessionId], gb = window.SESSIONS[seg.gapToSessionId];
     if (ga && gb) {
       const gap = Math.max(0, sessionStartMin(gb) - sessionEndMin(ga));
-      const flag = document.createElement('span');
+      flag = document.createElement('span');
       flag.className = 't-flag';
-      flag.textContent = (seg.via === 'home-return' ? 'Home and back' : seg.travelMin + ' min drive') + ' · ' + (gap > 0 ? 'only ' + gap + ' min' : 'no time');
+      flag.textContent = (seg.via === 'home-return' ? 'Home and back' : seg.travelMin + ' min drive') + ' · ' + (gap <= 0 ? 'no time' : gap < seg.travelMin ? 'only ' + gap + ' min' : 'no free slot');   // long enough, but other events fill it
+      flagTile = ga.element || null;
       el.appendChild(flag);
     }
   }
@@ -2943,8 +2945,32 @@ function renderSegmentOverlay(col, seg) {
   };
   if (canMove) attachTravelLegDrag(el, seg);
   if (el.parentNode !== col) col.appendChild(el);
+  if (flag) _settleLegFlag(flag, flagTile);
   if (stayCompact) { el.innerHTML = ''; }
   else if (tier === 't-full' || seg.via === 'stay') _fitLegText(el);
+}
+/* A short tile's title reaches its bottom-right corner (a 15-min visit, a
+   name wrapping to three lines in a narrow week column), and the no-time note
+   sat on top of it (26 Nov 2026 stress week). Where the note would cover the
+   tile's words it shrinks to a red "!" that keeps the sentence as its tooltip;
+   a click on it opens the travel panel like the leg. Not laid out (a hidden
+   column) = left as it is. */
+function _settleLegFlag(flag, tile) {
+  if (!tile || !flag.getBoundingClientRect || typeof document.createRange !== 'function') return;
+  const f = flag.getBoundingClientRect();
+  if (!f.width || !f.height) return;
+  const hits = (box) => box.right > f.left && box.left < f.right && box.bottom > f.top && box.top < f.bottom;
+  const covers = Array.from(tile.querySelectorAll('.s-title, .s-time, .s-sub')).some((t) => {
+    const range = document.createRange();
+    range.selectNodeContents(t);
+    return Array.from(range.getClientRects()).some(hits);
+  });
+  if (!covers) return;
+  const words = flag.textContent;
+  flag.classList.add('compact');
+  flag.textContent = '!';
+  flag.title = words;
+  flag.setAttribute('aria-label', words);
 }
 /* A leg's drawn height: its slot less the 4 px gap every tile keeps, never
    below a 2 px bar (T-15). Shared by every place that sizes a leg. */

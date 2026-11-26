@@ -2113,6 +2113,33 @@ describe('same-place marker and overlapping legs stay out of the tiles', () => {
     env.ev("refreshDayOverlays('mon')");
     expect(env.win.document.querySelector('#day-mon .travel-overlay .t-flag').textContent).toBe('18 min drive · only 10 min');
   });
+  test('a gap long enough for the drive but filled by other events says "no free slot", not "only 150 min"', async () => {
+    const env = makeEnv(HOME);
+    env.ev(`SESSIONS.A = { id: 'A', day: 'mon', type: 'therapy', startH: 9, startM: 0, endH: 10, endM: 0, address: ${JSON.stringify(A_ADDR)}, patient: 'Ada', dbId: 'db-A' };
+      SESSIONS.M = { id: 'M', day: 'mon', type: 'meeting', startH: 10, startM: 0, endH: 11, endM: 0, patient: '', title: 'MDT', dbId: 'db-M' };
+      SESSIONS.B = { id: 'B', day: 'mon', type: 'therapy', startH: 11, startM: 0, endH: 12, endM: 0, address: ${JSON.stringify(CV_ADDR)}, patient: 'Ben', dbId: 'db-B' };`);
+    await warmRoutes(env, [[A_ADDR, CV_ADDR, 18]]);
+    env.ev("refreshDayOverlays('mon')");
+    const flag = env.win.document.querySelector('#day-mon .travel-overlay .t-flag');
+    expect(flag && flag.textContent).toBe('18 min drive · no free slot');
+  });
+  test('a note that would cover a short tile\'s words shrinks to "!" and keeps the sentence as its tooltip', () => {
+    const env = makeEnv(HOME);
+    const settle = (textBox) => env.ev(`(function () {
+      var tile = document.createElement('div'); tile.innerHTML = '<div class="s-title">Client Appointment — Zoe Eng</div>';
+      var flag = document.createElement('span'); flag.className = 't-flag'; flag.textContent = '8 min drive · no time';
+      flag.getBoundingClientRect = function () { return { left: 60, right: 140, top: 40, bottom: 54, width: 80, height: 14 }; };
+      var real = document.createRange;
+      document.createRange = function () { return { selectNodeContents: function () {}, getClientRects: function () { return [${JSON.stringify(textBox)}]; } }; };
+      try { _settleLegFlag(flag, tile); } finally { document.createRange = real; }
+      return [flag.textContent, flag.classList.contains('compact'), flag.title];
+    })()`);
+    // the title's last line runs under the note → compact
+    expect(settle({ left: 5, right: 130, top: 30, bottom: 46 })).toEqual(['!', true, '8 min drive · no time']);
+    // the words end above it → the full sentence stays
+    expect(settle({ left: 5, right: 130, top: 2, bottom: 30 })).toEqual(['8 min drive · no time', false, '']);
+    expect(SHELL).toMatch(/\.travel-overlay \.t-flag\.compact \{[^}]*pointer-events: auto;/);
+  });
   test('the panel says why home is missing, and warns when a saved trip home no longer fits', async () => {
     const env = makeEnv(HOME);
     env.win.document.body.insertAdjacentHTML('beforeend', '<div id="travel-panel-overlay"></div><div id="travel-panel"><div id="travel-panel-body"></div></div>');

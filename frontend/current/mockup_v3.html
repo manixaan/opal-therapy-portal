@@ -204,7 +204,7 @@
      store and computeDayTravelSegments(), the calendar leg overlays and the
      travel details panel. Deferred and loaded ahead of profile.js and
      reports.js, both of which reach into it. -->
-<script src="/travel.js?v=78" defer></script>
+<script src="/travel.js?v=80" defer></script>
 <!-- Traffic alerts: a re-priced drive that now runs into a client session —
      point at it, offer Make room, Acknowledge or Ignore (today and tomorrow). -->
 <script src="/travel-alerts.js?v=1" defer></script>
@@ -3575,6 +3575,9 @@ window.opIcon = function (name, size) {
   .travel-overlay .t-flag { position: absolute; right: 6px; bottom: 100%; margin-bottom: 3px; z-index: 4;
     white-space: nowrap; font-size: 9.5px; font-weight: 700; line-height: 14px; padding: 0 6px;
     color: var(--danger, #9c3322); background: var(--panel); border: 1px solid currentColor; border-radius: 999px; pointer-events: none; }
+  /* …shrunk to a "!" where it would cover a short tile's words; the sentence
+     is its tooltip, so it takes the pointer (travel.js _settleLegFlag). */
+  .travel-overlay .t-flag.compact { width: 14px; padding: 0; text-align: center; color: var(--panel); background: var(--danger, #9c3322); pointer-events: auto; cursor: pointer; }
   /* …but still grabbable: an invisible 10 px hit area over the bar's edge. */
   .travel-overlay.overlaps, .travel-overlay.stay.stay-compact { overflow: visible; }
   .travel-overlay.overlaps::after, .travel-overlay.stay.stay-compact::after { content: ''; position: absolute; top: 0; bottom: 0; right: -1px; width: 10px; }
