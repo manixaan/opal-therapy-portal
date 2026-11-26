@@ -19,7 +19,7 @@
                      surface that loads it, so it belongs to this domain and
                      travels with it.
      Renderers       buildDailyReportHTML / buildWeeklyReportHTML and the
-                     _rptDailyRecs / _rptDailyAttn / _rptWeeklyRecs /
+                     _rptDailyAttn /
                      _rptWeeklyAttn / _rptCard / _rptEmpty helpers
 
    NOT A MODULE PATTERN, DELIBERATELY
@@ -1068,19 +1068,17 @@ function buildDailyReportHTML(date, role) {
   var startT = first ? _rptFmtTime(first.startH, first.startM) : '—';
   var endT   = last  ? _rptFmtTime(last.endH || last.startH, last.endM || 0) : '—';
 
-  var recs    = _rptDailyRecs({ billableH: billableH, targetH: targetH, travel: travel, gaps: gaps, missing: missing, sessions: sessions });
   var attn    = _rptDailyAttn({ missing: missing, travel: travel, billableH: billableH, targetH: targetH });
 
   var html = '';
 
   // Summary cards
   html += '<div class="rpt-summary-cards">';
-  html += _rptCard('', metrics.appts, 'Appointments', metrics.uniqueClients + 'client'+ (metrics.uniqueClients !== 1 ? 's': ''), '#3d6cae');
+  html += _rptCard('', metrics.appts, 'Appointments', metrics.uniqueClients + ' client' + (metrics.uniqueClients !== 1 ? 's': ''), '#3d6cae');
   html += _rptCard('', _rptHoursCell(metrics, metrics.workMin), 'Billable work', 'sessions + client notes', '#2f7d4f');
   html += _rptCard('', _rptHoursCell(metrics, metrics.clientTravelMin), 'Client travel', 'billable travel', '#b06e12');
   html += _rptCard('', _rptHoursCell(metrics, metrics.cancelledMin), 'Cancellations', metrics.cancelledCount + ' session' + (metrics.cancelledCount !== 1 ? 's' : ''), '#c2412e');
-  html += _rptCard('', gaps.length, 'Free gaps', gaps.length >0 ? 'available today': 'none found', '#8b80c8');
-  if (attn.length >0) html += _rptCard('', attn.length, 'Attention', 'item'+ (attn.length !== 1 ? 's': '') + 'to review', '#c2412e');
+  if (attn.length >0) html += _rptCard('', attn.length, 'Attention', 'item' + (attn.length !== 1 ? 's' : '') + ' to review', '#c2412e');
   html += '</div>';
 
   // Overview bar
@@ -1273,22 +1271,6 @@ function buildDailyReportHTML(date, role) {
     html += '</div></div>';
   }
 
-  // Recommendations
-  if (recs.length > 0) {
-    html += '<div class="rpt-section"><div class="rpt-section-title">Smart Recommendations</div><div class="rpt-rec-list">';
-    recs.forEach(function(r) {
-      html += '<div class="rpt-rec-item"><span class="rpt-rec-icon">' + r.icon + '</span><div class="rpt-rec-text">' + r.text + '</div></div>';
-    });
-    html += '</div></div>';
-  }
-
-  // Action buttons
-  html += '<div class="rpt-actions">';
-  html += '<button class="rpt-action-btn" onclick="closeReportPanel();typeof gotoToday===\'function\'&&gotoToday()">Open Calendar</button>';
-  html += '<button class="rpt-action-btn" onclick="closeReportPanel();switchTab(\'book\')">Book Appointment</button>';
-  html += '<button class="rpt-action-btn" onclick="closeReportPanel();switchTab(\'logbook\')">Travel Logbook</button>';
-  html += '<button class="rpt-action-btn" onclick="switchReportMode(\'weekly\')">View This Week</button>';
-  html += '</div>';
 
   return html_prefix + html;
 }
@@ -1342,8 +1324,6 @@ function buildWeeklyReportHTML(date, role) {
     return _rptEmpty('No appointments this week', 'No sessions found for the week of ' + _rptDateKey(weekStart) + '. If you expect appointments, check that the Outlook sync has run and events have loaded into the calendar.');
   }
 
-  var recs = _rptWeeklyRecs({ weekData: weekData, billableH: billableH, weekTarget: weekTarget,
-                               totalTravelMin: totalTravelMin, totalGaps: totalGaps, totalMissing: totalMissing, role: role });
   var attn = _rptWeeklyAttn({ weekData: weekData, billableH: billableH, weekTarget: weekTarget, totalMissing: totalMissing });
 
   var html = '';
@@ -1354,9 +1334,8 @@ function buildWeeklyReportHTML(date, role) {
   html += _rptCard('', _rptHoursCell(wk, totalWorkMin), 'Billable work', 'sessions + client notes', '#2f7d4f');
   html += _rptCard('', _rptHoursCell(wk, totalClientTravelMin), 'Client travel', 'billable travel', '#b06e12');
   html += _rptCard('', _rptHoursCell(wk, totalCancelMin), 'Cancellations', totalCancelCount + ' session' + (totalCancelCount !== 1 ? 's' : ''), '#c2412e');
-  html += _rptCard('', totalAppts, 'Appointments', allClients.size + 'clients', '#3d6cae');
-  html += _rptCard('', totalGaps, 'Free gaps', 'across the week', '#8b80c8');
-  if (totalMissing >0) html += _rptCard('', totalMissing, 'Missing addr', 'location'+ (totalMissing >1 ? 's': '') + 'missing', '#c2412e');
+  html += _rptCard('', totalAppts, 'Appointments', allClients.size + ' client' + (allClients.size !== 1 ? 's' : ''), '#3d6cae');
+  if (totalMissing >0) html += _rptCard('', totalMissing, 'Missing addr', 'location' + (totalMissing > 1 ? 's' : '') + ' missing', '#c2412e');
   html += '</div>';
   html += _rptBillingNotes(hoursLoaded ? weekNotes : null);
 
@@ -1460,55 +1439,12 @@ function buildWeeklyReportHTML(date, role) {
     html += '</div></div>';
   }
 
-  // Recommendations
-  if (recs.length > 0) {
-    html += '<div class="rpt-section"><div class="rpt-section-title">Smart Recommendations</div><div class="rpt-rec-list">';
-    recs.forEach(function(r) {
-      html += '<div class="rpt-rec-item"><span class="rpt-rec-icon">' + r.icon + '</span><div class="rpt-rec-text">' + r.text + '</div></div>';
-    });
-    html += '</div></div>';
-  }
-
-  // Action buttons
-  html += '<div class="rpt-actions">';
-  html += '<button class="rpt-action-btn" onclick="closeReportPanel();typeof gotoToday===\'function\'&&gotoToday()">Open Calendar</button>';
-  html += '<button class="rpt-action-btn" onclick="closeReportPanel();switchTab(\'logbook\')">Travel Logbook</button>';
-  html += '<button class="rpt-action-btn" onclick="closeReportPanel();switchTab(\'profile\')">My Profile</button>';
-  html += '<button class="rpt-action-btn" onclick="switchReportMode(\'daily\')">View Today</button>';
-  html += '</div>';
 
   return html;
 }
 
 // ── Recommendation engines ────────────────────────────────────
 
-function _rptDailyRecs(d) {
-  var recs = [];
-  if (d.billableH < d.targetH - 0.5) {
-    recs.push({ icon: '', text: 'You are '+ (d.targetH - d.billableH).toFixed(1) + 'h below your daily billable target. Consider booking available time if capacity allows.'});
-  }
-  if (d.travel && d.travel.travelMin > 90) {
-    recs.push({ icon: opIcon('car'), text: 'High travel day — ' + _rptFmtH(d.travel.travelMin) + ' estimated. Consider clustering nearby clients or reviewing route order.' });
-  }
-  if (d.gaps && d.gaps.length > 0) {
-    var bigGap = null;
-    d.gaps.forEach(function(g) { var f = g.endMin - g.startMin - (g.travelMin||0); if (!bigGap || f > (bigGap.endMin - bigGap.startMin - (bigGap.travelMin||0))) bigGap = g; });
-    if (bigGap) {
-      var free = bigGap.endMin - bigGap.startMin - (bigGap.travelMin || 0);
-      recs.push({ icon: '', text: free + '-minute free window available. Consider case notes, CPD, admin, or a proper break.'});
-    }
-  }
-  if (d.missing && d.missing.length > 0) {
-    recs.push({ icon: '', text: d.missing.length + 'appointment'+ (d.missing.length >1 ? 's are': 'is') + 'missing an address. Fix locations before the day starts to enable travel calculation.'});
-  }
-  var hasLunch = d.gaps && d.gaps.some(function(g) {
-    return (g.endMin - g.startMin - (g.travelMin||0)) >= 25 && g.startMin >= 660 && g.startMin <= 840;
-  });
-  if (!hasLunch && d.sessions && d.sessions.length >= 3) {
-    recs.push({ icon: '', text: 'No lunch break identified. Consider blocking 30 minutes around midday to avoid a full day without a break.'});
-  }
-  return recs.slice(0, 5);
-}
 
 function _rptDailyAttn(d) {
   var items = [];
@@ -1531,30 +1467,6 @@ function _rptDailyAttn(d) {
   return items;
 }
 
-function _rptWeeklyRecs(d) {
-  var recs = [];
-  if (d.billableH < d.weekTarget * 0.85) {
-    recs.push({ icon: '', text: 'Billable hours are at '+ d.billableH.toFixed(1) + 'h vs a '+ d.weekTarget + 'h weekly target ('+ Math.round(d.billableH / d.weekTarget * 100) + '%). Consider filling available slots.'});
-  }
-  if (d.totalMissing > 0) {
-    recs.push({ icon: '', text: d.totalMissing + 'appointment location'+ (d.totalMissing >1 ? 's are': 'is') + 'missing this week — fix before the day to enable accurate travel calculation.'});
-  }
-  if (d.totalTravelMin > 180) {
-    recs.push({ icon: opIcon('car'), text: 'High travel load this week — ' + _rptFmtH(d.totalTravelMin) + '. Consider clustering appointments by suburb to reduce drive time.' });
-  }
-  if (d.totalGaps >= 2) {
-    recs.push({ icon: '', text: d.totalGaps + 'free windows this week. Use them for case notes, CPD, supervision, or admin catch-up rather than leaving them unplanned.'});
-  }
-  var heavyDay = null;
-  d.weekData.forEach(function(day) { if (!heavyDay || day.travel.travelMin > heavyDay.travel.travelMin) heavyDay = day; });
-  if (heavyDay && heavyDay.travel.travelMin >= 90) {
-    recs.push({ icon: '', text: heavyDay.dayName + 'has the highest travel load ('+ _rptFmtH(heavyDay.travel.travelMin) + '). Consider reviewing route order or rescheduling nearby clients.'});
-  }
-  if (d.totalGaps >= 2) {
-    recs.push({ icon: '', text: 'With '+ d.totalGaps + 'free windows available this week, consider scheduling a CPD activity, supervision session, or professional development.'});
-  }
-  return recs.slice(0, 6);
-}
 
 function _rptWeeklyAttn(d) {
   var items = [];
