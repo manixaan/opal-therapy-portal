@@ -237,7 +237,7 @@
      the _rpt* data layer, the daily and weekly renderers, and the
      Snapshot Day V2 work list. Deferred, so it runs after the shell's
      inline scripts and keeps the same globals they expect. -->
-<script src="/reports.js?v=13" defer></script>
+<script src="/reports.js?v=14" defer></script>
 <script src="/navigation.js?v=17" defer></script>
 <script>
 /* Opal line icons — one consistent stroke set replacing emoji throughout.
@@ -1040,6 +1040,26 @@ window.opIcon = function (name, size) {
   .rpt-day-stat strong { display: block; font-size: 14px; font-weight: 700; color: var(--ink); }
   .rpt-day-stat span { font-size: 10px; color: var(--muted); }
   .rpt-day-card-warn { font-size: 10px; color: var(--warn-ink); background: var(--warn-soft); border-radius: 4px; padding: 2px 6px; margin-top: 2px; }
+  /* Missing-address fix exercise (reports.js rptFixStart) */
+  button.rpt-fix-chip { border: 0; font: inherit; font-size: 10.5px; font-weight: 600; cursor: pointer; text-align: left; }
+  button.rpt-day-card-warn.rpt-fix-chip { display: block; font-size: 10px; }
+  button.rpt-fix-chip:hover, button.rpt-fix-chip:focus-visible { background: color-mix(in srgb, var(--warn) 22%, var(--warn-soft)); outline: none; }
+  .rpt-fix-btn { border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent); background: var(--panel); color: var(--warn-ink); border-radius: 6px;
+    padding: 2px 9px; font: inherit; font-size: 11.5px; font-weight: 600; cursor: pointer; margin-left: 6px; white-space: nowrap; }
+  .rpt-card-sub .rpt-fix-btn, .rpt-attention-item .rpt-fix-btn { margin: 6px 0 0; }
+  .rpt-fix-btn:hover, .rpt-fix-btn:focus-visible { background: var(--warn-soft); outline: none; }
+  .rpt-fixbar { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 9000; display: flex; align-items: center; gap: 16px;
+    background: var(--panel); color: var(--ink); border: 1px solid var(--border); border-left: 4px solid var(--warn, #b06e12); border-radius: 12px;
+    box-shadow: 0 8px 28px rgba(0,0,0,0.18); padding: 10px 14px; max-width: calc(100vw - 32px); }
+  .rpt-fixbar-step { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-soft); }
+  .rpt-fixbar-done { color: var(--ok-ink, #2f7d4f); text-transform: none; letter-spacing: 0; margin-left: 6px; }
+  .rpt-fixbar-what { font-size: 13.5px; font-weight: 500; margin-top: 2px; }
+  .rpt-fixbar-dots { display: flex; gap: 4px; margin-top: 6px; }
+  .rpt-fixbar-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--border); }
+  .rpt-fixbar-dot.done { background: var(--ok, #2f7d4f); }
+  .rpt-fixbar-dot.current { box-shadow: 0 0 0 2px var(--warn, #b06e12); }
+  .rpt-fixbar-actions { display: flex; gap: 6px; flex-shrink: 0; }
+  @media (max-width: 600px) { .rpt-fixbar { left: 16px; right: 16px; transform: none; flex-direction: column; align-items: stretch; } }
   .rpt-day-card-open { font-size: 11px; color: var(--accent); margin-top: 5px; }
   /* Workload mix */
   .rpt-mix-bars { display: flex; flex-direction: column; gap: 7px; }
