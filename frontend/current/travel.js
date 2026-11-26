@@ -2954,16 +2954,18 @@ function _legHeightPx(startMin, endMin) {
 function _legTier(h) { return h < 14 ? 't-bar' : h < 20 ? 't-mins' : 't-full'; }
 /* A narrow column cannot hold "Start 8 min → Canning Vale Direct ⇄". Rather
    than an ellipsis eating the destination, drop whole parts in order — the
-   Start/End word, then the switch (the panel has it), then the destination —
+   Start/End word, then the destination, then the switch (the panel has both) —
    so what remains is always readable and the minutes always show (T-20). */
 function _fitLegText(el) {
   const over = () => el.scrollWidth > el.clientWidth + 0.5;
   if (!over()) return;
   el.classList.add('t-no-ico');
   if (!over()) return;
-  el.classList.add('t-no-switch');
-  if (!over()) return;
+  // The destination goes before the switch (26 Nov 2026): the switch is the
+  // only way back from Home on the calendar, and the panel names the place.
   el.classList.add('t-no-dest');
+  if (!over()) return;
+  el.classList.add('t-no-switch');
 }
 
 /* ---------- Travel legs mirrored to Outlook (5 Oct 2026) ----------

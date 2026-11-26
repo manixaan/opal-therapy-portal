@@ -2064,7 +2064,7 @@ describe('travel leg size tiers', () => {
   });
   test('the CSS hides dropped parts whole — never an ellipsis through the destination', () => {
     expect(SHELL).toMatch(/\.travel-overlay\.t-no-ico \.t-ico, \.travel-overlay\.t-no-switch \.t-switch,\s*\.travel-overlay\.t-no-dest \.t-dest \{ display: none; \}/);
-    expect(TRAVEL).toMatch(/el\.classList\.add\('t-no-ico'\);[\s\S]{0,80}el\.classList\.add\('t-no-switch'\);[\s\S]{0,80}el\.classList\.add\('t-no-dest'\);/);
+    expect(TRAVEL).toMatch(/el\.classList\.add\('t-no-ico'\);[\s\S]{0,240}el\.classList\.add\('t-no-dest'\);[\s\S]{0,80}el\.classList\.add\('t-no-switch'\);/);
   });
 });
 
