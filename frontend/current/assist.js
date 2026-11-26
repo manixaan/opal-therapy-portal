@@ -705,6 +705,12 @@
   $('oa-input').addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSend(); } });
   $('oa-client-search').addEventListener('input', renderSidebar);
   $('oa-client-file').addEventListener('click', openClientFile);
+  // Notes owing: finished sessions with no case note, written from here (assist-notes-owing.js).
+  function owingCount(n) { var b = $('oa-owing'); if (!b || n === null || n === undefined) return; b.textContent = global.OpalAssistNotesOwing.buttonLabel(n); b.classList.toggle('due', n > 0); }
+  $('oa-owing').addEventListener('click', function () {
+    if (!global.OpalAssistNotesOwing) return;
+    global.OpalAssistNotesOwing.open({ api: api, composer: COMPOSER(), onCount: owingCount });
+  });
   $('oa-namestyle').value = S.nameStyle;
   $('oa-namestyle').addEventListener('change', function (e) {
     S.nameStyle = e.target.value === 'full' ? 'full' : 'first';
@@ -764,6 +770,10 @@
       }).catch(function () { setStatus('Unavailable', 'off'); });
     loadThreads();
     if (S.surface === 'web') loadClients(/^splose:patient:[A-Za-z0-9_-]+$/.test(startRef || '') ? startRef : '');
+    if (S.surface === 'web' && global.OpalAssistNotesOwing) {
+      $('oa-owing').hidden = false;
+      global.OpalAssistNotesOwing.count(api).then(owingCount);
+    }
   }
   global.OpalAssist = { setSelection: setSelection, newChat: newChat, onInsert: null, _state: S };
   if (S.surface !== 'web' && office() && !office().state.ready && !office().state.error) document.addEventListener('opal-assist-office-ready', boot, { once: true });

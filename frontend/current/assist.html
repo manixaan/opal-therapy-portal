@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assist.css?v=14">
+  <link rel="stylesheet" href="/assist.css?v=15">
   <link rel="stylesheet" href="/theme.css?v=6">
 </head>
 <body>
@@ -30,6 +30,7 @@
         <button class="oa-btn primary" id="oa-new" type="button">+ New chat</button>
         <a class="oa-btn ghost" href="/" id="oa-portal" title="Back to the portal">Portal</a>
       </div>
+      <button class="oa-btn ghost oa-owing" id="oa-owing" type="button" title="Finished sessions with no case note yet — write them here" hidden>Notes owing</button>
       <div class="oa-client" id="oa-client">
         <label class="sr-only" for="oa-client-search">Find a client</label>
         <input class="oa-client-search" id="oa-client-search" type="search" placeholder="Find a client to start a chat…" autocomplete="off">
@@ -102,7 +103,8 @@
   <script src="/assist-doc.js?v=1"></script>
   <script src="/assist-export.js?v=1"></script>
   <script src="/assist-client-file.js?v=1"></script>
-  <script src="/assist-composer.js?v=4"></script>
-  <script src="/assist.js?v=18"></script>
+  <script src="/assist-notes-owing.js?v=1"></script>
+  <script src="/assist-composer.js?v=5"></script>
+  <script src="/assist.js?v=19"></script>
 </body>
 </html>

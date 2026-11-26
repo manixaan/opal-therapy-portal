@@ -173,6 +173,7 @@
     b.classList.toggle('on', C.listening);
     b.title = C.listening ? 'Stop dictating' : C.dictation === 'installable' ? 'Set up on-device dictation (one download, then speech never leaves this computer)' : C.dictation === 'installing' ? 'Setting up dictation…' : 'Dictate — speech is turned into text on this computer only';
     b.setAttribute('aria-pressed', C.listening ? 'true' : 'false');
+    if (C.onState) C.onState(C.dictation, C.listening);
   }
   function probeDictation() {
     var Ctor = speechCtor();
@@ -189,10 +190,11 @@
     })();
   }
   function insertAtCursor(text) {
-    var ta = $('oa-input'); var start = ta.selectionStart; var end = ta.selectionEnd; var before = ta.value.slice(0, start);
+    var ta = C.target || $('oa-input'); var start = ta.selectionStart; var end = ta.selectionEnd; var before = ta.value.slice(0, start);
     var piece = (before && !/\s$/.test(before) ? ' ' : '') + text.trim();
     ta.value = before + piece + ta.value.slice(end);
     ta.selectionStart = ta.selectionEnd = start + piece.length;
+    if (C.target) { if (C.targetChanged) C.targetChanged(); return; }
     autosize(); changed();
   }
   function startDictation() {
@@ -213,9 +215,23 @@
     rec.onend = function () { if (C.listening) { try { rec.start(); } catch (x) { stopDictation(); } } };
     C.rec = rec; C.listening = true; renderMic();
     try { rec.start(); } catch (x) { stopDictation(); }
-    $('oa-input').focus();
+    (C.target || $('oa-input')).focus();
   }
   function stopDictation() { C.listening = false; if (C.rec) { try { C.rec.stop(); } catch (x) { /* already stopped */ } } C.rec = null; renderMic(); }
+  /**
+   * Point dictation at another text box (the notes-owing panel) until
+   * release(). Same engine, same on-device-only rule; onState(state,
+   * listening) lets that panel draw its own microphone.
+   */
+  function dictateInto(textarea, opts) {
+    stopDictation();
+    C.target = textarea; C.targetChanged = opts && opts.onChange; C.onState = opts && opts.onState;
+    renderMic();
+    return {
+      toggle: function () { if (C.target !== textarea) return; if (C.listening) stopDictation(); else startDictation(); },
+      release: function () { if (C.target !== textarea) return; stopDictation(); C.target = null; C.targetChanged = null; C.onState = null; renderMic(); },
+    };
+  }
 
   // ── Model and context ─────────────────────────────────────────────────────
   function setModel(model) {
@@ -263,13 +279,15 @@
       });
       $('oa-attachments').addEventListener('click', function (e) { var b = e.target.closest('[data-att-remove]'); if (b) { C.attachments.splice(+b.dataset.attRemove, 1); renderAttachments(); changed(); } });
     }
-    $('oa-mic').addEventListener('click', function () { if (C.listening) stopDictation(); else startDictation(); });
+    $('oa-mic').addEventListener('click', function () { if (C.target) return; if (C.listening) stopDictation(); else startDictation(); });
     probeDictation();
     renderAttachments(); autosize();
   }
 
   api.init = init; api.autosize = autosize; api.attachmentsText = attachmentsText; api.clearAttachments = clearAttachments;
-  api.setModel = setModel; api.renderContext = renderContext; api.stopDictation = stopDictation;
+  api.setModel = setModel; api.renderContext = renderContext; api.stopDictation = stopDictation; api.dictateInto = dictateInto;
+  /** 'ready' | 'installable' | 'installing' | 'unavailable' */
+  api.dictationState = function () { return C.dictation; };
   /** The server's attachment cap (from the Assist config), applied once known. */
   api.setMaxAttachmentChars = function (n) { if (n > 0) C.maxAttachmentChars = n; };
   api.busyReading = function () { return C.attachments.some(function (a) { return a.loading; }); };
