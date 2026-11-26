@@ -273,5 +273,16 @@
   /** The server's attachment cap (from the Assist config), applied once known. */
   api.setMaxAttachmentChars = function (n) { if (n > 0) C.maxAttachmentChars = n; };
   api.busyReading = function () { return C.attachments.some(function (a) { return a.loading; }); };
+  /** Characters still free for attachments in this message. */
+  api.roomLeft = function () { return Math.max(0, C.maxAttachmentChars - usedAttachmentChars()); };
+  /** Attach text the page already has (the client file). Cut to the room left; checked for names like any file. */
+  api.addText = function (name, text) {
+    var room = api.roomLeft(); text = String(text || '');
+    if (!text.trim()) return false;
+    var item = { name: name, text: text.slice(0, room), cut: text.length > room };
+    if (room <= 0) { item.text = ''; item.error = 'No room left: attachments are limited to ' + C.maxAttachmentChars.toLocaleString() + ' characters a message.'; }
+    C.attachments.push(item); renderAttachments(); changed();
+    return !item.error;
+  };
   global.OpalAssistComposer = api;
 })(typeof window !== 'undefined' ? window : globalThis);

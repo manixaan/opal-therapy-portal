@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assist.css?v=13">
+  <link rel="stylesheet" href="/assist.css?v=14">
   <link rel="stylesheet" href="/theme.css?v=6">
 </head>
 <body>
@@ -43,6 +43,7 @@
         <button class="oa-btn ghost sm" id="oa-menu" type="button" aria-label="Chats" style="display:none;">☰</button>
         <div class="oa-title" id="oa-title">New chat</div>
         <span class="oa-client-chip" id="oa-client-chip" hidden></span>
+        <button class="oa-btn ghost sm oa-cf-open" id="oa-client-file" type="button" title="Look up this client's case, sessions and your notes, and tick what to attach" hidden>Client file</button>
         <button class="oa-btn sm" id="oa-use-selection" type="button" style="display:none;">Use selection</button>
         <span class="oa-pill" id="oa-status">Checking…</span>
         <button class="oa-theme" id="theme-toggle" type="button" onclick="window.OpalTheme.cycle()" title="Theme" aria-label="Theme"></button>
@@ -100,7 +101,8 @@
   </script>
   <script src="/assist-doc.js?v=1"></script>
   <script src="/assist-export.js?v=1"></script>
-  <script src="/assist-composer.js?v=3"></script>
-  <script src="/assist.js?v=17"></script>
+  <script src="/assist-client-file.js?v=1"></script>
+  <script src="/assist-composer.js?v=4"></script>
+  <script src="/assist.js?v=18"></script>
 </body>
 </html>

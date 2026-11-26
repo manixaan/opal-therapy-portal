@@ -585,6 +585,13 @@
   function renderClientChip() {
     var chip = $('oa-client-chip');
     if (S.client && S.client.name) { chip.hidden = false; chip.textContent = S.client.name; chip.title = 'This chat is about ' + S.client.name + ' — the AI sees [CLIENT_1]'; } else chip.hidden = true;
+    // The client file: their case, sessions and your notes, ticked into the message (assist-client-file.js).
+    var file = $('oa-client-file');
+    if (file) file.hidden = !(S.surface === 'web' && S.client && S.client.name && global.OpalAssistClientFile);
+  }
+  function openClientFile() {
+    if (!S.client || !global.OpalAssistClientFile) return;
+    global.OpalAssistClientFile.open({ client: S.client, api: api, composer: COMPOSER() });
   }
   function selectClient(ref) {
     var c = ref ? S.clients.filter(function (x) { return x.ref === ref; })[0] : null;
@@ -697,6 +704,7 @@
   });
   $('oa-input').addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSend(); } });
   $('oa-client-search').addEventListener('input', renderSidebar);
+  $('oa-client-file').addEventListener('click', openClientFile);
   $('oa-namestyle').value = S.nameStyle;
   $('oa-namestyle').addEventListener('change', function (e) {
     S.nameStyle = e.target.value === 'full' ? 'full' : 'first';

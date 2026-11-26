@@ -11,6 +11,7 @@
  *   PUT    /api/assist/conversations/:id/messages/:mid   save the practitioner's edits to a document
  *   POST   /api/assist/chat/stream            one reply as server-sent events
  *   GET    /api/assist/clients                the caller's clients, for the side-panel picker
+ *   GET    /api/assist/client-file            a client chat's lookups: own notes (searchable), sessions, Splose cases — NO model call
  *   GET    /api/assist/conversations          the caller's recent threads (?client=<ref>|general)
  *   GET    /api/assist/conversations/:id      one thread, tokenised turns
  *   DELETE /api/assist/conversations/:id      forget a thread now
@@ -161,6 +162,39 @@ router.get('/api/assist/clients', safe(async (req, res) => {
     console.error('[assist] client list failed:', err.message);
     res.status(502).json({ error: 'Could not load your clients from Splose just now.', code: 'client_lookup_failed' });
   }
+}));
+
+// ── Client file — read-only lookups for a client chat, no model call ─────────
+// The practitioner opens "Client file" in a client chat, searches and ticks
+// what to attach. The ticked text travels as an ordinary attachment, so it
+// meets /check and the chat guard before the model sees it. Here: caseload
+// scoping first (authoriseClient), the caller's OWN notes and sessions only,
+// and an audit row that records counts — never the search or the text.
+const clientFile = require('./assist/client-file');
+const sploseApi = require('./splose-api');
+router.get('/api/assist/client-file', rateLimit, safe(async (req, res) => {
+  if (!provider.isEnabled()) return res.status(503).json({ error: 'disabled', message: DISABLED });
+  const clientRef = await authoriseClient(req, res, req.query.client);
+  if (!clientRef) return;
+  const clientId = CLIENT_REF_RE.exec(clientRef)[1];
+  const query = clientFile.cleanQuery(req.query.q);
+  // Splose being slow or down costs only the case summary, never the notes.
+  const casesP = sploseApi.fetchAllCases().then((all) => clientFile.shapeCases(all, clientId), (err) => {
+    console.warn(`[assist] client-file cases unavailable (${err?.response?.status || err?.code || 'error'})`);
+    return null;
+  });
+  const [notes, sessions, cases] = await Promise.all([
+    clientFile.loadNotes(pool, { userId: req.user.id, clientId, query }),
+    query ? Promise.resolve(null) : clientFile.loadSessions(pool, { user: req.user, clientId }),
+    query ? Promise.resolve(null) : casesP,
+  ]);
+  await db.logAuditEvent({
+    actorUserId: req.user.id, organisationId: orgOf(req),
+    action: 'assist.client_file_viewed', targetType: 'client', targetId: clientId,
+    metadata: { notes: notes.notes.length, searched: !!query, cases: cases ? cases.length : null },
+    ipAddress: req.ip,
+  }).catch(() => {});
+  res.json({ query, notes: notes.notes, moreNotes: notes.more, sessions, cases, casesAvailable: query ? null : cases !== null });
 }));
 
 // ── Config ───────────────────────────────────────────────────────────────────
