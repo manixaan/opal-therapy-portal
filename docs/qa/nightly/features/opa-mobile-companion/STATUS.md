@@ -3,7 +3,7 @@
 - Tracker stage: **idea**
 - Tracker environment: **none**
 - Evidence label: **needs-refinement**
-- Addressed since the last audit (2026-11-24..2026-11-25): **yes** — a large addition: edit client/session/address from the phone, a client card, notes owing, and push notifications
+- Addressed since the last audit (2026-11-25..2026-11-26): **no** — last night's large addition (edit client/session/address, client card, notes owing, push) is unchanged tonight; no commit touched this subsystem's files
 - Created (any located code): **yes**
 
 ## Located files
@@ -61,16 +61,15 @@ vars. The client picker reads only from the caller's own caseload (`splose-casel
 ## Tests run
 - unit: `mobile-routes.test.js, mobile-calendar.test.js, mobile-move.test.js, mobile-event-edit.test.js,
   event-move.test.js, push-apns.test.js, case-note-routes.test.js, casenotes-compose.test.js,
-  casenotes-helpers.test.js, casenotes-workspace.test.js` — **pass** (10 files / 228 tests, run fresh
-  tonight; `mobile-event-edit.test.js` and `push-apns.test.js` are new tonight and this is their first
-  run under this audit)
+  casenotes-helpers.test.js, casenotes-workspace.test.js` — **pass** (10 files / 228 tests, re-run fresh
+  tonight, exact match to last night's count)
 - integration: `mobile-move.itest.js, mobile-event-edit.itest.js, mobile-crm.itest.js,
   case-note-approval-edit.itest.js, case-note-client-link.itest.js, case-note-deidentification.itest.js,
-  case-note-workspace.itest.js` — **pass** (7 files / 34 tests, run fresh tonight on an isolated
-  `DB_NAME`, migration 094 applied cleanly; `mobile-event-edit.itest.js` and `mobile-crm.itest.js` are
-  new tonight). Both new integration files assert the guard paths, not only the happy path: stranger's
-  row → 404, stale view → 409, missing required client → 400, unknown type → 400, `read_only` → 403,
-  malformed push token → 400, Apple "gone" token → disabled not reused.
+  case-note-workspace.itest.js` — **pass** (7 files / 34 tests, re-run fresh tonight on an isolated
+  `DB_NAME`, migration 094 still applies cleanly; exact match to last night's count). Both the
+  client/session/address edit and the push guard paths were re-confirmed passing, not only the happy
+  path: stranger's row → 404, stale view → 409, missing required client → 400, unknown type → 400,
+  `read_only` → 403, malformed push token → 400, Apple "gone" token → disabled not reused.
 
 ## Tab / browser proof
 N/A — mobile client is outside this repo. Server-side, every one of tonight's additions is guarded,
@@ -78,15 +77,13 @@ audited and tested; nothing in this repository can prove the phone's own UI (the
 client card, a push notification, drag-to-move) actually works on a device.
 
 ## Recency
-**Addressed tonight**, heavily. Four commits landed 2026-11-25 (see the brief's "What changed since
-last audit"): `feat(mobile): client card, notes owing, push to APNs (migration 094)`,
-`feat(mobile): change client, session type or address from the phone`,
-`feat(mobile): appointment detail reports canEdit/canMove for the Edit button`, and the fix to
-`outlook-tab.html`'s head is unrelated to this feature. The commits' own risk notes: contact details
-now reach the phone for the caller's own appointments only; APNs is a new outbound destination
-carrying no client data; push is "not exercised against real APNs (no key yet)" and the M365/Outlook
-embed work landing the same night is "not exercised against a real Outlook host yet" — both genuine,
-named gaps, not found independently by this audit.
+Not touched tonight. Last night's four commits (`feat(mobile): client card, notes owing, push to APNs
+(migration 094)`, `feat(mobile): change client, session type or address from the phone`,
+`feat(mobile): appointment detail reports canEdit/canMove for the Edit button`, plus the unrelated
+`outlook-tab.html` head fix) remain the most recent activity on this subsystem. Tonight's ten commits
+(2026-11-26, see the brief's "What changed since last audit") touched calendar/travel, Opal Assist and
+the Snapshot — none of this feature's files. The gaps named in those commits' own risk notes are
+unchanged: push is still "not exercised against real APNs (no key yet)".
 
 ## Open tasks (from the tracker)
 - Case Noting — todo

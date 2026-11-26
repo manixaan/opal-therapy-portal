@@ -30,13 +30,18 @@ Portal - Splose - Outlook | Integration Works
 - backend/travel-outlook-sync.js, backend/sync-preferences.js, backend/splose-api.js, backend/rich-notes.js, backend/block-review.js
 - backend/billing/{calendar-travel-minutes,day-route,route-facts,travel-billing,nf2f-timer,trips}.js
 - frontend: travel.js/.css, booking-route.js/.css, nf2f.js/.css, splose-sync.js/.css, sync-settings.js, block-review.js/.css, mockup_v3.html (calendar/booking panels, side panel, Sync popup, pinch-to-zoom)
-- Tonight (25 Nov) added: pinch-to-zoom on the week grid's time axis; travel legs redrawing live
-  during a pinch instead of waiting for it to stop; a saved address re-deriving its own suburb; and
-  Swap-type in the event panel rebooking the slot the same way the phone's edit sheet now does
-  (backend/routes.js's extracted `deleteEventCore`/`createBookingCore`).
+- 25 Nov added: pinch-to-zoom on the week grid's time axis; travel legs redrawing live during a
+  pinch; a saved address re-deriving its own suburb; and Swap-type in the event panel rebooking the
+  slot the same way the phone's edit sheet now does (backend/routes.js's extracted
+  `deleteEventCore`/`createBookingCore`).
+- 26 Nov added (travel.js v80, theme.css v9): "Via home" is now offered only when drive-home + 30 min
+  + drive-back actually fits the gap; the leg switch names both ways taken ("Direct \| Home",
+  "Stay \| Home"); a drive that cannot fit its gap gets an inline "no time" note instead of a bare red
+  bar, shrinking to a tooltip-only "!" where it would cover a short tile's title; dark mode shows red
+  (not purple) for a no-time drive again.
 
 ## Start here
-Walk the Multi Calendar Rules checklist against the live portal: book a session, confirm the "changes saved but not synced" indicator, check travel-time calculation, and confirm Portal/Splose match in both directions. This is a verification pass, not a build task — the subsystem grew hugely on 2026-11-21 (calendar a11y/gesture/rendering polish, booking panel, travel-leg display/routing, NF2F timer, a redesigned one-button Sync popup, an Outlook-text-escaping security fix), on 2026-11-23 the save path itself was refactored (event-move.js) so a portal drag and the phone's new drag-to-move take the same road, and on 2026-11-25 pinch-zoom and a travel-leg lag fix landed on top of the Swap-type/address fixes above — all still passing underneath it. (Separately, backend/outlook-embed.js and frontend/current/outlook-tab.* landed tonight too — the Outlook/Teams "Opal" app-bar icon — but that is embedding the whole portal inside Outlook, a different kind of integration than this card's calendar/Splose sync idea; see STATUS.md's note on tracker mapping.)
+Walk the Multi Calendar Rules checklist against the live portal: book a session, confirm the "changes saved but not synced" indicator, check travel-time calculation, and confirm Portal/Splose match in both directions. This is a verification pass, not a build task — the subsystem grew hugely on 2026-11-21 (calendar a11y/gesture/rendering polish, booking panel, travel-leg display/routing, NF2F timer, a redesigned one-button Sync popup, an Outlook-text-escaping security fix), the save path was refactored on 2026-11-23 (event-move.js), pinch-zoom and address/Swap-type fixes landed 2026-11-25, and the trip-home-fit rework above landed 2026-11-26 — all still passing underneath it. (Separately, backend/outlook-embed.js and frontend/current/outlook-tab.* landed 25 Nov too — the Outlook/Teams "Opal" app-bar icon — but that is embedding the whole portal inside Outlook, a different kind of integration than this card's calendar/Splose sync idea; see STATUS.md's note on tracker mapping. Opal Assist, not this card either, gained a much larger addition tonight — see the brief.)
 
 ## Done means
 Each Multi Calendar Rules checklist item is manually confirmed against the live portal with no bug found; label becomes `proven`.

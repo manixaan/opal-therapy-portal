@@ -3,7 +3,7 @@
 - Tracker stage: **idea**
 - Tracker environment: **none**
 - Evidence label: **built-untested**
-- Addressed since the last audit (2026-11-24..2026-11-25): **no**
+- Addressed since the last audit (2026-11-25..2026-11-26): **no**
 - Created (any located code): **yes**
 
 ## Located files
@@ -24,7 +24,7 @@ OK — backend/profile-routes.js is requireAuth router-wide + inline canApprove(
 Resource Hub has E2E proof (portal.spec.js) but that is a different subsystem. **Found 2026-11-23**: `docs/qa/BROWSER_QA_RESULTS.md` row I ("Leave/CPD/documents", dated 2026-08-01) covers the same My Profile tab this card's CPD section lives in, but only confirms the sections render and disabled features honestly read "Coming soon"/"Preview only — not saved" — it does not exercise the CPD round trip itself, so it does not prove this feature specifically.
 
 ## Recency
-Not touched since the last audit. Ten commits landed elsewhere in the repo tonight (2026-11-25, see the brief's "What changed since last audit") — none touched this subsystem's files.
+Not touched since the last audit. Ten commits landed elsewhere in the repo tonight (2026-11-26, see the brief's "What changed since last audit") — none touched this subsystem's files.
 
 ## Open tasks (from the tracker)
 (no tasks recorded on this card)

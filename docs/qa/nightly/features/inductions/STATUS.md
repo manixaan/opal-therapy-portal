@@ -3,7 +3,7 @@
 - Tracker stage: **idea**
 - Tracker environment: **none**
 - Evidence label: **needs-refinement**
-- Addressed since the last audit (2026-11-24..2026-11-25): **no**
+- Addressed since the last audit (2026-11-25..2026-11-26): **no**
 - Created (any located code): **yes**
 
 ## Located files
@@ -24,7 +24,7 @@ OK — requireAuth + requireRole('owner'), re-confirmed.
 e2e/tests/tutorials.spec.js still exists (re-confirmed by a fresh grep tonight) and still covers the learner-side flow end-to-end (start, highlight, advance, pause, resume across reload/re-login, complete, restart). No coverage of the creator/builder or AI-helper side.
 
 ## Recency
-Not touched since the last audit. Ten commits landed elsewhere in the repo tonight (2026-11-25, see the brief's "What changed since last audit") — none touched this subsystem's files.
+Not touched since the last audit. Ten commits landed elsewhere in the repo tonight (2026-11-26, see the brief's "What changed since last audit") — none touched this subsystem's files. Test counts unchanged, re-run fresh tonight.
 
 ## Open tasks (from the tracker)
 - Induction Playground — todo

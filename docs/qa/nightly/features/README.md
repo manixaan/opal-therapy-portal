@@ -8,12 +8,16 @@ One row per tracker idea. Rewritten nightly. See scripts/nightly-audit/PROMPT.md
 | Update Opal Docs Register | idea | untouched | no | [update-opal-docs-register/START.md](update-opal-docs-register/START.md) |
 | Report Templates | idea | tab-unproven | no | [report-templates/START.md](report-templates/START.md) |
 | Password Master Document | idea | untouched | no | [password-master-document/START.md](password-master-document/START.md) |
-| Opa Mobile Companion | idea | needs-refinement | **yes** — edit client/session/address, client card, notes owing, push | [opa-mobile-companion/START.md](opa-mobile-companion/START.md) |
+| Opa Mobile Companion | idea | needs-refinement | no | [opa-mobile-companion/START.md](opa-mobile-companion/START.md) |
 | Interactive Assessments | idea | tab-unproven | no | [interactive-assessments/START.md](interactive-assessments/START.md) |
 | Employee Personal Page (My Profile Tab) | idea | built-untested | no | [employee-personal-page-my-profile-tab/START.md](employee-personal-page-my-profile-tab/START.md) |
-| Automated Reminders | idea | needs-refinement | **yes** — Therapist Snapshot's billable hours now follow invoicing's own rules | [automated-reminders/START.md](automated-reminders/START.md) |
+| Automated Reminders | idea | needs-refinement | **yes** — missing-address guided fix, idle-gap/Smart Recommendations removal on the Snapshot | [automated-reminders/START.md](automated-reminders/START.md) |
 | Professional Development | idea | built-untested | no | [professional-development/START.md](professional-development/START.md) |
 | Inductions | idea | needs-refinement | no | [inductions/START.md](inductions/START.md) |
 | Clinical resources | idea | proven | no | [clinical-resources/START.md](clinical-resources/START.md) |
 | Portal Onboarding Workflow | idea | needs-refinement | no | [portal-onboarding-workflow/START.md](portal-onboarding-workflow/START.md) |
-| Portal - Splose - Outlook \| Integration Works | idea | needs-refinement | **yes** — pinch-zoom, travel-leg lag fix, address/suburb fix, Swap-type rebook fix | [portal-splose-outlook-integration-works/START.md](portal-splose-outlook-integration-works/START.md) |
+| Portal - Splose - Outlook \| Integration Works | idea | needs-refinement | **yes** — trip-home-fit rework (Via home only when it fits, both-ways leg switch) | [portal-splose-outlook-integration-works/START.md](portal-splose-outlook-integration-works/START.md) |
+
+**No tracker card** — Opal Assist gained its largest single-night addition yet (Client file lookup,
+picture OCR, Word/PowerPoint export) and still has no feature folder here because it has no tracker
+id. See tonight's brief for the detail; this has been an open question since 2026-11-15.

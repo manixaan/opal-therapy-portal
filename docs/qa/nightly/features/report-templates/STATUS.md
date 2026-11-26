@@ -3,7 +3,7 @@
 - Tracker stage: **idea**
 - Tracker environment: **none**
 - Evidence label: **tab-unproven**
-- Addressed since the last audit (2026-11-24..2026-11-25): **no**
+- Addressed since the last audit (2026-11-25..2026-11-26): **no**
 - Created (any located code): **yes**
 
 ## Located files
@@ -26,7 +26,7 @@ OK — requireClinicalRead/Write (fca/letter) and requireTemplateRead/Write (tem
 None found — no tab banner, no E2E spec, no browser QA entry names FCA/Letter/Agreement (re-confirmed by a fresh grep tonight).
 
 ## Recency
-Not touched since the last audit. Ten commits landed elsewhere in the repo tonight (2026-11-25, see the brief's "What changed since last audit") — none touched this subsystem's files.
+Not touched since the last audit. Ten commits landed elsewhere in the repo tonight (2026-11-26, see the brief's "What changed since last audit") — none touched this subsystem's files. Test counts unchanged: 626 unit, 27 integration, both re-run fresh tonight on their own.
 
 ## Open tasks (from the tracker)
 - FCA — todo

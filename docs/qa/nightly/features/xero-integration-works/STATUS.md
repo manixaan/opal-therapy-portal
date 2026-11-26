@@ -3,7 +3,7 @@
 - Tracker stage: **idea**
 - Tracker environment: **none**
 - Evidence label: **tab-unproven**
-- Addressed since the last audit (2026-11-24..2026-11-25): **no**
+- Addressed since the last audit (2026-11-25..2026-11-26): **no**
 - Created (any located code): **yes**
 
 ## Located files
@@ -29,7 +29,7 @@ OK — `accounting-routes.js` and `finance-routes.js` are `ownerOnly` throughout
 docs/qa/BROWSER_QA_RESULTS.md row H (owner-gated, Xero connected:false) — dated 2026-08-01, stale relative to this window, but exists (re-confirmed by a fresh grep tonight).
 
 ## Recency
-Not touched since the last audit. Ten commits landed elsewhere in the repo tonight (2026-11-25, see the brief's "What changed since last audit") — none touched this subsystem's files — test counts unchanged: 215 unit (12 files), 90 integration (6 files).
+Not touched since the last audit. Ten commits landed elsewhere in the repo tonight (2026-11-26, see the brief's "What changed since last audit") — none touched this subsystem's files — test counts unchanged: 215 unit (12 files), re-run fresh; integration re-run fresh across two batches tonight (`invoicing-splose.itest.js` with the Portal-Splose-Outlook batch, `invoicing.itest.js`/`accounting-routes.itest.js`/`accounting-phase2.itest.js`/`finance-routes.itest.js`/`onboarding-payroll-xero.itest.js` on their own) — all pass, same expected "xero offline in test" / "recurring invoices unavailable" fail-closed warnings as every prior night.
 
 ## Open tasks (from the tracker)
 - Financial Dashboard — todo
