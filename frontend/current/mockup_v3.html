@@ -237,7 +237,7 @@
      the _rpt* data layer, the daily and weekly renderers, and the
      Snapshot Day V2 work list. Deferred, so it runs after the shell's
      inline scripts and keeps the same globals they expect. -->
-<script src="/reports.js?v=12" defer></script>
+<script src="/reports.js?v=13" defer></script>
 <script src="/navigation.js?v=17" defer></script>
 <script>
 /* Opal line icons — one consistent stroke set replacing emoji throughout.
@@ -6932,33 +6932,6 @@ window.opIcon = function (name, size) {
             </div>
             <div class="settings-row-control">
               <label class="settings-toggle"><input type="checkbox" id="stg-rpt-include-travel" checked><span class="settings-toggle-slider"></span></label>
-            </div>
-          </div>
-          <div class="settings-row">
-            <div class="settings-row-label">
-              <strong>Include idle gaps in reports</strong>
-              <span>Show free windows in daily timeline</span>
-            </div>
-            <div class="settings-row-control">
-              <label class="settings-toggle"><input type="checkbox" id="stg-rpt-include-gaps" checked><span class="settings-toggle-slider"></span></label>
-            </div>
-          </div>
-          <div class="settings-row">
-            <div class="settings-row-label">
-              <strong>Include CPD suggestions</strong>
-              <span>Suggest CPD activities for long idle windows</span>
-            </div>
-            <div class="settings-row-control">
-              <label class="settings-toggle"><input type="checkbox" id="stg-rpt-cpd-suggest" checked><span class="settings-toggle-slider"></span></label>
-            </div>
-          </div>
-          <div class="settings-row">
-            <div class="settings-row-label">
-              <strong>Include lunch/break suggestions</strong>
-              <span>Suggest break windows in daily report</span>
-            </div>
-            <div class="settings-row-control">
-              <label class="settings-toggle"><input type="checkbox" id="stg-rpt-lunch-suggest" checked><span class="settings-toggle-slider"></span></label>
             </div>
           </div>
         </div>
@@ -25674,9 +25647,6 @@ async function loadUserSettings() {
     _setv('stg-rpt-daily-target',  rp.dailyBillableTargetHours  != null ? rp.dailyBillableTargetHours  : 5);
     _setv('stg-rpt-weekly-target', rp.weeklyBillableTargetHours != null ? rp.weeklyBillableTargetHours : 25);
     _setb('stg-rpt-include-travel', rp.includeTravel !== false);
-    _setb('stg-rpt-include-gaps',   rp.includeIdleGaps !== false);
-    _setb('stg-rpt-cpd-suggest',    rp.includeCpdSuggestions !== false);
-    _setb('stg-rpt-lunch-suggest',  rp.includeLunchSuggestions !== false);
 
     // Apply settings to app behaviour
     applyUserSettings(s, os);
@@ -25739,9 +25709,6 @@ async function saveUserSettings(section) {
       dailyBillableTargetHours:  dailyT,
       weeklyBillableTargetHours: weeklyT,
       includeTravel:         _sb('stg-rpt-include-travel'),
-      includeIdleGaps:       _sb('stg-rpt-include-gaps'),
-      includeCpdSuggestions: _sb('stg-rpt-cpd-suggest'),
-      includeLunchSuggestions: _sb('stg-rpt-lunch-suggest'),
     },
     notificationPreferences: {
       dailySchedule:       _sb('stg-notif-daily-schedule'),
