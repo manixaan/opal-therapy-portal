@@ -178,6 +178,20 @@ describe('DELETE cascade', () => {
     expect(meta.travelBlocksDeleted).toBe(2);
   });
 
+  test('?cascade=0 (Swap type) deletes only the event — every travel block stays', async () => {
+    const app = buildApp();
+    const { agent, user } = await agentFor(app);
+    const s = await seedScenario(user.id);
+
+    const res = await agent.delete(`/api/outlook/events/${s.appt.id}?cascade=0`);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ ok: true, deleted: 1, travelBlocksDeleted: 0 });
+    const alive = await aliveIds(user.id);
+    expect(alive).not.toContain(s.appt.id);
+    [s.tbBefore.id, s.tbLinked.id, s.tbSandwich.id, s.apptB.id, s.tbFar.id].forEach((id) => expect(alive).toContain(id));
+  });
+
   test('deleting an event with NO travel blocks reports a zero cascade', async () => {
     const app = buildApp();
     const { agent, user } = await agentFor(app);

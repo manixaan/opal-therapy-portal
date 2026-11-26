@@ -4,12 +4,14 @@
  * OPAL ASSIST — the practice-wide assistant's API.
  *
  *   GET    /api/assist/config                 is it on, for this person
+ *   POST   /api/assist/read-image             a picture attachment → its text, by local OCR — NO model call, nothing stored
  *   POST   /api/assist/check                  check-before-send: tokens in, list of what was hidden — NO model call
  *   POST   /api/assist/chat                   one reply (JSON); format=document|casenote → an editable document
  *   POST   /api/assist/revise                 rewrite one highlighted passage of a document
  *   PUT    /api/assist/conversations/:id/messages/:mid   save the practitioner's edits to a document
  *   POST   /api/assist/chat/stream            one reply as server-sent events
  *   GET    /api/assist/clients                the caller's clients, for the side-panel picker
+ *   GET    /api/assist/client-file            a client chat's lookups: own notes (searchable), sessions, Splose cases — NO model call
  *   GET    /api/assist/conversations          the caller's recent threads (?client=<ref>|general)
  *   GET    /api/assist/conversations/:id      one thread, tokenised turns
  *   DELETE /api/assist/conversations/:id      forget a thread now
@@ -162,6 +164,39 @@ router.get('/api/assist/clients', safe(async (req, res) => {
   }
 }));
 
+// ── Client file — read-only lookups for a client chat, no model call ─────────
+// The practitioner opens "Client file" in a client chat, searches and ticks
+// what to attach. The ticked text travels as an ordinary attachment, so it
+// meets /check and the chat guard before the model sees it. Here: caseload
+// scoping first (authoriseClient), the caller's OWN notes and sessions only,
+// and an audit row that records counts — never the search or the text.
+const clientFile = require('./assist/client-file');
+const sploseApi = require('./splose-api');
+router.get('/api/assist/client-file', rateLimit, safe(async (req, res) => {
+  if (!provider.isEnabled()) return res.status(503).json({ error: 'disabled', message: DISABLED });
+  const clientRef = await authoriseClient(req, res, req.query.client);
+  if (!clientRef) return;
+  const clientId = CLIENT_REF_RE.exec(clientRef)[1];
+  const query = clientFile.cleanQuery(req.query.q);
+  // Splose being slow or down costs only the case summary, never the notes.
+  const casesP = sploseApi.fetchAllCases().then((all) => clientFile.shapeCases(all, clientId), (err) => {
+    console.warn(`[assist] client-file cases unavailable (${err?.response?.status || err?.code || 'error'})`);
+    return null;
+  });
+  const [notes, sessions, cases] = await Promise.all([
+    clientFile.loadNotes(pool, { userId: req.user.id, clientId, query }),
+    query ? Promise.resolve(null) : clientFile.loadSessions(pool, { user: req.user, clientId }),
+    query ? Promise.resolve(null) : casesP,
+  ]);
+  await db.logAuditEvent({
+    actorUserId: req.user.id, organisationId: orgOf(req),
+    action: 'assist.client_file_viewed', targetType: 'client', targetId: clientId,
+    metadata: { notes: notes.notes.length, searched: !!query, cases: cases ? cases.length : null },
+    ipAddress: req.ip,
+  }).catch(() => {});
+  res.json({ query, notes: notes.notes, moreNotes: notes.more, sessions, cases, casesAvailable: query ? null : cases !== null });
+}));
+
 // ── Config ───────────────────────────────────────────────────────────────────
 router.get('/api/assist/config', safe(async (req, res) => {
   res.json({
@@ -170,6 +205,39 @@ router.get('/api/assist/config', safe(async (req, res) => {
     model: provider.describeModel(), historyTurns: HISTORY_TURNS, maxMessageChars: MAX_MESSAGE_CHARS, maxAttachmentChars: MAX_SELECTION_CHARS,
   });
 }));
+
+// ── Read a picture — local OCR, no model call ────────────────────────────────
+// A picture attachment (photo of a form, screenshot of a plan) is turned into
+// TEXT here, with the same in-process Tesseract onboarding uses: no provider,
+// no network, nothing stored, nothing logged but a status. The text goes back
+// to the browser and is attached like any other file, so it meets /check and
+// the chat guard before the model sees a word — the picture itself never
+// reaches the AI (a name in a photo cannot be hidden; its OCR'd text can).
+const ocr = require('./onboarding-ocr');
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+const MAX_OCR_AT_ONCE = 2; // Tesseract is CPU-heavy; the App Service shares those cores with every request
+let _ocrRunning = 0;
+const readImageBody = express.raw({ type: ['image/png', 'image/jpeg'], limit: MAX_IMAGE_BYTES });
+router.post('/api/assist/read-image', rateLimit, (req, res, next) => readImageBody(req, res, (err) => {
+  if (err) return res.status(err.type === 'entity.too.large' ? 413 : 400).json({ error: 'invalid_image', message: 'Pictures must be a PNG or JPEG under 8 MB.' });
+  next();
+}), safe(async (req, res) => {
+  if (!provider.isEnabled()) return res.status(503).json({ error: 'disabled', message: DISABLED });
+  const mime = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
+  if (!Buffer.isBuffer(req.body) || !req.body.length || !['image/png', 'image/jpeg'].includes(mime)) {
+    return res.status(400).json({ error: 'invalid_image', message: 'Pictures must be a PNG or JPEG under 8 MB.' });
+  }
+  if (_ocrRunning >= MAX_OCR_AT_ONCE) return res.status(503).json({ error: 'ocr_busy', message: 'Pictures are being read for others right now. Try again in a moment.' });
+  _ocrRunning++;
+  let r;
+  try { r = await ocr.ocrDocument({ buffer: req.body, mime }); } finally { _ocrRunning--; }
+  if (r.status !== 'ocr') {
+    const message = r.status === 'no_text' ? 'No readable text was found in this picture.' : 'This picture could not be read just now.';
+    return res.status(r.status === 'no_text' ? 422 : 502).json({ error: r.status, message });
+  }
+  res.json({ status: 'ocr', text: r.pages.join('\n\n').slice(0, MAX_SELECTION_CHARS), confidence: r.confidence });
+}));
+function _resetOcrForTests() { _ocrRunning = 0; }
 
 // ── Check before sending — no model call ─────────────────────────────────────
 router.post('/api/assist/check', safe(async (req, res) => {
@@ -640,5 +708,6 @@ module.exports.purgeExpired = purgeExpired;
 module.exports.ACTIONS = ACTIONS;
 module.exports.RETENTION_DAYS = RETENTION_DAYS;
 module.exports._resetRateLimitForTests = _resetRateLimitForTests;
+module.exports._resetOcrForTests = _resetOcrForTests;
 module.exports.MAX_MESSAGE_CHARS = MAX_MESSAGE_CHARS;
 module.exports._trimHistory = trimHistory;

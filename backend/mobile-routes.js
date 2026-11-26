@@ -24,6 +24,11 @@
  * validated as a real IANA name but day boundaries ALWAYS use Perth so a
  * travelling device cannot shift them. Timestamps in responses are UTC ISO.
  *
+ * ONE exception to "read only" (23 Nov 2026): POST /api/mobile/appointments/
+ * :id/move. It never calls Splose or Outlook itself — it saves the portal row
+ * and hands the change to event-move.js, the SAME road a portal drag takes
+ * (Splose draft queue + Outlook mirror under the user's sync settings).
+ *
  * read_only: GETs allowed; writes blocked by permissions.requireAuth.
  * Audit: voice-note create/update/review/archive/delete with ids-only
  * metadata — never transcript content. camelCase in, camelCase out.
@@ -33,10 +38,14 @@ const express = require('express');
 const router = express.Router();
 const db = require('./database');
 const { pool } = require('./database');
-const { requireAuth } = require('./permissions');
+const { requireAuth, requireAnyPermission, hasPermission } = require('./permissions');
+const mobileCal = require('./mobile-calendar');
+const calendarMinutes = require('./billing/calendar-travel-minutes');
 const { VIRTUAL_RE } = require('./geo');
 const dayRoute = require('./billing/day-route');
 const log = require('./logger').createLogger('mobile');
+const notesOwing = require('./mobile-notes-owing');
+const eventEdit = require('./mobile-event-edit');
 
 router.use('/api/mobile', requireAuth);
 
@@ -129,8 +138,15 @@ const isTravelMirror = (ev) => !!(ev && ev.custom_metadata && ev.custom_metadata
 const ALL_DAY_MS = 23 * 3600 * 1000;
 const isAllDayEvent = (ev) => new Date(ev.end_time) - new Date(ev.start_time) >= ALL_DAY_MS;
 
-/** Compact appointment shape for mobile lists. No raw sync payloads. */
-function formatMobileAppointment(ev) {
+/** May this caller move events from the phone at all? */
+const canScheduleOwn = (user) => !!user
+  && (hasPermission(user, 'manage_own_schedule') || hasPermission(user, 'manage_all_schedules'));
+
+/**
+ * Compact appointment shape for mobile lists. No raw sync payloads.
+ * `ctx` ({ user, now }) adds canMove — the same rule the move route enforces.
+ */
+function formatMobileAppointment(ev, ctx = null) {
   const address = bestAddress(ev);
   const virtual = VIRTUAL_RE.test(String(address || ''));
   return {
@@ -149,6 +165,11 @@ function formatMobileAppointment(ev) {
     needsAddressReview: ev.event_type === 'therapy' && !virtual && !isRoutableAddress(address),
     canOpenInMaps: !virtual && isRoutableAddress(address),
     source: ev.source || 'local',
+    linkedTo: ev.event_type === 'travel' && ev.related_event_id ? ev.related_event_id : null,
+    ...(ctx ? {
+      canMove: canScheduleOwn(ctx.user) && mobileCal.canMoveEvent(ev, ctx.user.id, ctx.now).ok,
+      canEdit: canScheduleOwn(ctx.user) && eventEdit.canEditEvent(ev, ctx.user.id, ctx.now).ok,
+    } : {}),
   };
 }
 
@@ -199,7 +220,8 @@ async function loadOwnAppointments(req, date, days = 1) {
       [req.user.id]);
     if (!any.rows.length) warnings = ['no_therapist_profile'];
   }
-  return { appointments: kept.map(formatMobileAppointment), rawEvents: kept, warnings };
+  const ctx = { user: req.user, now: new Date() };
+  return { appointments: kept.map((ev) => formatMobileAppointment(ev, ctx)), rawEvents: kept, warnings };
 }
 
 // ── Travel derivation (local data only — never recalculated externally) ──────
@@ -418,6 +440,9 @@ router.get('/api/mobile/today', safe(async (req, res) => {
         ORDER BY created_at DESC LIMIT 5`, [req.user.id]),
     loadDayBase(req, date),
   ]);
+  // Fail-soft: a count that can't be read shows as none, never a 500.
+  const owedCount = await notesOwing.listOwed(req.user, { limit: 200 })
+    .then((r) => r.length).catch(() => 0);
 
   const now = new Date();
   const upcoming = appointments.filter((a) => !a.isCancelled);
@@ -442,10 +467,45 @@ router.get('/api/mobile/today', safe(async (req, res) => {
       dueReminderCount: remindersQ.rows.length,
       travelMinutes: travelSummary.totalMinutes,
       needsReviewCount: travelSummary.needsReviewCount,
+      notesOwingCount: owedCount,
     },
     ...(warnings.length ? { warnings } : {}),
   });
 }));
+
+// ── Travel legs (the portal's own priced minutes — nothing is fetched) ───────
+
+const shiftYmd = (ymd, n) => new Date(Date.parse(`${ymd}T00:00:00Z`) + n * 86400000).toISOString().slice(0, 10);
+
+/**
+ * What the leg builder needs for some Perth dates: the caller's work bases
+ * and the minutes the portal calendar priced for those days (migration 090).
+ * Fails soft — no context means legs come back unpriced, never a 500.
+ */
+async function loadTravelContext(req, dates) {
+  try {
+    const [u, minutes] = await Promise.all([
+      pool.query('SELECT id, work_location_schedule, default_work_location FROM users WHERE id = $1', [req.user.id]),
+      calendarMinutes.loadForDays(pool, dates.map((date) => ({ userId: req.user.id, date }))),
+    ]);
+    return { user: u.rows[0] || null, minutes };
+  } catch (err) {
+    log.warn('mobile travel context failed', { error: err.message });
+    return { user: null, minutes: new Map() };
+  }
+}
+
+function legsForDay(ctx, date, events) {
+  if (!ctx || !ctx.user) return [];
+  try {
+    const dayMap = ctx.minutes.get(`${ctx.user.id}|${date}`);
+    return mobileCal.buildTravelLegs({ user: ctx.user, date, events, virtualRe: VIRTUAL_RE,
+      minutesFor: (o, d) => calendarMinutes.minutesFor(dayMap, o, d) });
+  } catch (err) {
+    log.warn('mobile travel legs failed', { error: err.message });
+    return [];
+  }
+}
 
 // ═══ GET /api/mobile/calendar?date=&range=day|week ═══════════════════════════
 
@@ -461,14 +521,17 @@ router.get('/api/mobile/calendar', safe(async (req, res) => {
   }
   const dayCount = range === 'week' ? 7 : 1;
 
-  const { appointments, warnings } = await loadOwnAppointments(req, date, dayCount);
+  const [{ appointments, rawEvents, warnings }, travelCtx] = await Promise.all([
+    loadOwnAppointments(req, date, dayCount),
+    loadTravelContext(req, Array.from({ length: dayCount }, (_, i) => shiftYmd(date, i))),
+  ]);
 
   // Group by Perth calendar day so the client renders lists without TZ maths.
   const days = [];
   for (let i = 0; i < dayCount; i++) {
     const d = new Date(Date.parse(`${date}T00:00:00Z`) + i * 24 * 3600 * 1000)
       .toISOString().slice(0, 10);
-    days.push({ date: d, appointments: [] });
+    days.push({ date: d, appointments: [], travelLegs: [] });
   }
   const byDate = new Map(days.map((d) => [d.date, d]));
   // An event that crosses midnight (or spans days) belongs to every Perth day
@@ -481,6 +544,11 @@ router.get('/api/mobile/calendar', safe(async (req, res) => {
       const { startUtc: ds, endUtc: de } = perthDayWindow(d.date);
       if (startMs < de.getTime() && lastMs >= ds.getTime()) byDate.get(d.date).appointments.push(a);
     }
+  }
+
+  // The day's travel legs, timed as the portal draws them (mobile-calendar.js).
+  for (const d of days) {
+    d.travelLegs = legsForDay(travelCtx, d.date, rawEvents.filter((e) => mobileCal.perthDate(e.start_time) === d.date));
   }
 
   res.json({
@@ -512,7 +580,9 @@ router.get('/api/mobile/appointments/:id', safe(async (req, res) => {
     `SELECT * FROM voice_notes WHERE user_id = $1 AND linked_event_id = $2
       ORDER BY created_at DESC LIMIT 50`, [req.user.id, ev.id]);
 
-  const base = formatMobileAppointment(ev);
+  // canMove / canEdit: the phone's Edit button follows the same rule the
+  // edit route enforces.
+  const base = formatMobileAppointment(ev, { user: req.user, now: new Date() });
   res.json({
     appointment: {
       ...base,
@@ -528,6 +598,380 @@ router.get('/api/mobile/appointments/:id', safe(async (req, res) => {
     voiceNoteCount: notes.rows.length,
   });
 }));
+
+// ═══ POST /api/mobile/appointments/:id/move — drag-to-move from the phone ════
+//
+// Body { start, end, expectedStart, expectedEnd } (ISO with offset). The
+// session and the travel blocks booked for it (related_event_id) move by the
+// same amount in ONE transaction, guarded by their stored times (optimistic
+// lock). Then each row goes down event-move.js — Splose draft queue + Outlook
+// mirror — exactly as a portal drag. Own rows only (user_id, as the portal's
+// PATCH). Errors carry a code, never internals. Outlook's copies of the
+// portal-drawn travel legs refresh the next time the portal draws that day.
+router.post('/api/mobile/appointments/:id/move',
+  requireAnyPermission('manage_own_schedule', 'manage_all_schedules'),
+  safe(async (req, res) => {
+    const id = req.params.id;
+    if (!isUuid(id)) return res.status(404).json({ error: 'Not found', code: 'not_found' });
+    const { rows } = await pool.query(
+      `SELECT * FROM events WHERE id = $1 AND user_id = $2 AND (is_deleted IS NULL OR is_deleted = FALSE)`,
+      [id, req.user.id]);
+    const ev = rows[0];
+    if (!ev) return res.status(404).json({ error: 'Not found', code: 'not_found' });
+
+    const linkedQ = await pool.query(
+      `SELECT * FROM events WHERE related_event_id = $1 AND user_id = $2 AND event_type = 'travel'
+          AND (is_deleted IS NULL OR is_deleted = FALSE) AND (status IS NULL OR status <> 'cancelled')`,
+      [id, req.user.id]);
+    const linked = linkedQ.rows;
+
+    // Everything the caller has on the target day(s), for overlap + travel.
+    const body = req.body || {};
+    const startMs = Date.parse(body.start);
+    let dayEvents = [], legsAfter = null;
+    if (!Number.isNaN(startMs)) {
+      const target = mobileCal.perthDate(startMs);
+      const first = shiftYmd(target, -1);               // linked travel can start the evening before
+      const { rawEvents } = await loadOwnAppointments(req, first, 3);
+      dayEvents = rawEvents;
+      const travelCtx = await loadTravelContext(req, [target]);
+      legsAfter = (movedRows) => {
+        const byId = new Map(movedRows.map((r) => [String(r.id), r]));
+        const after = rawEvents.map((e) => byId.get(String(e.id)) || e);
+        for (const r of movedRows) if (!after.some((e) => String(e.id) === String(r.id))) after.push(r);
+        return legsForDay(travelCtx, target, after.filter((e) => mobileCal.perthDate(e.start_time) === target));
+      };
+    }
+
+    const verdict = mobileCal.checkMove({ ev, userId: req.user.id, body, linked, dayEvents, legsAfter,
+      now: new Date(), virtualRe: VIRTUAL_RE });
+    if (!verdict.ok) {
+      return res.status(verdict.status).json({ error: verdict.error, code: verdict.code,
+        ...(verdict.reason ? { reason: verdict.reason } : {}), ...(verdict.conflict ? { conflict: verdict.conflict } : {}) });
+    }
+
+    // eslint-disable-next-line global-require
+    const eventMove = require('./event-move');
+    const deps = eventMove.defaultDeps();
+    const originals = new Map([ev, ...linked].map((r) => [String(r.id), r]));
+    const plans = new Map();
+    for (const r of verdict.moved) {
+      const o = originals.get(String(r.id));
+      // eslint-disable-next-line no-await-in-loop
+      plans.set(String(r.id), await eventMove.mirrorPlan(deps, req.user.id, o.outlook_id || null));
+    }
+
+    // 1. One transaction, each row guarded by the time the phone saw.
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      for (const r of verdict.moved) {
+        const o = originals.get(String(r.id));
+        const plan = plans.get(String(r.id));
+        // ISO strings, never Date objects: node-postgres would serialise a Date
+        // with the machine's offset, which TIMESTAMP silently drops.
+        // eslint-disable-next-line no-await-in-loop
+        const u = await client.query(
+          `UPDATE events
+              SET start_time = $1, end_time = $2,
+                  sync_status = COALESCE($3, sync_status),
+                  last_modified_by = 'app', last_modified_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+            WHERE id = $4 AND user_id = $5 AND start_time = $6 AND end_time = $7
+              AND (is_deleted IS NULL OR is_deleted = FALSE)`,
+          [r.start_time, r.end_time, eventMove.localSyncStatus(o.outlook_id, plan.mirrorToOutlook) || null,
+            r.id, req.user.id, new Date(o.start_time).toISOString(), new Date(o.end_time).toISOString()]);
+        if (u.rowCount !== 1) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ error: 'This appointment changed since you loaded it.', code: 'changed' });
+        }
+      }
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+    }
+
+    // 2. Pass each row on, the portal's way. Never fails the move: the rows are saved.
+    const results = [];
+    for (const r of verdict.moved) {
+      const o = originals.get(String(r.id));
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        results.push(await eventMove.moveEvent({ userId: req.user.id, actorId: req.user.id, dbId: r.id,
+          outlookId: o.outlook_id || null, writeLocal: false,
+          fields: { startTime: r.start_time, endTime: r.end_time } }, deps));
+      } catch (err) {
+        log.warn('mobile move sync step failed', { error: err.message });
+        results.push({ savedToOutlook: false, outlookStatus: 'failed', splose: 'not_linked' });
+      }
+    }
+
+    await db.logAuditEvent({
+      action: 'mobile_event_moved', targetType: 'event', targetId: ev.id,
+      actorUserId: req.user.id, organisationId: orgOf(req), ipAddress: req.ip,
+      metadata: { id: ev.id, deltaMinutes: Math.round(verdict.delta / 60000), linkedMoved: linked.map((l) => l.id) },
+    }).catch(() => {});
+
+    const fresh = await pool.query('SELECT * FROM events WHERE id = $1', [ev.id]);
+    const main = results[0] || {};
+    res.json({
+      ok: true,
+      appointment: formatMobileAppointment(fresh.rows[0] || { ...ev, ...verdict.moved[0] }, { user: req.user, now: new Date() }),
+      linkedMoved: linked.map((l) => l.id),
+      sync: { splose: main.splose || 'off', outlook: main.outlookStatus || 'not_linked' },
+      outlookTravelStale: true,
+      warnings: verdict.warnings,
+    });
+  }));
+
+// ═══ Edit client / session type / address from the phone (25 Nov 2026) ══════
+//
+// GET  …/:id/edit     what the edit sheet shows: the event's type, client,
+//                     address, and the types it can become.
+// PATCH …/:id/details { kind?, clientId?, address?, useClientAddress?,
+//                     expectedStart, expectedEnd } — address only → saved in
+//                     place, drives re-priced; client or type → rebooked the
+//                     way the portal's Swap type does. See mobile-event-edit.js.
+const EDIT_REFUSED = {
+  not_owner: 'Change this one in the portal.', travel_mirror: 'Change this one in the portal.',
+  cancelled: 'This appointment is cancelled.', all_day: 'Change all-day events in the portal.',
+  type: 'Change this one in the portal.', started: 'This appointment has already started — change it in the portal.',
+};
+
+async function loadEditable(req) {
+  const id = req.params.id;
+  if (!isUuid(id)) return { status: 404, body: { error: 'Not found', code: 'not_found' } };
+  const { rows } = await pool.query(
+    `SELECT * FROM events WHERE id = $1 AND user_id = $2 AND (is_deleted IS NULL OR is_deleted = FALSE)`, [id, req.user.id]);
+  const ev = rows[0];
+  if (!ev) return { status: 404, body: { error: 'Not found', code: 'not_found' } };
+  return { ev };
+}
+
+router.get('/api/mobile/appointments/:id/edit',
+  requireAnyPermission('manage_own_schedule', 'manage_all_schedules'),
+  safe(async (req, res) => {
+    const { ev, status, body } = await loadEditable(req);
+    if (!ev) return res.status(status).json(body);
+    const v = eventEdit.canEditEvent(ev, req.user.id, new Date());
+    const kind = eventEdit.currentKind(ev);
+    const address = bestAddress(ev);
+    res.json({
+      canEdit: v.ok,
+      ...(v.ok ? {} : { reason: v.reason, message: EDIT_REFUSED[v.reason] || 'Change this one in the portal.' }),
+      kind,
+      kindLabel: kind ? eventEdit.KINDS[kind].label : null,
+      client: eventEdit.currentClient(ev),
+      address,
+      isVirtual: VIRTUAL_RE.test(String(address || '')),
+      start: ev.start_time, end: ev.end_time,
+      kinds: eventEdit.kindList(),
+    });
+  }));
+
+// The address on file for one of the caller's clients — offered as a choice
+// when the client changes. Same caseload rule as the picker.
+router.get('/api/mobile/clients/:id/address', safe(async (req, res) => {
+  // eslint-disable-next-line global-require
+  const caseload = require('./splose-caseload');
+  try {
+    const c = await caseload.loadOwnClient(req, req.params.id);
+    if (!c) return res.status(404).json({ error: 'Not found', code: 'not_found' });
+    res.json({ address: c.formattedAddress || null });
+  } catch (err) {
+    if (err instanceof caseload.CaseloadError) return res.status(err.status).json({ error: err.message, code: err.code });
+    log.warn('mobile client address lookup failed', { error: err.message });
+    res.status(502).json({ error: "Couldn't reach Splose just now.", code: 'client_lookup_failed' });
+  }
+}));
+
+router.patch('/api/mobile/appointments/:id/details',
+  requireAnyPermission('manage_own_schedule', 'manage_all_schedules'),
+  safe(async (req, res) => {
+    const loaded = await loadEditable(req);
+    if (!loaded.ev) return res.status(loaded.status).json(loaded.body);
+    const ev = loaded.ev;
+    const now = new Date();
+    const v = eventEdit.canEditEvent(ev, req.user.id, now);
+    if (!v.ok) return res.status(409).json({ error: EDIT_REFUSED[v.reason] || 'Change this one in the portal.', code: 'not_editable', reason: v.reason });
+
+    const b = req.body || {};
+    // Optimistic lock: the phone's view must still be the row's.
+    const sameTime = (a, x) => !Number.isNaN(Date.parse(a)) && Date.parse(a) === new Date(x).getTime();
+    if (!sameTime(b.expectedStart, ev.start_time) || !sameTime(b.expectedEnd, ev.end_time)) {
+      return res.status(409).json({ error: 'This appointment changed since you loaded it.', code: 'changed' });
+    }
+
+    const curKind = eventEdit.currentKind(ev);
+    const curClient = eventEdit.currentClient(ev);
+    if (b.kind !== undefined && b.kind !== null && !Object.prototype.hasOwnProperty.call(eventEdit.KINDS, b.kind)) {
+      return res.status(400).json({ error: 'Unknown session type', code: 'bad_kind' });
+    }
+    const kind = b.kind || curKind;
+    const wantsClient = b.clientId !== undefined;
+    const clientId = wantsClient ? (b.clientId === null || b.clientId === '' ? null : String(b.clientId)) : (curClient ? curClient.id : null);
+    const kindChanged = !!b.kind && b.kind !== curKind;
+    const clientChanged = wantsClient && String(clientId || '') !== String(curClient ? curClient.id : '');
+    let addr = eventEdit.cleanAddressInput(b.address);
+    if (addr && addr.error) return res.status(400).json({ error: addr.error, code: 'bad_address' });
+
+    // The client: from the caller's own caseload, never trusted from the phone.
+    let client = curClient;
+    if (clientChanged) {
+      client = null;
+      if (clientId) {
+        // eslint-disable-next-line global-require
+        const caseload = require('./splose-caseload');
+        try {
+          const c = await caseload.loadOwnClient(req, clientId);
+          if (!c) return res.status(404).json({ error: 'That client is not in your caseload.', code: 'client_not_found' });
+          client = { id: c.id, name: c.fullName, formattedAddress: c.formattedAddress };
+        } catch (err) {
+          if (err instanceof caseload.CaseloadError) return res.status(err.status).json({ error: err.message, code: err.code });
+          log.warn('mobile edit client lookup failed', { error: err.message });
+          return res.status(502).json({ error: "Couldn't reach Splose to check the client. Nothing was changed.", code: 'client_lookup_failed' });
+        }
+      }
+    }
+    if (b.useClientAddress === true) {
+      if (!client || !client.id) return res.status(400).json({ error: 'Choose a client first', code: 'bad_address' });
+      let onFile = client.formattedAddress;
+      if (onFile === undefined) {
+        // eslint-disable-next-line global-require
+        const c = await require('./splose-caseload').loadOwnClient(req, client.id).catch(() => null);
+        onFile = c ? c.formattedAddress : null;
+      }
+      if (!onFile) return res.status(409).json({ error: 'This client has no address on file.', code: 'no_client_address' });
+      addr = { address: onFile, lat: null, lng: null };
+    }
+
+    const oldAddress = bestAddress(ev);
+    const addressChanged = addr !== undefined
+      && (addr.clear ? !!oldAddress : String(addr.address).trim() !== String(oldAddress || '').trim());
+    const date = mobileCal.perthDate(ev.start_time);
+
+    // ── Rebook: client or type changed ───────────────────────────────────────
+    if (kindChanged || clientChanged) {
+      if (!kind) return res.status(400).json({ error: 'Choose the session type', code: 'bad_kind' });
+      const rule = eventEdit.CLIENT_RULE[eventEdit.KINDS[kind].group];
+      if (rule === 'required' && !(client && client.id)) {
+        return res.status(400).json({ error: 'Choose the client for this session', code: 'client_required' });
+      }
+      const useClient = rule === 'none' ? null : client;
+      const address = addr === undefined ? oldAddress : (addr.clear ? null : addr.address);
+      const body = eventEdit.composeBooking({ kind, client: useClient, address,
+        startTime: new Date(ev.start_time).toISOString(), endTime: new Date(ev.end_time).toISOString() });
+
+      // eslint-disable-next-line global-require
+      const { createBookingCore, deleteEventCore } = require('./routes');
+      const made = await createBookingCore(req, body);
+      if (made.status !== 201 || !made.body || !made.body.dbId) {
+        return res.status(made.status >= 400 && made.status < 500 ? made.status : 502)
+          .json({ error: (made.body && made.body.error) || 'Could not save the change', code: 'rebook_failed' });
+      }
+      const newId = made.body.dbId;
+
+      // Carry over what belongs to the slot, not the booking type.
+      const m = (ev.custom_metadata && typeof ev.custom_metadata === 'object') ? ev.custom_metadata : {};
+      const carry = {};
+      for (const k of ['travel', 'notes']) if (m[k] !== undefined) carry[k] = m[k];
+      if (Object.keys(carry).length) {
+        await pool.query(`UPDATE events SET custom_metadata = COALESCE(custom_metadata, '{}'::jsonb) || $2::jsonb WHERE id = $1`,
+          [newId, JSON.stringify(carry)]).catch((e) => log.warn('rebook metadata carry failed', { error: e.message }));
+      }
+      if (address && addr && !addr.clear) {
+        await db.updateEventManualLocation(newId, { address, lat: addr.lat, lng: addr.lng, suburb: eventEdit.extractSuburb(address) || null })
+          .catch((e) => log.warn('rebook address pin failed', { error: e.message }));
+      } else if (address && ev.manual_location && addr === undefined) {
+        await pool.query(`UPDATE events SET manual_location = $2, is_manual_location_override = TRUE WHERE id = $1`,
+          [newId, typeof ev.manual_location === 'string' ? ev.manual_location : JSON.stringify(ev.manual_location)]).catch(() => {});
+      }
+      await pool.query(`UPDATE events SET related_event_id = $1 WHERE related_event_id = $2 AND user_id = $3`, [newId, ev.id, req.user.id]).catch(() => {});
+      await pool.query(`UPDATE voice_notes SET linked_event_id = $1 WHERE linked_event_id = $2 AND user_id = $3`, [newId, ev.id, req.user.id]).catch(() => {});
+      await pool.query(`UPDATE case_note_drafts SET linked_event_id = $1 WHERE linked_event_id = $2 AND user_id = $3`, [newId, ev.id, req.user.id]).catch(() => {});
+
+      // The old one goes only now the new one is saved; its travel stays.
+      let oldRemoved = false;
+      try {
+        const del = await deleteEventCore(req, ev.id, { noCascade: true });
+        oldRemoved = del.status === 200;
+      } catch (err) {
+        log.warn('rebook: old event not removed', { error: err.message });
+      }
+
+      await db.logAuditEvent({
+        action: 'mobile_event_rebooked', targetType: 'event', targetId: newId,
+        actorUserId: req.user.id, organisationId: orgOf(req), ipAddress: req.ip,
+        metadata: { id: newId, replaced: ev.id, oldRemoved, kindChanged, clientChanged, addressChanged },
+      }).catch(() => {});
+
+      let travel = { priced: 0, recorded: false };
+      if (addressChanged) {
+        // eslint-disable-next-line global-require
+        travel = await eventEdit.repriceDay({ pool, userId: req.user.id, date, now,
+          provider: require('./billing/maps-adapter').getMapsProvider(), minutesStore: calendarMinutes });
+      }
+      const fresh = await pool.query('SELECT * FROM events WHERE id = $1', [newId]);
+      return res.json({
+        ok: true, mode: 'rebook', id: newId, replacedId: ev.id, oldRemoved,
+        appointment: formatMobileAppointment(fresh.rows[0], { user: req.user, now }),
+        sync: { splose: made.body.sploseQueued ? 'queued' : 'off', outlook: made.body.outlookStatus || 'not_linked' },
+        travel: { repriced: travel.recorded },
+      });
+    }
+
+    // ── Address only ─────────────────────────────────────────────────────────
+    if (!addressChanged) return res.json({ ok: true, mode: 'unchanged', id: ev.id, appointment: formatMobileAppointment(ev, { user: req.user, now }) });
+
+    // eslint-disable-next-line global-require
+    const eventMove = require('./event-move');
+    const deps = eventMove.defaultDeps();
+    const plan = await eventMove.mirrorPlan(deps, req.user.id, ev.outlook_id || null);
+    const pending = eventMove.localSyncStatus(ev.outlook_id, plan.mirrorToOutlook) || null;
+    if (addr.clear) {
+      await pool.query(
+        `UPDATE events SET manual_location = NULL, is_manual_location_override = TRUE, location = '',
+                sync_status = COALESCE($2, sync_status), last_modified_by = 'app', last_modified_at = CURRENT_TIMESTAMP,
+                updated_at = CURRENT_TIMESTAMP
+          WHERE id = $1 AND user_id = $3`, [ev.id, pending, req.user.id]);
+    } else {
+      await db.updateEventManualLocation(ev.id, { address: addr.address, lat: addr.lat, lng: addr.lng, suburb: eventEdit.extractSuburb(addr.address) || null });
+      await pool.query(
+        `UPDATE events SET sync_status = COALESCE($2, sync_status), last_modified_by = 'app', last_modified_at = CURRENT_TIMESTAMP
+          WHERE id = $1`, [ev.id, pending]);
+    }
+    // A zone picked at booking was for the old address; billing re-reads the new one.
+    // eslint-disable-next-line global-require
+    await require('./billing/session-mmm-store').clearBookingZone(pool, { eventId: ev.id, userId: req.user.id })
+      .catch((e) => log.warn('mobile edit: MMM zone not cleared', { error: e.message }));
+
+    let outlook = ev.outlook_id ? 'held' : 'not_linked';
+    if (plan.mirrorToOutlook) {
+      const r = await eventMove.mirrorOutlook(deps, { userId: req.user.id, dbId: ev.id, outlookId: ev.outlook_id,
+        fields: { location: addr.clear ? '' : addr.address } });
+      outlook = r.outlookStatus || (r.savedToOutlook ? 'saved' : 'failed');
+    }
+
+    // eslint-disable-next-line global-require
+    const travel = await eventEdit.repriceDay({ pool, userId: req.user.id, date, now,
+      provider: require('./billing/maps-adapter').getMapsProvider(), minutesStore: calendarMinutes });
+
+    await db.logAuditEvent({
+      action: 'mobile_event_address_changed', targetType: 'event', targetId: ev.id,
+      actorUserId: req.user.id, organisationId: orgOf(req), ipAddress: req.ip,
+      metadata: { id: ev.id, cleared: !!addr.clear, travelRepriced: travel.recorded },
+    }).catch(() => {});
+
+    const fresh = await pool.query('SELECT * FROM events WHERE id = $1', [ev.id]);
+    res.json({
+      ok: true, mode: 'address', id: ev.id,
+      appointment: formatMobileAppointment(fresh.rows[0], { user: req.user, now }),
+      sync: { splose: 'off', outlook },
+      travel: { repriced: travel.recorded },
+    });
+  }));
 
 // ═══ GET /api/mobile/travel?date= ════════════════════════════════════════════
 
@@ -682,6 +1126,179 @@ router.delete('/api/mobile/voice-notes/:id', safe(async (req, res) => {
   }
   await pool.query('DELETE FROM voice_notes WHERE id = $1 AND user_id = $2', [row.id, req.user.id]);
   await audit(req, 'mobile.voice_note_deleted', row.id);
+  res.json({ ok: true });
+}));
+
+// ═══ GET /api/mobile/appointments/:id/client — the client card ═════════════
+//
+// Who the caller is about to see: how to reach them, where, and the caller's
+// own history with them. Authorised by the APPOINTMENT — an event on the
+// caller's own diary (same owner rule as GET /api/mobile/appointments/:id,
+// which already shows the client's name and address). read_only is refused
+// like every Splose client read. Contact details come live from Splose (the
+// source of truth; there is no local client table). History and the last
+// note are the caller's own rows only — never another therapist's notes.
+// Audited with ids only.
+
+const PHONE_FIELDS = [
+  ['mobilePhone', 'Mobile'], ['homePhone', 'Home'], ['workPhone', 'Work'], ['phone', 'Phone'],
+];
+const NOTE_EXCERPT_CHARS = 280;
+
+router.get('/api/mobile/appointments/:id/client', safe(async (req, res) => {
+  if (req.user.role === 'read_only') {
+    return res.status(403).json({ error: 'Read-only accounts cannot see client details', code: 'splose_read_only_denied' });
+  }
+  const id = req.params.id;
+  if (!isUuid(id)) return res.status(404).json({ error: 'Not found' });
+  const params = [id, req.user.id];
+  let where = 'user_id = $2';
+  if (req.user.therapist_profile_id) {
+    params.push(req.user.therapist_profile_id);
+    where = '(user_id = $2 OR therapist_profile_id = $3)';
+  }
+  const { rows: [ev] } = await pool.query(
+    `SELECT * FROM events WHERE id = $1 AND ${where} AND (is_deleted IS NULL OR is_deleted = FALSE)`, params);
+  if (!ev) return res.status(404).json({ error: 'Not found' });
+
+  // eslint-disable-next-line global-require
+  const caseload = require('./splose-caseload');
+  const clientId = ev.client_id ? String(ev.client_id) : null;
+  if (!clientId || !caseload.isSploseClientId(clientId)) {
+    return res.json({ client: null, reason: 'no_client_linked' });
+  }
+
+  // eslint-disable-next-line global-require
+  const sploseApi = require('./splose-api');
+  let patient = sploseApi.peekPatient ? sploseApi.peekPatient(clientId) : null;
+  if (!patient) {
+    try {
+      patient = await sploseApi.getPatient(clientId);
+    } catch (err) {
+      if (err?.response?.status === 404) return res.json({ client: null, reason: 'client_not_found' });
+      log.warn('client card lookup failed', { status: err?.response?.status || null });
+      return res.status(502).json({ error: "Couldn't load this client from Splose just now.", code: 'client_lookup_failed' });
+    }
+  }
+  if (!patient || patient._raw?.archived || patient._raw?.deletedAt) {
+    return res.json({ client: null, reason: 'client_not_found' });
+  }
+
+  const raw = patient._raw || {};
+  const seen = new Set();
+  const phones = PHONE_FIELDS
+    .map(([k, label]) => ({ label, number: String((k === 'mobilePhone' ? patient.mobilePhone : raw[k]) || '').trim() }))
+    .filter((p) => p.number && /\d{6,}/.test(p.number.replace(/\D/g, '')) && !seen.has(p.number) && seen.add(p.number));
+
+  const histParams = [clientId, req.user.id];
+  let histOwner = 'user_id = $2';
+  if (req.user.therapist_profile_id) {
+    histParams.push(req.user.therapist_profile_id);
+    histOwner = '(user_id = $2 OR therapist_profile_id = $3)';
+  }
+  const [historyQ, noteQ] = await Promise.all([
+    pool.query(
+      `SELECT id, title, start_time, end_time, status FROM events
+        WHERE client_id = $1 AND ${histOwner} AND event_type = 'therapy'
+          AND (is_deleted IS NULL OR is_deleted = FALSE)
+        ORDER BY start_time DESC LIMIT 60`, histParams),
+    pool.query(
+      `SELECT c.id, c.created_at, c.note_body, c.linked_event_id FROM case_note_drafts c
+        WHERE c.user_id = $2 AND c.status <> 'archived'
+          AND (c.splose_patient_id = $1
+               OR c.linked_event_id IN (SELECT id FROM events WHERE client_id = $1))
+        ORDER BY c.created_at DESC LIMIT 1`, [clientId, req.user.id]),
+  ]);
+  const now = new Date();
+  const visit = (r) => ({ id: r.id, title: r.title, start: r.start_time, end: r.end_time, isCancelled: r.status === 'cancelled' });
+  const sessions = historyQ.rows;
+  const past = sessions.filter((r) => new Date(r.start_time) < now && r.id !== ev.id).slice(0, 3).map(visit);
+  const next = sessions.filter((r) => new Date(r.start_time) > new Date(ev.start_time) && r.status !== 'cancelled')
+    .sort((a, b) => new Date(a.start_time) - new Date(b.start_time))[0];
+  const note = noteQ.rows[0];
+  const body = note ? String(note.note_body || '').replace(/\s+/g, ' ').trim() : '';
+
+  await db.logAuditEvent({
+    action: 'mobile.client_card_viewed', targetType: 'client', targetId: clientId,
+    actorUserId: req.user.id, organisationId: orgOf(req), ipAddress: req.ip,
+    metadata: { eventId: ev.id },
+  }).catch(() => {});
+
+  res.json({
+    client: {
+      id: clientId,
+      fullName: patient.fullName || ev.client_name || null,
+      firstName: patient.firstname || null,
+      phones,
+      email: patient.email || null,
+      address: patient.formattedAddress || null,
+      pastSessions: past,
+      nextSession: next ? visit(next) : null,
+      sessionCount: sessions.filter((r) => r.status !== 'cancelled' && new Date(r.start_time) < now).length,
+      lastNote: note ? {
+        id: note.id,
+        createdAt: note.created_at,
+        excerpt: body.length > NOTE_EXCERPT_CHARS ? `${body.slice(0, NOTE_EXCERPT_CHARS - 1)}…` : body,
+      } : null,
+    },
+  });
+}));
+
+// ═══ Notes owing — finished sessions with no case note (mobile-notes-owing) ═══
+
+router.get('/api/mobile/notes-owing', safe(async (req, res) => {
+  const rows = await notesOwing.listOwed(req.user, { limit: 100 });
+  res.json({
+    sessions: rows.map((r) => ({
+      id: r.id, title: r.title, start: r.start_time, end: r.end_time, clientName: r.client_name || null,
+    })),
+    count: rows.length,
+    windowDays: notesOwing.WINDOW_DAYS,
+  });
+}));
+
+/** "Written in Splose" — stop listing it. Own therapy sessions only. */
+router.post('/api/mobile/notes-owing/:id/dismiss', safe(async (req, res) => {
+  if (!isUuid(req.params.id)) return res.status(404).json({ error: 'Not found' });
+  const own = await notesOwing.ownSession(req.user, req.params.id);
+  if (!own) return res.status(404).json({ error: 'Not found' });
+  await notesOwing.dismiss(req.user, own.id);
+  res.json({ ok: true });
+}));
+
+router.delete('/api/mobile/notes-owing/:id/dismiss', safe(async (req, res) => {
+  if (!isUuid(req.params.id)) return res.status(404).json({ error: 'Not found' });
+  await notesOwing.undismiss(req.user, req.params.id);
+  res.json({ ok: true });
+}));
+
+// ═══ Push devices — the phone's APNs token (push/apns.js sends) ══════════════
+//
+// A token belongs to whoever signed in on that phone last: registering it
+// moves it to the caller. Sign-out deletes it. Nothing here sends anything.
+
+const APNS_TOKEN_RE = /^[0-9a-f]{64,200}$/i;
+
+router.post('/api/mobile/push-devices', safe(async (req, res) => {
+  const token = String(req.body?.token || '').trim();
+  const environment = req.body?.environment === 'sandbox' ? 'sandbox' : 'production';
+  const appVersion = req.body?.appVersion ? String(req.body.appVersion).slice(0, 40) : null;
+  if (!APNS_TOKEN_RE.test(token)) return res.status(400).json({ error: 'token must be an APNs device token', code: 'invalid_token' });
+  await pool.query(
+    `INSERT INTO mobile_push_devices (user_id, token, environment, app_version)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (token) DO UPDATE
+       SET user_id = EXCLUDED.user_id, environment = EXCLUDED.environment,
+           app_version = EXCLUDED.app_version, last_seen_at = NOW(),
+           disabled_at = NULL, disabled_reason = NULL`,
+    [req.user.id, token.toLowerCase(), environment, appVersion]);
+  res.json({ ok: true });
+}));
+
+router.delete('/api/mobile/push-devices/:token', safe(async (req, res) => {
+  const token = String(req.params.token || '').trim();
+  if (!APNS_TOKEN_RE.test(token)) return res.status(400).json({ error: 'token must be an APNs device token', code: 'invalid_token' });
+  await pool.query('DELETE FROM mobile_push_devices WHERE token = $1 AND user_id = $2', [token.toLowerCase(), req.user.id]);
   res.json({ ok: true });
 }));
 

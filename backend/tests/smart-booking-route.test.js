@@ -419,7 +419,7 @@ describe('Smart Booking: straight on from the last client, or home in between', 
     expect(env.log.filter((c) => c.method === 'PATCH' && c.url === '/api/events/db-A/travel')).toEqual([]);
   });
 
-  test('the calendar leg between two clients is the switch: Direct ⇄ flips to Via home ⇄', async () => {
+  test('the calendar leg between two clients is the switch: Direct flips to Home, both ways named', async () => {
     const env = makeEnv(Object.assign({ routes }, HOME));
     env.ev(`SESSIONS.A = { id: 'A', day: 'mon', type: 'therapy', startH: 9, startM: 0, endH: 10, endM: 0,
       address: ${JSON.stringify(A_ADDR)}, patient: 'Ada Client', dbId: 'db-A' };
@@ -430,12 +430,14 @@ describe('Smart Booking: straight on from the last client, or home in between', 
     await warmRoutes(env, [[A_ADDR, CV_ADDR, 25], [A_ADDR, HOME_ADDR, 20], [HOME_ADDR, CV_ADDR, 20]]);
     env.ev("refreshDayOverlays('mon')");
     const sw = () => env.win.document.querySelector('#day-mon .travel-overlay .t-switch');
-    expect(sw().textContent).toBe('Direct ⇄');
+    expect([...sw().querySelectorAll('.t-opt')].map((o) => o.textContent)).toEqual(['Direct', 'Home']);
+    expect(sw().querySelector('.t-opt.on').textContent).toBe('Direct');
     sw().click();
     await flush();
     const patch = env.log.filter((c) => c.method === 'PATCH' && c.url === '/api/events/db-A/travel').pop();
     expect(patch.body).toEqual({ next: 'home', afterOffsetMin: null });
-    expect(sw().textContent).toBe('Via home ⇄');
+    expect(sw().querySelector('.t-opt.on').textContent).toBe('Home');
+    expect(sw().dataset.way).toBe('home');
     expect(env.win.document.querySelectorAll('#day-mon .travel-overlay .t-switch')).toHaveLength(1);   // one switch per gap
   });
 
@@ -1340,13 +1342,13 @@ describe('same place twice in a day: the choice stays visible (6 Oct 2026)', () 
     env.ev("refreshDayOverlays('mon')");
     const stay = env.win.document.querySelector('#day-mon .travel-overlay.stay');
     expect(stay.textContent).toMatch(/Same place/);
-    expect(stay.querySelector('.t-switch').textContent).toBe('Direct ⇄');
+    expect(stay.querySelector('.t-switch .t-opt.on').textContent).toBe('Stay');
     // it is not a drive: not mirrored to Outlook, not a badge's "travel linked"
     expect(env.ev("travelOutlookPayload('mon', computeDayTravelSegments('mon')).legs.some(function (l) { return / 0 min /.test(l.title); })")).toBe(false);
     expect(env.ev("travelBadgeState(SESSIONS.N1, computeDayTravelSegments('mon')).text")).not.toMatch(/\b0 min\b/);
     stay.querySelector('.t-switch').click();
     await flush();
-    expect(env.win.document.querySelector('#day-mon .travel-overlay .t-switch').textContent).toBe('Via home ⇄');
+    expect(env.win.document.querySelector('#day-mon .travel-overlay .t-switch .t-opt.on').textContent).toBe('Home');
   });
 });
 
@@ -2058,11 +2060,11 @@ describe('travel leg size tiers', () => {
     const el = await between(25);
     expect(el.classList.contains('t-full')).toBe(true);
     expect(el.querySelector('.t-label').textContent).toBe('25 min → Canning Vale');
-    expect(el.querySelector('.t-switch').textContent).toBe('Direct ⇄');
+    expect(el.querySelector('.t-switch .t-opt.on').textContent).toBe('Direct');
   });
   test('the CSS hides dropped parts whole — never an ellipsis through the destination', () => {
     expect(SHELL).toMatch(/\.travel-overlay\.t-no-ico \.t-ico, \.travel-overlay\.t-no-switch \.t-switch,\s*\.travel-overlay\.t-no-dest \.t-dest \{ display: none; \}/);
-    expect(TRAVEL).toMatch(/el\.classList\.add\('t-no-ico'\);[\s\S]{0,80}el\.classList\.add\('t-no-switch'\);[\s\S]{0,80}el\.classList\.add\('t-no-dest'\);/);
+    expect(TRAVEL).toMatch(/el\.classList\.add\('t-no-ico'\);[\s\S]{0,240}el\.classList\.add\('t-no-dest'\);[\s\S]{0,80}el\.classList\.add\('t-no-switch'\);/);
   });
 });
 
@@ -2075,22 +2077,84 @@ describe('same-place marker and overlapping legs stay out of the tiles', () => {
     env.ev("refreshDayOverlays('mon')");
     return env.win.document.querySelector('#day-mon .travel-overlay.stay');
   }
-  test('a 15-min slot: the marker fits inside it, 4 px clear of the next tile, one label', () => {
+  // 26 Nov 2026: a trip home needs drive home + 30 min + drive back. A short
+  // or zero gap at one address has no choice to offer, so it draws nothing —
+  // the lavender gutter slivers between back-to-back tiles are gone.
+  test('a 15-min slot at one address: no marker — there is no time to go home', () => {
     const env = makeEnv(HOME);
-    const el = stay(env, [10, 15]);
-    expect(el.style.top).toBe(env.ev('tToY(10, 0)') + 'px');
-    expect(parseFloat(el.style.height)).toBeCloseTo(15 * 1.2 - 4);
-    expect(el.querySelector('.t-ico').textContent).toBe('Same place');
-    expect(el.textContent).not.toMatch(/no drive/);
+    expect(stay(env, [10, 15])).toBeNull();
+    expect(env.ev("computeDayTravelSegments('mon').filter(function (x) { return x.kind === 'between'; }).length")).toBe(0);
   });
-  test('back to back: a gutter bar centred on the boundary, not a block under the next tile', () => {
+  test('back to back at one address: nothing between the tiles', () => {
     const env = makeEnv(HOME);
-    const el = stay(env, [10, 0]);
-    expect(el.classList.contains('stay-compact')).toBe(true);
-    expect(el.style.top).toBe((env.ev('tToY(10, 0)') - 8) + 'px');
-    expect(el.textContent).toBe('');
-    expect(el.title).toBe('Same place — no drive.');
+    expect(stay(env, [10, 0])).toBeNull();
+    expect(env.win.document.querySelectorAll('#day-mon .travel-overlay.stay-compact')).toHaveLength(0);
+    // the compact style stays for a zoomed-out grid with a real choice in a short slot
     expect(SHELL).toMatch(/\.travel-overlay\.stay\.stay-compact \{ left: auto; right: 0; width: 3px;/);
+  });
+  test('the Same place marker has its own fill, so today\'s column wash does not change it', () => {
+    expect(SHELL).toMatch(/\.travel-overlay\.stay \{ background: var\(--panel\);/);
+  });
+  test('back to back at two addresses: the drive that cannot fit says so on the boundary', async () => {
+    const env = makeEnv(HOME);
+    env.ev(`SESSIONS.A = { id: 'A', day: 'mon', type: 'therapy', startH: 9, startM: 0, endH: 10, endM: 0, address: ${JSON.stringify(A_ADDR)}, patient: 'Ada', dbId: 'db-A' };
+      SESSIONS.B = { id: 'B', day: 'mon', type: 'therapy', startH: 10, startM: 0, endH: 11, endM: 0, address: ${JSON.stringify(CV_ADDR)}, patient: 'Ben', dbId: 'db-B' };`);
+    await warmRoutes(env, [[A_ADDR, CV_ADDR, 18]]);
+    env.ev("refreshDayOverlays('mon')");
+    const el = env.win.document.querySelector('#day-mon .travel-overlay.overlaps.tight');
+    expect(el.querySelector('.t-flag').textContent).toBe('18 min drive · no time');
+    expect(el.querySelector('.t-switch')).toBeNull();
+  });
+  test('a 10-minute gap for an 18-minute drive: "only 10 min"', async () => {
+    const env = makeEnv(HOME);
+    env.ev(`SESSIONS.A = { id: 'A', day: 'mon', type: 'therapy', startH: 9, startM: 0, endH: 10, endM: 0, address: ${JSON.stringify(A_ADDR)}, patient: 'Ada', dbId: 'db-A' };
+      SESSIONS.B = { id: 'B', day: 'mon', type: 'therapy', startH: 10, startM: 10, endH: 11, endM: 0, address: ${JSON.stringify(CV_ADDR)}, patient: 'Ben', dbId: 'db-B' };`);
+    await warmRoutes(env, [[A_ADDR, CV_ADDR, 18]]);
+    env.ev("refreshDayOverlays('mon')");
+    expect(env.win.document.querySelector('#day-mon .travel-overlay .t-flag').textContent).toBe('18 min drive · only 10 min');
+  });
+  test('a gap long enough for the drive but filled by other events says "no free slot", not "only 150 min"', async () => {
+    const env = makeEnv(HOME);
+    env.ev(`SESSIONS.A = { id: 'A', day: 'mon', type: 'therapy', startH: 9, startM: 0, endH: 10, endM: 0, address: ${JSON.stringify(A_ADDR)}, patient: 'Ada', dbId: 'db-A' };
+      SESSIONS.M = { id: 'M', day: 'mon', type: 'meeting', startH: 10, startM: 0, endH: 11, endM: 0, patient: '', title: 'MDT', dbId: 'db-M' };
+      SESSIONS.B = { id: 'B', day: 'mon', type: 'therapy', startH: 11, startM: 0, endH: 12, endM: 0, address: ${JSON.stringify(CV_ADDR)}, patient: 'Ben', dbId: 'db-B' };`);
+    await warmRoutes(env, [[A_ADDR, CV_ADDR, 18]]);
+    env.ev("refreshDayOverlays('mon')");
+    const flag = env.win.document.querySelector('#day-mon .travel-overlay .t-flag');
+    expect(flag && flag.textContent).toBe('18 min drive · no free slot');
+  });
+  test('a note that would cover a short tile\'s words shrinks to "!" and keeps the sentence as its tooltip', () => {
+    const env = makeEnv(HOME);
+    const settle = (textBox) => env.ev(`(function () {
+      var tile = document.createElement('div'); tile.innerHTML = '<div class="s-title">Client Appointment — Zoe Eng</div>';
+      var flag = document.createElement('span'); flag.className = 't-flag'; flag.textContent = '8 min drive · no time';
+      flag.getBoundingClientRect = function () { return { left: 60, right: 140, top: 40, bottom: 54, width: 80, height: 14 }; };
+      var real = document.createRange;
+      document.createRange = function () { return { selectNodeContents: function () {}, getClientRects: function () { return [${JSON.stringify(textBox)}]; } }; };
+      try { _settleLegFlag(flag, tile); } finally { document.createRange = real; }
+      return [flag.textContent, flag.classList.contains('compact'), flag.title];
+    })()`);
+    // the title's last line runs under the note → compact
+    expect(settle({ left: 5, right: 130, top: 30, bottom: 46 })).toEqual(['!', true, '8 min drive · no time']);
+    // the words end above it → the full sentence stays
+    expect(settle({ left: 5, right: 130, top: 2, bottom: 30 })).toEqual(['8 min drive · no time', false, '']);
+    expect(SHELL).toMatch(/\.travel-overlay \.t-flag\.compact \{[^}]*pointer-events: auto;/);
+  });
+  test('the panel says why home is missing, and warns when a saved trip home no longer fits', async () => {
+    const env = makeEnv(HOME);
+    env.win.document.body.insertAdjacentHTML('beforeend', '<div id="travel-panel-overlay"></div><div id="travel-panel"><div id="travel-panel-body"></div></div>');
+    env.ev(`SESSIONS.A = { id: 'A', day: 'mon', type: 'therapy', startH: 9, startM: 0, endH: 10, endM: 0, address: ${JSON.stringify(A_ADDR)}, patient: 'Ada', dbId: 'db-A' };
+      SESSIONS.B = { id: 'B', day: 'mon', type: 'therapy', startH: 10, startM: 30, endH: 11, endM: 0, address: ${JSON.stringify(CV_ADDR)}, patient: 'Ben', dbId: 'db-B' };`);
+    await warmRoutes(env, [[A_ADDR, CV_ADDR, 10], [A_ADDR, HOME_ADDR, 15], [HOME_ADDR, CV_ADDR, 15]]);
+    const body = () => env.win.document.getElementById('travel-panel-body');
+    const open = () => env.ev("openTravelPanel(computeDayTravelSegments('mon').filter(function (x) { return x.kind === 'between'; })[0])");
+    open();
+    expect(body().querySelector('[data-mode="home"]')).toBeNull();
+    expect(body().querySelector('.tp-home-fit').textContent).toBe('No time to go home in between: that needs about 60 min and the gap is 30 min.');
+    env.ev("SESSIONS.A.travel = { next: 'home' }");
+    open();
+    expect(body().querySelector('[data-mode="home"]').classList.contains('on')).toBe(true);
+    expect(body().querySelector('.tp-home-fit.warn').textContent).toMatch(/^Going home doesn't fit any more: it needs about 60 min and the gap is 30 min\./);
   });
   test('a leg that overlaps an appointment is a bar in the right gutter with no words or switch', () => {
     expect(SHELL).toMatch(/\.travel-overlay\.overlaps \{ left: auto; right: 0; width: 3px;/);

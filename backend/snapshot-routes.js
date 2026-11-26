@@ -341,4 +341,16 @@ router.delete('/api/snapshot/tasks/:id', safe(async (req, res) => {
   res.json({ ok: true });
 }));
 
+// ── Billable hours (25 Nov 2026) ─────────────────────────────────────────────
+// The caller's own hours per Perth day, counted by the invoicing rules:
+// billable work, client travel and cancellations (billing/snapshot-hours.js).
+// Read-only, own diary only — the same scope as everything above.
+router.get('/api/snapshot/billable-hours', safe(async (req, res) => {
+  const SH = require('./billing/snapshot-hours');
+  const from = String(req.query.from || ''), to = String(req.query.to || '');
+  if (!SH.validRange(from, to)) return res.status(400).json({ error: 'from and to must be YYYY-MM-DD, at most 31 days apart' });
+  if (!orgOf(req)) return res.json({ from, to, days: {}, method: 'invoicing-rules' });
+  res.json(await SH.snapshotHours(pool, { userId: req.user.id, orgId: orgOf(req), from, to }));
+}));
+
 module.exports = router;

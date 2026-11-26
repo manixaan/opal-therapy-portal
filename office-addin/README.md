@@ -54,3 +54,47 @@ add-in → Add from file → `opal-assist-outlook.xml`.
 
 The pane needs the portal over **https** — it works against staging or
 production, not a plain `http://localhost` server.
+
+# Opal in the Outlook app bar — the whole portal
+
+An **Opal** icon in Outlook's left app bar (beside Mail and Calendar; also in
+Teams and the Microsoft 365 app) that opens the full portal inside Outlook,
+signed in with the person's Microsoft 365 account. It is a Microsoft 365 app
+(Teams manifest 1.17, one personal tab at `/outlook`), not an Office add-in.
+Server side: `backend/outlook-embed.js`.
+
+## One-time setup
+
+1. **Reuse the Opal Assist app registration** (steps 1–3 above). Under
+   *Expose an API* → *Add a client application*, add these Microsoft 365
+   host ids for the `access_as_user` scope (Teams desktop/mobile, Teams web,
+   Microsoft 365 web, Microsoft 365 desktop, Outlook desktop, Outlook web,
+   Outlook mobile): `1fec8e78-bce4-4aaf-ab1b-5451cc387264`,
+   `5e3ce6c0-2b1f-4285-8d4b-75ee78787346`, `4765445b-32c6-49b0-83e6-1d93765276ca`,
+   `0ec893e0-5785-4de6-99da-4ed124e5296c`, `d3590ed6-52b3-4102-aeff-aad2292ab01c`,
+   `bc59ab01-8403-45c6-8796-ac3ef710b3e3`, `27922004-5251-4030-b22d-91ecd9a37ea4`.
+2. **Portal setting**: `OPAL_OUTLOOK_TAB_ENABLED=true` (the Opal Assist Entra
+   settings must already be there). Without it the tab says it is not switched
+   on and no embed session is ever issued.
+3. **Build the package** (repo root):
+
+       node scripts/build-m365-app.js --host https://<portal host> --client-id <client id>
+
+   → `office-addin/dist/opal-portal-m365.zip`.
+4. **Install**: https://admin.microsoft.com → Settings → Integrated apps →
+   Upload custom apps → *Teams app* → upload the zip → assign to everyone →
+   Deploy. Within a day it appears under **More apps** (the four squares) in
+   Outlook; right-click → **Pin** keeps it in the bar.
+
+## How sign-in works inside Outlook
+
+Outlook shows the tab as a cross-site frame, where the portal's ordinary
+(SameSite=Lax) cookie is never sent. `/outlook` asks Outlook for a Microsoft
+SSO token, `POST /api/auth/entra-embed` validates it (same checks and same
+refusals as Opal Assist) and issues a **separate** session cookie,
+`opal.embed.sid` — SameSite=None; Secure; Partitioned — that exists only
+under Outlook/Teams. Only requests on that session may be framed by the
+Microsoft 365 hosts, and their writes must be same-origin
+(`Sec-Fetch-Site`). Signing out inside Outlook signs straight back in with
+Microsoft, by design. A browser that refuses partitioned cookies gets an
+"Open Opal in the browser" button instead of a sign-in loop. Needs **https**.

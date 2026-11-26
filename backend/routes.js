@@ -2786,84 +2786,16 @@ router.patch('/api/outlook/events/:dbId', requireAuth, async (req, res) => {
     );
     if (!ev.rows.length) return res.status(404).json({ error: 'Event not found' });
 
-    const outlookId = ev.rows[0].outlook_id;
-    const flags = require('./feature-flags');
-    // Sync settings (081): portal → Outlook off or manual-only holds the row
-    // 'pending' exactly like write-back off; "Sync now" sends it later.
-    const editPrefs = await require('./sync-preferences').effectiveOrNull(db, req.session.userId);
-    const mirrorToOutlook = !!outlookId && flags.isOutlookWriteEnabled()
-      && require('./sync-preferences').allowsLinked(editPrefs, 'portal_to_outlook');
-
-    // 1. Persist the local change FIRST — it must survive an Outlook failure.
-    //    An Outlook-linked row that will not be mirrored now (write-back off)
-    //    is held 'pending' in the same write (10 Oct 2026): a 'synced' row lets
-    //    the next delta upsert put Outlook's older times back over the move.
-    await db.updateEvent(dbId, {
-      title, startTime, endTime, location, lastModifiedBy: 'app',
-      syncStatus: (outlookId && !mirrorToOutlook) ? 'pending' : undefined,
+    // The save itself (local-first write, Splose queue, Outlook mirror) lives
+    // in event-move.js so the phone's move takes exactly the same road.
+    const r = await require('./event-move').moveEvent({
+      userId: req.session.userId, actorId: req.session.userId, dbId,
+      outlookId: ev.rows[0].outlook_id, fields: { title, startTime, endTime, location },
     });
-
-    // Draft-and-publish (058): a time change on a Splose-linked (or Splose-
-    // queued) appointment is queued for the next "Sync Splose".
-    if ((startTime || endTime) && flagsDraft().isSploseDraftSyncEnabled()
-        && require('./sync-preferences').allowsLinked(editPrefs, 'portal_to_splose', { manual: true })) {
-      try {
-        const link = await db.pool.query(
-          `SELECT e.splose_id, e.start_time, e.end_time, e.user_id,
-                  (SELECT COUNT(*) FROM splose_sync_queue q WHERE q.event_id = e.id AND q.status IN ('pending','failed')) AS live
-             FROM events e WHERE e.id = $1`, [dbId]);
-        const l = link.rows[0];
-        if (l && (l.splose_id || Number(l.live) > 0)) {
-          const qrow = await draftSync.enqueueChange(db, {
-            userId: l.user_id, createdBy: req.session.userId, eventId: dbId, action: 'update',
-            payload: { start: new Date(l.start_time).toISOString(), end: new Date(l.end_time).toISOString(), summary: title || undefined },
-          });
-          if (qrow) require('./splose-sync-routes').notifyQueued(l.user_id);
-        }
-      } catch (qErr) { console.warn('⚠️  Splose draft queue (update) failed (non-fatal):', qErr.message); }
-    }
-
-    // Portal-only event (or write-back off): the portal edit is the whole job.
-    if (!mirrorToOutlook) {
-      return res.json({ ok: true, outlookId: outlookId || null, savedToDb: true, savedToOutlook: false,
-        outlookStatus: outlookId ? 'disabled' : 'not_linked' });
-    }
-
-    // 2. Propagate to Outlook (partial update — only defined fields are sent).
-    try {
-      const user = await db.getUser(req.session.userId);
-      const accessToken = await getValidAccessToken(user);
-      await outlookApi.updateOutlookEvent(accessToken, outlookId, { title, startTime, endTime, location });
-    } catch (outlookErr) {
-      // Graceful degradation: local change persists; record the sync failure.
-      console.error('Outlook update failed (local change kept):', outlookErr.response?.data || outlookErr.message);
-      await db.updateEvent(dbId, { syncStatus: 'pending' }).catch(() => {});
-      await db.pool.query(
-        `INSERT INTO sync_log (event_id, action, source, target, status, error_message) VALUES ($1, 'updated', 'app', 'outlook', 'failed', $2)`,
-        [dbId, outlookErr.message]
-      ).catch(() => {});
-      const userId = req.user?.id || req.session?.userId;
-      if (userId) {
-        storeNotificationLazy(userId, {
-          type: 'outlook_writeback_failed',
-          title: 'Outlook event update failed',
-          message: `Could not sync appointment changes to Outlook: ${outlookErr.message}. Your local changes are saved and will be reconciled.`,
-          severity: 'error',
-          relatedEntity: 'integration',
-          actionPayload: { action: 'reconnect_outlook' },
-        }).catch(() => {});
-      }
-      return res.json({ ok: true, outlookId, savedToDb: true, savedToOutlook: false, syncError: outlookErr.message });
-    }
-
-    await db.updateEvent(dbId, { syncStatus: 'synced' }).catch(() => {});
-    await db.pool.query(
-      `INSERT INTO sync_log (event_id, action, source, target, status) VALUES ($1, 'updated', 'app', 'outlook', 'success')`,
-      [dbId]
-    ).catch(() => {});
-
-    console.log(`✏️ Outlook event updated: ${outlookId}`);
-    res.json({ ok: true, outlookId, savedToDb: true, savedToOutlook: true });
+    // Same response the portal has always had.
+    const { splose, ...body } = r;
+    if (body.outlookStatus === 'failed' || body.outlookStatus === 'saved') delete body.outlookStatus;
+    res.json(body);
   } catch (err) {
     if (handleFeatureDisabled(err, res)) return;
     console.error('Outlook update error:', err.response?.data || err.message);
@@ -2887,14 +2819,33 @@ router.patch('/api/outlook/events/:dbId', requireAuth, async (req, res) => {
  */
 router.delete('/api/outlook/events/:dbId', requireAuth, async (req, res) => {
   try {
-    const { dbId } = req.params;
-    const dryRun = req.query.dryRun === '1' || req.query.dryRun === 'true';
+    const r = await deleteEventCore(req, req.params.dbId, {
+      dryRun: req.query.dryRun === '1' || req.query.dryRun === 'true',
+      // ?cascade=0 — a "Swap type" replacement (25 Nov 2026): the new booking
+      // sits in the very same slot, so the travel around it still serves it.
+      noCascade: req.query.cascade === '0' || req.query.cascade === 'false',
+      reasonId: req.body && req.body.reasonId,
+    });
+    res.status(r.status).json(r.body);
+  } catch (err) {
+    console.error('Outlook delete error:', err.response?.data || err.message);
+    res.status(500).json({ error: 'Failed to delete event', details: err.message });
+  }
+});
 
+/**
+ * Remove one of the caller's events (the DELETE route above, and the phone's
+ * rebook — mobile-event-edit.js). Same order as ever: Splose cancel queued,
+ * Outlook copies removed best-effort, local soft-delete, audit.
+ * Returns { status, body }; throws only for an unexpected failure.
+ */
+async function deleteEventCore(req, dbId, { dryRun = false, noCascade = false, reasonId = null } = {}) {
+  {
     const ev = await db.pool.query(
       'SELECT outlook_id, title, start_time, end_time, splose_id, user_id FROM events WHERE id = $1 AND user_id = $2',
       [dbId, req.session.userId]
     );
-    if (!ev.rows.length) return res.status(404).json({ error: 'Event not found' });
+    if (!ev.rows.length) return { status: 404, body: { error: 'Event not found' } };
 
     const { outlook_id: outlookId, title, start_time: startTime, end_time: endTime } = ev.rows[0];
     const sploseLinkedId = ev.rows[0].splose_id;
@@ -2905,7 +2856,7 @@ router.delete('/api/outlook/events/:dbId', requireAuth, async (req, res) => {
     // rule needs the neighbouring non-travel events too). Selection itself is
     // pure — see travel-cascade.js.
     let cascade = [];
-    try {
+    if (!noCascade) try {
       const params = [req.session.userId, dbId];
       let windowSql = '';
       if (startTime && endTime) {
@@ -2936,12 +2887,12 @@ router.delete('/api/outlook/events/:dbId', requireAuth, async (req, res) => {
     const travelBlockTitles = cascade.map((b) => b.title);
 
     if (dryRun) {
-      return res.json({
+      return { status: 200, body: {
         ok: true, dryRun: true, title,
         deleted: 0,
         travelBlocksDeleted: cascade.length,
         travelBlockIds, travelBlockTitles,
-      });
+      } };
     }
 
     // Draft-and-publish (058): cancelling a Splose-linked appointment queues a
@@ -2958,7 +2909,7 @@ router.delete('/api/outlook/events/:dbId', requireAuth, async (req, res) => {
         if (sploseLinkedId || live.rows.length) {
           const qrow = await draftSync.enqueueChange(db, {
             userId: req.session.userId, createdBy: req.session.userId, eventId: dbId, action: 'cancel',
-            payload: { reasonId: req.body && req.body.reasonId ? Number(req.body.reasonId) : null, summary: title,
+            payload: { reasonId: reasonId ? Number(reasonId) : null, summary: title,
                        start: startTime ? new Date(startTime).toISOString() : null, end: endTime ? new Date(endTime).toISOString() : null },
           });
           if (qrow) require('./splose-sync-routes').notifyQueued(req.session.userId);
@@ -3029,17 +2980,14 @@ router.delete('/api/outlook/events/:dbId', requireAuth, async (req, res) => {
       metadata: { travelBlocksDeleted: travelBlockIds.length, travelBlockIds },
     }).catch(() => {});
 
-    res.json({
+    return { status: 200, body: {
       ok: true, deletedFromOutlook, outlookStatus, title,
       deleted: 1,
       travelBlocksDeleted: travelBlockIds.length,
       travelBlockIds, travelBlockTitles,
-    });
-  } catch (err) {
-    console.error('Outlook delete error:', err.response?.data || err.message);
-    res.status(500).json({ error: 'Failed to delete event', details: err.message });
+    } };
   }
-});
+}
 
 /**
  * POST /api/outlook/events/:dbId/restore
@@ -3300,3 +3248,4 @@ module.exports = router;
 module.exports.cleanTravelSpec = cleanTravelSpec;
 module.exports.getValidAccessToken = getValidAccessToken;
 module.exports.createBookingCore = createBookingCore;
+module.exports.deleteEventCore = deleteEventCore;

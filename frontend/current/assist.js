@@ -211,6 +211,17 @@
 
   // ── Documents: one live editor per document message, kept across re-renders ──
   var editors = {};
+  /** Download a document reply as a Word or PowerPoint file, built here (assist-export.js). */
+  function exportDoc(format, doc, btn, label) {
+    if (!global.OpalAssistExport) return;
+    btn.disabled = true; btn.textContent = 'Preparing…';
+    global.OpalAssistExport.download(format, doc, S.names, S.nameStyle).then(function () {
+      btn.textContent = 'Downloaded';
+    }, function () { btn.textContent = 'Could not build the file'; }).then(function () {
+      setTimeout(function () { btn.disabled = false; btn.textContent = label; }, 1500);
+    });
+  }
+
   function editorFor(m) {
     var key = m.id || m.key;
     if (editors[key]) return editors[key];
@@ -218,7 +229,11 @@
       var text = DOC().docToPlain(doc, S.names, S.nameStyle);
       if (typeof global.OpalAssist.onInsert === 'function') global.OpalAssist.onInsert(text);
       else if (office()) office().insert(text).then(function (ok) { btn.textContent = ok ? 'Inserted' : 'Could not insert'; setTimeout(function () { btn.textContent = 'Insert into document'; }, 1500); });
-    }]] : [];
+    }]] : [
+      // Web page only: the file is built in this browser with names put back, like Copy. Nothing is sent anywhere.
+      ['Word file', function (doc, btn) { exportDoc('docx', doc, btn, 'Word file'); }],
+      ['PowerPoint file', function (doc, btn) { exportDoc('pptx', doc, btn, 'PowerPoint file'); }],
+    ];
     editors[key] = DOC().mount({
       doc: m.doc,
       getNames: function () { return S.names; },
@@ -570,6 +585,13 @@
   function renderClientChip() {
     var chip = $('oa-client-chip');
     if (S.client && S.client.name) { chip.hidden = false; chip.textContent = S.client.name; chip.title = 'This chat is about ' + S.client.name + ' — the AI sees [CLIENT_1]'; } else chip.hidden = true;
+    // The client file: their case, sessions and your notes, ticked into the message (assist-client-file.js).
+    var file = $('oa-client-file');
+    if (file) file.hidden = !(S.surface === 'web' && S.client && S.client.name && global.OpalAssistClientFile);
+  }
+  function openClientFile() {
+    if (!S.client || !global.OpalAssistClientFile) return;
+    global.OpalAssistClientFile.open({ client: S.client, api: api, composer: COMPOSER() });
   }
   function selectClient(ref) {
     var c = ref ? S.clients.filter(function (x) { return x.ref === ref; })[0] : null;
@@ -682,6 +704,7 @@
   });
   $('oa-input').addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSend(); } });
   $('oa-client-search').addEventListener('input', renderSidebar);
+  $('oa-client-file').addEventListener('click', openClientFile);
   $('oa-namestyle').value = S.nameStyle;
   $('oa-namestyle').addEventListener('change', function (e) {
     S.nameStyle = e.target.value === 'full' ? 'full' : 'first';

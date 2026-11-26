@@ -394,7 +394,10 @@ describe('the composer: grows, attaches, dictates on-device, shows the model and
 
   test('files are read locally: no upload, only the portal\'s own vendored readers are fetched', () => {
     const src = read('assist-composer.js');
-    expect(src).not.toMatch(/fetch\s*\(|XMLHttpRequest|sendBeacon|WebSocket|\/api\//);
+    // The one exception: a picture goes to the portal's own OCR (/api/assist/read-image —
+    // no AI, nothing stored; tests/assist-read-image.test.js). Nothing else leaves the browser.
+    const rest = src.replace("fetch('/api/assist/read-image'", '');
+    expect(rest).not.toMatch(/fetch\s*\(|XMLHttpRequest|sendBeacon|WebSocket|\/api\//);
     (src.match(/import\('([^']+)'\)|loadScript\('([^']+)'\)/g) || []).forEach((m) => expect(m).toMatch(/'\/vendor\//));
   });
 

@@ -272,6 +272,7 @@ function travelDurationMinSync(from, to, mode) {
   const key = routeKey(from, to, modeKey);
   const entry = ROUTE_CACHE.get(key);
   if (isFresh(entry)) return entry.durationMin;
+  if (_quietRouting) return estimateTravelMinFromTable(from, to);   // quietTravelMin: ask nothing
   // Warm the cache in the background — don't await. Not while a session is
   // being dragged: each snapped position would ask for new pairs; the drop
   // routes what it lands on (T-09).
@@ -389,6 +390,14 @@ function travelMinutes(fromSuburb, toSuburb) {
   if (!fromSuburb || !toSuburb) return 0;
   if (fromSuburb === toSuburb) return 0;
   return travelDurationMinSync(fromSuburb, toSuburb, 'driving');
+}
+/* Drive minutes from the route cache, else the suburb table — never a new
+   Routes call (T-09). Answers "would a trip home fit in this gap?" for every
+   gap of the week without pricing trips nobody takes (26 Nov 2026). */
+var _quietRouting = false;
+function quietTravelMin(from, to) {
+  _quietRouting = true;
+  try { return travelMinutes(from, to); } finally { _quietRouting = false; }
 }
 
 /* Drive minutes for a leg leaving at `departMin` on `day` (29 Oct 2026).
@@ -597,6 +606,19 @@ function isPhysicalLocation(loc) {
    travel block) with a physical location. */
 function isPhysicalStop(s) {
   return !!s && !isTravelBlock(s) && isPhysicalLocation(sessionLocation(s));
+}
+
+/* An address saved on an event (detail panel, travel panel, undo) carries
+   its own suburb: the suburb a booking was made with (the client's) used to
+   stay behind, so the legs kept naming the old place until a reload
+   (25 Nov 2026). Re-derive suburb / region from the new address. */
+function refreshSessionPlace(s) {
+  if (!s) return;
+  const sub = s.address && isPlaceAddress(s.address) ? stripSuburb(addrSuburb(s.address) || '') : '';
+  s.suburb = sub || null;
+  if (sub) s.region = suburbRegion(sub) || s.region;
+  if (s.address) s.locationUnknown = false;
+  delete s.__loc;
 }
 
 function sessionLocation(s) {
@@ -930,7 +952,8 @@ function captureSessionAddress(s) {
   if (!s) return null;
   return { id: s.id, dbId: s.dbId || null, sploseId: s.sploseId || null, address: s.address || '',
            lat: s.lat || null, lng: s.lng || null, location: s.location, addressSource: s.addressSource,
-           locationObj: s.locationObj };
+           locationObj: s.locationObj, suburb: s.suburb || null, region: s.region || null,
+           locationUnknown: !!s.locationUnknown };
 }
 function registerSessionAddressUndo(s, was) {
   if (!window.OpalUndo || !s || !was) return;
@@ -948,6 +971,7 @@ function registerSessionAddressUndo(s, was) {
     const replaced = cur.address;
     cur.address = was.address; cur.lat = was.lat; cur.lng = was.lng;
     cur.location = was.location; cur.addressSource = was.addressSource; cur.locationObj = was.locationObj;
+    cur.suburb = was.suburb; cur.region = was.region; cur.locationUnknown = was.locationUnknown;
     delete cur.__loc;
     invalidateRouteCacheFor(replaced); invalidateRouteCacheFor(was.address);
     try {
@@ -2389,6 +2413,13 @@ function betweenTravelPlan(curr, next, base) {
   const out = { mode: 'direct', auto: !choice, home: null, toBase: 0, fromBase: 0, homeAvailable: false,
                 place: null, toPlace: 0, fromPlace: 0, placeAvailable: false };
   const fromKey = locTravelKey(sessionLocation(curr)), toKey = locTravelKey(sessionLocation(next));
+  // Via home is offered only when the drive home, TRAVEL_HOME_MIN_STAY at
+  // home and the drive back all fit in the gap (26 Nov 2026). Back-to-back
+  // tiles used to get a "Same place" sliver and a home option that could not
+  // work. A saved 'home' that no longer fits is still drawn (it is what is
+  // billed) and the panel says why (homeShort).
+  const gapMin = sessionStartMin(next) - sessionEndMin(curr);
+  const homeNeed = (bk) => quietTravelMin(fromKey, bk) + TRAVEL_HOME_MIN_STAY + quietTravelMin(bk, toKey);
   // "Go Somewhere Else" (6 Oct 2026): the place saved as this session's
   // "after" is where the therapist goes next — between two sessions too, not
   // only at the end of the day. It is the way unless Direct / Home has been
@@ -2406,14 +2437,17 @@ function betweenTravelPlan(curr, next, base) {
       Object.assign(out, { mode: 'elsewhere', auto: false, place: Object.assign({}, place), toPlace, fromPlace });
       // Home stays offered as the other way, so the switch can still flip.
       const bk = base && !base.unset && !base.remote ? (base.addr || base.suburb) : null;
-      out.homeAvailable = !!(bk && canonAddr(bk) !== canonAddr(fromKey) && canonAddr(bk) !== canonAddr(toKey));
+      out.homeAvailable = !!(bk && canonAddr(bk) !== canonAddr(fromKey) && canonAddr(bk) !== canonAddr(toKey) && gapMin >= homeNeed(bk));
       return out;
     }
   }
   const baseKey = base && !base.unset && !base.remote ? (base.addr || base.suburb) : null;
   if (!fromKey || !toKey || !baseKey) return out;
   if (canonAddr(baseKey) === canonAddr(fromKey) || canonAddr(baseKey) === canonAddr(toKey)) return out;
-  out.homeAvailable = true;
+  out.homeNeedMin = homeNeed(baseKey);
+  out.gapMin = gapMin;
+  out.homeAvailable = gapMin >= out.homeNeedMin;
+  out.homeShort = choice === 'home' && !out.homeAvailable;
   // A trip home in between only when the therapist chose it (19 Nov 2026,
   // owner's call): the gap rule used to send them home on its own. "Via home"
   // stays offered on the leg's switch. Only then are the drives home and back
@@ -2712,6 +2746,18 @@ function _renderDayLegs(col, segs) {
   try { segs.forEach(seg => renderSegmentOverlay(col, seg)); }
   finally { _LEG_REUSE = null; reuse.forEach(el => el.remove()); }
 }
+/* Pinch zoom (25 Nov 2026): redraw every day's legs at the current HOUR_PX
+   from the segments already worked out — no routing, no Outlook / minutes
+   sync — so the legs follow the hours frame by frame while the fingers move.
+   The pinch's end runs the full refresh once. A leg being dragged is left. */
+function redrawTravelLegsFromCache() {
+  if (!travelCalculationEnabled()) return;
+  document.querySelectorAll('#cal-grid .cal-col[data-day]').forEach(col => {
+    const segs = DAY_SEGMENTS.get(col.dataset.day);
+    if (!segs || (TRAVEL_DRAG.leg && col.contains(TRAVEL_DRAG.leg))) return;
+    _renderDayLegs(col, segs);
+  });
+}
 /* Settings › Enable travel calculation (21 Nov 2026 audit T-12). Off: no legs
    are computed or drawn, nothing is routed, nothing is mirrored to Outlook. */
 function travelCalculationEnabled() {
@@ -2829,6 +2875,21 @@ function renderSegmentOverlay(col, seg) {
     : tier === 't-mins' ? `<span class="t-label"><span class="t-min">${seg.travelMin} min</span></span>`
     : `<span class="t-ico">${_tpEsc(icon)}</span><span class="t-label"><span class="t-min">${seg.travelMin} min</span><span class="t-dest"> → ${_tpEsc(seg.toLoc.suburb || to)}</span></span>`;
   if (seg.via === 'stay') el.classList.add('stay');
+  // A drive that does not fit its gap (26 Nov 2026): the bare red gutter bar
+  // said nothing. A short note sits on the boundary, in the earlier tile's
+  // bottom-right corner, saying what is wrong.
+  let flag = null, flagTile = null;
+  if (overlaps && seg.tight && seg.kind === 'between' && seg.via !== 'home-out' && seg.via !== 'place-out' && seg.gapFromSessionId && seg.gapToSessionId && window.SESSIONS) {
+    const ga = window.SESSIONS[seg.gapFromSessionId], gb = window.SESSIONS[seg.gapToSessionId];
+    if (ga && gb) {
+      const gap = Math.max(0, sessionStartMin(gb) - sessionEndMin(ga));
+      flag = document.createElement('span');
+      flag.className = 't-flag';
+      flag.textContent = (seg.via === 'home-return' ? 'Home and back' : seg.travelMin + ' min drive') + ' · ' + (gap <= 0 ? 'no time' : gap < seg.travelMin ? 'only ' + gap + ' min' : 'no free slot');   // long enough, but other events fill it
+      flagTile = ga.element || null;
+      el.appendChild(flag);
+    }
+  }
   const kindLabel = seg.kind === 'start' ? 'Morning drive from' :
                     seg.kind === 'end'   ? 'Evening drive to'    :
                                            'Travel';
@@ -2859,13 +2920,19 @@ function renderSegmentOverlay(col, seg) {
   if (tier !== 't-bar' && tier !== 't-mins' && gapFrom && gapFrom.dbId && !seg.toHome && (seg.via === 'home-return' || seg.via === 'place-in' || seg.homeAvailable)) {
     // Via home or via a saved place flips to Direct; Direct flips to home.
     const viaHome = seg.via === 'home-return' || seg.via === 'place-in';
-    const viaName = seg.via === 'place-in' ? 'Via ' + (seg.toLoc.label || 'stop') : 'Via home';
+    // Both ways are named and the one taken is filled (26 Nov 2026): the old
+    // "Direct ⇄" pill named only the current state and hid the other way.
     const sw = document.createElement('button');
     sw.type = 'button';
     sw.className = 't-switch';
-    sw.textContent = (viaHome ? viaName : 'Direct') + ' ⇄';
+    const stayHere = seg.via === 'stay';
+    const optA = stayHere ? 'Stay' : 'Direct';
+    const optB = seg.via === 'place-in' ? (seg.toLoc.label || 'Stop') : 'Home';
+    sw.innerHTML = '<span class="t-opt' + (viaHome ? '' : ' on') + '">' + optA + '</span>' +
+                   '<span class="t-opt' + (viaHome ? ' on' : '') + '">' + _tpEsc(optB) + '</span>';
+    sw.dataset.way = viaHome ? 'home' : 'direct';
     sw.title = viaHome ? 'Going ' + (seg.via === 'place-in' ? 'to ' + (seg.toLoc.label || 'the stop') : 'home') + ' in between. Click to go direct to the next client instead.'
-                       : 'Going direct to the next client. Click to go home in between instead.';
+                       : (stayHere ? 'Staying here until the next appointment.' : 'Going direct to the next client.') + ' Click to go home in between instead.';
     sw.setAttribute('aria-label', sw.title);
     sw.addEventListener('pointerdown', (e) => e.stopPropagation());   // not a leg drag, not a create-drag
     sw.addEventListener('click', (e) => { e.stopPropagation(); setBetweenTravel(gapFrom.id, viaHome ? 'direct' : 'home'); });
@@ -2878,8 +2945,32 @@ function renderSegmentOverlay(col, seg) {
   };
   if (canMove) attachTravelLegDrag(el, seg);
   if (el.parentNode !== col) col.appendChild(el);
+  if (flag) _settleLegFlag(flag, flagTile);
   if (stayCompact) { el.innerHTML = ''; }
   else if (tier === 't-full' || seg.via === 'stay') _fitLegText(el);
+}
+/* A short tile's title reaches its bottom-right corner (a 15-min visit, a
+   name wrapping to three lines in a narrow week column), and the no-time note
+   sat on top of it (26 Nov 2026 stress week). Where the note would cover the
+   tile's words it shrinks to a red "!" that keeps the sentence as its tooltip;
+   a click on it opens the travel panel like the leg. Not laid out (a hidden
+   column) = left as it is. */
+function _settleLegFlag(flag, tile) {
+  if (!tile || !flag.getBoundingClientRect || typeof document.createRange !== 'function') return;
+  const f = flag.getBoundingClientRect();
+  if (!f.width || !f.height) return;
+  const hits = (box) => box.right > f.left && box.left < f.right && box.bottom > f.top && box.top < f.bottom;
+  const covers = Array.from(tile.querySelectorAll('.s-title, .s-time, .s-sub')).some((t) => {
+    const range = document.createRange();
+    range.selectNodeContents(t);
+    return Array.from(range.getClientRects()).some(hits);
+  });
+  if (!covers) return;
+  const words = flag.textContent;
+  flag.classList.add('compact');
+  flag.textContent = '!';
+  flag.title = words;
+  flag.setAttribute('aria-label', words);
 }
 /* A leg's drawn height: its slot less the 4 px gap every tile keeps, never
    below a 2 px bar (T-15). Shared by every place that sizes a leg. */
@@ -2889,16 +2980,18 @@ function _legHeightPx(startMin, endMin) {
 function _legTier(h) { return h < 14 ? 't-bar' : h < 20 ? 't-mins' : 't-full'; }
 /* A narrow column cannot hold "Start 8 min → Canning Vale Direct ⇄". Rather
    than an ellipsis eating the destination, drop whole parts in order — the
-   Start/End word, then the switch (the panel has it), then the destination —
+   Start/End word, then the destination, then the switch (the panel has both) —
    so what remains is always readable and the minutes always show (T-20). */
 function _fitLegText(el) {
   const over = () => el.scrollWidth > el.clientWidth + 0.5;
   if (!over()) return;
   el.classList.add('t-no-ico');
   if (!over()) return;
-  el.classList.add('t-no-switch');
-  if (!over()) return;
+  // The destination goes before the switch (26 Nov 2026): the switch is the
+  // only way back from Home on the calendar, and the panel names the place.
   el.classList.add('t-no-dest');
+  if (!over()) return;
+  el.classList.add('t-no-switch');
 }
 
 /* ---------- Travel legs mirrored to Outlook (5 Oct 2026) ----------
@@ -3524,7 +3617,7 @@ function _renderTravelPanel(seg) {
     html += '<div class="tp-section-title">Travel from ' + stopAt(gapFrom) + ' to ' + stopAt(gapTo) + '</div>';
     html += '<div class="tp-plan-opts tp-between" data-between="' + _tpEsc(gapFrom.id) + '">' +
       '<button type="button" class="tp-plan-opt' + (plan.mode === 'direct' ? ' on' : '') + '" data-mode="direct">Go direct to ' + _tpEsc(_stopName(gapTo) || 'the next stop') + '</button>' +
-      (plan.homeAvailable ? '<button type="button" class="tp-plan-opt' + (plan.mode === 'home' ? ' on' : '') + '" data-mode="home">Go home in between</button>' : '') +
+      (plan.homeAvailable || plan.mode === 'home' ? '<button type="button" class="tp-plan-opt' + (plan.mode === 'home' ? ' on' : '') + '" data-mode="home">Go home in between</button>' : '') +
       // A saved Go Somewhere Else place is its own way; choosing it clears the
       // Direct / Home choice so the place applies again.
       (plan.placeAvailable ? '<button type="button" class="tp-plan-opt' + (plan.mode === 'elsewhere' ? ' on' : '') + '" data-mode="">Go to ' + _tpEsc(placeName) + ' in between</button>' : '') +
@@ -3533,6 +3626,14 @@ function _renderTravelPanel(seg) {
       '</div>' +
       '<div class="tp-plan-oneoff tp-else" hidden><input type="text" class="tp-addr" data-else-addr placeholder="Where are you going? Type an address" aria-label="Place to go in between" autocomplete="off">' +
       '</div>';
+    // Why home is missing, or why the chosen trip home runs into a session
+    // (26 Nov 2026): home needs the drive there, TRAVEL_HOME_MIN_STAY at home
+    // and the drive back.
+    if (plan.homeNeedMin > 0 && plan.homeShort) {
+      html += '<div class="tp-home-fit warn">Going home doesn\'t fit any more: it needs about ' + plan.homeNeedMin + ' min and the gap is ' + Math.max(0, plan.gapMin) + ' min. Choose Go direct to fix it.</div>';
+    } else if (plan.homeNeedMin > 0 && !plan.homeAvailable) {
+      html += '<div class="tp-home-fit">No time to go home in between: that needs about ' + plan.homeNeedMin + ' min and the gap is ' + Math.max(0, plan.gapMin) + ' min.</div>';
+    }
   }
 
   html += _deskHereList(seg);
@@ -3877,7 +3978,7 @@ async function saveSessionAddress(sessionId, newAddr, lat, lng) {
   s.location = newAddr;
   s.locationObj = { formattedAddress: newAddr, latitude: lat, longitude: lng, source: 'manual', isMissing: false, isManualOverride: true,
                     isValidForRouting: (typeof isValidRoutingLocation === 'function' ? isValidRoutingLocation(newAddr) : true) || fromPlaces };
-  delete s.__loc;
+  refreshSessionPlace(s);
   invalidateRouteCacheFor(oldAddr); invalidateRouteCacheFor(newAddr);
   try {
     var key = s.sploseId ? 'manual_addr_splose_' + s.sploseId : (s.dbId ? 'manual_addr_db_' + s.dbId : null);

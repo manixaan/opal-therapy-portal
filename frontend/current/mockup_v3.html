@@ -145,7 +145,7 @@
 <link rel="stylesheet" href="/nf2f.css?v=5" />
 <link rel="stylesheet" href="/flights.css?v=2" />
 <!-- Last stylesheet: night-mode token overrides must win over every feature sheet. -->
-<link rel="stylesheet" href="/theme.css?v=8" />
+<link rel="stylesheet" href="/theme.css?v=9" />
 <!-- The Library's document library (folders, list/tiles, bin, versions). Before
      resourcehub.js, which mounts it into #rhl-root inside the Library view. -->
 <script src="/resourcelibrary.js?v=3" defer></script>
@@ -204,14 +204,14 @@
      store and computeDayTravelSegments(), the calendar leg overlays and the
      travel details panel. Deferred and loaded ahead of profile.js and
      reports.js, both of which reach into it. -->
-<script src="/travel.js?v=75" defer></script>
+<script src="/travel.js?v=80" defer></script>
 <!-- Traffic alerts: a re-priced drive that now runs into a client session —
      point at it, offer Make room, Acknowledge or Ignore (today and tomorrow). -->
 <script src="/travel-alerts.js?v=1" defer></script>
 <!-- Route-aware Smart Booking: client location selector, work-location
      notice, and the "What next?" continuation after a booking. Extends the
      booking panel; the route maths live in travel.js, loaded just above. -->
-<script src="/booking-route.js?v=15" defer></script>
+<script src="/booking-route.js?v=16" defer></script>
 <script src="/recurrence.js?v=1" defer></script>
 <script src="/nf2f.js?v=9" defer></script>
 <!-- Travel block: a billable start → end drive, priced by Google Maps. -->
@@ -237,7 +237,7 @@
      the _rpt* data layer, the daily and weekly renderers, and the
      Snapshot Day V2 work list. Deferred, so it runs after the shell's
      inline scripts and keeps the same globals they expect. -->
-<script src="/reports.js?v=10" defer></script>
+<script src="/reports.js?v=14" defer></script>
 <script src="/navigation.js?v=17" defer></script>
 <script>
 /* Opal line icons — one consistent stroke set replacing emoji throughout.
@@ -1040,6 +1040,26 @@ window.opIcon = function (name, size) {
   .rpt-day-stat strong { display: block; font-size: 14px; font-weight: 700; color: var(--ink); }
   .rpt-day-stat span { font-size: 10px; color: var(--muted); }
   .rpt-day-card-warn { font-size: 10px; color: var(--warn-ink); background: var(--warn-soft); border-radius: 4px; padding: 2px 6px; margin-top: 2px; }
+  /* Missing-address fix exercise (reports.js rptFixStart) */
+  button.rpt-fix-chip { border: 0; font: inherit; font-size: 10.5px; font-weight: 600; cursor: pointer; text-align: left; }
+  button.rpt-day-card-warn.rpt-fix-chip { display: block; font-size: 10px; }
+  button.rpt-fix-chip:hover, button.rpt-fix-chip:focus-visible { background: color-mix(in srgb, var(--warn) 22%, var(--warn-soft)); outline: none; }
+  .rpt-fix-btn { border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent); background: var(--panel); color: var(--warn-ink); border-radius: 6px;
+    padding: 2px 9px; font: inherit; font-size: 11.5px; font-weight: 600; cursor: pointer; margin-left: 6px; white-space: nowrap; }
+  .rpt-card-sub .rpt-fix-btn, .rpt-attention-item .rpt-fix-btn { margin: 6px 0 0; }
+  .rpt-fix-btn:hover, .rpt-fix-btn:focus-visible { background: var(--warn-soft); outline: none; }
+  .rpt-fixbar { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 9000; display: flex; align-items: center; gap: 16px;
+    background: var(--panel); color: var(--ink); border: 1px solid var(--border); border-left: 4px solid var(--warn, #b06e12); border-radius: 12px;
+    box-shadow: 0 8px 28px rgba(0,0,0,0.18); padding: 10px 14px; max-width: calc(100vw - 32px); }
+  .rpt-fixbar-step { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-soft); }
+  .rpt-fixbar-done { color: var(--ok-ink, #2f7d4f); text-transform: none; letter-spacing: 0; margin-left: 6px; }
+  .rpt-fixbar-what { font-size: 13.5px; font-weight: 500; margin-top: 2px; }
+  .rpt-fixbar-dots { display: flex; gap: 4px; margin-top: 6px; }
+  .rpt-fixbar-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--border); }
+  .rpt-fixbar-dot.done { background: var(--ok, #2f7d4f); }
+  .rpt-fixbar-dot.current { box-shadow: 0 0 0 2px var(--warn, #b06e12); }
+  .rpt-fixbar-actions { display: flex; gap: 6px; flex-shrink: 0; }
+  @media (max-width: 600px) { .rpt-fixbar { left: 16px; right: 16px; transform: none; flex-direction: column; align-items: stretch; } }
   .rpt-day-card-open { font-size: 11px; color: var(--accent); margin-top: 5px; }
   /* Workload mix */
   .rpt-mix-bars { display: flex; flex-direction: column; gap: 7px; }
@@ -1050,12 +1070,14 @@ window.opIcon = function (name, size) {
   .rpt-mix-fill.billable { background: #2f7d4f; }
   .rpt-mix-fill.nonbillable { background: #7a736a; }
   .rpt-mix-fill.travel { background: #b06e12; }
+  .rpt-mix-fill.cancelled { background: #c2412e; opacity: .55; }
   .rpt-mix-total { font-size: 11px; color: var(--ink-soft); text-align: right; }
   .rpt-mix-legend { display: flex; gap: 12px; margin-top: 7px; font-size: 11.5px; color: var(--ink-soft); }
   .rpt-legend-dot { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
   .rpt-legend-dot.billable { background: #2f7d4f; }
   .rpt-legend-dot.nonbillable { background: #7a736a; }
   .rpt-legend-dot.travel { background: #b06e12; }
+  .rpt-legend-dot.cancelled { background: #c2412e; opacity: .55; }
   /* SVG progress ring */
   .rpt-ring-wrap { display: flex; align-items: center; gap: 20px; padding: 4px 0 2px; }
   .rpt-ring-svg { flex-shrink: 0; }
@@ -1063,6 +1085,8 @@ window.opIcon = function (name, size) {
   .rpt-ring-headline { font-size: 22px; font-weight: 700; color: var(--ink); line-height: 1.1; }
   .rpt-ring-headline small { font-size: 14px; font-weight: 400; color: var(--ink-soft); }
   .rpt-ring-sub { font-size: 12.5px; color: var(--ink-soft); margin-top: 5px; line-height: 1.4; }
+  .rpt-ring-split { font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
+  .rpt-billing-notes { font-size: 12px; color: var(--warn, #b06e12); background: var(--warn-soft); border-radius: 6px; padding: 6px 10px; margin: -4px 0 12px; line-height: 1.45; }
   .rpt-ring-bar { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; margin-top: 8px; }
   .rpt-ring-bar-fill { height: 100%; border-radius: 3px; transition: width 0.5s; }
   /* Visual day Gantt strip */
@@ -3484,6 +3508,8 @@ window.opIcon = function (name, size) {
      lands it eases to the real size instead of jumping (audit T-14). Never
      while dragged — direct manipulation is 1:1. Reduced motion collapses it. */
   .travel-overlay:not(.drag-preview):not(.dragging):not(.preview) { transition: top 140ms var(--ease-out), height 140ms var(--ease-out); }
+  /* Pinch zoom: legs move with the hours, not 140 ms behind them. */
+  #cal-grid.cal-zooming .travel-overlay { transition: none !important; }
   /* Priced from the suburb table, not a real route (yet): a dashed bar marks
      it provisional (T-19); the fill stays solid (22 Nov 2026). */
   .travel-overlay.estimate { border-left-style: dashed; }
@@ -3520,6 +3546,10 @@ window.opIcon = function (name, size) {
     color: inherit; background: transparent; border: 1px solid currentColor; border-radius: 999px;
     padding: 0 6px; cursor: pointer; white-space: nowrap;
   }
+  /* Both ways named, the one taken filled (26 Nov 2026) — not "Direct ⇄". */
+  .travel-overlay .t-switch { display: inline-flex; padding: 0; overflow: hidden; }
+  .travel-overlay .t-switch .t-opt { padding: 0 6px; }
+  .travel-overlay .t-switch .t-opt.on { background: var(--c-travel-ink); color: var(--panel); }
   .travel-overlay .t-switch:hover { background: rgba(255,255,255,.35); }
   .travel-overlay .t-switch:focus-visible { outline: none; box-shadow: var(--focus-ring); }
   /* Legs redrawn while a session is dragged (travel.js previewTravelForMove):
@@ -3530,7 +3560,7 @@ window.opIcon = function (name, size) {
      audit T-16). Back to back there is no room beside the tiles, so it is a
      short bar in the column's right gutter on the boundary — never over a
      tile's title; a click opens the panel. */
-  .travel-overlay.stay { background: transparent; border-left-style: dashed; opacity: .85; padding: 0 6px; line-height: 12px; }
+  .travel-overlay.stay { background: var(--panel); border-left-style: dashed; opacity: .85; padding: 0 6px; line-height: 12px; }
   .travel-overlay.stay .t-ico { font-size: 10px; font-weight: 500; white-space: nowrap; flex-shrink: 0; }
   .travel-overlay.stay.stay-compact { left: auto; right: 0; width: 3px; padding: 0; border: 0; border-radius: 2px;
     background: currentColor; opacity: .6; z-index: 3; }
@@ -3540,6 +3570,14 @@ window.opIcon = function (name, size) {
   .travel-overlay.overlaps { left: auto; right: 0; width: 3px; padding: 0; border-left: 0; border-radius: 2px;
     background: currentColor; z-index: 3; }
   .travel-overlay.overlaps.tight { color: var(--danger, #9c3322); }
+  /* …and one that does not fit its gap says so, on the boundary inside the
+     earlier tile's bottom-right corner (26 Nov 2026). */
+  .travel-overlay .t-flag { position: absolute; right: 6px; bottom: 100%; margin-bottom: 3px; z-index: 4;
+    white-space: nowrap; font-size: 9.5px; font-weight: 700; line-height: 14px; padding: 0 6px;
+    color: var(--danger, #9c3322); background: var(--panel); border: 1px solid currentColor; border-radius: 999px; pointer-events: none; }
+  /* …shrunk to a "!" where it would cover a short tile's words; the sentence
+     is its tooltip, so it takes the pointer (travel.js _settleLegFlag). */
+  .travel-overlay .t-flag.compact { width: 14px; padding: 0; text-align: center; color: var(--panel); background: var(--danger, #9c3322); pointer-events: auto; cursor: pointer; }
   /* …but still grabbable: an invisible 10 px hit area over the bar's edge. */
   .travel-overlay.overlaps, .travel-overlay.stay.stay-compact { overflow: visible; }
   .travel-overlay.overlaps::after, .travel-overlay.stay.stay-compact::after { content: ''; position: absolute; top: 0; bottom: 0; right: -1px; width: 10px; }
@@ -4399,6 +4437,8 @@ window.opIcon = function (name, size) {
 .tp-plan-current { font-size: 13px; margin-bottom: 8px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .tp-plan-reset { background: none; border: none; color: var(--accent); cursor: pointer; font-size: 12px; text-decoration: underline; padding: 0; }
 .tp-plan-opts { display: flex; flex-wrap: wrap; gap: 6px; }
+.tp-home-fit { margin-top: 8px; font-size: 12px; color: var(--ink-soft); }
+.tp-home-fit.warn { color: var(--danger, #9c3322); font-weight: 600; }
 .tp-plan-opt { font: inherit; font-size: 12.5px; padding: 5px 10px; border-radius: 999px; border: 1px solid var(--border, #d9e1dc); background: var(--panel, #fff); color: inherit; cursor: pointer; }
 .tp-plan-opt.on { background: var(--accent); color: #fff; border-color: var(--accent); }
 .tp-plan-opt:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -6926,33 +6966,6 @@ window.opIcon = function (name, size) {
             </div>
             <div class="settings-row-control">
               <label class="settings-toggle"><input type="checkbox" id="stg-rpt-include-travel" checked><span class="settings-toggle-slider"></span></label>
-            </div>
-          </div>
-          <div class="settings-row">
-            <div class="settings-row-label">
-              <strong>Include idle gaps in reports</strong>
-              <span>Show free windows in daily timeline</span>
-            </div>
-            <div class="settings-row-control">
-              <label class="settings-toggle"><input type="checkbox" id="stg-rpt-include-gaps" checked><span class="settings-toggle-slider"></span></label>
-            </div>
-          </div>
-          <div class="settings-row">
-            <div class="settings-row-label">
-              <strong>Include CPD suggestions</strong>
-              <span>Suggest CPD activities for long idle windows</span>
-            </div>
-            <div class="settings-row-control">
-              <label class="settings-toggle"><input type="checkbox" id="stg-rpt-cpd-suggest" checked><span class="settings-toggle-slider"></span></label>
-            </div>
-          </div>
-          <div class="settings-row">
-            <div class="settings-row-label">
-              <strong>Include lunch/break suggestions</strong>
-              <span>Suggest break windows in daily report</span>
-            </div>
-            <div class="settings-row-control">
-              <label class="settings-toggle"><input type="checkbox" id="stg-rpt-lunch-suggest" checked><span class="settings-toggle-slider"></span></label>
             </div>
           </div>
         </div>
@@ -13564,6 +13577,7 @@ async function confirmBooking() {
       // No success modal — land the user straight on the calendar with the
       // new event in view; a quiet toast confirms the write.
       if (newDbId && _chainNc && typeof travelChainInherit === 'function') await travelChainInherit(newDbId, _chainNc);
+      if (window.__bspSwap) __bspFinishSwap(newDbId);
       WIZARD_BOOKED = true;
       resetBtn();
       if (typeof resetWizard === 'function') resetWizard();
@@ -13805,6 +13819,8 @@ async function confirmBooking() {
       if (typeof refreshDayOverlays === 'function') setTimeout(() => refreshDayOverlays(slot.day), 100);
     }
 
+    // Swap type: only a booking on the viewer's own calendar replaces theirs.
+    if (window.__bspSwap) { if (_bookedFor) window.__bspSwap = null; else __bspFinishSwap(newDbId); }
     // No success modal — go straight to the calendar with the event in view.
     WIZARD_BOOKED = true;
     resetBtn();
@@ -13909,7 +13925,17 @@ function resetWizard() {
 }
 
 /* ---------- Calendar rendering ---------- */
-const HOUR_PX = 72;    // pixels per hour — 15-min slots stay readable without a marathon scroll
+// Pixels per hour — 72 keeps 15-min slots readable without a marathon scroll.
+// A trackpad pinch over the week grid changes it (calendar zoom, 25 Nov 2026),
+// remembered per browser. Everything that draws reads HOUR_PX at draw time.
+const HOUR_PX_DEFAULT = 72, HOUR_PX_MIN = 36, HOUR_PX_MAX = 216;
+let HOUR_PX = (function () {
+  try {
+    const v = parseFloat(localStorage.getItem('opal.calendar.hourPx'));
+    if (Number.isFinite(v)) return Math.min(HOUR_PX_MAX, Math.max(HOUR_PX_MIN, v));
+  } catch (_) { /* storage unavailable */ }
+  return HOUR_PX_DEFAULT;
+})();
 var START_H   = 0;     // visible grid start — full 24-hour day (midnight). Calendar always shows 0→24.
 var END_H     = 24;    // visible grid end   — midnight (full 24-hour day)
 var WORK_S    = 8;     // soft working-hours start for non-working band
@@ -13989,6 +14015,85 @@ rebuildCalendarGrid();
   } else {
     wire();
   }
+})();
+
+/* ── Pinch to zoom the time axis (25 Nov 2026) ─────────────────────────────
+   Two fingers moving apart on the trackpad over the week grid stretch the
+   hours (and every event with them); pinching squeezes them — the same
+   gesture as the Opa app. No click needed. Chrome / Edge / Firefox send a
+   trackpad pinch as a ctrl+wheel; Safari sends gesture events. The time
+   under the pointer stays where it is. While the fingers move, only the
+   tiles and hour lines are repositioned; travel legs and the now line are
+   redrawn once the pinch stops. */
+function setCalendarHourPx(px, clientY) {
+  px = Math.round(Math.min(HOUR_PX_MAX, Math.max(HOUR_PX_MIN, px)) * 10) / 10;
+  if (!Number.isFinite(px) || px === HOUR_PX) return false;
+  const grid = document.getElementById('cal-grid');
+  const col = document.querySelector('#cal-grid .cal-col');
+  let anchorY = null, anchorMin = null;
+  if (grid && col) {
+    const r = col.getBoundingClientRect(), g = grid.getBoundingClientRect();
+    anchorY = (clientY != null ? clientY : g.top + g.height / 2) - r.top;
+    anchorMin = anchorY / HOUR_PX * 60;
+  }
+  HOUR_PX = px;
+  rebuildCalendarGrid();
+  Object.keys(SESSIONS).forEach(id => {
+    const s = SESSIONS[id], el = s && s.element;
+    if (!el || !el.isConnected || !el.closest('#cal-grid .cal-col') || s.allDay) return;
+    el.style.top = tToY(s.startH, s.startM || 0) + 'px';
+    el.style.height = sessionTileHeight(durMin(s), sessionStartMin(s)) + 'px';
+  });
+  // Travel legs and the now line follow live, from what is already computed.
+  if (typeof redrawTravelLegsFromCache === 'function') { try { redrawTravelLegsFromCache(); } catch (_) { /* never break the zoom */ } }
+  if (typeof updateNowLine === 'function') updateNowLine();
+  if (grid && anchorMin != null) grid.scrollTop += anchorMin / 60 * HOUR_PX - anchorY;
+  try { localStorage.setItem('opal.calendar.hourPx', String(px)); } catch (_) { /* storage unavailable */ }
+  return true;
+}
+(function initCalendarPinchZoom() {
+  let settle = null, raf = null, pending = null, gestureStart = null;
+  function afterPinch() {
+    clearTimeout(settle);
+    const grid = document.getElementById('cal-grid');
+    if (grid) grid.classList.add('cal-zooming');
+    settle = setTimeout(() => {
+      if (grid) grid.classList.remove('cal-zooming');
+      // The full refresh once the pinch stops (legs were redrawn live from
+      // cache; this re-prices them and records the minutes). Mid-drag, leave it.
+      if (typeof TRAVEL_DRAG !== 'undefined' && (TRAVEL_DRAG.active || TRAVEL_DRAG.leg)) return;
+      if (typeof refreshAllOverlays === 'function') refreshAllOverlays();
+    }, 160);
+  }
+  function schedule(px, y) {
+    pending = { px, y };
+    if (raf) return;
+    raf = requestAnimationFrame(() => {
+      raf = null;
+      const p = pending; pending = null;
+      if (p && setCalendarHourPx(p.px, p.y)) afterPinch();
+    });
+  }
+  function wire() {
+    const grid = document.getElementById('cal-grid');
+    if (!grid) return;
+    grid.addEventListener('wheel', e => {
+      if (!e.ctrlKey) return;            // a plain scroll stays a scroll
+      e.preventDefault();                // not the browser's page zoom
+      const base = pending ? pending.px : HOUR_PX;
+      const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1;
+      schedule(base * Math.exp(-e.deltaY * unit * 0.01), e.clientY);
+    }, { passive: false });
+    // Safari (macOS): pinch arrives as gesturestart / gesturechange.
+    grid.addEventListener('gesturestart', e => { e.preventDefault(); gestureStart = HOUR_PX; }, { passive: false });
+    grid.addEventListener('gesturechange', e => {
+      e.preventDefault();
+      if (gestureStart != null && Number.isFinite(e.scale)) schedule(gestureStart * e.scale, e.clientY);
+    }, { passive: false });
+    grid.addEventListener('gestureend', e => { e.preventDefault(); gestureStart = null; }, { passive: false });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire);
+  else wire();
 })();
 
 /* Skip to calendar (Q-07): Enter puts focus on the first appointment of the
@@ -15657,7 +15762,12 @@ function openBlockDetail(id) {
   if (s.cancelled) tags.push('<span class="detail-tag" style="background:var(--danger-soft);color:var(--danger-ink);">Cancelled</span>');
 
   const rows = [];
-  rows.push(row('Session type', escapeHtml(sessionKindLabel(s))));
+  // Swap type (25 Nov 2026): booked as the wrong type (Case Noting for a
+  // session) — rebook the same slot as the right one; the old goes once the new saves.
+  rows.push(row('Session type', escapeHtml(sessionKindLabel(s)) + (bdCanSwapType(s)
+    ? ` <button type="button" class="btn btn-xs" id="bd-swap-btn" onclick="bdSwapType('${id}')">Swap type</button>
+       <div id="bd-swap" hidden style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;"></div>`
+    : '')));
   // Day, with "Change" (19 Nov 2026): move the event to another date — same
   // start time, same duration.
   const _canMoveDay = MOVABLE_TYPES.has(s.type) && !s.cancelled && !s.allDay && s.endH < 24 && !!s.dbId && !!s.startTimeIso;
@@ -15807,6 +15917,91 @@ function bdDeleteEvent(id) {
   const s = SESSIONS[id];
   if (!s || !s.dbId) return;
   deleteEventFlow(id);
+}
+
+/* ── Swap type (25 Nov 2026) ─────────────────────────────────────────────
+   An event booked as the wrong type is rebooked as the right one through
+   Smart Booking — same day, time, length, client and address — so every
+   booking rule (client required, Splose draft, billing) is the one a new
+   booking gets. The old event is removed only once the new one has saved
+   (__bspFinishSwap); closing the panel instead leaves it as it was. */
+function bdCanSwapType(s) {
+  if (!s || !s.dbId || !s.startTimeIso || s.cancelled || s.allDay || !(s.endH < 24)) return false;
+  if (typeof isTravelBlock === 'function' && isTravelBlock(s)) return false;
+  if (s.booking && s.booking.group === 'travel') return false;
+  return !!(window.BookingRoute && typeof BookingRoute.openPrefilled === 'function');
+}
+function bdSwapClientId(s) {
+  const b = s.booking || {};
+  if (s.patientId != null) return String(s.patientId);
+  if (b.clientId != null) return String(b.clientId);
+  const c = Array.isArray(b.clients) && b.clients[0];
+  return c && c.clientId != null ? String(c.clientId) : null;
+}
+function bdSwapType(id) {
+  const s = SESSIONS[id], box = document.getElementById('bd-swap');
+  if (!s || !box) return;
+  if (!box.hidden) { box.hidden = true; return; }
+  const cur = s.booking && s.booking.kind;
+  const GROUPS = [['direct', 'Direct services'], ['report', 'Requested reports'], ['nf2f', 'Non-face-to-face'], ['other', 'Non-billable']];
+  const opts = GROUPS.map(([g, label]) => {
+    const leaves = Object.keys(BOOKING_LEAVES).filter(k => {
+      const l = BOOKING_LEAVES[k];
+      return l.group === g && k !== cur && !(l.group === 'direct' && !l.serviceId);
+    });
+    return leaves.length ? `<optgroup label="${label}">${leaves.map(k => `<option value="${k}">${escapeHtml(BOOKING_LEAVES[k].label)}</option>`).join('')}</optgroup>` : '';
+  }).join('');
+  box.innerHTML = `<select id="bd-swap-kind" aria-label="New type" style="flex:1;min-width:0;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--panel);color:var(--ink);font:inherit;font-size:12.5px;">
+      <option value="">Swap to…</option>${opts}</select>
+    <button type="button" class="btn btn-xs primary" onclick="bdSwapGo('${id}')">Continue</button>`;
+  box.hidden = false;
+  const sel = document.getElementById('bd-swap-kind'); if (sel) sel.focus();
+}
+function bdSwapGo(id) {
+  const s = SESSIONS[id], sel = document.getElementById('bd-swap-kind');
+  const leaf = sel && sel.value;
+  if (!s || !leaf || !BOOKING_LEAVES[leaf]) { showToast('Pick a type', 'Choose what this should have been booked as.', 'warn'); return; }
+  const pad = n => String(n).padStart(2, '0');
+  const addr = s.address && (typeof isPlaceAddress !== 'function' || isPlaceAddress(s.address)) ? s.address : null;
+  const oldLabel = sessionDrawerTitle(s);
+  const swap = { sessionId: id, dbId: s.dbId, label: oldLabel };
+  closeBlockDetail();
+  BookingRoute.openPrefilled({
+    day: s.day, start: pad(s.startH) + ':' + pad(s.startM || 0), dur: durMin(s), leaf,
+    patientId: BOOKING_LEAVES[leaf].client === 'none' ? null : bdSwapClientId(s),
+    location: addr ? { value: addr, lat: s.lat || '', lng: s.lng || '' } : null,
+    unsure: false, home: false,
+  }, () => {
+    window.__bspSwap = swap;
+    const text = document.getElementById('bsp-prefill-text'), strip = document.getElementById('bsp-prefill-strip');
+    if (text && strip) { strip.style.display = 'flex'; text.textContent = 'Swapping ' + oldLabel + ' — Create replaces it'; }
+  });
+}
+/* The new booking saved: remove the one it replaces. Travel around the slot
+   stays (?cascade=0) — it serves the new booking just the same. */
+async function __bspFinishSwap(newDbId) {
+  const sw = window.__bspSwap; window.__bspSwap = null;
+  if (!sw || !sw.dbId || !newDbId || String(sw.dbId) === String(newDbId)) return;
+  const tid = Object.keys(SESSIONS).find(k => SESSIONS[k] && String(SESSIONS[k].dbId) === String(sw.dbId));
+  try {
+    const r = await fetch(`/api/outlook/events/${encodeURIComponent(sw.dbId)}?cascade=0`, { method: 'DELETE', credentials: 'include' });
+    if (!r.ok) throw new Error(((await r.json().catch(() => ({}))).error) || ('HTTP ' + r.status));
+    if (tid) { const cols = new Set(); __removeSessionTile(tid, cols); cols.forEach(c => { if (typeof reflowDayOverlaps === 'function' && c) reflowDayOverlaps(c); }); }
+    if (typeof refreshAllOverlays === 'function') refreshAllOverlays();
+    if (window.OpalUndo) {
+      OpalUndo.register({ group: 'calendar', label: 'Swap type — ' + sw.label, undo: async () => {
+        const rr = await fetch(`/api/outlook/events/${encodeURIComponent(sw.dbId)}/restore`, {
+          method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ travelBlockIds: [] }) });
+        if (!rr.ok) throw new Error(((await rr.json().catch(() => ({}))).error) || 'restore failed');
+        const dr = await fetch(`/api/outlook/events/${encodeURIComponent(newDbId)}?cascade=0`, { method: 'DELETE', credentials: 'include' });
+        if (!dr.ok) throw new Error('the old one is back, but the new one could not be removed');
+        if (typeof loadOutlookEventsToCalendar === 'function') loadOutlookEventsToCalendar();
+      } });
+    }
+    showToast('Type swapped', sw.label + ' was replaced.');
+  } catch (e) {
+    showToast('Old event not removed', 'The new booking is saved, but ' + sw.label + ' could not be removed (' + e.message + '). Delete it from its panel.', 'warn');
+  }
 }
 
 // ── Location section builder ───────────────────────────────────────────────
@@ -16011,7 +16206,11 @@ function bdSaveAddress(id) {
     isManualOverride: true,
     isValidForRouting: isValidRoutingLocation(newAddr) || fromPlaces,
   };
-  delete s.__loc; // bust sessionLocation() cache so next call re-derives
+  s.location = newAddr;
+  // The new address's own suburb / region, not the one it was booked with —
+  // the travel legs name and price the stop from these (travel.js).
+  if (typeof refreshSessionPlace === 'function') refreshSessionPlace(s);
+  else delete s.__loc; // bust sessionLocation() cache so next call re-derives
 
   // ── Persist manual address to localStorage so it survives page reload ──────
   // Splose sessions have no dbId (they're not in the local DB), so we key by
@@ -23638,6 +23837,7 @@ function closeBookingPanel(confirmIfDirty = false) {
   _bspOpen = false;
   _bspDirty = false;
   _bspPrefill = null;
+  window.__bspSwap = null; // a swap ends with its panel: the old event stays
   clearPreviewBlocks();
 }
 
@@ -25481,9 +25681,6 @@ async function loadUserSettings() {
     _setv('stg-rpt-daily-target',  rp.dailyBillableTargetHours  != null ? rp.dailyBillableTargetHours  : 5);
     _setv('stg-rpt-weekly-target', rp.weeklyBillableTargetHours != null ? rp.weeklyBillableTargetHours : 25);
     _setb('stg-rpt-include-travel', rp.includeTravel !== false);
-    _setb('stg-rpt-include-gaps',   rp.includeIdleGaps !== false);
-    _setb('stg-rpt-cpd-suggest',    rp.includeCpdSuggestions !== false);
-    _setb('stg-rpt-lunch-suggest',  rp.includeLunchSuggestions !== false);
 
     // Apply settings to app behaviour
     applyUserSettings(s, os);
@@ -25546,9 +25743,6 @@ async function saveUserSettings(section) {
       dailyBillableTargetHours:  dailyT,
       weeklyBillableTargetHours: weeklyT,
       includeTravel:         _sb('stg-rpt-include-travel'),
-      includeIdleGaps:       _sb('stg-rpt-include-gaps'),
-      includeCpdSuggestions: _sb('stg-rpt-cpd-suggest'),
-      includeLunchSuggestions: _sb('stg-rpt-lunch-suggest'),
     },
     notificationPreferences: {
       dailySchedule:       _sb('stg-notif-daily-schedule'),

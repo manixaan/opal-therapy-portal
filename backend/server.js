@@ -236,9 +236,11 @@ require('./env-validation').enforceEnvironmentOrExit();
 // Session — 8-hour timeout, httpOnly cookie.
 // Saved to a variable so it can be shared with Socket.IO middleware below.
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000; // 8 hours
-const sessionMiddleware = session({
-  store: new PgSessionStore(dbPool, SESSION_TTL_MS),
-  secret: process.env.SESSION_SECRET || 'dev-secret-change-in-production',
+const SESSION_STORE = new PgSessionStore(dbPool, SESSION_TTL_MS);
+const SESSION_SECRET = process.env.SESSION_SECRET || 'dev-secret-change-in-production';
+const normalSessionMiddleware = session({
+  store: SESSION_STORE,
+  secret: SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
   rolling: true, // reset timeout on each request
@@ -251,7 +253,18 @@ const sessionMiddleware = session({
     maxAge: SESSION_TTL_MS,
   }
 });
+// The Outlook app-bar tab gets its own partitioned SameSite=None cookie; every
+// other request keeps the Lax one above (outlook-embed.js). Dormant unless
+// OPAL_OUTLOOK_TAB_ENABLED=true and the Entra settings exist.
+const outlookEmbed = require('./outlook-embed');
+const sessionMiddleware = outlookEmbed.createSessionDispatcher({
+  session, normal: normalSessionMiddleware, normalStore: SESSION_STORE,
+  // Same table, separate object — see createSessionDispatcher.
+  embedStore: new PgSessionStore(dbPool, SESSION_TTL_MS),
+  secret: SESSION_SECRET, ttlMs: SESSION_TTL_MS,
+});
 app.use(sessionMiddleware);
+app.use(outlookEmbed.embedGuards);
 
 // Structured request log (after session so the internal user id is known).
 // Logs path only — never query strings (OAuth codes / reset tokens) or bodies.
@@ -275,6 +288,9 @@ app.use(express.static(frontendPath, { setHeaders: require('./static-cache').set
 
 // ── Public auth pages (no session required) ───────────────────────────────
 app.get('/login', (req, res) => {
+  // Inside the Outlook tab the sign-in page cannot show (and cannot be
+  // framed); the tab signs in again with Microsoft instead.
+  if (outlookEmbed.isFramedNavigation(req)) return res.redirect(outlookEmbed.TAB_PATH);
   res.sendFile(path.join(frontendPath, 'login.html'));
 });
 app.get('/register', (req, res) => {
@@ -351,13 +367,11 @@ app.get('/', async (req, res) => {
 });
 
 // ── Opal Assist — standalone page, same account guard as the shell ─────────
-// Office hosts that may frame the task pane. Everything else keeps the
-// global frame-ancestors 'self'. The pane itself carries no data: every API
-// call behind it is guarded (session or Microsoft bearer, assist-routes.js).
-const OFFICE_FRAME_ANCESTORS = [
-  "'self'", 'https://*.officeapps.live.com', 'https://*.office.com', 'https://*.office365.com',
-  'https://*.microsoft.com', 'https://*.sharepoint.com', 'https://*.cloud.microsoft', 'https://outlook.live.com',
-];
+// Office hosts that may frame the task pane (shared with outlook-embed.js).
+// Everything else keeps the global frame-ancestors 'self'. The pane itself
+// carries no data: every API call behind it is guarded (session or Microsoft
+// bearer, assist-routes.js).
+const { OFFICE_FRAME_ANCESTORS } = outlookEmbed;
 const OFFICE_SURFACES = new Set(['word', 'excel', 'outlook']);
 app.get('/assist', async (req, res) => {
   if (OFFICE_SURFACES.has(String(req.query.surface || ''))) {
@@ -471,6 +485,8 @@ const db = require('./database');
 // handle /api/auth/* requests without going through requireAuth.
 const authRoutes = require('./auth');
 app.use('/', authRoutes);
+// Outlook app-bar tab: GET /outlook and the Microsoft sign-in exchange.
+app.use('/', outlookEmbed.createRouter({ frontendPath }));
 
 // Main app routes (calendar, sync, Splose, Outlook write-back, etc.)
 const routes = require('./routes');
@@ -1230,6 +1246,10 @@ require('./assist/warmup').start();
   setTimeout(run, 20000);
   setInterval(run, 24 * 60 * 60 * 1000).unref();
 }
+
+// ── Opa push notifications (leave-now + evening notes owing) ───────────────
+// Inert unless PUSH_NOTIFICATIONS_ENABLED=true and APNS_* are set.
+require('./push/push-jobs').start();
 
 // ===== FRIDAY LOCATION ALARM CRON =====
 // Fires every Friday at 16:00 AWST (08:00 UTC, since AWST = UTC+8).

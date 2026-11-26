@@ -175,6 +175,13 @@
   function restoreDraft() {
     var d = DRAFT; DRAFT = null;
     if (!d || (Date.now() - d.savedAt) > DRAFT_TTL_MS || !d.day || !fn('openBookingPanel')) return;
+    openPrefilled(d, function () { toast('Booking restored', 'Your unfinished appointment is back where you left it.'); });
+  }
+  /* Open the panel filled in from a draft-shaped object — the unfinished
+     booking above, or an event being swapped to another type (25 Nov 2026,
+     the detail panel's "Swap type"). `after` runs once it is filled in. */
+  function openPrefilled(d, after) {
+    if (!d || !d.day || !fn('openBookingPanel')) return;
     var parts = (d.start || '09:00').split(':').map(Number);
     var s = parts[0] * 60 + (parts[1] || 0), e = s + d.dur;
     global.openBookingPanel({ day: d.day, date: (typeof DAY_DATES !== 'undefined' && DAY_DATES) ? DAY_DATES[d.day] : null,
@@ -194,10 +201,11 @@
       if (d.home) applyHome();
       refreshWorkLocationNotice();
       if (fn('bspTravelPreview')) global.bspTravelPreview();
-      toast('Booking restored', 'Your unfinished appointment is back where you left it.');
+      if (typeof after === 'function') after();
     }, 90);
   }
   BR.captureDraft = captureDraft;
+  BR.openPrefilled = openPrefilled;
 
   /* ─────────────────────── Client location selector (§5–7) ─────────────────── */
   var LOC = { clientId: null, list: [], seq: 0, mode: 'none', label: 'Other', applying: false, pending: null, pendingUnsure: false, patient: null, userPicked: false };
