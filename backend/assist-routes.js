@@ -13,6 +13,7 @@
  *   GET    /api/assist/clients                the caller's clients, for the side-panel picker
  *   GET    /api/assist/client-file            a client chat's lookups: own notes (searchable), sessions, Splose cases — NO model call
  *   GET    /api/assist/plan-reviews           plans ending soon: funding used, report started — caseload-scoped, NO model call
+ *   POST   /api/assist/outlook-draft          a document reply saved to the caller's OWN Outlook Drafts — never sent, NO model call
  *   GET    /api/assist/conversations          the caller's recent threads (?client=<ref>|general)
  *   GET    /api/assist/conversations/:id      one thread, tokenised turns
  *   DELETE /api/assist/conversations/:id      forget a thread now
@@ -250,12 +251,42 @@ router.get('/api/assist/plan-reviews', rateLimit, safe(async (req, res) => {
   res.json({ rows, windowDays: planRadar.WINDOW_DAYS, graceDays: planRadar.GRACE_DAYS, fundingAvailable: invoicesComplete, scope: allowed ? 'caseload' : 'practice' });
 }));
 
+// ── Outlook draft (assist/email-draft.js → graph-mail.js) ───────────────────
+// A document reply saved in the caller's own Outlook Drafts. Never sent: they
+// open it in Outlook and press Send. Plain-text blocks in, the HTML built and
+// escaped here. Needs GRAPH_MAIL_ENABLED (Mail.ReadWrite granted in Entra)
+// and the caller's Microsoft connection. Audited by counts only.
+const graphMail = require('./graph-mail');
+const emailDraft = require('./assist/email-draft');
+router.post('/api/assist/outlook-draft', rateLimit, safe(async (req, res) => {
+  const reason = graphMail.unavailableReason(req.user);
+  if (reason) return res.status(409).json({ error: 'outlook_unavailable', message: reason });
+  const b = req.body || {};
+  const to = emailDraft.readRecipients(b.to);
+  if (!to.ok) return res.status(400).json({ error: 'invalid_recipients', message: to.reason });
+  const body = emailDraft.renderBody(b.blocks);
+  if (!body.ok) return res.status(400).json({ error: 'invalid_document', message: body.reason });
+  const subject = emailDraft.readSubject(b.subject);
+  const accessToken = await graphMail.getAccessToken(req.user);
+  if (!accessToken) return res.status(409).json({ error: 'outlook_unavailable', message: 'Your Microsoft connection needs renewing. Reconnect it from Settings → Integrations.' });
+  const draft = await graphMail.createDraft({ accessToken, to: to.to, subject, html: body.html });
+  await db.logAuditEvent({
+    actorUserId: req.user.id, organisationId: orgOf(req),
+    action: draft.ok ? 'assist.outlook_draft_created' : 'assist.outlook_draft_failed', targetType: 'mailbox', targetId: null,
+    metadata: { recipients: to.to.length, chars: body.chars, code: draft.ok ? null : draft.code },
+    ipAddress: req.ip,
+  }).catch(() => {});
+  if (!draft.ok) return res.status(draft.code === 'scope_missing' ? 409 : 502).json({ error: draft.code, message: draft.reason });
+  res.json({ ok: true, webLink: draft.webLink || null });
+}));
+
 // ── Config ───────────────────────────────────────────────────────────────────
 router.get('/api/assist/config', safe(async (req, res) => {
   res.json({
     enabled: provider.isEnabled(), reason: provider.isEnabled() ? null : provider.configError(), name: 'Opal Assist', retentionDays: RETENTION_DAYS,
     // What the page shows beside the send button, and what it needs to show how full a chat is.
     model: provider.describeModel(), historyTurns: HISTORY_TURNS, maxMessageChars: MAX_MESSAGE_CHARS, maxAttachmentChars: MAX_SELECTION_CHARS,
+    outlookDrafts: { available: graphMail.isAvailable(req.user), reason: graphMail.unavailableReason(req.user) },
   });
 }));
 

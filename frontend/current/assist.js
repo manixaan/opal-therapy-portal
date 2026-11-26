@@ -273,6 +273,16 @@
       ['Word file', function (doc, btn) { exportDoc('docx', doc, btn, 'Word file'); }],
       ['PowerPoint file', function (doc, btn) { exportDoc('pptx', doc, btn, 'PowerPoint file'); }],
     ];
+    // Any document can be saved to the practitioner's own Outlook Drafts — never sent (assist-outlook.js).
+    if (S.surface === 'web' && global.OpalAssistOutlook) {
+      extra.push(['Outlook draft', function (doc) {
+        global.OpalAssistOutlook.open({
+          doc: doc, names: S.names, api: api, status: S.outlook,
+          restore: function (t) { return DOC().restoreText(t, S.names, S.nameStyle); },
+          strip: doc.report ? DOC().stripCites : function (t) { return t; },
+        });
+      }]);
+    }
     // A Report builder draft can go straight into its Templates master.
     if (S.surface === 'web' && m.doc && m.doc.report && global.OpalAssistReport) {
       extra.push(['Fill the template', function (doc, btn) { fillTemplate(m, doc, btn); }]);
@@ -829,6 +839,7 @@
         S.historyTurns = c.historyTurns || 16;
         S.maxMessageChars = c.maxMessageChars || 0;
         S.maxAttachmentChars = c.maxAttachmentChars || 0;
+        S.outlook = c.outlookDrafts || { available: false, reason: null };
         if (COMPOSER().setMaxAttachmentChars) COMPOSER().setMaxAttachmentChars(S.maxAttachmentChars);
         COMPOSER().setModel(c.model || null);
         setStatus(S.enabled ? 'Ready' : 'Not switched on', S.enabled ? '' : 'off');

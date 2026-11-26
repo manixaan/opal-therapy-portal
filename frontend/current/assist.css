@@ -382,3 +382,10 @@ select:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 .oa-pr-check li.done { color: var(--ink); }
 .oa-pr-check li.done::before { background: var(--accent); border-color: var(--accent); }
 .oa-pr-actions { margin-top: 8px; }
+
+/* Outlook draft (assist-outlook.js) — a small centred dialog on the panel shell. */
+.oa-od-backdrop { justify-content: center; align-items: center; }
+.oa-od { height: auto; max-height: 90vh; width: min(460px, calc(100vw - 32px)); border-radius: var(--radius-lg); }
+.oa-od-input { width: 100%; box-sizing: border-box; font: inherit; font-size: 13px; padding: 7px 10px; margin-bottom: 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--panel); color: var(--ink); }
+.oa-od-input:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.oa-od .oa-no-msg a { color: var(--accent-deep); font-weight: 600; }

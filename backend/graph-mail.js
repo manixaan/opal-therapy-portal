@@ -131,7 +131,7 @@ async function getAccessToken(user) {
  * @param {string}  opts.accessToken   a valid delegated token (the caller
  *                                     refreshes; this module never touches
  *                                     stored credentials)
- * @param {string}  opts.to
+ * @param {string|string[]}  opts.to  one address, several, or none
  * @param {string}  opts.subject
  * @param {string}  opts.html
  * @param {Buffer}  [opts.attachment]
@@ -147,7 +147,10 @@ async function createDraft({
   const body = {
     subject: String(subject || '').slice(0, 250),
     body: { contentType: 'HTML', content: String(html || '') },
-    toRecipients: [{ emailAddress: { address: String(to || '') } }],
+    // One address (the starter pack) or several / none (an Assist draft,
+    // which may be addressed in Outlook itself).
+    toRecipients: (Array.isArray(to) ? to : [to]).map((a) => String(a || '').trim()).filter(Boolean)
+      .map((address) => ({ emailAddress: { address } })),
   };
 
   if (attachment && attachment.length) {
