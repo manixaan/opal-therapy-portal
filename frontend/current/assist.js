@@ -211,6 +211,17 @@
 
   // ── Documents: one live editor per document message, kept across re-renders ──
   var editors = {};
+  /** Download a document reply as a Word or PowerPoint file, built here (assist-export.js). */
+  function exportDoc(format, doc, btn, label) {
+    if (!global.OpalAssistExport) return;
+    btn.disabled = true; btn.textContent = 'Preparing…';
+    global.OpalAssistExport.download(format, doc, S.names, S.nameStyle).then(function () {
+      btn.textContent = 'Downloaded';
+    }, function () { btn.textContent = 'Could not build the file'; }).then(function () {
+      setTimeout(function () { btn.disabled = false; btn.textContent = label; }, 1500);
+    });
+  }
+
   function editorFor(m) {
     var key = m.id || m.key;
     if (editors[key]) return editors[key];
@@ -218,7 +229,11 @@
       var text = DOC().docToPlain(doc, S.names, S.nameStyle);
       if (typeof global.OpalAssist.onInsert === 'function') global.OpalAssist.onInsert(text);
       else if (office()) office().insert(text).then(function (ok) { btn.textContent = ok ? 'Inserted' : 'Could not insert'; setTimeout(function () { btn.textContent = 'Insert into document'; }, 1500); });
-    }]] : [];
+    }]] : [
+      // Web page only: the file is built in this browser with names put back, like Copy. Nothing is sent anywhere.
+      ['Word file', function (doc, btn) { exportDoc('docx', doc, btn, 'Word file'); }],
+      ['PowerPoint file', function (doc, btn) { exportDoc('pptx', doc, btn, 'PowerPoint file'); }],
+    ];
     editors[key] = DOC().mount({
       doc: m.doc,
       getNames: function () { return S.names; },
