@@ -46,27 +46,65 @@
   var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
 
   /** Editor HTML for a run of text: names become atomic spans carrying their token. */
-  function inlineHtml(text, names, style) {
-    var out = ''; var last = 0; var m;
-    var s = String(text || '');
-    TOKEN_RE.lastIndex = 0;
-    while ((m = TOKEN_RE.exec(s)) !== null) {
+  // ── Note references (the Report builder) ──────────────────────────────────
+  // A report cites the case note behind each statement: "(N3)", "(N2, N5)".
+  // In the editor each one is a small chip (click it to read the note); in
+  // anything that leaves for a reader — Word, PowerPoint, the template, Copy —
+  // they are taken out.
+  var CITE_RE = /\((N\d{1,3}(?:\s*,\s*N\d{1,3})*)\)/g;
+  function citeCodes(inner) { return String(inner || '').split(/\s*,\s*/).filter(Boolean); }
+  /** Text without its note references, spacing tidied. */
+  function stripCites(text) {
+    return String(text || '').replace(/[ \t]*\(N\d{1,3}(?:\s*,\s*N\d{1,3})*\)/g, '').replace(/[ \t]+([.,;:!?])/g, '$1').replace(/^[ \t]+/gm, '');
+  }
+  /** A copy of a document with every note reference taken out. */
+  function withoutCites(doc) {
+    if (!doc) return doc;
+    var out = { kind: doc.kind, title: doc.title || null, blocks: (doc.blocks || []).map(function (b) {
+      var o = { t: b.t, text: stripCites(b.text) };
+      if (b.lead) o.lead = stripCites(b.lead);
+      return o;
+    }) };
+    if (doc.report) out.report = doc.report;
+    return out;
+  }
+  function citeLabel(code, sources) {
+    var src = sources && sources[code];
+    return src ? code + ' — ' + (src.date || '') + (src.title ? ', ' + src.title : '') : code + ' — a case note from the report material';
+  }
+  function plainHtml(text, sources) {
+    var out = ''; var last = 0; var m; var s = String(text || '');
+    CITE_RE.lastIndex = 0;
+    while ((m = CITE_RE.exec(s)) !== null) {
       out += esc(s.slice(last, m.index)).replace(/\n/g, '<br>');
-      out += '<span class="oa-tok" contenteditable="false" data-token="' + esc(m[1]) + '">' + esc(displayName(m[1], names, style)) + '</span>';
+      var codes = citeCodes(m[1]);
+      out += '<span class="oa-cite" contenteditable="false" data-cite="' + esc(codes.join(', ')) + '" title="' + esc(codes.map(function (c) { return citeLabel(c, sources); }).join('\n')) + '">' + esc(codes.join(', ')) + '</span>';
       last = m.index + m[0].length;
     }
     return out + esc(s.slice(last)).replace(/\n/g, '<br>');
   }
 
+  function inlineHtml(text, names, style, sources) {
+    var out = ''; var last = 0; var m;
+    var s = String(text || '');
+    TOKEN_RE.lastIndex = 0;
+    while ((m = TOKEN_RE.exec(s)) !== null) {
+      out += plainHtml(s.slice(last, m.index), sources);
+      out += '<span class="oa-tok" contenteditable="false" data-token="' + esc(m[1]) + '">' + esc(displayName(m[1], names, style)) + '</span>';
+      last = m.index + m[0].length;
+    }
+    return out + plainHtml(s.slice(last), sources);
+  }
+
   /** The whole document as editor HTML. */
-  function docToHtml(doc, names, style) {
+  function docToHtml(doc, names, style, sources) {
     var html = ''; var list = false;
     (doc && doc.blocks || []).forEach(function (b) {
       if (b.t === 'li' && !list) { html += '<ul>'; list = true; }
       if (b.t !== 'li' && list) { html += '</ul>'; list = false; }
-      if (b.t === 'h') html += '<h3>' + inlineHtml(b.text, names, style) + '</h3>';
-      else if (b.t === 'li') html += '<li>' + (b.lead ? '<strong>' + inlineHtml(b.lead, names, style) + ':</strong> ' : '') + inlineHtml(b.text, names, style) + '</li>';
-      else html += '<p>' + inlineHtml(b.text, names, style) + '</p>';
+      if (b.t === 'h') html += '<h3>' + inlineHtml(b.text, names, style, sources) + '</h3>';
+      else if (b.t === 'li') html += '<li>' + (b.lead ? '<strong>' + inlineHtml(b.lead, names, style, sources) + ':</strong> ' : '') + inlineHtml(b.text, names, style, sources) + '</li>';
+      else html += '<p>' + inlineHtml(b.text, names, style, sources) + '</p>';
     });
     if (list) html += '</ul>';
     return html;
@@ -98,7 +136,8 @@
   /** Same tokens, same order, same text? (Decides whether an edit needs saving.) */
   function sameDoc(a, b) { return JSON.stringify(a && a.blocks) === JSON.stringify(b && b.blocks); }
 
-  var api = { displayName: displayName, restoreText: restoreText, docToHtml: docToHtml, docToPlain: docToPlain, docToClipboardHtml: docToClipboardHtml, sameDoc: sameDoc, tokenBase: tokenBase };
+  var api = { displayName: displayName, restoreText: restoreText, docToHtml: docToHtml, docToPlain: docToPlain, docToClipboardHtml: docToClipboardHtml, sameDoc: sameDoc, tokenBase: tokenBase,
+    stripCites: stripCites, withoutCites: withoutCites };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (!global.document) return;
 
@@ -108,6 +147,7 @@
     if (node.nodeType === 3) return node.nodeValue.replace(/ /g, ' ');
     if (node.nodeType !== 1) return '';
     if (node.dataset && node.dataset.token) return '[' + node.dataset.token + ']';
+    if (node.dataset && node.dataset.cite) return '(' + node.dataset.cite + ')';
     if (node.tagName === 'BR') return '\n';
     var s = '';
     for (var i = 0; i < node.childNodes.length; i++) s += nodeText(node.childNodes[i]);
@@ -163,10 +203,12 @@
    */
   function mount(opts) {
     var current = { kind: opts.doc.kind, title: opts.doc.title || null, blocks: opts.doc.blocks.slice() };
+    if (opts.doc.report) current.report = opts.doc.report;
+    var sources = function () { return (opts.getSources && opts.getSources()) || null; };
     var el = document.createElement('div');
-    el.className = 'oa-doc' + (current.kind === 'casenote' ? ' casenote' : '');
+    el.className = 'oa-doc' + (current.kind === 'casenote' ? ' casenote' : '') + (current.report ? ' report' : '');
     el.innerHTML = '<div class="oa-doc-bar" role="toolbar" aria-label="Edit document">'
-      + '<span class="oa-doc-kind">' + (current.kind === 'casenote' ? 'Case note' : 'Document') + '</span>'
+      + '<span class="oa-doc-kind">' + (current.kind === 'casenote' ? 'Case note' : current.report ? 'Report' : 'Document') + '</span>'
       + '<button type="button" data-cmd="undo" title="Undo" aria-label="Undo">↶</button>'
       + '<button type="button" data-cmd="redo" title="Redo" aria-label="Redo">↷</button>'
       + '<span class="oa-doc-sep"></span>'
@@ -181,8 +223,11 @@
       + '<div class="oa-doc-menu" hidden role="dialog" aria-label="Rewrite the highlighted text">'
       + QUICK.map(function (q, i) { return '<button type="button" data-quick="' + i + '">' + esc(q[0]) + '</button>'; }).join('')
       + '<form class="oa-doc-ask"><input type="text" placeholder="Or say what to change…" aria-label="What to change"><button type="submit">Go</button></form>'
-      + '</div>';
+      + '</div>'
+      + (current.report ? '<div class="oa-doc-cites">Each (N3) marks the case note a statement came from — click one to read the note. They are taken out of Copy, the Word file and the template.</div>' : '')
+      + '<div class="oa-cite-pop" hidden role="dialog" aria-label="The case note behind this statement"></div>';
     var page = el.querySelector('.oa-doc-page');
+    var pop = el.querySelector('.oa-cite-pop');
     var menu = el.querySelector('.oa-doc-menu');
     var status = el.querySelector('.oa-doc-status');
     var bar = el.querySelector('.oa-doc-bar');
@@ -193,12 +238,30 @@
     });
     var savedRange = null;
 
-    function render() { page.innerHTML = docToHtml(current, opts.getNames(), opts.getStyle()); }
+    function render() { page.innerHTML = docToHtml(current, opts.getNames(), opts.getStyle(), sources()); }
+
+    // A note reference: show the note it points to, right there.
+    function showCite(chip) {
+      var codes = citeCodes(chip.dataset.cite); var src = sources() || {};
+      pop.innerHTML = codes.map(function (c) {
+        var n = src[c];
+        return '<div class="oa-cite-note"><b>' + esc(citeLabel(c, src)) + '</b>'
+          + (n && n.text ? '<div>' + esc(restoreText(n.text, opts.getNames(), opts.getStyle())) + '</div>' : '<div class="oa-cite-missing">The notes are kept only while this page is open. Open the Report builder again to see them.</div>') + '</div>';
+      }).join('') + '<button type="button" class="oa-cite-close">Close</button>';
+      pop.hidden = false;
+      var box = chip.getBoundingClientRect(); var host = el.getBoundingClientRect();
+      pop.style.top = (box.bottom - host.top + 6) + 'px';
+      pop.style.left = Math.max(8, Math.min(box.left - host.left, host.width - pop.offsetWidth - 8)) + 'px';
+    }
+    page.addEventListener('click', function (e) { var c = e.target.closest('.oa-cite'); if (c) { e.preventDefault(); showCite(c); } });
+    pop.addEventListener('click', function (e) { if (e.target.closest('.oa-cite-close')) pop.hidden = true; });
+    document.addEventListener('mousedown', function (e) { if (!pop.hidden && !pop.contains(e.target) && !e.target.closest('.oa-cite')) pop.hidden = true; });
     function setStatus(t) { status.textContent = t || ''; }
     function changed() {
       var blocks = serialize(page);
       if (!blocks.length) return;
       var next = { kind: current.kind, title: current.title, blocks: blocks };
+      if (current.report) next.report = current.report;
       if (sameDoc(next, current)) return;
       current = next;
       opts.onChange(current, setStatus);
@@ -219,7 +282,8 @@
         page.dispatchEvent(new Event('input'));
       } else if (b.dataset.act === 'copy') {
         var names = opts.getNames(); var style = opts.getStyle();
-        var plain = docToPlain(current, names, style); var rich = docToClipboardHtml(current, names, style);
+        var out = current.report ? withoutCites(current) : current;
+        var plain = docToPlain(out, names, style); var rich = docToClipboardHtml(out, names, style);
         var done = function () { b.textContent = 'Copied'; setTimeout(function () { b.textContent = 'Copy'; }, 1400); };
         try {
           if (global.ClipboardItem && navigator.clipboard.write) {
@@ -268,7 +332,7 @@
         if (!text) { setStatus('Could not rewrite that — try again'); return; }
         var sel = global.getSelection(); sel.removeAllRanges(); sel.addRange(range);
         // One paragraph/dot point stays inline; the reply's own line breaks become <br>.
-        document.execCommand('insertHTML', false, inlineHtml(text, opts.getNames(), opts.getStyle()));
+        document.execCommand('insertHTML', false, inlineHtml(text, opts.getNames(), opts.getStyle(), sources()));
         setStatus('');
         changed();
       }, function (err) {
@@ -286,7 +350,7 @@
     return {
       el: el,
       doc: function () { return current; },
-      setDoc: function (d) { current = { kind: d.kind, title: d.title || null, blocks: d.blocks.slice() }; render(); },
+      setDoc: function (d) { current = { kind: d.kind, title: d.title || null, blocks: d.blocks.slice() }; if (d.report) current.report = d.report; render(); },
       rerender: render,
       status: setStatus,
     };

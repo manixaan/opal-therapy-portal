@@ -46,6 +46,7 @@ const { buildSystemPrompt, SURFACES } = require('./assist/assist-prompt');
 const directory = require('./assist/identity-directory');
 const caseload = require('./splose-caseload');
 const documents = require('./assist/assist-document');
+const reports = require('./assist/report-kinds');
 const { toPlainText, plainTextStream } = require('./assist/plain-text');
 
 const router = express.Router();
@@ -178,23 +179,26 @@ router.get('/api/assist/client-file', rateLimit, safe(async (req, res) => {
   if (!clientRef) return;
   const clientId = CLIENT_REF_RE.exec(clientRef)[1];
   const query = clientFile.cleanQuery(req.query.q);
+  // The Report builder asks for one period's notes (Perth days, YYYY-MM-DD).
+  const period = clientFile.periodBounds(req.query.from, req.query.to);
+  const narrowed = !!(query || period.from || period.to);
   // Splose being slow or down costs only the case summary, never the notes.
   const casesP = sploseApi.fetchAllCases().then((all) => clientFile.shapeCases(all, clientId), (err) => {
     console.warn(`[assist] client-file cases unavailable (${err?.response?.status || err?.code || 'error'})`);
     return null;
   });
   const [notes, sessions, cases] = await Promise.all([
-    clientFile.loadNotes(pool, { userId: req.user.id, clientId, query }),
-    query ? Promise.resolve(null) : clientFile.loadSessions(pool, { user: req.user, clientId }),
-    query ? Promise.resolve(null) : casesP,
+    clientFile.loadNotes(pool, { userId: req.user.id, clientId, query, from: period.from, to: period.to }),
+    narrowed ? Promise.resolve(null) : clientFile.loadSessions(pool, { user: req.user, clientId }),
+    narrowed ? Promise.resolve(null) : casesP,
   ]);
   await db.logAuditEvent({
     actorUserId: req.user.id, organisationId: orgOf(req),
     action: 'assist.client_file_viewed', targetType: 'client', targetId: clientId,
-    metadata: { notes: notes.notes.length, searched: !!query, cases: cases ? cases.length : null },
+    metadata: { notes: notes.notes.length, searched: !!query, period: !!(period.from || period.to), cases: cases ? cases.length : null },
     ipAddress: req.ip,
   }).catch(() => {});
-  res.json({ query, notes: notes.notes, moreNotes: notes.more, sessions, cases, casesAvailable: query ? null : cases !== null });
+  res.json({ query, notes: notes.notes, moreNotes: notes.more, sessions, cases, casesAvailable: narrowed ? null : cases !== null });
 }));
 
 // ── Config ───────────────────────────────────────────────────────────────────
@@ -322,11 +326,16 @@ async function prepare(req, res) {
   // On the web page the model chooses the shape of each reply (chat, document,
   // case note); the Office panes and the phone keep plain answers. An explicit
   // format still forces one.
-  const format = documents.FORMATS[body.format] || (surface === 'web' ? documents.FORMATS.auto : null);
+  // The Report builder: a client chat on the web page asking for a progress
+  // report or support letter in the Templates' own headings, citing notes.
+  const report = surface === 'web' ? reports.readReport(body.report) : null;
+  if (report && !clientRef) { res.status(400).json({ error: 'report_needs_client', answer: 'A report is written in a client chat. Pick the client first.' }); return null; }
+  const format = report ? documents.FORMATS.document : (documents.FORMATS[body.format] || (surface === 'web' ? documents.FORMATS.auto : null));
   let system = buildSystemPrompt({ user: req.user, surface, selection, clientChat: !!clientRef });
   if (format) system += '\n\n' + documents.formatInstruction(format);
+  if (report) system += '\n\n' + reports.reportInstruction(report);
   const hiddenCount = Number.isInteger(body.hiddenCount) && body.hiddenCount >= 0 ? Math.min(body.hiddenCount, 10000) : 0;
-  return { message, selection, conversation, history, surface, system, hiddenCount, clientRef, format, known };
+  return { message, selection, conversation, history, surface, system, hiddenCount, clientRef, format, known, report };
 }
 
 /**
@@ -377,7 +386,7 @@ async function persist(req, prep, answer, streamed, kind = 'text') {
   await db.logAuditEvent({
     actorUserId: req.user.id, organisationId: orgOf(req),
     action: 'assist.chat', targetType: 'assist_conversation', targetId: conversation.id,
-    metadata: { surface: prep.surface, streamed: !!streamed, hiddenCount: prep.hiddenCount, hasSelection: !!prep.selection, messageChars: prep.message.length, clientChat: !!prep.clientRef, kind },
+    metadata: { surface: prep.surface, streamed: !!streamed, hiddenCount: prep.hiddenCount, hasSelection: !!prep.selection, messageChars: prep.message.length, clientChat: !!prep.clientRef, kind, report: prep.report ? prep.report.kind : undefined },
     ipAddress: req.ip,
   }).catch(() => {});
   return conversation;
@@ -415,13 +424,22 @@ async function settleReply(req, prep, messages, text) {
   }
   let parsed = documents.parseDocument(first, prep.format);
   let last = first;
+  // A report must carry its template's headings, in order: one correction, like a case note.
+  if (parsed.ok && prep.report) {
+    const reason = reports.checkHeadings(parsed.doc, prep.report);
+    if (reason) parsed = { ok: false, reason, kind: documents.FORMATS.document };
+  }
   if (!parsed.ok) {
     const kind = prep.format === documents.FORMATS.auto ? (parsed.kind || documents.FORMATS.document) : prep.format;
     const retry = [...messages, { role: 'assistant', content: first }, { role: 'user', content: `That reply did not follow the required format (${parsed.reason}). Send it again as the JSON object only, following the format rules exactly.` }];
     const r = await provider.generate({ system: prep.system, messages: retry, userId: req.user.id, organisationId: orgOf(req), raw: true });
     last = String(r.text || '').slice(0, MAX_ANSWER_CHARS * 2);
     parsed = documents.parseDocument(last, kind);
+    // Still off after the correction: keep the report anyway (it is still the
+    // practitioner's to read and edit); only the template fill will find fewer sections.
+    if (parsed.ok && prep.report) reports.checkHeadings(parsed.doc, prep.report);
   }
+  if (parsed.ok && prep.report) parsed.doc.report = { kind: prep.report.kind, goals: prep.report.goals };
   if (parsed.ok) return { kind: parsed.doc.kind, document: parsed.doc };
   return { kind: 'text', answer: documents.looksLikeDocument(last) ? NO_LAYOUT : (toPlainText(last).trim().slice(0, MAX_ANSWER_CHARS) || NO_LAYOUT) };
 }

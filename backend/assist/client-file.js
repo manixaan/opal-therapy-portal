@@ -37,11 +37,31 @@ function cleanQuery(q) {
   return String(q == null ? '' : q).replace(/[\u0000-\u001F]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, MAX_QUERY_CHARS);
 }
 
-/** The caller's notes for this client, newest first; `query` narrows by full-text search. */
-async function loadNotes(pool, { userId, clientId, query }) {
+const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * A Perth calendar-day range (the Report builder's period) as UTC instants:
+ * { from, to } with `to` the midnight AFTER the last day. Bad or reversed
+ * dates are ignored, never guessed. Event times are UTC wall time, so the
+ * bounds go in as ISO strings (as in mobile-notes-owing.js).
+ */
+function periodBounds(fromDay, toDay) {
+  const day = (v) => (DAY_RE.test(String(v || '')) && !isNaN(Date.parse(`${v}T00:00:00+08:00`)) ? String(v) : null);
+  const f = day(fromDay); const t = day(toDay);
+  const from = f ? new Date(`${f}T00:00:00+08:00`) : null;
+  const to = t ? new Date(Date.parse(`${t}T00:00:00+08:00`) + 86400000) : null;
+  if (from && to && from >= to) return { from: null, to: null };
+  return { from, to };
+}
+
+/** The caller's notes for this client, newest first; `query` narrows by full-text search, `from`/`to` (Dates) by when. */
+async function loadNotes(pool, { userId, clientId, query, from = null, to = null }) {
   const params = [clientId, userId];
   let search = '';
-  if (query) { params.push(query); search = `AND to_tsvector('english', c.note_body) @@ websearch_to_tsquery('english', $3)`; }
+  const next = (v) => { params.push(v); return '$' + params.length; };
+  if (query) search = `AND to_tsvector('english', c.note_body) @@ websearch_to_tsquery('english', ${next(query)})`;
+  if (from) search += ` AND COALESCE(e.start_time, c.created_at) >= ${next(from.toISOString())}`;
+  if (to) search += ` AND COALESCE(e.start_time, c.created_at) < ${next(to.toISOString())}`;
   const { rows } = await pool.query(
     `SELECT c.id, c.created_at, c.note_body, c.review_status, e.title AS event_title, e.start_time AS event_start
        FROM case_note_drafts c
@@ -104,4 +124,4 @@ function shapeCases(allCases, clientId) {
     .slice(0, MAX_CASES);
 }
 
-module.exports = { cleanQuery, loadNotes, loadSessions, shapeCases, MAX_NOTES, MAX_NOTE_CHARS, MAX_QUERY_CHARS };
+module.exports = { cleanQuery, periodBounds, loadNotes, loadSessions, shapeCases, MAX_NOTES, MAX_NOTE_CHARS, MAX_QUERY_CHARS };

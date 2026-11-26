@@ -215,11 +215,50 @@
   function exportDoc(format, doc, btn, label) {
     if (!global.OpalAssistExport) return;
     btn.disabled = true; btn.textContent = 'Preparing…';
+    // A report's note references are for checking here, not for the reader.
+    if (doc && doc.report) doc = DOC().withoutCites(doc);
     global.OpalAssistExport.download(format, doc, S.names, S.nameStyle).then(function () {
       btn.textContent = 'Downloaded';
     }, function () { btn.textContent = 'Could not build the file'; }).then(function () {
       setTimeout(function () { btn.disabled = false; btn.textContent = label; }, 1500);
     });
+  }
+
+  // ── Reports (assist-report.js) ──
+  // What the builder knew when it asked — the notes behind the chips, the
+  // period, the goals — kept in this page's memory only, by chat.
+  S.reportMeta = {};
+  S.pendingReport = null;
+  function reportMetaFor(m) { return m.reportMeta || (S.conversationId && S.reportMeta[S.conversationId]) || null; }
+  function renderPendingReport() {
+    var el = $('oa-report-pending'); if (!el) return;
+    el.hidden = !S.pendingReport;
+    if (S.pendingReport) $('oa-report-pending-text').textContent = 'Next reply: a ' + S.pendingReport.label.toLowerCase() + ' in the template\'s headings, marked with the note behind each statement.';
+  }
+  function openReport() {
+    if (!S.client || !global.OpalAssistReport) return;
+    global.OpalAssistReport.open({
+      client: S.client, api: api, composer: COMPOSER(),
+      start: function (pending, text) {
+        S.pendingReport = pending; renderPendingReport();
+        var ta = $('oa-input'); ta.value = text; COMPOSER().autosize(); updateContext();
+        onSend();
+      },
+    });
+  }
+  function fillTemplate(m, doc, btn) {
+    btn.disabled = true; btn.textContent = 'Filling the template…';
+    global.OpalAssistReport.fillTemplate({
+      doc: doc, api: api, client: S.client || { ref: '' }, meta: reportMetaFor(m),
+      restore: function (t) { return DOC().restoreText(t, S.names, S.nameStyle); },
+      strip: DOC().stripCites,
+    }).then(function (r) {
+      btn.textContent = 'Saved to Templates';
+      setStatus(r.missing.length ? 'Downloaded. Not filled (the draft had no such heading): ' + r.missing.join(', ') : 'Downloaded, and saved in Resources → Templates to edit further.', r.missing.length ? 'warn' : '');
+    }, function (err) {
+      btn.textContent = 'Fill the template';
+      setStatus(err.message, 'warn');
+    }).then(function () { setTimeout(function () { btn.disabled = false; btn.textContent = 'Fill the template'; }, 2500); });
   }
 
   function editorFor(m) {
@@ -234,10 +273,15 @@
       ['Word file', function (doc, btn) { exportDoc('docx', doc, btn, 'Word file'); }],
       ['PowerPoint file', function (doc, btn) { exportDoc('pptx', doc, btn, 'PowerPoint file'); }],
     ];
+    // A Report builder draft can go straight into its Templates master.
+    if (S.surface === 'web' && m.doc && m.doc.report && global.OpalAssistReport) {
+      extra.push(['Fill the template', function (doc, btn) { fillTemplate(m, doc, btn); }]);
+    }
     editors[key] = DOC().mount({
       doc: m.doc,
       getNames: function () { return S.names; },
       getStyle: function () { return S.nameStyle; },
+      getSources: function () { var meta = reportMetaFor(m); return meta ? meta.sources : null; },
       onChange: function (doc, status) { m.doc = doc; saveDoc(m, status); },
       onRevise: reviseText,
       extraButtons: extra,
@@ -443,6 +487,11 @@
     var body = { message: r.text, conversationId: S.conversationId, surface: S.surface, hiddenCount: r.hidden.length, known: S.known };
     if (S.client) body.clientRef = S.client.ref;
     if (r.selectionText) body.selection = r.selectionText;
+    if (S.pendingReport) {
+      body.report = { kind: S.pendingReport.kind, goals: S.pendingReport.goals || undefined };
+      live.reportMeta = S.pendingReport; live.format = 'document';
+      S.pendingReport = null; renderPendingReport();
+    }
     S.selection = ''; updateSelectionBar();
 
     api('/api/assist/chat/stream', { body: body, signal: ctrl.signal }).then(function (res) {
@@ -453,6 +502,7 @@
         live.text = j.answer || (j.document ? DOC().docToPlainTokens(j.document) : 'Opal Assist is unavailable right now.');
         live.error = j.status !== 'ok'; live.live = false;
         if (j.document) { live.doc = j.document; live.kind = j.kind; }
+        if (j.document && j.document.report && live.reportMeta && j.conversationId) S.reportMeta[j.conversationId] = live.reportMeta;
         if (j.messageId) live.id = j.messageId;
         if (j.conversationId) { S.conversationId = j.conversationId; if (S.title === 'New chat') { S.title = shown(S.messages[0].text).slice(0, 60); $('oa-title').textContent = S.title; } }
       });
@@ -588,6 +638,8 @@
     // The client file: their case, sessions and your notes, ticked into the message (assist-client-file.js).
     var file = $('oa-client-file');
     if (file) file.hidden = !(S.surface === 'web' && S.client && S.client.name && global.OpalAssistClientFile);
+    var rep = $('oa-report');
+    if (rep) rep.hidden = !(S.surface === 'web' && S.client && S.client.name && global.OpalAssistReport);
   }
   function openClientFile() {
     if (!S.client || !global.OpalAssistClientFile) return;
@@ -705,6 +757,8 @@
   $('oa-input').addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSend(); } });
   $('oa-client-search').addEventListener('input', renderSidebar);
   $('oa-client-file').addEventListener('click', openClientFile);
+  $('oa-report').addEventListener('click', openReport);
+  $('oa-report-cancel').addEventListener('click', function () { S.pendingReport = null; renderPendingReport(); });
   // Notes owing: finished sessions with no case note, written from here (assist-notes-owing.js).
   function owingCount(n) { var b = $('oa-owing'); if (!b || n === null || n === undefined) return; b.textContent = global.OpalAssistNotesOwing.buttonLabel(n); b.classList.toggle('due', n > 0); }
   $('oa-owing').addEventListener('click', function () {

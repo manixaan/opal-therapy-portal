@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assist.css?v=15">
+  <link rel="stylesheet" href="/assist.css?v=16">
   <link rel="stylesheet" href="/theme.css?v=6">
 </head>
 <body>
@@ -45,6 +45,7 @@
         <div class="oa-title" id="oa-title">New chat</div>
         <span class="oa-client-chip" id="oa-client-chip" hidden></span>
         <button class="oa-btn ghost sm oa-cf-open" id="oa-client-file" type="button" title="Look up this client's case, sessions and your notes, and tick what to attach" hidden>Client file</button>
+        <button class="oa-btn ghost sm oa-cf-open" id="oa-report" type="button" title="Draft a progress report or support letter from your case notes, in the template's headings" hidden>Report</button>
         <button class="oa-btn sm" id="oa-use-selection" type="button" style="display:none;">Use selection</button>
         <span class="oa-pill" id="oa-status">Checking…</span>
         <button class="oa-theme" id="theme-toggle" type="button" onclick="window.OpalTheme.cycle()" title="Theme" aria-label="Theme"></button>
@@ -57,6 +58,7 @@
       <footer class="oa-compose">
         <div class="oa-compose-inner">
           <div id="oa-review-slot"></div>
+          <div class="oa-report-pending" id="oa-report-pending" hidden><span id="oa-report-pending-text"></span><button class="oa-btn ghost sm" id="oa-report-cancel" type="button">Not a report</button></div>
           <div class="oa-selection" id="oa-selection"><strong>Selected content attached</strong><span id="oa-selection-info"></span><button class="oa-btn ghost sm" id="oa-selection-clear" type="button">Remove</button></div>
           <!-- One box: attachments, a text area that grows, and a tool row (assist-composer.js). -->
           <div class="oa-composer" id="oa-composer">
@@ -100,11 +102,12 @@
       if (sf === 'excel') document.write('<script src="/assist-excel-format.js?v=2"><\/script>');
     })();
   </script>
-  <script src="/assist-doc.js?v=1"></script>
+  <script src="/assist-doc.js?v=2"></script>
   <script src="/assist-export.js?v=1"></script>
   <script src="/assist-client-file.js?v=1"></script>
   <script src="/assist-notes-owing.js?v=1"></script>
+  <script src="/assist-report.js?v=1"></script>
   <script src="/assist-composer.js?v=5"></script>
-  <script src="/assist.js?v=19"></script>
+  <script src="/assist.js?v=20"></script>
 </body>
 </html>
