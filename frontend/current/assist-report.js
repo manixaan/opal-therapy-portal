@@ -191,7 +191,9 @@
    */
   function open(opts) {
     close();
-    var P = { kind: 'progress_report', period: defaultPeriod(), notes: null, picked: {}, error: '', seq: 0, goals: '', recommend: '' };
+    // The plan review radar opens it on one plan: its dates, a progress report.
+    var period = opts.period && /^\d{4}-\d{2}-\d{2}$/.test(opts.period.from) && /^\d{4}-\d{2}-\d{2}$/.test(opts.period.to) && opts.period.from <= opts.period.to ? opts.period : defaultPeriod();
+    var P = { kind: 'progress_report', period: period, notes: null, picked: {}, error: '', seq: 0, goals: '', recommend: '' };
     var el = document.createElement('div');
     el.className = 'oa-cf-backdrop'; el.id = 'oa-rb';
     el.innerHTML = '<div class="oa-cf oa-rb" role="dialog" aria-modal="true" aria-labelledby="oa-rb-title">'

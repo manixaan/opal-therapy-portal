@@ -235,10 +235,10 @@
     el.hidden = !S.pendingReport;
     if (S.pendingReport) $('oa-report-pending-text').textContent = 'Next reply: a ' + S.pendingReport.label.toLowerCase() + ' in the template\'s headings, marked with the note behind each statement.';
   }
-  function openReport() {
+  function openReport(period) {
     if (!S.client || !global.OpalAssistReport) return;
     global.OpalAssistReport.open({
-      client: S.client, api: api, composer: COMPOSER(),
+      client: S.client, api: api, composer: COMPOSER(), period: period || null,
       start: function (pending, text) {
         S.pendingReport = pending; renderPendingReport();
         var ta = $('oa-input'); ta.value = text; COMPOSER().autosize(); updateContext();
@@ -757,7 +757,20 @@
   $('oa-input').addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSend(); } });
   $('oa-client-search').addEventListener('input', renderSidebar);
   $('oa-client-file').addEventListener('click', openClientFile);
-  $('oa-report').addEventListener('click', openReport);
+  $('oa-report').addEventListener('click', function () { openReport(); });
+  // Plan reviews: plans ending soon, funding used, report started (assist-plan-radar.js).
+  function plansCount(n) { var b = $('oa-plans'); if (!b || n === null || n === undefined) return; b.textContent = global.OpalAssistPlanRadar.buttonLabel(n); b.classList.toggle('due', n > 0); }
+  $('oa-plans').addEventListener('click', function () {
+    if (!global.OpalAssistPlanRadar) return;
+    global.OpalAssistPlanRadar.open({
+      api: api, onCount: plansCount,
+      startReport: function (row, period) {
+        if (!S.clients.some(function (c) { return c.ref === row.clientRef; })) { setStatus('That client is not in your client list yet — try again in a moment.', 'warn'); return; }
+        selectClient(row.clientRef);
+        openReport(period);
+      },
+    });
+  });
   $('oa-report-cancel').addEventListener('click', function () { S.pendingReport = null; renderPendingReport(); });
   // Notes owing: finished sessions with no case note, written from here (assist-notes-owing.js).
   function owingCount(n) { var b = $('oa-owing'); if (!b || n === null || n === undefined) return; b.textContent = global.OpalAssistNotesOwing.buttonLabel(n); b.classList.toggle('due', n > 0); }
@@ -824,6 +837,10 @@
       }).catch(function () { setStatus('Unavailable', 'off'); });
     loadThreads();
     if (S.surface === 'web') loadClients(/^splose:patient:[A-Za-z0-9_-]+$/.test(startRef || '') ? startRef : '');
+    if (S.surface === 'web' && global.OpalAssistPlanRadar) {
+      $('oa-plans').hidden = false;
+      global.OpalAssistPlanRadar.count(api).then(plansCount);
+    }
     if (S.surface === 'web' && global.OpalAssistNotesOwing) {
       $('oa-owing').hidden = false;
       global.OpalAssistNotesOwing.count(api).then(owingCount);

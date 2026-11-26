@@ -356,3 +356,29 @@ select:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 .oa-cite-note div { white-space: pre-wrap; line-height: 1.45; }
 .oa-cite-missing { color: var(--muted); }
 .oa-cite-close { margin-top: 8px; border: 1px solid var(--border); background: var(--panel); color: var(--ink); border-radius: var(--radius-sm); padding: 3px 9px; font-size: 12px; }
+
+/* Plan reviews (assist-plan-radar.js). */
+#oa-plans { margin-top: -6px; }
+.oa-pr-list { list-style: none; margin: 0; padding: 0; }
+.oa-pr-item { padding: 12px 2px; border-bottom: 1px solid var(--border-soft); font-size: 13px; }
+.oa-pr-item > small { display: block; color: var(--ink-soft); font-size: 12px; margin: 2px 0 6px; }
+.oa-pr-item.ended .oa-pr-when { color: var(--danger); }
+.oa-pr-top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.oa-pr-when { font-size: 12px; font-weight: 600; color: var(--accent-deep); }
+.oa-pr-bar { position: relative; height: 8px; border-radius: 999px; background: var(--border-soft); overflow: visible; margin: 4px 0 6px; }
+.oa-pr-bar .used { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; background: var(--accent); }
+.oa-pr-bar .used.warn { background: var(--warn); }
+.oa-pr-bar .used.bad { background: var(--danger); }
+.oa-pr-bar i { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink-soft); border-radius: 1px; }
+.oa-pr-fund { font-size: 12.5px; color: var(--ink); }
+.oa-pr-pace { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px; background: var(--border-soft); }
+.oa-pr-pace.ok { color: var(--accent-deep); }
+.oa-pr-pace.warn { color: var(--warn); }
+.oa-pr-pace.bad { color: var(--danger); }
+.oa-pr-note { font-size: 11px; color: var(--muted); }
+.oa-pr-check { list-style: none; margin: 8px 0 0; padding: 0; font-size: 12.5px; }
+.oa-pr-check li { padding: 2px 0 2px 20px; position: relative; color: var(--ink-soft); }
+.oa-pr-check li::before { content: ''; position: absolute; left: 2px; top: 5px; width: 11px; height: 11px; border: 1.5px solid var(--border); border-radius: 3px; }
+.oa-pr-check li.done { color: var(--ink); }
+.oa-pr-check li.done::before { background: var(--accent); border-color: var(--accent); }
+.oa-pr-actions { margin-top: 8px; }

@@ -12,6 +12,7 @@
  *   POST   /api/assist/chat/stream            one reply as server-sent events
  *   GET    /api/assist/clients                the caller's clients, for the side-panel picker
  *   GET    /api/assist/client-file            a client chat's lookups: own notes (searchable), sessions, Splose cases — NO model call
+ *   GET    /api/assist/plan-reviews           plans ending soon: funding used, report started — caseload-scoped, NO model call
  *   GET    /api/assist/conversations          the caller's recent threads (?client=<ref>|general)
  *   GET    /api/assist/conversations/:id      one thread, tokenised turns
  *   DELETE /api/assist/conversations/:id      forget a thread now
@@ -199,6 +200,54 @@ router.get('/api/assist/client-file', rateLimit, safe(async (req, res) => {
     ipAddress: req.ip,
   }).catch(() => {});
   res.json({ query, notes: notes.notes, moreNotes: notes.more, sessions, cases, casesAvailable: narrowed ? null : cases !== null });
+}));
+
+// ── Plan review radar (assist/plan-radar.js) ────────────────────────────────
+// Plans ending soon, funding used, report started — read-only, no model.
+// Caseload-scoped like the client list: read_only refused (above), a
+// therapist sees only cases assigned to their own Splose practitioner, an
+// unlinked therapist fails closed. Audited by counts only.
+const planRadar = require('./assist/plan-radar');
+router.get('/api/assist/plan-reviews', rateLimit, safe(async (req, res) => {
+  let allowed;
+  try { allowed = await caseload.allowedPatientIds(req); } catch (err) {
+    if (err instanceof caseload.CaseloadError) return res.status(err.status).json({ error: err.code, message: err.message });
+    console.warn(`[assist] plan radar caseload failed (${err?.response?.status || err?.code || 'error'})`);
+    return res.status(502).json({ error: 'splose_unavailable', message: 'Splose could not be reached just now. Try again in a minute.' });
+  }
+  const practitionerId = allowed ? (req.user.tp_splose_practitioner_id || null) : null;
+  let cases; let patients;
+  try { [cases, patients] = await Promise.all([sploseApi.fetchAllCases(), sploseApi.getPatients()]); } catch (err) {
+    console.warn(`[assist] plan radar cases failed (${err?.response?.status || err?.code || 'error'})`);
+    return res.status(502).json({ error: 'splose_unavailable', message: 'Splose could not be reached just now. Try again in a minute.' });
+  }
+  // Invoices only price the funding; without them the plans still show.
+  let invoices = null;
+  try { invoices = await sploseApi.getInvoices(); } catch (err) {
+    console.warn(`[assist] plan radar invoices unavailable (${err?.response?.status || err?.code || 'error'})`);
+  }
+  const invoicesComplete = Array.isArray(invoices) && invoices._fetchComplete !== false;
+  const now = new Date();
+  const billingPlanEnds = await planRadar.loadPlanEnds(pool, orgOf(req));
+  const prelim = planRadar.radarCases(cases, { allowed, practitionerId, now, billingPlanEnds });
+  const extras = await planRadar.loadExtras(pool, {
+    orgId: orgOf(req), userId: req.user.id,
+    rows: prelim.map((x) => ({ patientId: String(x.c.patientId), planStart: planRadar.isoDay(x.start), planEnd: planRadar.isoDay(x.end) })),
+  });
+  const wanted = new Set(prelim.map((x) => String(x.c.patientId)));
+  extras.names = {};
+  (Array.isArray(patients) ? patients : []).forEach((pt) => {
+    if (!wanted.has(String(pt.id))) return;
+    extras.names[String(pt.id)] = (pt.fullName || `${pt.firstname || ''} ${pt.lastname || ''}`).trim() || null;
+  });
+  const rows = planRadar.buildRadar({ cases, invoices, invoicesComplete, allowed, practitionerId, now, billingPlanEnds, extras });
+  await db.logAuditEvent({
+    actorUserId: req.user.id, organisationId: orgOf(req),
+    action: 'assist.plan_reviews_viewed', targetType: 'caseload', targetId: null,
+    metadata: { plans: rows.length, scope: allowed ? 'caseload' : 'practice', fundingAvailable: invoicesComplete },
+    ipAddress: req.ip,
+  }).catch(() => {});
+  res.json({ rows, windowDays: planRadar.WINDOW_DAYS, graceDays: planRadar.GRACE_DAYS, fundingAvailable: invoicesComplete, scope: allowed ? 'caseload' : 'practice' });
 }));
 
 // ── Config ───────────────────────────────────────────────────────────────────
