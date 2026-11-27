@@ -1,8 +1,8 @@
 # Professional Development
 
 Tracker stage: idea · Tracker environment: none
-Evidence label: **needs-refinement**
-Addressed this window (since 2026-11-13): no
+Evidence label: **built-untested**
+Addressed since last audit (2026-11-26, commit `f5fc28d` — unchanged, zero new commits tonight): no
 Created (any located code): yes
 
 ## Located files — two different code paths, easy to conflate
@@ -47,9 +47,17 @@ None recorded directly on this card, but the tracker's own `next_action` is stil
 "Decide whether this card merges into Employee Personal Page, then add an integration test for
 the CPD approval round trip."
 
-## Commits in window (since 2026-11-13)
+## Commits since last audit (2026-11-26)
 
-None touch `resource-hub-r2-routes.js` or `profile-routes.js`.
+None — `origin/develop` is unchanged at `f5fc28d`.
+
+## Note on the evidence label
+
+Every prior night's audit on this card reads its real identity as the owner-approved CPD
+workflow in `profile-routes.js` (not the separate, already-proven RH2 self-tracked log),
+treating it as the same code and the same gap as "Employee Personal Page." Classified
+**built-untested** on that same basis, for consistency — the located code is guarded, but the
+approval round trip it's actually about has zero functional test coverage.
 
 ## Disagreement
 

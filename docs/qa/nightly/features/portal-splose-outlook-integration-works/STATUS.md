@@ -2,7 +2,7 @@
 
 Tracker stage: idea · Tracker environment: none
 Evidence label: **needs-refinement**
-Addressed this window (since 2026-11-13): yes
+Addressed since last audit (2026-11-26, commit `f5fc28d` — unchanged, zero new commits tonight): no
 Created (any located code): yes
 
 ## Located files
@@ -24,8 +24,10 @@ explicit self-scoped-by-design header comment. No unguarded endpoint found.
 
 ## Tests
 
-- Unit (41 files: `calendar-*`, `outlook-*`, `splose-*`, `travel-*`): **41/41 suites,
-  598/598 tests passed**.
+- Unit (52 files: `calendar-*`, `outlook-*`, `splose-*`, `travel-*`, plus `booking-*`,
+  `sync-*`, `event-drawer-consistency.test.js`, `event-move.test.js`,
+  `smart-booking-route.test.js` found on a second, wider sweep): **52/52 suites,
+  912/912 tests passed**.
 - Integration (10 files): `splose-draft-sync.itest.js`, `splose-link-ignore.itest.js`,
   `travel-outlook-sync.itest.js`, `outlook-claim.itest.js`, `outlook-delta-preserve.itest.js`,
   `calendar-local-first.itest.js`, `event-travel-plan.itest.js`, `travel-overrides.itest.js`,
@@ -48,15 +50,11 @@ explicit self-scoped-by-design header comment. No unguarded endpoint found.
   what Outlook should show, and stress-test with real examples. This is explicitly designed as
   a confirm-it's-working exercise, not a build task — but it has never been walked end to end.
 
-## Commits in window (since 2026-11-13)
+## Commits since last audit (2026-11-26)
 
-`244f872` fix(outlook): embed session own store · `d068624` feat(outlook): portal as "Opal"
-icon in Outlook app bar · `812b051` feat(billing): travel bills minutes calendar showed ·
-`f9e2cd0` fix(travel): week's travel to Outlook in one request, per-day guard (T-08) ·
-`566e542` fix(travel): Outlook travel mirrored only when day real · `c4a4156` feat(calendar):
-three-tab Sync popup, outside-event QC, night mode · `3f63508` feat(sync): one sync choice per
-Outlook direction, three-tab Sync now — plus a large body of calendar/booking/travel polish
-commits in the same window (see the morning brief's "What changed" section).
+None — `origin/develop` is unchanged at `f5fc28d` since the last audit ran. (The last real
+change to this subsystem was the 2026-11-26 trip-home-fit correctness fix — see that night's
+brief; it is already reflected in tonight's passing test counts.)
 
 ## Disagreement
 

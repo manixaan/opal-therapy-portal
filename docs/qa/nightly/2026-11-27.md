@@ -2,44 +2,52 @@
 
 ## 1. Status line
 
-**RAN** · 2026-11-27T18:48Z UTC · commit audited: `f5fc28d` (tip of `origin/develop`) ·
-first-ever run of this audit — no prior brief existed, so the change window is the last 14
-days (since 2026-11-13).
+**RAN** · 2026-11-27T18:48Z UTC · commit audited: `f5fc28d` (tip of `origin/develop`) — the
+same commit the 2026-11-26 audit saw; nothing landed in `backend/` or `frontend/current/`
+between that audit and tonight's.
 
-**13 features reviewed.** Proven: **1** · Needs refinement: **4** · Built but untested: **2** ·
-Tab/page unproven: **4** · Untouched (nothing to build in the portal): **2** · Broken: **0**.
+**13 features reviewed.** Proven: **1** · Needs refinement: **4** · Built but untested: **3** ·
+Tab/page unproven: **3** · Untouched (nothing to build in the portal): **2** · Broken: **0**.
 
 ## 2. Do this first
 
-1. **Employee Personal Page (My Profile Tab)** — the leave and professional-development
-   approval workflow (an employee submits, the owner approves or rejects) has **no automated
-   test anywhere**, even though the rest of the tab is well guarded and partly tested. This is
-   employment-sensitive data.
-2. **Xero Integration Works** — every test passes, but only against a mocked Xero client. A
+1. **Correcting a 9-night-old error in the audit trail itself.** Every night from 2026-11-18
+   through 2026-11-26, this audit reported that the tracker's "Create minimise function on
+   snapshot" checklist item (under Automated Reminders → Therapist Snapshot) was false — "no
+   matching code was found." It was wrong every one of those nights. `reportPanelGenie` has
+   existed in `frontend/current/reports.js` since September (commit `2e3414c`, 2026-09-11) and
+   is correctly wired into the snapshot panel's open/close. The checklist is accurate; there
+   never was a disagreement here. (This audit's own first pass repeated the same mistake before
+   a second look caught it — see §7.) No code action needed; the live tracker's `claude_update`
+   text is corrected in tonight's write-back.
+2. **"Opal Assist" has no tracker card, and it keeps growing.** This has been flagged
+   repeatedly since 2026-11-15 (per this branch's own prior briefs) — an AI
+   chat feature with its own client-data read path ("Client file" — a practitioner's case
+   notes/sessions/Splose summary pulled into a chat), picture OCR, and document export, all
+   correctly registered in the AI gateway (`opal_assist` in `ai-policy.js`), but with no card
+   in the 13-feature Development Manager tracker to track it. Nothing changed on it tonight,
+   but it remains unresolved. Done means: a human decision on whether it gets its own card.
+3. **Employee Personal Page (My Profile Tab)** — the leave and professional-development
+   approval workflow has **no automated test anywhere**, even though the rest of the tab is
+   guarded and partly tested. Employment-sensitive data; unchanged for many nights running.
+4. **Xero Integration Works** — every test passes, but only against a mocked Xero client. A
    real Xero sandbox connection has still never been confirmed live, in a browser, with a real
-   account — twelfth night running, now independently confirmed by this audit.
-3. **Interactive Assessments** — WHODAS 2.0 is fully built and heavily tested (484 unit tests),
+   account.
+5. **Interactive Assessments** — WHODAS 2.0 is fully built and heavily tested (484 unit tests),
    but nobody has opened the Assessment tab as a therapist with a real client and confirmed it
    renders and works.
-4. **Professional Development** and **Employee Personal Page** point at the exact same
-   untested gap (CPD approval) under two different tracker cards. Worth merging them or
-   deciding which one owns it, before more work goes into either.
-5. **Opa Mobile Companion** — the case-noting AI pathway (dictation → AI clinical summary →
-   save) passes all 204 of its automated tests, but the only thing that can prove the pilot
-   actually works is a person testing it on the physical device, which the tracker's own task
-   already asks for and which hasn't happened yet.
 
 ## 3. Every feature
 
 | Feature | Tracker stage | Evidence label | Why | Tests run |
 |---|---|---|---|---|
-| Opa Mobile Companion | idea | tab-unproven | API fully tested; no device walkthrough recorded | unit 170/170, int 34/34 |
-| Portal - Splose - Outlook \| Integration Works | idea | needs-refinement | Code+tests+partial browser proof solid; "Multi Calendar Rules" human confirmation checklist still open | unit 598/598, int 79/79 |
-| Automated Reminders | idea | built-untested | Client reminders: zero code. Snapshot: real, working code (incl. a minimise animation the tracker correctly marks done) with no dedicated test | unit: none specific, int 2/2 (snapshot) |
+| Opa Mobile Companion | idea | needs-refinement | API fully tested; Case Noting task still open and the required device walkthrough hasn't happened | unit 170/170, int 34/34 |
+| Portal - Splose - Outlook \| Integration Works | idea | needs-refinement | Code+tests+partial browser proof solid; "Multi Calendar Rules" human confirmation checklist still open | unit 912/912 (52 files), int 79/79 (10 files) |
+| Automated Reminders | idea | built-untested | Client reminders: zero code. Snapshot: real, working code (its minimise animation genuinely works, see §2.1) with no dedicated test | unit: none dedicated, int 2/2 |
 | Portal Onboarding Workflow | idea | needs-refinement | Stage 1 solid; Stage 2's SharePoint storage confirmed missing; Stage 3 empty | unit 653/654*, int 169/169 |
-| Clinical resources | idea | **proven** | Guarded, fully tested, real E2E + browser-QA proof, no open task | unit 398/398, int 232/232 (shared) |
+| Clinical resources | idea | **proven** | Guarded, fully tested, real E2E + browser-QA proof, no open task | unit 398/410 (12 skipped), int 232/232 (shared) |
 | Inductions | idea | needs-refinement | Learner side E2E-proven; owner-side builder/AI-helper checklist almost entirely open | unit 271/271, int 232/232 (shared) |
-| Professional Development | idea | needs-refinement | Self-tracked CPD log fully proven; shares an untested owner-approval gap with Employee Personal Page | unit 398/398 (shared), int 232/232 (shared) |
+| Professional Development | idea | built-untested | Shares Employee Personal Page's code and its untested CPD-approval round trip | unit 398/410 (shared), int 232/232 (shared) |
 | Employee Personal Page (My Profile Tab) | idea | built-untested | Guarded and partly tested; the leave/CPD approval round trip has zero test coverage | unit 399/399 (guard-only), int 20/21** |
 | Interactive Assessments | idea | tab-unproven | WHODAS 2.0 fully tested; tab never proven to render for a therapist | unit 484/484, int 2/2 |
 | Password Master Document | idea | untouched | Explicitly a OneDrive document task, correctly has no code | none applicable |
@@ -54,7 +62,18 @@ file in this sandbox, not a code defect.
 
 ## 4. Prompts for the morning
 
-**1 — Employee Personal Page**
+**1 — Opal Assist's tracker card**
+```
+/opal-feature
+Opal Assist (backend/assist-routes.js, frontend Opal Assist widget) has grown a real client-
+data read path (Client file, picture OCR, document export) with no card anywhere in the
+13-feature Development Manager tracker, flagged every night since 2026-11-15. Decide whether
+it needs its own card given how clinically sensitive it now is, and if so create it with the
+team's own words for idea/why/who/what/outcome.
+Done means: a tracker decision is made and recorded.
+```
+
+**2 — Employee Personal Page**
 ```
 /opal-critical
 Open backend/profile-routes.js and find the leave approve/reject and CPD approve/reject
@@ -67,7 +86,7 @@ Done means: new integration tests exercise /api/profile/leave/:id/approve, /reje
 Tracker: 83bb9988-52ba-4f8c-85ba-7b65aca189b2 (see docs/qa/nightly/features/employee-personal-page-my-profile-tab/START.md)
 ```
 
-**2 — Xero Integration Works**
+**3 — Xero Integration Works**
 ```
 /opal-critical
 This is CRITICAL-level work (accounting/Xero, owner-only financial data). Open the Accounting
@@ -78,7 +97,7 @@ Done means: a real Xero sandbox OAuth attempt is recorded in docs/qa/BROWSER_QA_
 Tracker: 3d5da727-ee76-4195-8954-2a6486844d77 (see docs/qa/nightly/features/xero-integration-works/START.md)
 ```
 
-**3 — Interactive Assessments**
+**4 — Interactive Assessments**
 ```
 /opal-feature
 Open the Assessment tab as a therapist with a client that has no prior WHODAS record, start a
@@ -88,7 +107,7 @@ tab-unproven to proven.
 Tracker: f0210ee7-ed35-4228-a28c-d5d4c83da371 (see docs/qa/nightly/features/interactive-assessments/START.md)
 ```
 
-**4 — Professional Development / Employee Personal Page**
+**5 — Professional Development / Employee Personal Page**
 ```
 /opal-critical
 Confirm with Anthony/Ann which system the "Professional Development" tracker card is actually
@@ -100,51 +119,29 @@ Employee Personal Page's work item above rather than duplicated.
 Tracker: 37f4e057-ae96-4a9e-a576-5f808b7dc8fb (see docs/qa/nightly/features/professional-development/START.md)
 ```
 
-**5 — Opa Mobile Companion**
-```
-/opal-critical
-All API-level unit (170) and integration (34) tests pass. On the physical test device, walk
-the tracker's own "Case Noting" checklist: dictate a note, check the AI summary follows the
-clinical pathway, confirm it saves against the right client, and tick each checklist item as
-pass/fail (no written report needed, just tick the boxes).
-Done means: the physical-device checklist is walked and each item ticked, or a defect is filed
-for any step that fails.
-Tracker: e786d774-43bf-4a8b-826d-94bcb97a9613 (see docs/qa/nightly/features/opa-mobile-companion/START.md)
-```
-
 ## 5. Ideas without a start
 
-All 13 feature folders under `docs/qa/nightly/features/` were created tonight — this is the
-first run of this audit, so every folder and every `START.md` is new. From the next run
-onward, this section will only list folders that actually changed.
+Every `STATUS.md` was rewritten tonight (as it is every night); `START.md` changed for three
+cards whose evidence label changed from last night's: **Opa Mobile Companion**
+(tab-unproven → needs-refinement — it's a native app, not a `mockup_v3.html` tab, so the
+tab-unproven criterion doesn't cleanly fit; needs-refinement matches every other night's call
+on this card) and **Professional Development** (needs-refinement → built-untested, to stay
+consistent with "Employee Personal Page" sharing the same gap). **Automated Reminders**' label
+is unchanged (built-untested) but its `START.md`/`STATUS.md` text changed substantially after
+correcting the minimise-function error described in §2.1.
 
 ## 6. What changed since last audit
 
-124 commits touched `backend/` or `frontend/current/` in the last 14 days (since 2026-11-13,
-the first-run window). By subsystem:
+**Nothing.** `origin/develop` sat at commit `f5fc28d` for both the 2026-11-26 audit and
+tonight's — zero commits touched `backend/` or `frontend/current/` in between. Every evidence
+label above was independently re-verified against the current code and tests tonight rather
+than carried forward unchecked, which is how the long-standing minimise-checklist error
+(§2.1) was finally caught.
 
-- **Calendar / booking / travel / Splose / Outlook sync** (~95 commits: `fix(calendar)` ×36,
-  `fix(travel)` ×11, `feat(calendar)` ×10, `fix(booking)` ×7, plus sync/nav/settings/header/
-  tabs/static/boot/security/notes polish) — all under **Portal - Splose - Outlook | Integration
-  Works**.
-- **Billing / invoicing** (`feat(billing)` ×5, `feat(invoicing)` ×3, `fix(invoicing)` ×1,
-  `fix(billing)` ×1) — under **Xero Integration Works**.
-- **Mobile** (`feat(mobile)` ×4) and **case notes** (`feat(casenotes)` ×1) — under **Opa
-  Mobile Companion**.
-- **Snapshot/reports** (`feat(snapshot)` ×1, `fix(reports)` ×2, `feat(reports)` ×1) — under
-  **Automated Reminders** (Therapist Snapshot task).
-
-**Subsystem with real activity and no tracker feature at all: "Opal Assist"** — 4 commits
-(`feat(assist)`: a client-file lookup inside the chat, picture attachments read by the
-portal's own OCR, downloading a reply as Word/PowerPoint, and raising the message limit from
-12,000 to 30,000 characters). It is correctly registered in the AI gateway
-(`opal_assist` in `backend/ai/ai-policy.js`, with de-identification in
-`backend/assist/assist-deidentify.js`) — not a governance bypass — but there is no tracker
-card tracking a feature that is clearly under active, real development. Worth adding one.
-
-A handful of general shell-polish commits (`feat(ui): Settings gear icon`, `fix(nav): tab
-strip`, `style(header)`, `fix(tabs)`, `fix(settings)` ×2) don't belong to any single tracker
-feature — ordinary cross-cutting UI maintenance, not flagged as a gap.
+The only thing worth restating from prior nights, since it's still true and still
+unaddressed: **"Opal Assist"** (`backend/assist-routes.js`) has real, growing functionality —
+client-file lookup, picture OCR, document export, all correctly AI-gateway-governed — and
+still no tracker card of its own, flagged repeatedly since 2026-11-15 (see §2.2).
 
 ## 7. Technical detail
 
@@ -153,10 +150,23 @@ feature — ordinary cross-cutting UI maintenance, not flagged as a gap.
 `NODE_USE_ENV_PROXY=1 SUPABASE_URL="$SUPABASE_URL" node ../scripts/nightly-audit/fetch-tracker.mjs`
 → 13 features, 19 tasks.
 
+**A process note on the audit window, for whoever reads this next**: this run's bootstrap
+checked `docs/qa/nightly/` on `origin/develop` for the last audit date, found only `README.md`
+there (no dated briefs — they only ever land on the unmerged `claude/nightly-audit` branch,
+never on `develop`), and wrongly treated this as a first run, using a 14-day window. It was
+not a first run — `claude/nightly-audit` already carried briefs back to 2026-11-15. This was
+caught at push time (the remote branch had 662 commits this session's local branch didn't),
+corrected by merging that history forward rather than force-overwriting it, and the window was
+recalculated correctly (since 2026-11-26, the real last-audit date) before this brief was
+finalised. **Next run: check the last audit date from `claude/nightly-audit`'s own history
+(e.g. `git log origin/claude/nightly-audit -- docs/qa/nightly/*.md`), not from `develop`.**
+
 **Unit commands run** (from `backend/`, all passed except the one noted environment artifact):
 `npx jest mobile-calendar.test.js mobile-event-edit.test.js mobile-move.test.js
 mobile-routes.test.js case-note-routes.test.js` (170/170) ·
-`npx jest calendar- outlook- splose- travel-` (598/598) ·
+`npx jest calendar- outlook- splose- travel-` (598/598) plus a second, wider sweep
+`npx jest booking- sync- nav- event- drag-` found 11 more relevant files (314/314) —
+combined, 912/912 across 52 files for the Splose/Outlook/Calendar feature ·
 `npx jest onboarding-` (653/654, 1 environment artifact) ·
 `npx jest resource- induction- learning- assign-learning` (669/681, 12 skipped) ·
 `npx jest credential-surface-guards.test.js frontend-stage2-guards.test.js
@@ -167,27 +177,20 @@ smart-route-backend.test.js` (399/399) ·
 (72/72).
 
 **Integration commands run** (`DB_NAME=therapy_scheduler_audit DB_PASSWORD=audit`, all
-`--runInBand`, all passed except the one noted environment artifact):
-mobile/case-note batch (34/34) · calendar/outlook/splose/travel batch (79/79) · onboarding
-batch (169/169) · resource/learning/induction-assistant batch (232/232) · a 16-file batch
-covering whodas/assessments/fca-reports/progress-note-letters/finance/accounting/invoicing/
-snapshot/profile-functional tests (314/315 — the one failure is the `readonly-and-hardening`
-root/chmod artifact described above).
+`--runInBand`, run serially to protect the shared test database, all passed except the one
+noted environment artifact): mobile/case-note batch (34/34) · calendar/outlook/splose/travel
+batch (79/79) · onboarding batch (169/169) · resource/learning/induction-assistant batch
+(232/232) · a 16-file batch covering whodas/assessments/fca-reports/progress-note-letters/
+finance/accounting/invoicing/snapshot/profile-functional tests (314/315 — the one failure is
+`readonly-and-hardening.itest.js`'s D-6/D-7 test, which `chmod`s a directory to `0o755`
+expecting a subsequent write to fail; this sandbox runs as `root`, which ignores Unix
+permission bits, so the write succeeds where it would fail for a real non-root deployment —
+confirmed environment artifact, not a code defect).
 
 **Weekly deep run**: not applicable tonight — 2026-11-27 UTC is a Friday, not a Sunday.
 
-**Audit-process note, for transparency**: this run's locate step for "Automated Reminders"
-initially missed `frontend/current/reports.js` (it only found the backend
-`snapshot-routes.js`/`billing/snapshot-hours.js`) and, on that incomplete basis, wrongly
-flagged the tracker's "Create minimise function on snapshot" checklist item as false. A second
-pass, triggered by noticing three `fix(reports)`/`feat(reports)` commits in the window that
-didn't map to any already-located file, found `reports.js` and the real, working
-`reportPanelGenie` animation — the checklist item is accurate, and the STATUS.md was corrected
-before this brief was written. No other feature's commit list showed a similar unmapped
-file, but this is a first run, so treat that as reasonable confidence, not certainty.
-
 **Worth a decision from the team**:
-- Should "Opal Assist" get its own tracker card?
+- Should "Opal Assist" get its own tracker card? (Asked repeatedly since 2026-11-15.)
 - Should "Professional Development" merge into "Employee Personal Page"?
 - Is `ONBOARDING_ENCRYPTION_KEY` actually provisioned as its own secret in staging/production
   (not just falling back to `TOKEN_ENCRYPTION_KEY`), given it protects stored tax/bank data?

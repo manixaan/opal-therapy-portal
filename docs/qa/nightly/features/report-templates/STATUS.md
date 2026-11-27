@@ -2,7 +2,7 @@
 
 Tracker stage: idea · Tracker environment: none
 Evidence label: **tab-unproven**
-Addressed this window (since 2026-11-13): no
+Addressed since last audit (2026-11-26, commit `f5fc28d` — unchanged, zero new commits tonight): no
 Created (any located code): yes
 
 ## Located files
@@ -38,7 +38,7 @@ correctly.
 - FCA, Progress Letter, Client Agreement Form — all todo, each with no recorded detail beyond
   the shared `next_action`: run all three document flows by hand through to a downloaded file.
 
-## Commits in window (since 2026-11-13)
+## Commits since last audit (2026-11-26)
 
 None touch `fca-routes.js`, `letter-routes.js` or `templates-routes.js`.
 

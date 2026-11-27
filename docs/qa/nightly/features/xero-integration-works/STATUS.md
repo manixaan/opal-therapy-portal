@@ -2,7 +2,7 @@
 
 Tracker stage: idea · Tracker environment: none
 Evidence label: **tab-unproven**
-Addressed this window (since 2026-11-13): yes
+Addressed since last audit (2026-11-26, commit `f5fc28d` — unchanged, zero new commits tonight): no
 Created (any located code): yes
 
 ## Located files
@@ -41,16 +41,14 @@ CRITICAL-sensitivity routes solidly guarded.
 
 ## Open tasks (from tracker)
 
-- Financial Dashboard — todo, unchanged this window.
-- Payroll Automation — todo; real commit activity this window (see below), but the live Xero
-  connection is still unconfirmed.
+- Financial Dashboard — todo, unchanged.
+- Payroll Automation — todo; the live Xero connection is still unconfirmed.
 
-## Commits in window (since 2026-11-13)
+## Commits since last audit (2026-11-26)
 
-`79ab915` feat(invoicing): every sent invoice copied to Xero once, with the same number ·
-`0f261aa` fix(invoicing): close the Xero and email gaps found in review · `915f795`
-feat(invoicing): tick invoices and send them all, each exactly once (all on
-`invoicing-routes.js`; `finance-routes.js` had no commits in window).
+None — `origin/develop` is unchanged at `f5fc28d`. (The invoicing-Xero commits this audit
+first noticed — `79ab915`, `0f261aa`, `915f795` — all predate 2026-11-26 and are already
+reflected in the passing test counts above; they are not new tonight.)
 
 ## Technical note
 

@@ -2,7 +2,7 @@
 
 Tracker stage: idea · Tracker environment: none
 Evidence label: **needs-refinement**
-Addressed this window (since 2026-11-13): no
+Addressed since last audit (2026-11-26, commit `f5fc28d` — unchanged, zero new commits tonight): no
 Created (any located code): yes
 
 ## Located files
@@ -56,7 +56,7 @@ in addition to `requireAuth`. No unguarded route found.
   dynamic contract split, and make the employee contract dynamic like the Letter of Offer.
 - **Stage 3** — todo, no detail recorded.
 
-## Commits in window (since 2026-11-13)
+## Commits since last audit (2026-11-26)
 
 None touch any `onboarding-*.js` file.
 

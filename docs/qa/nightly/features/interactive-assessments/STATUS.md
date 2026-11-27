@@ -2,7 +2,7 @@
 
 Tracker stage: idea · Tracker environment: none
 Evidence label: **tab-unproven**
-Addressed this window (since 2026-11-13): no
+Addressed since last audit (2026-11-26, commit `f5fc28d` — unchanged, zero new commits tonight): no
 Created (any located code): yes
 
 ## Located files
@@ -36,7 +36,7 @@ Both files apply `router.use('/api/<x>', requireAuth)` then per-route
   pending/to-remove, and source originals for keepers. This doesn't gate whether WHODAS 2.0
   itself works — it's a separate catalogue-curation job.
 
-## Commits in window (since 2026-11-13)
+## Commits since last audit (2026-11-26)
 
 None touch `whodas-routes.js` or `assessments-routes.js`.
 

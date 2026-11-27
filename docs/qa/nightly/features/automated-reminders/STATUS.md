@@ -2,7 +2,7 @@
 
 Tracker stage: idea · Tracker environment: none
 Evidence label: **built-untested**
-Addressed this window (since 2026-11-13): yes — Therapist Snapshot only
+Addressed since last audit (2026-11-26, commit `f5fc28d` — unchanged, zero new commits tonight): no
 Created (any located code): partially — Therapist Snapshot exists, Automated Client Appt
 Reminders does not.
 
@@ -53,21 +53,26 @@ tracker/code disagreement here after all.
 - Automated Client Appt Reminders — todo. Entire checklist unchecked; zero code exists for any
   part of it (storing a reminder time, choosing SMS/email, a confirm step, a scheduler, a
   "mark as reminded" flag).
-- Therapist Snapshot — todo overall, but genuinely active this window: a missing-address
-  step-through fix exercise was added, and three stale panels (Smart Recommendations,
-  quick-action buttons, Free/idle gaps) were removed, per `5e972ee`/`b6ce0fe`/`f6601f3`. The
-  "Add animation minimising window towards the top right hand side" item remains open and is
-  correctly unchecked.
+- Therapist Snapshot — todo overall. A missing-address step-through fix exercise and the
+  removal of three stale panels (Smart Recommendations, quick-action buttons, Free/idle gaps)
+  landed on 2026-11-26, before the last audit ran, and are already reflected in the current
+  code (not new tonight). The "Add animation minimising window towards the top right hand
+  side" item remains open and is correctly unchecked.
 
-## Commits in window (since 2026-11-13)
+## Commits since last audit (2026-11-26)
 
-`59b13b1` feat(snapshot): billable hours counted by the invoicing rules · `5e972ee`
-feat(reports): missing addresses become a step-through fix exercise · `b6ce0fe` fix(reports):
-remove idle gaps from the snapshot, fix missing spaces · `f6601f3` fix(reports): drop Smart
-Recommendations, action buttons and Free gaps from the snapshot. No commit touches any
-client-reminder code.
+None — `origin/develop` is unchanged at `f5fc28d`. No commit touches any client-reminder code.
 
 ## Disagreement
 
-None. (An earlier draft of this STATUS.md incorrectly flagged one; corrected above after
-finding `frontend/current/reports.js`, which the first pass missed.)
+None — and this corrects a long-standing error in the audit trail itself, not just a typo.
+Every night from 2026-11-18 through 2026-11-26 (9 nights, visible in this branch's own
+history) reported "no matching code was found in `frontend/current/reports.js`" for the
+"Create minimise function on snapshot" checklist item, and the live tracker's `claude_update`
+for this card still said so tonight ("twelfth night confirming this"). That claim was wrong
+every one of those nights: `reportPanelGenie` has existed in `reports.js` since September
+(commit `2e3414c`, 2026-09-11) and is wired into both `openReportPanel()` and
+`closeReportPanel()`. This audit's own first pass repeated the same error (grepping only
+`mockup_v3.html`) before a second pass, triggered by the `fix(reports)`/`feat(reports)`
+commits in the change log, found the real file. The write-back for this card corrects the
+`claude_update` text accordingly.

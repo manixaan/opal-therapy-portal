@@ -1,8 +1,8 @@
 # Opa Mobile Companion
 
 Tracker stage: idea · Tracker environment: none
-Evidence label: **tab-unproven**
-Addressed this window (since 2026-11-13): yes
+Evidence label: **needs-refinement**
+Addressed since last audit (2026-11-26, commit `f5fc28d` — unchanged, zero new commits tonight): no
 Created (any located code): yes
 
 ## Located files
@@ -42,12 +42,20 @@ read another user's drafts"). Self-scoped by design, not broken.
   is unchecked.
 - Calendar View — todo, no detail recorded.
 
-## Commits in window (since 2026-11-13)
+## Commits since last audit (2026-11-26)
 
-`2ae079b` feat(mobile): appointment detail canEdit/canMove · `c6d599a` feat(mobile): change
-client/session type/address from phone · `9874238` feat(mobile): client card, notes owing,
-push to APNs (migration 094) · `e4fa521` feat(mobile): drag-to-move · `e222a77`
-feat(casenotes): case-noting workspace
+None — `origin/develop` is unchanged at `f5fc28d`. (The mobile/case-note commits this audit
+first noticed — `2ae079b`, `c6d599a`, `9874238`, `e4fa521`, `e222a77` — all predate
+2026-11-26 and are already reflected in the passing test counts above; they are not new
+tonight.)
+
+## Note on the evidence label
+
+This is a native mobile app, not a `mockup_v3.html` tab, so the `tab-unproven` label's literal
+criterion (a browser/E2E test covering the tab) doesn't cleanly apply. Classified as
+**needs-refinement** instead, consistent with every prior night's call on this card: the code
+is built and the API-level tests are solid, but the Case Noting task is still open and the one
+thing that can close it — a human walkthrough on the physical test device — hasn't happened.
 
 ## Disagreement
 

@@ -2,7 +2,7 @@
 
 Tracker stage: idea · Tracker environment: none
 Evidence label: **built-untested**
-Addressed this window (since 2026-11-13): no
+Addressed since last audit (2026-11-26, commit `f5fc28d` — unchanged, zero new commits tonight): no
 Created (any located code): yes
 
 ## Located files
@@ -47,7 +47,7 @@ deliberately excluded from approvals). No unguarded route found.
   approval, notifications, every button. This is exactly the round trip that has no automated
   coverage.
 
-## Commits in window (since 2026-11-13)
+## Commits since last audit (2026-11-26)
 
 None touch `profile-routes.js`.
 

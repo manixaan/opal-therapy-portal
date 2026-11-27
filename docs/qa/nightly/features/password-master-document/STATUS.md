@@ -2,7 +2,7 @@
 
 Tracker stage: idea · Tracker environment: none
 Evidence label: **untouched**
-Addressed this window (since 2026-11-13): no
+Addressed since last audit (2026-11-26, commit `f5fc28d` — unchanged, zero new commits tonight): no
 Created (any located code): no
 
 ## Located files
@@ -27,7 +27,7 @@ None applicable — there is nothing to test.
 
 None recorded.
 
-## Commits in window (since 2026-11-13)
+## Commits since last audit (2026-11-26)
 
 None — nothing to touch.
 
