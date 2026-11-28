@@ -2567,7 +2567,7 @@ function computeDayTravelSegments(day) {
         if (toMin > 0) segs.push({
           day, kind: 'between', via: atPlace ? 'place-in' : 'home-return', plan: plan.mode, auto: plan.auto, homeAvailable: plan.homeAvailable,
           fromLoc: locOf(from), toLoc: homeLoc,
-          startMin: ret.startMin, endMin: ret.endMin, travelMin: toMin, freeMin: 0,
+          startMin: ret.startMin, endMin: ret.endMin, travelMin: toMin, freeMin: 0, backMin: fromMin,
           moved: ret.moved, tight: ret.tight || ret.endMin > sessionStartMin(next), autoStartMin: retAuto,
           fromSessionId: curr.id, toSessionId: null, gapFromSessionId: curr.id, gapToSessionId: next.id,
           ownerSessionId: curr.id, ownerSide: 'after', anchorBaseId: hb.baseId || calendarWeekLocations()[day] || null, routeReal: tTo.real,
@@ -2881,7 +2881,42 @@ function renderSegmentOverlay(col, seg) {
       const gap = Math.max(0, sessionStartMin(gb) - sessionEndMin(ga));
       flag = document.createElement('span');
       flag.className = 't-flag';
-      flag.textContent = (seg.via === 'home-return' ? 'Home and back' : seg.travelMin + ' min drive') + ' · ' + (gap <= 0 ? 'no time' : gap < seg.travelMin ? 'only ' + gap + ' min' : 'no free slot');   // long enough, but other events fill it
+      // 28 Nov 2026: "Home and back · only 25 min" did not say what was wrong
+      // or what to do. A trip home (or to a saved stop) that does not fit now
+      // says so in words, with the time it needs, and a click goes direct.
+      const viaStop = (seg.via === 'home-return' && !seg.toHome) || seg.via === 'place-in';
+      if (viaStop) {
+        const need = seg.travelMin + (seg.backMin || 0);
+        const where = seg.via === 'place-in' ? (seg.toLoc.label || 'the stop') : 'home';
+        const lead = 'No time to go ' + (where === 'home' ? '' : 'to ') + where;
+        const detail = 'It needs about ' + need + ' min there and back' + (gap <= 0 ? ' and there is no gap.' : ' and the gap is ' + gap + ' min.');
+        // Two short lines: a column is ~140 px and one line would run over the tile.
+        flag.classList.add('t-flag-2');
+        const l1 = document.createElement('span'); l1.textContent = lead;
+        const l2 = document.createElement('span'); l2.textContent = 'Needs ' + need + ' min';
+        flag.append(l1, l2);
+        flag.dataset.tip = lead + '. ' + detail;
+        flag.title = flag.dataset.tip;
+        if (ga.dbId) {
+          flag.classList.add('t-flag-act');
+          const go = document.createElement('span');
+          go.className = 't-flag-go';
+          go.textContent = 'Go direct';
+          l2.append(' · ', go);
+          flag.setAttribute('role', 'button');
+          flag.tabIndex = 0;
+          flag.dataset.tip += ' Click to drive straight to the next client instead (Cmd+Z undoes it).';
+          flag.title = flag.dataset.tip;
+          flag.setAttribute('aria-label', flag.dataset.tip);
+          const goDirect = (e) => { e.stopPropagation(); e.preventDefault(); setBetweenTravel(ga.id, 'direct'); };
+          flag.addEventListener('pointerdown', (e) => e.stopPropagation());   // not a leg drag
+          flag.addEventListener('click', goDirect);
+          flag.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') goDirect(e); });
+        }
+      } else {
+        const what = seg.toHome ? seg.travelMin + ' min drive home' : seg.travelMin + ' min drive';
+        flag.textContent = what + ' · ' + (gap <= 0 ? 'no time' : gap < seg.travelMin ? 'only ' + gap + ' min free' : 'no free slot');   // long enough, but other events fill it
+      }
       flagTile = ga.element || null;
       el.appendChild(flag);
     }
@@ -2962,7 +2997,7 @@ function _settleLegFlag(flag, tile) {
     return Array.from(range.getClientRects()).some(hits);
   });
   if (!covers) return;
-  const words = flag.textContent;
+  const words = flag.dataset.tip || flag.textContent;
   flag.classList.add('compact');
   flag.textContent = '!';
   flag.title = words;

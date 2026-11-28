@@ -204,7 +204,7 @@
      store and computeDayTravelSegments(), the calendar leg overlays and the
      travel details panel. Deferred and loaded ahead of profile.js and
      reports.js, both of which reach into it. -->
-<script src="/travel.js?v=82" defer></script>
+<script src="/travel.js?v=83" defer></script>
 <!-- Traffic alerts: a re-priced drive that now runs into a client session —
      point at it, offer Make room, Acknowledge or Ignore (today and tomorrow). -->
 <script src="/travel-alerts.js?v=1" defer></script>
@@ -3581,6 +3581,13 @@ window.opIcon = function (name, size) {
     color: var(--danger, #9c3322); background: var(--panel); border: 1px solid currentColor; border-radius: 999px; pointer-events: none; }
   /* …shrunk to a "!" where it would cover a short tile's words; the sentence
      is its tooltip, so it takes the pointer (travel.js _settleLegFlag). */
+  /* …and one that can be fixed with a click (a trip home that does not fit)
+     takes the pointer; "Go direct" reads as the action (28 Nov 2026). */
+  .travel-overlay .t-flag.t-flag-act { pointer-events: auto; cursor: pointer; }
+  .travel-overlay .t-flag.t-flag-2 { display: flex; flex-direction: column; align-items: flex-end; line-height: 12px; padding: 2px 7px; border-radius: 7px; }
+  .travel-overlay .t-flag.t-flag-2.compact { display: block; padding: 0; line-height: 14px; border-radius: 999px; }
+  .travel-overlay .t-flag .t-flag-go { text-decoration: underline; text-underline-offset: 2px; }
+  .travel-overlay .t-flag.t-flag-act:hover, .travel-overlay .t-flag.t-flag-act:focus-visible { color: var(--panel); background: var(--danger, #9c3322); outline: none; }
   .travel-overlay .t-flag.compact { width: 14px; padding: 0; text-align: center; color: var(--panel); background: var(--danger, #9c3322); pointer-events: auto; cursor: pointer; }
   /* …but still grabbable: an invisible 10 px hit area over the bar's edge. */
   .travel-overlay.overlaps, .travel-overlay.stay.stay-compact { overflow: visible; }

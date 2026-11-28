@@ -2111,7 +2111,7 @@ describe('same-place marker and overlapping legs stay out of the tiles', () => {
       SESSIONS.B = { id: 'B', day: 'mon', type: 'therapy', startH: 10, startM: 10, endH: 11, endM: 0, address: ${JSON.stringify(CV_ADDR)}, patient: 'Ben', dbId: 'db-B' };`);
     await warmRoutes(env, [[A_ADDR, CV_ADDR, 18]]);
     env.ev("refreshDayOverlays('mon')");
-    expect(env.win.document.querySelector('#day-mon .travel-overlay .t-flag').textContent).toBe('18 min drive · only 10 min');
+    expect(env.win.document.querySelector('#day-mon .travel-overlay .t-flag').textContent).toBe('18 min drive · only 10 min free');
   });
   test('a gap long enough for the drive but filled by other events says "no free slot", not "only 150 min"', async () => {
     const env = makeEnv(HOME);
@@ -2122,6 +2122,22 @@ describe('same-place marker and overlapping legs stay out of the tiles', () => {
     env.ev("refreshDayOverlays('mon')");
     const flag = env.win.document.querySelector('#day-mon .travel-overlay .t-flag');
     expect(flag && flag.textContent).toBe('18 min drive · no free slot');
+  });
+  test('a saved trip home that does not fit says "No time to go home", what it needs, and a click goes direct', async () => {
+    const env = makeEnv(HOME);
+    env.ev(`SESSIONS.A = { id: 'A', day: 'mon', type: 'therapy', startH: 9, startM: 0, endH: 10, endM: 0, address: ${JSON.stringify(A_ADDR)}, patient: 'Ada', dbId: 'db-A', travel: { next: 'home' } };
+      SESSIONS.B = { id: 'B', day: 'mon', type: 'therapy', startH: 10, startM: 25, endH: 11, endM: 0, address: ${JSON.stringify(CV_ADDR)}, patient: 'Ben', dbId: 'db-B' };`);
+    await warmRoutes(env, [[A_ADDR, CV_ADDR, 10], [A_ADDR, HOME_ADDR, 30], [HOME_ADDR, CV_ADDR, 30]]);
+    env.ev("window.__calls = []; window.setBetweenTravel = function (id, mode) { window.__calls.push([id, mode]); }");
+    env.ev("refreshDayOverlays('mon')");
+    const flag = env.win.document.querySelector('#day-mon .travel-overlay .t-flag');
+    expect(flag.textContent).toBe('No time to go homeNeeds 60 min · Go direct');
+    expect(flag.title).toBe('No time to go home. It needs about 60 min there and back and the gap is 25 min. Click to drive straight to the next client instead (Cmd+Z undoes it).');
+    expect(flag.textContent).not.toMatch(/Home and back/);
+    expect(flag.classList.contains('t-flag-act')).toBe(true);
+    flag.dispatchEvent(new env.win.MouseEvent('click', { bubbles: true }));
+    expect(env.ev('JSON.stringify(window.__calls)')).toBe('[["A","direct"]]');
+    expect(SHELL).toMatch(/\.travel-overlay \.t-flag\.t-flag-act \{ pointer-events: auto; cursor: pointer; \}/);
   });
   test('a note that would cover a short tile\'s words shrinks to "!" and keeps the sentence as its tooltip', () => {
     const env = makeEnv(HOME);
