@@ -21,7 +21,9 @@ const M = require('./money');
 const MAX_SESSION_MINUTES = 8 * 60;
 
 function isTelehealth(ev) {
-  return !!ev.is_teams_meeting || ev.event_type === 'teams_meeting';
+  const kind = ev.custom_metadata && ev.custom_metadata.booking && ev.custom_metadata.booking.kind;
+  // A Smart Booking telehealth kind is telehealth even when no Teams link was made.
+  return !!ev.is_teams_meeting || ev.event_type === 'teams_meeting' || /^telehealth/.test(String(kind || ''));
 }
 
 function durationMinutes(ev) {

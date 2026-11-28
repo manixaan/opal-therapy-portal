@@ -51,6 +51,7 @@
   var post = function (p, b) { return api('POST', p, b || {}); };
   var put = function (p, b) { return api('PUT', p, b || {}); };
   var patch = function (p, b) { return api('PATCH', p, b || {}); };
+  var del = function (p) { return api('DELETE', p); };
 
   function canInvoice() {
     var u = window.APP_USER;
@@ -321,7 +322,117 @@
   });
 
   // ── Invoice detail ───────────────────────────────────────────────────────
-  var COMPONENT_LABEL = { SESSION: 'Session', TRAVEL_LABOUR: 'Provider travel', TRAVEL_KM: 'Vehicle / non-labour', TRIP_COST: 'Trip cost', MANUAL: 'Manual', NF2F: 'Non-face-to-face', SPLOSE_ACTIVITY: 'Splose support activity' };
+  var COMPONENT_LABEL = { SESSION: 'Session', TRAVEL_LABOUR: 'Provider travel', TRAVEL_KM: 'Vehicle / non-labour', TRIP_COST: 'Trip cost', MANUAL: 'Added by hand', NF2F: 'Non-face-to-face', SPLOSE_ACTIVITY: 'Splose support activity' };
+  /** The small grey label under a line's item code: what kind of charge it is. */
+  function lineLabel(l) {
+    var c = l.calculation || {};
+    if (c.method === 'case_note') return 'Case noting';
+    if (c.method === 'travel_block') return 'Provider travel';
+    if (l.component === 'NF2F' && c.activity) return c.activity;
+    return COMPONENT_LABEL[l.component] || l.component;
+  }
+  /** One editable header field on the invoice paper (edit mode). */
+  function hdrEd(field, value, placeholder) {
+    return '<span class="inv-ce" contenteditable="true" data-hdr="' + field + '" data-ph="' + esc(placeholder || '') + '">' + esc(value || '') + '</span>';
+  }
+
+  // ── Edit in place ────────────────────────────────────────────────────────
+  // Every edit saves when the field loses focus. Reasons are recorded for the
+  // audit trail automatically ("Edited on the invoice"). A recipient typed here
+  // is also saved on the client's billing profile, so the next invoice has it.
+  var EDIT_REASON = 'Edited on the invoice';
+  function saveState(text, bad) {
+    var s = document.getElementById('inv-save-state');
+    if (s) { s.textContent = text; s.className = bad ? 'inv-save-bad' : 'inv-dim'; }
+  }
+  function parseNum(t) { var n = Number(String(t || '').replace(/[$,\s]/g, '')); return Number.isFinite(n) ? n : NaN; }
+  async function saveInline(el) {
+    var inv = state.detail && state.detail.invoice;
+    if (!inv || !state.editMode) return;
+    var text = el.tagName === 'INPUT' ? el.value : el.textContent.replace(/ /g, ' ').trim();
+    try {
+      if (el.dataset.line) {
+        var l = lineById(el.dataset.line); if (!l) return;
+        var f = el.dataset.field, body = {};
+        if (f === 'description') { if (!text || text === l.description) return; body.description = text; }
+        else {
+          var n = parseNum(text);
+          var cur = Number(f === 'quantity' ? l.quantity : l.unit_price);
+          if (!Number.isFinite(n) || n < 0 || (f === 'quantity' && n <= 0)) { saveState('Enter a number above zero', true); el.textContent = f === 'quantity' ? l.quantity : Number(l.unit_price).toFixed(2); return; }
+          if (n === cur) return;
+          body[f] = String(n); body.reason = EDIT_REASON;
+        }
+        saveState('Saving…');
+        await patch('/invoices/' + inv.id + '/lines/' + l.id, body);
+      } else if (el.dataset.hdr) {
+        var k = el.dataset.hdr, col = { payerName: 'payer_name', payerEmail: 'payer_email', payerReference: 'payer_reference', notes: 'notes', issueDate: 'issue_date', dueDate: 'due_date' }[k];
+        if ((text || '') === (inv[col] || '')) return;
+        var b = {}; b[k] = text;
+        if (k.indexOf('payer') === 0) { b.reason = EDIT_REASON; if (!inv.payer_type) b.payerType = 'PLAN_MANAGER'; }
+        if ((k === 'issueDate' || k === 'dueDate') && !text) return;
+        saveState('Saving…');
+        await patch('/invoices/' + inv.id, b);
+        // Remember the recipient for this client's next invoices.
+        if (k.indexOf('payer') === 0 && inv.client_id) {
+          var pb = {}; pb[k] = text || null; if (!inv.payer_type) pb.payerType = 'PLAN_MANAGER';
+          await put('/clients/' + encodeURIComponent(inv.client_id), pb).catch(function () {});
+        }
+      } else return;
+      saveState('Saved');
+      softRefresh();
+    } catch (e) { saveState(e.message, true); }
+  }
+  // Re-draw the invoice (totals, amounts) only once the person has stopped
+  // typing in it, so moving from one field to the next never loses the cursor.
+  var refreshTimer = null;
+  function softRefresh() {
+    clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(function () {
+      var a = document.activeElement;
+      if (a && a.closest && a.closest('#inv-root .inv-ce, #inv-root .inv-ce-date, #inv-root .inv-new-line')) { softRefresh(); return; }
+      refreshDetail();
+    }, 700);
+  }
+  async function saveNewLine(row) {
+    var inv = state.detail && state.detail.invoice;
+    var val = function (n) { var c = row.querySelector('[data-new="' + n + '"]'); return c ? c.textContent.replace(/ /g, ' ').trim() : ''; };
+    var desc = val('description'), price = parseNum(val('unitPrice')), qty = parseNum(val('quantity') || '1');
+    if (!desc || !Number.isFinite(price)) return; // not finished yet
+    if (!(qty > 0) || price < 0) { saveState('Quantity must be above zero and price not negative', true); return; }
+    row.dataset.saving = '1';
+    try {
+      saveState('Saving…');
+      await post('/invoices/' + inv.id + '/lines', { description: desc, itemCode: val('itemCode') || null, unitPrice: String(price), quantity: String(qty), reason: EDIT_REASON });
+      saveState('Saved'); softRefresh();
+    } catch (e) { row.dataset.saving = ''; saveState(e.message, true); }
+  }
+  function addInlineRow() {
+    var tb = document.getElementById('inv-line-body');
+    if (!tb) return;
+    var empty = tb.querySelector('.inv-empty'); if (empty) empty.parentElement.remove();
+    var tr = document.createElement('tr');
+    tr.className = 'inv-new-line';
+    tr.innerHTML = '<td><span class="inv-ce" contenteditable="true" data-new="itemCode" data-ph="Item code"></span></td>' +
+      '<td><span class="inv-ce" contenteditable="true" data-new="description" data-ph="Description"></span></td>' +
+      '<td class="num">$<span class="inv-ce num" contenteditable="true" inputmode="decimal" data-new="unitPrice" data-ph="0.00"></span></td>' +
+      '<td class="num"><span class="inv-ce num" contenteditable="true" inputmode="decimal" data-new="quantity" data-ph="1">1</span></td><td class="num"></td><td class="num"></td>' +
+      '<td class="acts"><button class="mini inv-line-x" type="button" data-inv="drop-new-line" aria-label="Discard this new line">✕</button></td>';
+    tb.appendChild(tr);
+    tr.querySelector('[data-new="description"]').focus();
+  }
+  document.addEventListener('focusout', function (e) {
+    var el = e.target;
+    if (!el || !el.closest || !el.closest('#inv-root')) return;
+    var row = el.closest('.inv-new-line');
+    if (row) { if (!row.contains(e.relatedTarget) && !row.dataset.saving) saveNewLine(row); return; }
+    if (el.matches('.inv-ce[data-line], .inv-ce[data-hdr], input.inv-ce-date')) saveInline(el);
+  });
+  document.addEventListener('keydown', function (e) {
+    var el = e.target;
+    if (e.key !== 'Enter' || !el || !el.classList || !el.classList.contains('inv-ce')) return;
+    if (el.dataset.hdr === 'notes' && e.shiftKey) return; // notes may have line breaks
+    e.preventDefault(); el.blur();
+  });
 
   function calcHtml(l) {
     var c = l.calculation || {};
@@ -392,12 +503,15 @@
     var inv = d.invoice, biz = d.business || {};
     var editable = inv.status === 'DRAFT' || inv.status === 'NEEDS_ATTENTION';
     var finalised = ['READY', 'SENT', 'PART_PAID', 'PAID'].indexOf(inv.status) >= 0;
+    // Simple buttons: back, edit in place, finalise, delete / void, preview and download.
+    // No "regenerate": drafts are refreshed by the background runs.
+    if (state.editId !== inv.id) state.editMode = false;
+    var editing = editable && state.editMode;
     var actions = [];
     actions.push('<button class="btn" data-inv="back">← All invoices</button>');
     if (editable) {
-      actions.push('<button class="btn" data-inv="regen" data-id="' + esc(inv.id) + '">Regenerate draft</button>');
-      actions.push('<button class="btn" data-inv="edit-header" data-id="' + esc(inv.id) + '">Edit draft</button>');
-      actions.push('<button class="btn primary" data-inv="finalise" data-id="' + esc(inv.id) + '">Finalise</button>');
+      actions.push('<button class="btn' + (editing ? ' primary' : '') + '" data-inv="toggle-edit" data-id="' + esc(inv.id) + '" aria-pressed="' + editing + '">' + (editing ? 'Done editing' : 'Edit') + '</button>');
+      if (!editing) actions.push('<button class="btn primary" data-inv="finalise" data-id="' + esc(inv.id) + '">Finalise</button>');
     }
     actions.push('<a class="btn" href="' + API + '/invoices/' + encodeURIComponent(inv.id) + '/pdf?disposition=inline" target="_blank" rel="noopener">Preview PDF</a>');
     actions.push('<a class="btn" href="' + API + '/invoices/' + encodeURIComponent(inv.id) + '/pdf" download>Download PDF</a>');
@@ -409,11 +523,13 @@
     }
     if (inv.status !== 'VOID') {
       actions.push('<button class="btn" data-inv="void" data-id="' + esc(inv.id) + '">Void</button>');
-      if (finalised || editable) actions.push('<button class="btn" data-inv="reissue" data-id="' + esc(inv.id) + '">Void &amp; reissue</button>');
+      if (finalised) actions.push('<button class="btn" data-inv="reissue" data-id="' + esc(inv.id) + '">Void &amp; reissue</button>');
     }
+    if (editable && !inv.finalised_at) actions.push('<button class="btn danger" data-inv="delete-draft" data-id="' + esc(inv.id) + '">Delete</button>');
 
     var banners = '';
-    if (inv.is_stale) banners += '<div class="inv-warn">⚠ ' + esc(inv.stale_reason || 'A source calendar event changed.') + ' <button class="btn btn-xs" data-inv="regen" data-id="' + esc(inv.id) + '">Regenerate now</button></div>';
+    if (inv.is_stale) banners += '<div class="inv-warn">⚠ ' + esc(inv.stale_reason || 'A source calendar event changed.') + ' <button class="btn btn-xs" data-inv="refresh-draft" data-id="' + esc(inv.id) + '">Update from calendar</button> (runs in the background)</div>';
+    if (editing) banners += '<div class="inv-note inv-edit-hint">Editing: click any text on the invoice and type. Changes save when you click away. <b>✕</b> removes a line; <b>+ Add line</b> adds one.</div>';
     // Reviewer notes from the travel calculation: here only — never on the PDF or in Xero.
     var notes = [];
     (d.lines || []).forEach(function (l) { if (l.line_status === 'ACTIVE' && l.calculation && Array.isArray(l.calculation.reviewNotes)) l.calculation.reviewNotes.forEach(function (n) { if (notes.indexOf(n) < 0) notes.push(n); }); });
@@ -430,15 +546,21 @@
     var lineRows = lines.map(function (l) {
       var removed = l.line_status === 'REMOVED';
       var src = l.calendar_event_id ? '<div class="src">Source: calendar event · ' + esc(l.event_title || '') + (l.event_start ? ' · ' + dt(l.event_start) : '') + (l.event_deleted ? ' (deleted)' : '') + '</div>' : '';
-      var acts = '<button class="mini" type="button" data-inv="calc" data-line="' + esc(l.id) + '" aria-expanded="false">How calculated</button>';
-      if (editable) {
+      var acts = editing ? '' : '<button class="mini" type="button" data-inv="calc" data-line="' + esc(l.id) + '" aria-expanded="false">How calculated</button>';
+      if (editing) {
         acts += removed
           ? '<button class="mini" type="button" data-inv="restore-line" data-line="' + esc(l.id) + '">Restore</button>'
-          : '<button class="mini" type="button" data-inv="edit-line" data-line="' + esc(l.id) + '">Edit</button><button class="mini" type="button" data-inv="remove-line" data-line="' + esc(l.id) + '">Remove</button>';
+          : '<button class="mini inv-line-x" type="button" data-inv="remove-line" data-line="' + esc(l.id) + '" title="Remove this line" aria-label="Remove this line">✕</button>';
       }
-      return '<tr class="' + (removed ? 'removed' : '') + '"><td><div class="code">' + esc(l.item_code || '') + '</div><div class="inv-dim" style="color:#7a868a">' + esc(COMPONENT_LABEL[l.component] || l.component) + (l.is_overridden ? ' · overridden' : '') + '</div></td>' +
-        '<td>' + esc(l.description) + src + (removed ? '<div class="inv-dim">Removed: ' + esc(l.removed_reason || '') + '</div>' : '') + '</td>' +
-        '<td class="num">' + money(l.unit_price) + '</td><td class="num">' + esc(Number(l.quantity).toFixed(Number(l.quantity) % 0.01 ? 4 : 2)) + '</td>' +
+      // In edit mode the description, unit price and quantity are typed straight into.
+      var ce = editing && !removed;
+      var ed = function (field, text, numeric) {
+        return ce ? '<span class="inv-ce' + (numeric ? ' num' : '') + '" contenteditable="true" spellcheck="' + !numeric + '" data-line="' + esc(l.id) + '" data-field="' + field + '"' + (numeric ? ' inputmode="decimal"' : '') + '>' + esc(text) + '</span>' : esc(text);
+      };
+      var qty = Number(l.quantity).toFixed(Number(l.quantity) % 0.01 ? 4 : 2);
+      return '<tr class="' + (removed ? 'removed' : '') + ' inv-line-' + esc(String(l.component).toLowerCase()) + '"><td><div class="code">' + esc(l.item_code || '') + '</div><div class="inv-dim" style="color:#7a868a">' + esc(lineLabel(l)) + (l.is_overridden ? ' · edited' : '') + '</div></td>' +
+        '<td>' + ed('description', l.description) + (editing ? '' : src) + (removed ? '<div class="inv-dim">Removed: ' + esc(l.removed_reason || '') + '</div>' : '') + '</td>' +
+        '<td class="num">' + (ce ? '$' + ed('unitPrice', Number(l.unit_price).toFixed(2), true) : money(l.unit_price)) + '</td><td class="num">' + ed('quantity', qty, true) + '</td>' +
         '<td class="num">' + Math.round(Number(l.gst_rate) * 100) + '%</td><td class="num"><b>' + money(l.amount) + '</b></td>' +
         '<td class="acts">' + acts + '</td></tr>' +
         '<tr class="calc-row" id="calc-' + esc(l.id) + '" hidden><td colspan="7">' + calcHtml(l) + '</td></tr>';
@@ -450,14 +572,18 @@
       '<div class="inv-detail-grid"><div class="inv-paper"><div class="band"></div><div class="pad">' +
       '<div class="top"><div><h2>Tax Invoice</h2>' + (editable ? '<div class="draft-mark">DRAFT</div>' : '') + '</div><img src="' + API + '/logo" alt="Opal Therapy"></div>' +
       '<div class="parties"><div><b>Client</b>' + esc(inv.client_name || '—') + '<br>NDIS Number: ' + esc(inv.ndis_number || 'not recorded') +
-      '<b>Invoice to</b>' + (inv.payer_name ? esc(inv.payer_name) : '<span style="color:#c2412e">Recipient not set</span>') + (inv.payer_reference ? '<br>Ref: ' + esc(inv.payer_reference) : '') + (inv.payer_email ? '<br>' + esc(inv.payer_email) : '') + '</div>' +
+      (editing
+        ? '<b>Invoice to</b>' + hdrEd('payerName', inv.payer_name, 'Who pays (e.g. plan manager)') + '<br>' + hdrEd('payerEmail', inv.payer_email, 'Recipient email') + '<br>Ref: ' + hdrEd('payerReference', inv.payer_reference, 'Reference') + '</div>'
+        : '<b>Invoice to</b>' + (inv.payer_name ? esc(inv.payer_name) : '<span style="color:#c2412e">Recipient not set</span>') + (inv.payer_reference ? '<br>Ref: ' + esc(inv.payer_reference) : '') + (inv.payer_email ? '<br>' + esc(inv.payer_email) : '') + '</div>') +
       '<div><b>From</b>' + esc(biz.name || 'Opal Therapy') + '<b>ABN</b>' + (biz.abn ? esc(biz.abn) : '<span style="color:#c2412e">Not set — Billing settings</span>') + '<b>Provider</b>' + esc(inv.practitioner_names || '—') + '</div>' +
-      '<div><b>Invoice #</b>' + esc(inv.invoice_number) + '<b>Issue date</b>' + dmy(inv.issue_date) + '<b>Due date</b>' + dmy(inv.due_date) + '<b>Service period</b>' + dmy(inv.period_start) + ' – ' + dmy(inv.period_end) + '</div></div>' +
-      '<table><thead><tr><th>Item code</th><th>Description</th><th class="num">Unit price</th><th class="num">Quantity</th><th class="num">GST</th><th class="num">Amount AUD</th><th></th></tr></thead><tbody>' + (lineRows || '<tr><td colspan="7" class="inv-empty">No lines.</td></tr>') + '</tbody></table>' +
-      (editable ? '<div style="margin-top:8px"><button class="mini" type="button" data-inv="add-line">+ Add line</button></div>' : '') +
+      '<div><b>Invoice #</b>' + esc(inv.invoice_number) + '<b>Issue date</b>' + (editing ? '<input type="date" class="inv-ce-date" data-hdr="issueDate" value="' + esc(inv.issue_date || '') + '">' : dmy(inv.issue_date)) +
+      '<b>Due date</b>' + (editing ? '<input type="date" class="inv-ce-date" data-hdr="dueDate" value="' + esc(inv.due_date || '') + '">' : dmy(inv.due_date)) + '<b>Service period</b>' + dmy(inv.period_start) + ' – ' + dmy(inv.period_end) + '</div></div>' +
+      '<table><thead><tr><th>Item code</th><th>Description</th><th class="num">Unit price</th><th class="num">Quantity</th><th class="num">GST</th><th class="num">Amount AUD</th><th></th></tr></thead><tbody id="inv-line-body">' + (lineRows || '<tr><td colspan="7" class="inv-empty">No lines.</td></tr>') + '</tbody></table>' +
+      (editing ? '<div style="margin-top:8px"><button class="mini" type="button" data-inv="add-line-inline">+ Add line</button> <span id="inv-save-state" class="inv-dim" aria-live="polite"></span></div>' : '') +
       '<div class="totals"><div><span>Subtotal</span><span>' + money(inv.subtotal) + '</span></div><div><span>' + (inv.tax_treatment === 'GST_10_EXCLUSIVE' ? 'GST 10%' : 'GST (GST-free)') + '</span><span>' + money(inv.gst_total) + '</span></div>' +
       '<div class="strong"><span>Total AUD</span><span>' + money(inv.total) + '</span></div><div><span>Amount paid</span><span>' + money(inv.amount_paid) + '</span></div><div class="strong"><span>Outstanding</span><span>' + money(inv.outstanding) + '</span></div></div>' +
-      (inv.notes ? '<p style="font-size:12.5px;margin-top:14px"><b>Notes</b><br>' + esc(inv.notes) + '</p>' : '') +
+      (editing ? '<p style="font-size:12.5px;margin-top:14px"><b>Notes</b><br>' + hdrEd('notes', inv.notes, 'Notes printed on the invoice') + '</p>'
+        : (inv.notes ? '<p style="font-size:12.5px;margin-top:14px"><b>Notes</b><br>' + esc(inv.notes) + '</p>' : '')) +
       '</div></div>' +
       '<aside class="inv-side">' +
       '<div class="inv-panel"><h3>Payments</h3><div class="inv-progress"><i style="width:' + paidPct + '%"></i></div><div class="inv-dim">' + money(inv.amount_paid) + ' / ' + money(inv.total) + ' AUD</div>' +
@@ -484,7 +610,157 @@
     }).catch(function () {});
   }
 
+  // ── Quick fix ────────────────────────────────────────────────────────────
+  // One small pop-up per attention item that asks only for the missing thing.
+  // Client answers are saved on the client's billing profile (and a payer in the
+  // payer directory), so later invoices — and other clients with the same payer —
+  // already have them; block answers are remembered per calendar block.
+  var QUICK_FIX = ['CLIENT_MISSING_PAYER', 'NDIS_NUMBER_MISSING', 'CLIENT_ADDRESS_MISSING', 'MMM_UNRESOLVED', 'MMM_REVIEW',
+    'SESSION_MMM_UNRESOLVED', 'SESSION_MMM_REVIEW', 'CASE_NOTE_MISSING', 'REPORT_NOT_BILLED', 'TRAVEL_BLOCK_NOT_INVOICED',
+    'TRAVEL_BLOCK_NO_CLIENT', 'FLIGHT_NO_TRIP'];
+  state.issueCache = state.issueCache || {};
+  function zoneSelect() {
+    var o = '<option value="">Choose…</option>';
+    for (var z = 1; z <= 7; z++) o += '<option value="' + z + '">MM' + z + (z === 1 ? ' — metro' : z >= 6 ? ' — remote' : '') + '</option>';
+    return '<select name="zone" required>' + o + '</select>';
+  }
+  function qfButtons(list) {
+    return '<button class="btn" data-inv="close-modal">Cancel</button>' + list.map(function (b, i) {
+      return '<button class="btn' + (i === list.length - 1 ? ' primary' : '') + '" data-inv="qf-answer" data-answer="' + esc(b[0]) + '">' + esc(b[1]) + '</button>';
+    }).join('');
+  }
+  async function openQuickFix(issueId) {
+    var i = state.issueCache[issueId];
+    if (!i) return;
+    var t = i.fix_target || {};
+    if (i.issue_type === 'NF2F_UNTIMED' && window.Nf2f) return window.Nf2f.openResolve(t.eventId);
+    var who = t.clientName || '';
+    var html = '', foot = '', title = 'Quick fix';
+    state.qf = { issue: i, profile: null, payers: [] };
+    switch (i.issue_type) {
+      case 'CLIENT_MISSING_PAYER': {
+        var cl = await get('/clients/' + encodeURIComponent(i.client_id)).catch(function () { return {}; });
+        var py = await get('/payers').catch(function () { return { payers: [] }; });
+        var p = cl.profile || {}, last = (cl.payerHistory || [])[0] || {};
+        state.qf.payers = py.payers || [];
+        who = p.participant_name || who;
+        // Pattern: the payer this client was last invoiced to, else their plan type.
+        var guessName = p.payer_name || last.payer_name || last.name || '';
+        var guessType = p.payer_type || last.payer_type || (p.management_type === 'SELF_MANAGED' ? 'PARTICIPANT' : 'PLAN_MANAGER');
+        var known = state.qf.payers.find(function (x) { return x.name === guessName; });
+        title = 'Who pays for ' + (who || 'this client') + '?';
+        html = '<form class="inv-form inv-qf" id="inv-qf-form"><label>Paid by<select name="payerType">' +
+          [['PLAN_MANAGER', 'Plan manager'], ['PARTICIPANT', 'The participant'], ['NOMINEE', 'Nominee'], ['OTHER', 'Someone else']].map(function (o) { return '<option value="' + o[0] + '"' + (o[0] === guessType ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') +
+          '</select></label><label>Name<input name="payerName" list="inv-qf-payers" value="' + esc(guessName) + '" autocomplete="off" required></label>' +
+          '<label>Invoice email<input name="payerEmail" type="email" value="' + esc(p.payer_email || (known && known.email) || '') + '"></label>' +
+          '<datalist id="inv-qf-payers">' + state.qf.payers.map(function (x) { return '<option value="' + esc(x.name) + '">'; }).join('') + '</datalist></form>' +
+          (guessName ? '<div class="inv-dim">Suggested from ' + (p.payer_name ? 'the client record' : 'their last invoice') + '.</div>' : '');
+        foot = qfButtons([['save', 'Save']]);
+        break;
+      }
+      case 'NDIS_NUMBER_MISSING':
+        title = 'NDIS number' + (who ? ' for ' + who : '');
+        html = '<form class="inv-form inv-qf" id="inv-qf-form"><label>NDIS number<input name="ndisNumber" inputmode="numeric" pattern="[0-9 ]{9,12}" required></label></form>';
+        foot = qfButtons([['save', 'Save']]); break;
+      case 'CLIENT_ADDRESS_MISSING':
+        title = 'Where are ' + (who ? who + "'s" : 'the') + ' sessions?';
+        html = '<form class="inv-form inv-qf" id="inv-qf-form"><label class="wide">Address<input name="serviceAddress" autocomplete="street-address" required></label></form>';
+        foot = qfButtons([['save', 'Save']]); break;
+      case 'MMM_UNRESOLVED': case 'MMM_REVIEW':
+        title = 'Which MMM zone' + (who ? ' is ' + who + ' in' : '') + '?';
+        html = '<form class="inv-form inv-qf" id="inv-qf-form"><label>Zone' + zoneSelect() + '</label></form>';
+        foot = qfButtons([['save', 'Save']]); break;
+      case 'SESSION_MMM_UNRESOLVED': case 'SESSION_MMM_REVIEW':
+        title = 'Which MMM zone was this session in?';
+        html = '<div class="inv-dim">' + esc(i.message) + '</div><form class="inv-form inv-qf" id="inv-qf-form"><label>Zone' + zoneSelect() + '</label></form>';
+        foot = qfButtons([['save', 'Save']]); break;
+      case 'CASE_NOTE_MISSING':
+        title = 'Case noting for this session';
+        html = '<div class="inv-dim">' + esc(i.message.split('. ')[0]) + '.</div><form class="inv-form inv-qf" id="inv-qf-form"><label>Case-noting minutes<input name="minutes" inputmode="numeric" type="number" min="1" max="600" step="1" required></label></form>';
+        foot = qfButtons([['leave', 'No case noting'], ['save', 'Add to invoice']]); break;
+      case 'REPORT_NOT_BILLED':
+        title = 'Bill ' + (t.label || 'this report') + '?';
+        html = '<div>' + esc((t.label || 'Report writing') + (t.clientName ? ' for ' + t.clientName : '') + ', ' + dmy(t.date) + ', ' + (t.minutes || '?') + ' min') + '</div>';
+        foot = qfButtons([['NOT_BILLABLE', 'Not billable'], ['SPLOSE', 'Billed in Splose'], ['BILL', 'Bill it']]); break;
+      case 'TRAVEL_BLOCK_NOT_INVOICED':
+        title = 'Bill this travel?';
+        html = '<div>' + esc((t.minutes || '?') + ' min travel block, ' + dmy(t.date) + (t.clientName ? ', for ' + t.clientName : '')) + '</div>';
+        foot = qfButtons([['NOT_BILLABLE', 'Already a travel leg'], ['BILL', 'Bill it']]); break;
+      case 'TRAVEL_BLOCK_NO_CLIENT':
+        title = 'Whose travel is this?';
+        html = '<div>' + esc((t.minutes || '?') + ' min travel block, ' + dmy(t.date)) + ' names no client. Add the client on the calendar, or mark it not billable.</div>';
+        foot = qfButtons([['calendar', 'Open calendar'], ['NOT_BILLABLE', 'Not billable']]); break;
+      case 'FLIGHT_NO_TRIP':
+        title = 'Flight not on a trip';
+        html = '<div>' + esc(i.message) + '</div>';
+        foot = qfButtons([['NOT_BILLABLE', 'Not billable'], ['trip', 'Create a trip']]); break;
+      default: return;
+    }
+    modal(title, html + '<div id="inv-qf-msg"></div>', foot);
+    var first = document.querySelector('#inv-qf-form input, #inv-qf-form select');
+    if (first) first.focus();
+    var nameIn = document.querySelector('#inv-qf-form [name="payerName"]');
+    if (nameIn) nameIn.addEventListener('change', function () {
+      // Picking a known payer fills its email: entered once, used for every client.
+      var k = state.qf.payers.find(function (x) { return x.name === nameIn.value; });
+      var em = document.querySelector('#inv-qf-form [name="payerEmail"]');
+      if (k && em && !em.value) em.value = k.email || '';
+      var ty = document.querySelector('#inv-qf-form [name="payerType"]');
+      if (k && ty && k.payer_type) ty.value = k.payer_type;
+    });
+  }
+  async function saveQuickFix(btn) {
+    var q = state.qf; if (!q) return;
+    var i = q.issue, t = i.fix_target || {}, ans = btn.dataset.answer;
+    var msg = document.getElementById('inv-qf-msg');
+    var f = document.getElementById('inv-qf-form');
+    if (ans === 'save' && f && !f.reportValidity()) return;
+    var v = function (n) { return f && f.elements[n] ? f.elements[n].value.trim() : ''; };
+    btn.disabled = true;
+    try {
+      var out;
+      switch (i.issue_type) {
+        case 'CLIENT_MISSING_PAYER': {
+          var known = q.payers.find(function (x) { return x.name === v('payerName'); });
+          await put('/clients/' + encodeURIComponent(i.client_id), known && (!v('payerEmail') || v('payerEmail') === known.email)
+            ? { payerId: known.id } : { payerType: v('payerType'), payerName: v('payerName'), payerEmail: v('payerEmail') || null });
+          out = await post('/issues/' + i.id + '/quick-fix'); break;
+        }
+        case 'NDIS_NUMBER_MISSING':
+          await put('/clients/' + encodeURIComponent(i.client_id), { ndisNumber: v('ndisNumber') });
+          out = await post('/issues/' + i.id + '/quick-fix'); break;
+        case 'CLIENT_ADDRESS_MISSING':
+          await put('/clients/' + encodeURIComponent(i.client_id), { serviceAddress: v('serviceAddress') });
+          out = await post('/issues/' + i.id + '/quick-fix'); break;
+        case 'MMM_UNRESOLVED': case 'MMM_REVIEW':
+          await put('/clients/' + encodeURIComponent(i.client_id) + '/mmm-override', { zone: v('zone'), reason: 'Quick fix' });
+          out = await post('/issues/' + i.id + '/quick-fix'); break;
+        case 'SESSION_MMM_UNRESOLVED': case 'SESSION_MMM_REVIEW':
+          await put('/events/' + encodeURIComponent(t.eventId || i.calendar_event_id) + '/mmm', { zone: v('zone'), reason: 'Quick fix' });
+          out = await post('/issues/' + i.id + '/quick-fix'); break;
+        case 'CASE_NOTE_MISSING':
+          out = await post('/issues/' + i.id + '/quick-fix', ans === 'leave' ? { leaveOff: true } : { minutes: v('minutes') }); break;
+        case 'TRAVEL_BLOCK_NO_CLIENT':
+          if (ans === 'calendar') { closeModal(); if (typeof window.switchTab === 'function') window.switchTab('calendar'); return; }
+          out = await post('/issues/' + i.id + '/quick-fix', { decision: ans }); break;
+        case 'FLIGHT_NO_TRIP':
+          if (ans === 'trip') { closeModal(); await openNewTrip(); return; }
+          out = await post('/issues/' + i.id + '/quick-fix', { decision: ans }); break;
+        default:
+          out = await post('/issues/' + i.id + '/quick-fix', { decision: ans });
+      }
+      closeModal();
+      toast('Fixed', out && out.job ? 'The client\'s drafts are being updated in the background' : (out && out.stillMissing && out.stillMissing.length ? 'Something else is still missing for this client' : 'Saved for next time too'));
+      if (out && out.job) watchJob(out.job.jobId, null);
+      loadOverview();
+      if (state.invoiceId) refreshDetail(); else if (state.section === 'attention') go('attention');
+    } catch (e) { btn.disabled = false; if (msg) msg.innerHTML = '<div class="inv-error">' + esc(e.message) + '</div>'; }
+  }
+
   function fixButton(i) {
+    if (i && i.id) state.issueCache[i.id] = i;
+    if (i && QUICK_FIX.indexOf(i.issue_type) >= 0) return '<button class="btn btn-xs primary" data-inv="quick-fix" data-id="' + esc(i.id) + '">Quick fix</button>';
+    if (i && i.issue_type === 'NF2F_UNTIMED') { var tt = i.fix_target || {}; return '<button class="btn btn-xs primary" data-inv="nf2f-resolve" data-id="' + esc(tt.eventId) + '">Quick fix</button>'; }
     var t = i.fix_target || {};
     if (t.kind === 'client') return '<button class="btn btn-xs" data-inv="open-client" data-client="' + esc(t.clientId) + '">Fix client</button>';
     if (t.kind === 'invoice') return '<button class="btn btn-xs" data-inv="open" data-id="' + esc(t.invoiceId) + '">Open invoice</button>';
@@ -512,8 +788,25 @@
       '<div class="inv-field-row"><label class="inv-dim">From <input type="date" id="inv-run-from" value="' + ranges.lastwork[0] + '"></label><label class="inv-dim">To <input type="date" id="inv-run-to" value="' + ranges.lastwork[1] + '"></label>' +
       '<label class="inv-dim">Practitioner <select id="inv-run-prac"><option value="">All practitioners</option>' + state.practitioners.map(function (p) { return '<option value="' + esc(p.id) + '">' + esc(p.name) + '</option>'; }).join('') + '</select></label></div>' +
       '<div class="inv-note">Completed, billable sessions in this period are priced from each client\'s MMM zone and the rate card for the service date, travel is divided across each practitioner\'s day, and sessions are grouped into one draft per client and plan manager. Anything that cannot be billed safely goes to <b>Needs attention</b>. Running it again never duplicates a charge.</div>' +
+      '<div id="inv-run-auto" class="inv-dim"></div>' +
       '<div id="inv-run-result"></div>';
-    var bd = modal('Complete invoicing', body, '<button class="btn" data-inv="close-modal">Close</button><button class="btn primary" id="inv-run-go" data-inv="run-go">Create drafts</button>');
+    var bd = modal('Complete invoicing', body, '<button class="btn" data-inv="close-modal">Close</button><button class="btn" data-inv="goto" data-sec="invoices" data-status="DRAFT,NEEDS_ATTENTION" id="inv-run-open">Open invoices</button><button class="btn primary" id="inv-run-go" data-inv="run-go">Create drafts</button>');
+    // What the background already did, how many drafts wait, and a run still going.
+    get('/overview').then(function (ov) {
+      var c = ov.counts || {}, pend = (Number(c.draft) || 0) + (Number(c.needs_attention || c.needsAttention) || 0);
+      var ob = document.getElementById('inv-run-open'); if (ob && pend) ob.textContent = 'Open invoices (' + pend + ' pending)';
+      var a = ov.autoDrafts || {}, box = document.getElementById('inv-run-auto');
+      if (box && a.enabled && a.lastAt && a.lastPeriod) {
+        box.innerHTML = 'Drafts were prepared automatically ' + dt(a.lastAt) + ' for ' + dmy(a.lastPeriod.from) + ' – ' + dmy(a.lastPeriod.to) +
+          '. Create drafts now only adds what changed since.';
+      } else if (box && a.enabled) box.textContent = 'Drafts for the current week are prepared automatically each night.';
+      if (box && a.lastError) box.innerHTML += ' <span class="inv-save-bad">' + esc(a.lastError) + '</span>';
+      var j = ov.job;
+      if (j && j.state === 'RUNNING') {
+        var out = document.getElementById('inv-run-result'), go = document.getElementById('inv-run-go');
+        if (out && go) { go.disabled = true; go.textContent = 'Working…'; out.innerHTML = '<div class="inv-progress-line"><span class="inv-spin" aria-hidden="true"></span><span id="inv-run-stage">' + esc(j.stage) + '…</span></div>'; watchJob(j.jobId, { out: out, btn: go, from: j.from, to: j.to }); }
+      }
+    }).catch(function () {});
     bd.__ranges = ranges;
     // One press on Monday: "Invoice last week" opens this and starts the run
     // for the previous Mon–Fri across all practitioners straight away.
@@ -532,34 +825,59 @@
     var from = document.getElementById('inv-run-from').value, to = document.getElementById('inv-run-to').value;
     var prac = document.getElementById('inv-run-prac').value;
     var out = document.getElementById('inv-run-result');
-    btn.disabled = true; btn.textContent = 'Analysing calendar…';
-    out.innerHTML = skel(3);
+    btn.disabled = true; btn.textContent = 'Working…';
+    out.innerHTML = '<div class="inv-progress-line"><span class="inv-spin" aria-hidden="true"></span><span id="inv-run-stage">Starting…</span></div><div class="inv-dim">This runs in the background — you can close this and keep working. Drafts appear as soon as it finishes.</div>';
     try {
-      var r = await post('/runs', { from: from, to: to, practitionerId: prac || null });
-      var s = r.summary;
-      var skipped = Object.keys(s.skipped || {}).reduce(function (a, k) { return a + s.skipped[k]; }, 0);
-      out.innerHTML = '<div class="inv-ok">Invoicing complete for ' + dmy(from) + ' – ' + dmy(to) + '.</div><div class="inv-summary">' +
-        '<div><b>' + s.invoicesCreated + '</b><span>invoices created</span></div>' +
-        '<div><b>' + s.invoicesUpdated + '</b><span>drafts updated</span></div>' +
-        '<div><b>' + s.sessionsIncluded + '</b><span>sessions included</span></div>' +
-        '<div><b>' + (s.nf2fIncluded || 0) + '</b><span>non-face-to-face shares</span></div>' +
-        '<div><b>' + (s.sploseActivitiesIncluded || 0) + '</b><span>Splose support activities</span></div>' +
-        '<div><b>' + (s.invoicedInSplose || 0) + '</b><span>skipped — already invoiced in Splose</span></div>' +
-        '<div><b>' + s.travelAllocations + '</b><span>travel allocations</span></div>' +
-        (s.travelUnbilledMinutes ? '<div><b>' + (Math.round(s.travelUnbilledMinutes * 100) / 100) + '</b><span>travel minutes above the daily ceiling (not billed)</span></div>' : '') +
-        '<div><b>' + s.itemsNeedAttention + '</b><span>items need attention</span></div>' +
-        '<div><b>' + s.alreadyInvoiced + '</b><span>skipped — already invoiced</span></div>' +
-        '<div><b>' + skipped + '</b><span>not billable (cancelled, DNA, future…)</span></div>' +
-        '<div><b>' + aud(s.total) + '</b><span>value of touched drafts</span></div></div>' +
-        (s.warnings ? '<div class="inv-note">' + s.warnings + ' warning' + (s.warnings === 1 ? '' : 's') + ' (e.g. a day with no work location set).</div>' : '');
-      var foot = document.getElementById('inv-modal-foot');
-      if (foot) foot.innerHTML = (s.itemsNeedAttention ? '<button class="btn" data-inv="goto" data-sec="attention">Review attention items</button>' : '') + '<button class="btn primary" data-inv="goto" data-sec="invoices" data-status="DRAFT,NEEDS_ATTENTION">Open drafts</button>';
-      loadOverview();
-      if (state.section === 'invoices' && !state.invoiceId) loadInvoiceList();
+      var j = await post('/runs', { from: from, to: to, practitionerId: prac || null, background: true });
+      watchJob(j.jobId, { out: out, btn: btn, from: from, to: to });
     } catch (e) {
       out.innerHTML = '<div class="inv-error">' + esc(e.message) + '</div>';
       btn.disabled = false; btn.textContent = 'Create drafts';
     }
+  }
+
+  /** Poll a background run; draw its stage, then its summary (if the pop-up is still open). */
+  function watchJob(jobId, ui) {
+    var tries = 0;
+    (function poll() {
+      get('/runs/jobs/' + encodeURIComponent(jobId)).then(function (j) {
+        var stage = document.getElementById('inv-run-stage');
+        if (stage) stage.textContent = j.stage + '…';
+        if (j.state === 'RUNNING') { tries++; setTimeout(poll, tries < 10 ? 1000 : 2000); return; }
+        loadOverview();
+        if (state.section === 'invoices' && !state.invoiceId) loadInvoiceList();
+        if (state.invoiceId) refreshDetail();
+        if (j.state === 'FAILED') {
+          if (ui && document.body.contains(ui.out)) { ui.out.innerHTML = '<div class="inv-error">' + esc(j.error) + '</div>'; ui.btn.disabled = false; ui.btn.textContent = 'Create drafts'; }
+          else toast('Drafts not finished', j.error);
+          return;
+        }
+        var s = (j.result && j.result.summary) || {};
+        if (ui && document.body.contains(ui.out)) renderRunSummary(s, ui.from, ui.to, ui.out);
+        else toast('Drafts ready', (s.invoicesCreated || 0) + ' new, ' + (s.invoicesUpdated || 0) + ' updated' + (s.itemsNeedAttention ? ' · ' + s.itemsNeedAttention + ' need attention' : ''));
+      }).catch(function (e) {
+        if (e.status === 404) { if (ui && document.body.contains(ui.out)) ui.out.innerHTML = '<div class="inv-note">' + esc(e.message) + '</div>'; loadOverview(); return; }
+        tries++; if (tries < 60) setTimeout(poll, 3000);
+      });
+    })();
+  }
+
+  function renderRunSummary(s, from, to, out) {
+    var skipped = Object.keys(s.skipped || {}).reduce(function (a, k) { return a + s.skipped[k]; }, 0);
+    out.innerHTML = '<div class="inv-ok">Drafts ready for ' + dmy(from) + ' – ' + dmy(to) + '.</div><div class="inv-summary">' +
+      '<div><b>' + (s.invoicesCreated || 0) + '</b><span>invoices created</span></div>' +
+      '<div><b>' + (s.invoicesUpdated || 0) + '</b><span>drafts updated</span></div>' +
+      '<div><b>' + (s.sessionsIncluded || 0) + '</b><span>sessions included</span></div>' +
+      '<div><b>' + (s.nf2fIncluded || 0) + '</b><span>case noting / non-face-to-face / reports</span></div>' +
+      '<div><b>' + (s.travelAllocations || 0) + '</b><span>travel allocations</span></div>' +
+      '<div><b>' + (s.sploseActivitiesIncluded || 0) + '</b><span>Splose support activities</span></div>' +
+      '<div><b>' + ((s.alreadyInvoiced || 0) + (s.invoicedInSplose || 0)) + '</b><span>skipped — already invoiced</span></div>' +
+      '<div><b>' + skipped + '</b><span>not billable (cancelled, DNA, future…)</span></div>' +
+      '<div><b>' + (s.itemsNeedAttention || 0) + '</b><span>items need attention</span></div>' +
+      '<div><b>' + aud(s.total) + '</b><span>value of touched drafts</span></div></div>';
+    var btn = document.getElementById('inv-run-go'); if (btn) { btn.disabled = false; btn.textContent = 'Create drafts'; }
+    var foot = document.getElementById('inv-modal-foot');
+    if (foot) foot.innerHTML = '<button class="btn" data-inv="close-modal">Close</button>' + (s.itemsNeedAttention ? '<button class="btn" data-inv="goto" data-sec="attention">Needs attention (' + s.itemsNeedAttention + ')</button>' : '') + '<button class="btn primary" data-inv="goto" data-sec="invoices" data-status="DRAFT,NEEDS_ATTENTION">Open drafts</button>';
   }
 
   // ── Needs attention ──────────────────────────────────────────────────────
@@ -569,7 +887,7 @@
     el.innerHTML = '<div class="inv-table-wrap"><table class="inv-table"><thead><tr><th>Item</th><th>Client</th><th>Date</th><th>Detail</th><th></th></tr></thead><tbody>' + r.issues.map(function (i) {
       return '<tr><td><span class="inv-pill ' + esc(i.severity) + '">' + esc(i.label) + '</span></td><td>' + esc(i.client_name || i.client_id || '—') + '</td><td>' + dmy(i.service_date) + '</td>' +
         '<td>' + esc(i.message) + (i.invoice_number ? '<div class="inv-dim">Invoice ' + esc(i.invoice_number) + '</div>' : '') + '</td>' +
-        '<td style="white-space:nowrap">' + fixButton(i) + ' <button class="btn btn-xs" data-inv="reprocess" data-id="' + esc(i.id) + '">Reprocess</button> <button class="btn btn-xs" data-inv="dismiss" data-id="' + esc(i.id) + '">Dismiss</button></td></tr>';
+        '<td style="white-space:nowrap">' + fixButton(i) + (QUICK_FIX.indexOf(i.issue_type) >= 0 || i.issue_type === 'NF2F_UNTIMED' ? '' : ' <button class="btn btn-xs" data-inv="reprocess" data-id="' + esc(i.id) + '">Reprocess</button>') + ' <button class="btn btn-xs" data-inv="dismiss" data-id="' + esc(i.id) + '">Dismiss</button></td></tr>';
     }).join('') + '</tbody></table></div>';
   }
 
@@ -877,6 +1195,7 @@
       '<label>Default trip allocation<select name="defaultTripAllocationMethod">' + opt('EQUAL_PER_CLIENT', 'Equal per unique client', s.defaultTripAllocationMethod) + opt('PER_SESSION', 'Per billable session', s.defaultTripAllocationMethod) + opt('MANUAL_WEIGHTED', 'Manual weighted', s.defaultTripAllocationMethod) + '</select></label>' +
       '<label>Completion rule<select name="completionRule">' + opt('PAST_CONFIRMED', 'Past confirmed sessions are delivered', s.completionRule) + opt('EXPLICIT_ONLY', 'Only sessions marked Completed', s.completionRule) + '</select></label>' +
       '<label>Timezone<input name="timezone" value="' + esc(s.timezone) + '"></label>' +
+      '<label class="wide inv-check"><input type="checkbox" name="autoDraftsEnabled"' + (s.autoDraftsEnabled !== false ? ' checked' : '') + '> Prepare drafts every night for the current week (so Create drafts is quick)</label>' +
       '<label>Xero sales account code<input name="xeroSalesAccountCode" value="' + esc(s.xeroSalesAccountCode || '') + '" placeholder="e.g. 200" title="The revenue account in Xero these invoices post to. Blank = nothing is copied to Xero."></label>' +
       '<label>Xero tax type — GST-free<input name="xeroTaxTypeGstFree" value="' + esc(s.xeroTaxTypeGstFree || 'EXEMPTOUTPUT') + '"></label>' +
       '<label>Xero tax type — GST 10%<input name="xeroTaxTypeGst" value="' + esc(s.xeroTaxTypeGst || 'OUTPUT') + '"></label>' +
@@ -1052,13 +1371,26 @@
         case 'open-from-cal':
           if (typeof window.closeBlockDetail === 'function') window.closeBlockDetail();
           switchToInvoicing(function () { openInvoice(id); }); break;
-        case 'back': state.invoiceId = null; go('invoices'); break;
-        case 'regen': {
-          btn.disabled = true; btn.textContent = 'Regenerating…';
-          var rr = await post('/invoices/' + id + '/regenerate');
-          toast('Draft regenerated', (rr.summary.itemsNeedAttention ? rr.summary.itemsNeedAttention + ' item(s) need attention' : 'Calculation refreshed from the calendar'));
+        case 'back': state.invoiceId = null; state.editMode = false; go('invoices'); break;
+        case 'toggle-edit':
+          state.editMode = !state.editMode; state.editId = id;
+          if (!state.editMode) { clearTimeout(refreshTimer); if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); }
           refreshDetail(); break;
+        case 'add-line-inline': addInlineRow(); break;
+        case 'drop-new-line': { var nl = btn.closest('.inv-new-line'); if (nl) nl.remove(); break; }
+        case 'delete-draft': {
+          if (!(await confirmIt('Delete this draft? It is removed for good (the deletion is kept in the audit trail). Its sessions are drafted again next time drafts are made — to stop a charge, remove its line instead.'))) return;
+          await del('/invoices/' + id); state.invoiceId = null; state.editMode = false;
+          toast('Draft deleted'); loadOverview(); go('invoices'); break;
         }
+        case 'quick-fix': await openQuickFix(id); break;
+        case 'refresh-draft': {
+          btn.disabled = true; btn.textContent = 'Updating…';
+          var rj = await post('/invoices/' + id + '/regenerate', { background: true });
+          if (rj.job) watchJob(rj.job.jobId, null); else refreshDetail();
+          break;
+        }
+        case 'qf-answer': await saveQuickFix(btn); break;
         case 'finalise': {
           if (!(await confirmIt('Finalise this invoice? Its amounts and PDF are locked afterwards; changes need void & reissue.'))) return;
           await post('/invoices/' + id + '/finalise'); toast('Invoice finalised', 'The final PDF is stored and locked'); refreshDetail(); break;
@@ -1169,6 +1501,10 @@
           break;
         }
         case 'remove-line': case 'restore-line': {
+          if (state.editMode) {
+            await post('/invoices/' + state.invoiceId + '/lines/' + btn.dataset.line + '/' + (a === 'remove-line' ? 'remove' : 'restore'), { reason: a === 'remove-line' ? 'Removed on the invoice' : 'Restored on the invoice' });
+            refreshDetail(); break;
+          }
           var reason = await ask(a === 'remove-line' ? 'Why remove this charge? (kept in the audit trail; re-running will not add it back)' : 'Why restore this charge?');
           if (!reason) return;
           await post('/invoices/' + state.invoiceId + '/lines/' + btn.dataset.line + '/' + (a === 'remove-line' ? 'remove' : 'restore'), { reason: reason });

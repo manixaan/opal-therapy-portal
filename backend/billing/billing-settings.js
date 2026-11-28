@@ -30,6 +30,7 @@ const SETTINGS_FIELDS = {
   xeroSalesAccountCode: 'xero_sales_account_code',
   xeroTaxTypeGstFree: 'xero_tax_type_gst_free',
   xeroTaxTypeGst: 'xero_tax_type_gst',
+  autoDraftsEnabled: 'auto_drafts_enabled',
 };
 
 function rowToSettings(r) {
@@ -40,6 +41,9 @@ function rowToSettings(r) {
   out.paymentTermsDays = Number(out.paymentTermsDays);
   out.sploseInvoiceNumberHigh = r.splose_invoice_number_high == null ? null : Number(r.splose_invoice_number_high);
   out.sploseNumbersCheckedAt = r.splose_numbers_checked_at || null;
+  out.autoDraftsLastAt = r.auto_drafts_last_at || null;
+  out.autoDraftsLastPeriod = r.auto_drafts_last_period || null;
+  out.autoDraftsLastError = r.auto_drafts_last_error || null;
   out.updatedAt = r.updated_at;
   return out;
 }
@@ -101,6 +105,7 @@ function validateSettingsPatch(patch) {
         else out[k] = Number(v);
         break;
       case 'returnTravelPayable':
+      case 'autoDraftsEnabled':
         out[k] = v === true || v === 'true';
         break;
       case 'defaultTaxTreatment':
