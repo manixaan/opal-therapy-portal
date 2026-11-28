@@ -2,8 +2,18 @@
 
 Tracker stage: idea · Tracker environment: none
 Evidence label: **proven**
-Addressed since last audit (2026-11-26, commit `f5fc28d` — unchanged, zero new commits tonight): no
+Addressed since last audit (2026-11-26, commit `f5fc28d`): no — zero new commits
 Created (any located code): yes
+
+*Reconfirmed 2026-11-28:* independently re-ran all 12 unit suites (398 passed,
+12 skipped) and 7 integration files touching resources specifically
+(`resource-file-upload`, `resource-hub-r2`, `resource-hub-v1`,
+`resource-ingestion`, `resource-library-sharepoint`, `resource-library`,
+`resources` — 168 passed; two transient async-preview-worker WARNs logged,
+FK violation + deadlock, but all tests still passed — looks like an
+exercised failure path, not a defect). Verified `e2e/tests/portal.spec.js`
+directly: its "Resource Hub shows approved starter content" test really does
+check `/api/resources` and the folder-create 403. `node --check`: OK.
 
 ## Located files
 

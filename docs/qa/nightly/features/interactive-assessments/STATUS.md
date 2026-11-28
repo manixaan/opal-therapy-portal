@@ -2,8 +2,12 @@
 
 Tracker stage: idea · Tracker environment: none
 Evidence label: **tab-unproven**
-Addressed since last audit (2026-11-26, commit `f5fc28d` — unchanged, zero new commits tonight): no
+Addressed since last audit (2026-11-26, commit `f5fc28d`): no — zero new commits
 Created (any located code): yes
+
+*Reconfirmed 2026-11-28:* independently re-ran all 6 unit suites (484/484
+passed) and `whodas.itest.js` + `assessments.itest.js` (2 suites / 81 passed)
+tonight. `node --check`: OK. No TODO/FIXME found.
 
 ## Located files
 

@@ -60,7 +60,7 @@ from xero and then upload that to claude and ask the limiations and features we 
 
 `backend/finance-routes.js` (Finance tab, owner-only), `backend/accounting-routes.js` (Xero
 sync/reconciliation), `backend/onboarding-payroll-routes.js`, `backend/invoicing-routes.js`.
-All owner-gated. 146 unit tests and 5 integration files pass tonight, all against a mocked
+All owner-gated. 128 unit tests and 96 integration tests pass tonight, all against a mocked
 Xero client.
 
 ## Start here

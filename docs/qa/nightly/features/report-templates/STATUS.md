@@ -2,8 +2,14 @@
 
 Tracker stage: idea · Tracker environment: none
 Evidence label: **tab-unproven**
-Addressed since last audit (2026-11-26, commit `f5fc28d` — unchanged, zero new commits tonight): no
+Addressed since last audit (2026-11-26, commit `f5fc28d`): no — zero new commits
 Created (any located code): yes
+
+*Reconfirmed 2026-11-28:* independently re-ran all 15 unit files (626/626
+passed) plus `fca-reports.itest.js`, `progress-note-letters.itest.js` and
+`templates.itest.js` (3 suites / 123 passed — the Client Agreement Form's own
+integration coverage lives in that third file). `node --check`: OK. No
+TODO/FIXME found.
 
 ## Located files
 

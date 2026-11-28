@@ -2,8 +2,16 @@
 
 Tracker stage: idea · Tracker environment: none
 Evidence label: **needs-refinement**
-Addressed since last audit (2026-11-26, commit `f5fc28d` — unchanged, zero new commits tonight): no
+Addressed since last audit (2026-11-26, commit `f5fc28d`): no — zero new commits
 Created (any located code): yes
+
+*Reconfirmed 2026-11-28:* independently re-ran `induction-*`, `learning-*`,
+`assign-learning-guards.test.js` (7 suites / 271 tests) and the matching
+integration files (4 suites / 68 tests) tonight — all pass, consistent with
+the counts below. Also independently verified `e2e/tests/tutorials.spec.js`
+genuinely exercises the learner-side induction dashboard and walkthrough
+lifecycle (start/advance/pause/resume/complete) by reading the spec file.
+`node --check`: OK. No TODO/FIXME found.
 
 ## Located files
 

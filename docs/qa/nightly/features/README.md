@@ -18,8 +18,10 @@ prompt, replaced with a two-line "proven" note once a card reaches that label. S
 | [password-master-document](password-master-document/START.md) | idea | untouched | no | [open](password-master-document/START.md) |
 | [report-templates](report-templates/START.md) | idea | tab-unproven | no | [open](report-templates/START.md) |
 | [update-opal-docs-register](update-opal-docs-register/START.md) | idea | untouched | no | [open](update-opal-docs-register/START.md) |
-| [xero-integration-works](xero-integration-works/START.md) | idea | tab-unproven | no | [open](xero-integration-works/START.md) |
+| [xero-integration-works](xero-integration-works/START.md) | idea | tab-unproven | **yes** | [open](xero-integration-works/START.md) |
 
-Last updated: 2026-11-27. `origin/develop` was unchanged (commit `f5fc28d`) between the
-2026-11-26 audit and tonight's, so nothing was "addressed" in the strict commit sense; every
-label above was independently re-verified against the current code and tests regardless.
+Last updated: 2026-11-28, commit `d8c861c`. 14 commits landed since the last audit
+(2026-11-26, commit `f5fc28d`): 4 `feat(invoicing)` (touch Xero Integration Works — see
+that card), 5 `fix/feat(calendar)` and 5 `feat(assist)` (neither has a tracker card — see
+tonight's brief, §6). Every label above was independently re-verified against the current
+code and tests tonight, not carried forward from last night's write-up.

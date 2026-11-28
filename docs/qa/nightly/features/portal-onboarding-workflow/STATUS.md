@@ -2,8 +2,17 @@
 
 Tracker stage: idea · Tracker environment: none
 Evidence label: **needs-refinement**
-Addressed since last audit (2026-11-26, commit `f5fc28d` — unchanged, zero new commits tonight): no
+Addressed since last audit (2026-11-26, commit `f5fc28d`): no — zero new commits
 Created (any located code): yes
+
+*Reconfirmed 2026-11-28:* independently re-ran all 27 `onboarding-*.test.js`
+unit files (653/654 passed, same OCR-package artifact) and a 9-file
+integration slice (`onboarding-defaults`, `-journey`, `-pack`, `-payroll-xero`,
+`-portal-route`, `-returns`, `-wizard-link`, `-workflow`, and the base
+`onboarding.itest.js`) — 216/216 passed. Also independently verified, by
+direct grep, that no "sharepoint" string and no dynamic-contract logic exist
+anywhere in `onboarding-*.js` — confirms Stage 2's two headline items are
+still genuinely unbuilt. `node --check`: OK on all 11 route files.
 
 ## Located files
 

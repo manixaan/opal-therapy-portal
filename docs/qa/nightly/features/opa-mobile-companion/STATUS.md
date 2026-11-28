@@ -2,8 +2,21 @@
 
 Tracker stage: idea · Tracker environment: none
 Evidence label: **needs-refinement**
-Addressed since last audit (2026-11-26, commit `f5fc28d` — unchanged, zero new commits tonight): no
+Addressed since last audit (2026-11-26, commit `f5fc28d`): no — zero new commits
 Created (any located code): yes
+
+*Reconfirmed 2026-11-28:* independently re-ran `mobile-calendar.test.js`,
+`mobile-event-edit.test.js`, `mobile-move.test.js`, `mobile-routes.test.js`,
+`case-note-routes.test.js` (5 suites / 170 passed), plus the matching
+integration files (7 suites / 34 passed) — consistent with the counts below.
+`node --check`: OK. No TODO/FIXME found. Note: this audit's first pass tonight
+also pulled in `backend/opa-routes.js` (the `opa-deidentify`/`opa-knowledge`/
+`opa-shell` tests) as if it were part of this card — on a second look, that's
+wrong: `opa-routes.js` backs the general "Opa" chat pebble visible on the
+*desktop* web shell (`id="opa-pebble"` in `mockup_v3.html`), a separate,
+uncarded AI-chat feature in its own right, not the mobile app's case-noting or
+calendar view. Correcting that here rather than reporting it as this card's
+evidence.
 
 ## Located files
 

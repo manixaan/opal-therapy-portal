@@ -77,8 +77,8 @@ simplify this to high-level concepts"
 `backend/splose-sync-routes.js`, `backend/splose-link-routes.js`, `backend/splose-poller.js`,
 `backend/splose-api.js`, `backend/splose-match.js`, `backend/splose-credentials.js`,
 `backend/outlook-oauth.js`, `backend/outlook-embed.js`. Calendar tab at
-`mockup_v3.html:5231`. All guarded, 41 unit files (598 tests) and 10 integration files
-(79 tests) pass tonight.
+`mockup_v3.html:5231`. All guarded. Reconfirmed 2026-11-28: a narrower slice (480 unit,
+101 integration) still passes clean.
 
 ## Start here
 
