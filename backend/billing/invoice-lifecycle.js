@@ -168,7 +168,7 @@ async function getInvoiceDetail(q, orgId, invoiceId, { tz = 'Australia/Perth' } 
     `SELECT id, version, is_final, file_name, byte_size, sha256, generated_at FROM invoice_documents
       WHERE invoice_id = $1 ORDER BY version DESC`, [invoiceId]);
   const { rows: issues } = await q.query(
-    `SELECT id, issue_type, severity, message, fix_target, created_at FROM billing_issues
+    `SELECT id, issue_type, severity, message, fix_target, created_at, client_id, calendar_event_id FROM billing_issues
       WHERE status = 'OPEN' AND (invoice_id = $1 OR (organisation_id = $2 AND client_id = $3 AND issue_type IN ('CLIENT_MISSING_PAYER','NDIS_NUMBER_MISSING')))
       ORDER BY created_at DESC`, [invoiceId, orgId, inv.client_id]);
   const today = S.todayInTz(tz);
@@ -433,7 +433,7 @@ async function finalise({ pool = defaultPool, orgId, userId, invoiceId }) {
     const inv = await lockInvoice(tx, orgId, invoiceId);
     if (!EDITABLE_STATUSES.includes(inv.status)) throw err(409, 'Invoice is not a draft', 'INVOICE_LOCKED');
     if (inv.status === 'NEEDS_ATTENTION') throw err(409, 'Resolve the attention items (recipient / NDIS number) first', 'NEEDS_ATTENTION');
-    if (inv.is_stale) throw err(409, 'A source event changed — regenerate the draft before finalising', 'STALE');
+    if (inv.is_stale) throw err(409, 'A source calendar event changed — press Update from calendar on the invoice, then finalise', 'STALE');
     if (!inv.payer_name) throw err(409, 'The invoice has no recipient', 'NO_RECIPIENT');
     const business = await Settings.businessProfile(tx, orgId);
     if (!business.abn) throw err(409, 'Set the business ABN in Billing Settings before finalising a tax invoice', 'NO_ABN');

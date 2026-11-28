@@ -9,7 +9,9 @@
  *     itself never reaches the model;
  *   - + attaches a file: .txt .md .csv .docx .pdf, READ IN THIS BROWSER (the
  *     portal's own pdf.js and jszip) — only the text is kept, and it goes
- *     through the same name check as the message before anything is sent;
+ *     through the same name check as the message before anything is sent.
+ *     A SCANNED PDF's pages (no text layer) are drawn here and read by the
+ *     portal's OCR one page at a time, like a picture (up to 15 pages);
  *   - the microphone dictates ON-DEVICE ONLY (the browser's processLocally
  *     switch, as in the Case Notes composer) — where a browser cannot promise
  *     that, there is no microphone button at all;
@@ -41,7 +43,35 @@
       .replace(/\n{3,}/g, '\n\n').trim();
   }
 
-  var api = { estimateTokens: estimateTokens, contextBand: contextBand, docxXmlToText: docxXmlToText };
+  // ── Scanned PDFs ──────────────────────────────────────────────────────────
+  // A page whose text layer is (nearly) empty is a scan or a photo. Those
+  // pages are drawn here (pdf.js) and read by the portal's own OCR, one page at
+  // a time, exactly like an attached picture — only the TEXT is kept.
+  var MIN_PAGE_CHARS = 20;      // fewer non-space characters than this = no real text layer
+  var MAX_SCAN_PAGES = 15;      // OCR is slow and shared; a longer scan is cut, and says so
+  var SCAN_SIDE = 2400;         // same ceiling as a picture
+
+  /** Which pages (1-based) need reading by OCR. */
+  function pagesNeedingOcr(pageTexts) {
+    var out = [];
+    (pageTexts || []).forEach(function (t, i) { if (String(t || '').replace(/\s+/g, '').length < MIN_PAGE_CHARS) out.push(i + 1); });
+    return out;
+  }
+  /** The render scale for a page of this size (at scale 1): long side about SCAN_SIDE px, never more than 3x. */
+  function scanScale(width, height) {
+    var side = Math.max(width || 0, height || 0);
+    return side > 0 ? Math.min(3, SCAN_SIDE / side) : 1;
+  }
+  /** The PDF's text: each page's own text, or what OCR read from it. Empty pages drop out. */
+  function joinPages(pageTexts, ocrTexts) {
+    return (pageTexts || []).map(function (t, i) {
+      var o = ocrTexts && ocrTexts[i + 1];
+      return String(o != null ? o : t || '').trim();
+    }).filter(Boolean).join('\n\n');
+  }
+
+  var api = { estimateTokens: estimateTokens, contextBand: contextBand, docxXmlToText: docxXmlToText,
+    pagesNeedingOcr: pagesNeedingOcr, scanScale: scanScale, joinPages: joinPages, MAX_SCAN_PAGES: MAX_SCAN_PAGES };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (!global.document) return;
 
@@ -72,7 +102,7 @@
       .then(docxXmlToText);
   }
   var pdfjs = null;
-  function readPdf(file) {
+  function readPdf(file, progress) {
     var lib = pdfjs ? Promise.resolve(pdfjs) : import('/vendor/pdfjs/pdf.min.mjs').then(function (m) {
       pdfjs = m; pdfjs.GlobalWorkerOptions.workerSrc = '/vendor/pdfjs/pdf.worker.min.mjs'; return pdfjs;
     });
@@ -81,7 +111,47 @@
       for (var i = 1; i <= Math.min(doc.numPages, 60); i++) {
         (function (n) { chain = chain.then(function () { return doc.getPage(n); }).then(function (p) { return p.getTextContent(); }).then(function (tc) { pages.push(tc.items.map(function (it) { return it.str + (it.hasEOL ? '\n' : ''); }).join('')); }); })(i);
       }
-      return chain.then(function () { var t = pages.join('\n\n').trim(); if (!t) throw new Error('This PDF has no text to read (it may be a scan).'); return t; });
+      return chain.then(function () {
+        var scanned = pagesNeedingOcr(pages);
+        if (!scanned.length) return joinPages(pages);
+        var todo = scanned.slice(0, MAX_SCAN_PAGES); var ocr = {}; var conf = []; var failed = 0;
+        var run = Promise.resolve();
+        todo.forEach(function (n, k) {
+          run = run.then(function () {
+            if (progress) progress('Reading scanned page ' + (k + 1) + ' of ' + todo.length + '…');
+            return doc.getPage(n).then(renderPageJpeg).then(ocrJpeg).then(function (r) { ocr[n] = r.text; if (r.confidence != null) conf.push(r.confidence); }, function () { failed += 1; });
+          });
+        });
+        return run.then(function () {
+          var text = joinPages(pages, ocr);
+          if (!text) throw new Error('The text in this scanned PDF could not be read.');
+          return {
+            text: text, scannedPages: todo.length - failed, skippedPages: scanned.length - todo.length, failedPages: failed,
+            confidence: conf.length ? Math.round(conf.reduce(function (a, b) { return a + b; }, 0) / conf.length) : null,
+          };
+        });
+      });
+    });
+  }
+  /** One PDF page drawn white-backed into a JPEG, about 2400 px on its long side. */
+  function renderPageJpeg(page) {
+    var base = page.getViewport({ scale: 1 });
+    var vp = page.getViewport({ scale: scanScale(base.width, base.height) });
+    var c = document.createElement('canvas'); c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+    var g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+    return page.render({ canvasContext: g, viewport: vp }).promise.then(function () {
+      return new Promise(function (resolve, reject) { c.toBlob(function (b) { c.width = c.height = 0; if (b) resolve(b); else reject(new Error('page')); }, 'image/jpeg', 0.9); });
+    });
+  }
+  /** The portal's OCR on one JPEG; waits and tries again while it is busy with someone else's. */
+  function ocrJpeg(jpeg, attempt) {
+    attempt = attempt || 0;
+    return fetch('/api/assist/read-image', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'image/jpeg' }, body: jpeg }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (j) {
+        if (res.status === 503 && j.error === 'ocr_busy' && attempt < 4) return new Promise(function (r) { setTimeout(r, 1500 * (attempt + 1)); }).then(function () { return ocrJpeg(jpeg, attempt + 1); });
+        if (!res.ok) throw new Error(j.message || j.answer || 'This picture could not be read just now.');
+        return { text: j.text || '', confidence: j.confidence };
+      });
     });
   }
   // Pictures: shrunk and re-encoded HERE (any format this browser can show —
@@ -110,23 +180,15 @@
       return new Promise(function (resolve, reject) { c.toBlob(function (b) { if (b) resolve(b); else reject(new Error('This picture could not be prepared.')); }, 'image/jpeg', 0.92); });
     });
   }
-  function readImage(file) {
-    return imageToJpeg(file).then(function (jpeg) {
-      return fetch('/api/assist/read-image', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'image/jpeg' }, body: jpeg });
-    }).then(function (res) {
-      return res.json().catch(function () { return {}; }).then(function (j) {
-        if (!res.ok) throw new Error(j.message || j.answer || 'This picture could not be read just now.');
-        return { text: j.text || '', confidence: j.confidence };
-      });
-    });
-  }
+  // Pictures and scanned PDF pages share one door to the OCR (ocrJpeg, above).
+  function readImage(file) { return imageToJpeg(file).then(function (jpeg) { return ocrJpeg(jpeg); }); }
 
-  function readFile(file) {
+  function readFile(file, progress) {
     var name = file.name || 'file'; var ext = (name.split('.').pop() || '').toLowerCase();
     if (file.size > 15 * 1024 * 1024) return Promise.reject(new Error(name + ' is too large to attach.'));
     if (isImage(file)) return readImage(file);
     if (ext === 'docx') return readDocx(file);
-    if (ext === 'pdf') return readPdf(file);
+    if (ext === 'pdf') return readPdf(file, progress);
     if (['txt', 'md', 'csv', 'text'].indexOf(ext) >= 0 || /^text\//.test(file.type)) return file.text();
     return Promise.reject(new Error(name + ': only pictures and .txt, .md, .csv, .docx and .pdf files can be attached.'));
   }
@@ -135,8 +197,12 @@
     Array.prototype.forEach.call(files || [], function (file) {
       var item = { name: file.name || 'Pasted picture', text: '', loading: true, picture: isImage(file) };
       C.attachments.push(item); renderAttachments();
-      readFile(file).then(function (text) {
-        if (text && typeof text === 'object') { item.confidence = text.confidence; text = text.text; }
+      readFile(file, function (msg) { item.progress = msg; renderAttachments(); }).then(function (text) {
+        if (text && typeof text === 'object') {
+          item.confidence = text.confidence;
+          if (text.scannedPages !== undefined) { item.scanned = text.scannedPages; item.skipped = text.skippedPages; item.failedPages = text.failedPages; }
+          text = text.text;
+        }
         var room = C.maxAttachmentChars - usedAttachmentChars();
         item.loading = false;
         if (room <= 0) { item.error = 'No room left: attachments are limited to ' + C.maxAttachmentChars.toLocaleString() + ' characters a message.'; }
@@ -148,9 +214,12 @@
   function renderAttachments() {
     var el = $('oa-attachments'); if (!el) return;
     el.innerHTML = C.attachments.map(function (a, i) {
-      var meta = a.loading ? (a.picture ? 'Reading the text in this picture…' : 'Reading…') : a.error ? esc(a.error)
-        : ((a.picture ? 'Text read from picture: ' : '') + a.text.length.toLocaleString() + ' characters' + (a.cut ? ' (cut to fit)' : '')
-          + (a.picture && a.confidence != null && a.confidence < 70 ? ' — hard to read, check the reply' : ''));
+      var meta = a.loading ? esc(a.progress || (a.picture ? 'Reading the text in this picture…' : 'Reading…')) : a.error ? esc(a.error)
+        : ((a.picture ? 'Text read from picture: ' : '') + (a.scanned ? 'Scanned — text read from ' + a.scanned + (a.scanned === 1 ? ' page' : ' pages') + ': ' : '')
+          + a.text.length.toLocaleString() + ' characters' + (a.cut ? ' (cut to fit)' : '')
+          + (a.skipped ? ' — only the first ' + MAX_SCAN_PAGES + ' scanned pages were read' : '')
+          + (a.failedPages ? ' — ' + a.failedPages + (a.failedPages === 1 ? ' page' : ' pages') + ' could not be read' : '')
+          + ((a.picture || a.scanned) && a.confidence != null && a.confidence < 70 ? ' — hard to read, check the reply' : ''));
       return '<span class="oa-att' + (a.error ? ' bad' : '') + '"><span class="oa-att-name">' + esc(a.name) + '</span><small>' + meta + '</small>'
         + '<button type="button" data-att-remove="' + i + '" aria-label="Remove ' + esc(a.name) + '">×</button></span>';
     }).join('');
@@ -159,7 +228,7 @@
   /** The attached text as one block for the check, or ''. */
   function attachmentsText() {
     return C.attachments.filter(function (a) { return a.text && !a.error; }).map(function (a) {
-      return (a.picture ? '--- Text read from attached picture: ' : '--- Attached file: ') + a.name + ' ---\n' + a.text;
+      return (a.picture ? '--- Text read from attached picture: ' : a.scanned ? '--- Text read from attached scanned PDF: ' : '--- Attached file: ') + a.name + ' ---\n' + a.text;
     }).join('\n\n');
   }
   function clearAttachments() { C.attachments = []; renderAttachments(); changed(); }
@@ -173,6 +242,7 @@
     b.classList.toggle('on', C.listening);
     b.title = C.listening ? 'Stop dictating' : C.dictation === 'installable' ? 'Set up on-device dictation (one download, then speech never leaves this computer)' : C.dictation === 'installing' ? 'Setting up dictation…' : 'Dictate — speech is turned into text on this computer only';
     b.setAttribute('aria-pressed', C.listening ? 'true' : 'false');
+    if (C.onState) C.onState(C.dictation, C.listening);
   }
   function probeDictation() {
     var Ctor = speechCtor();
@@ -189,10 +259,11 @@
     })();
   }
   function insertAtCursor(text) {
-    var ta = $('oa-input'); var start = ta.selectionStart; var end = ta.selectionEnd; var before = ta.value.slice(0, start);
+    var ta = C.target || $('oa-input'); var start = ta.selectionStart; var end = ta.selectionEnd; var before = ta.value.slice(0, start);
     var piece = (before && !/\s$/.test(before) ? ' ' : '') + text.trim();
     ta.value = before + piece + ta.value.slice(end);
     ta.selectionStart = ta.selectionEnd = start + piece.length;
+    if (C.target) { if (C.targetChanged) C.targetChanged(); return; }
     autosize(); changed();
   }
   function startDictation() {
@@ -213,9 +284,23 @@
     rec.onend = function () { if (C.listening) { try { rec.start(); } catch (x) { stopDictation(); } } };
     C.rec = rec; C.listening = true; renderMic();
     try { rec.start(); } catch (x) { stopDictation(); }
-    $('oa-input').focus();
+    (C.target || $('oa-input')).focus();
   }
   function stopDictation() { C.listening = false; if (C.rec) { try { C.rec.stop(); } catch (x) { /* already stopped */ } } C.rec = null; renderMic(); }
+  /**
+   * Point dictation at another text box (the notes-owing panel) until
+   * release(). Same engine, same on-device-only rule; onState(state,
+   * listening) lets that panel draw its own microphone.
+   */
+  function dictateInto(textarea, opts) {
+    stopDictation();
+    C.target = textarea; C.targetChanged = opts && opts.onChange; C.onState = opts && opts.onState;
+    renderMic();
+    return {
+      toggle: function () { if (C.target !== textarea) return; if (C.listening) stopDictation(); else startDictation(); },
+      release: function () { if (C.target !== textarea) return; stopDictation(); C.target = null; C.targetChanged = null; C.onState = null; renderMic(); },
+    };
+  }
 
   // ── Model and context ─────────────────────────────────────────────────────
   function setModel(model) {
@@ -263,13 +348,15 @@
       });
       $('oa-attachments').addEventListener('click', function (e) { var b = e.target.closest('[data-att-remove]'); if (b) { C.attachments.splice(+b.dataset.attRemove, 1); renderAttachments(); changed(); } });
     }
-    $('oa-mic').addEventListener('click', function () { if (C.listening) stopDictation(); else startDictation(); });
+    $('oa-mic').addEventListener('click', function () { if (C.target) return; if (C.listening) stopDictation(); else startDictation(); });
     probeDictation();
     renderAttachments(); autosize();
   }
 
   api.init = init; api.autosize = autosize; api.attachmentsText = attachmentsText; api.clearAttachments = clearAttachments;
-  api.setModel = setModel; api.renderContext = renderContext; api.stopDictation = stopDictation;
+  api.setModel = setModel; api.renderContext = renderContext; api.stopDictation = stopDictation; api.dictateInto = dictateInto;
+  /** 'ready' | 'installable' | 'installing' | 'unavailable' */
+  api.dictationState = function () { return C.dictation; };
   /** The server's attachment cap (from the Assist config), applied once known. */
   api.setMaxAttachmentChars = function (n) { if (n > 0) C.maxAttachmentChars = n; };
   api.busyReading = function () { return C.attachments.some(function (a) { return a.loading; }); };

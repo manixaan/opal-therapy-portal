@@ -30,6 +30,7 @@ const SETTINGS_FIELDS = {
   xeroSalesAccountCode: 'xero_sales_account_code',
   xeroTaxTypeGstFree: 'xero_tax_type_gst_free',
   xeroTaxTypeGst: 'xero_tax_type_gst',
+  autoDraftsEnabled: 'auto_drafts_enabled',
 };
 
 function rowToSettings(r) {
@@ -40,6 +41,9 @@ function rowToSettings(r) {
   out.paymentTermsDays = Number(out.paymentTermsDays);
   out.sploseInvoiceNumberHigh = r.splose_invoice_number_high == null ? null : Number(r.splose_invoice_number_high);
   out.sploseNumbersCheckedAt = r.splose_numbers_checked_at || null;
+  out.autoDraftsLastAt = r.auto_drafts_last_at || null;
+  out.autoDraftsLastPeriod = r.auto_drafts_last_period || null;
+  out.autoDraftsLastError = r.auto_drafts_last_error || null;
   out.updatedAt = r.updated_at;
   return out;
 }
@@ -66,17 +70,31 @@ async function loadOrgProfile(q, orgId) {
   };
 }
 
+/**
+ * Printed at the bottom of every invoice when Billing settings leaves "Payment
+ * details" blank (the owner's wording, 28 Nov 2026). Editable in Billing settings.
+ */
+const DEFAULT_PAYMENT_DETAILS = [
+  'Please pay by bank transfer',
+  'Account name: Opal Therapy Pty Limited',
+  'BSB: 067-873    Account number: 24820381',
+  'Questions about this invoice: Ann Mary Matthew · 0484 827 212 · ann.matthew@opaltherapy.com.au',
+].join('\n');
+
+/** Opal Therapy Pty Limited's ABN (owner-confirmed 28 Nov 2026); Billing settings can replace it. */
+const DEFAULT_ABN = '49 699 791 958';
+
 /** The business identity printed on an invoice. */
 async function businessProfile(q, orgId) {
   const [st, org] = await Promise.all([ensureSettings(q, orgId), loadOrgProfile(q, orgId)]);
   return {
     name: st.businessName || org.name || 'Opal Therapy',
-    abn: st.abn || null,
+    abn: st.abn || DEFAULT_ABN,
     email: st.businessEmail || org.businessEmail || null,
     phone: st.businessPhone || org.businessPhone || null,
     address: st.businessAddress || org.businessAddress || null,
     website: org.website || null,
-    paymentDetails: st.paymentDetails || null,
+    paymentDetails: st.paymentDetails || DEFAULT_PAYMENT_DETAILS,
     footer: st.invoiceFooter || null,
     paymentTermsDays: st.paymentTermsDays,
   };
@@ -101,6 +119,7 @@ function validateSettingsPatch(patch) {
         else out[k] = Number(v);
         break;
       case 'returnTravelPayable':
+      case 'autoDraftsEnabled':
         out[k] = v === true || v === 'true';
         break;
       case 'defaultTaxTreatment':
@@ -186,6 +205,6 @@ async function allocateInvoiceNumber(q, orgId) {
 }
 
 module.exports = {
-  SETTINGS_FIELDS, ensureSettings, loadOrgProfile, businessProfile, validateSettingsPatch,
+  SETTINGS_FIELDS, DEFAULT_PAYMENT_DETAILS, DEFAULT_ABN, ensureSettings, loadOrgProfile, businessProfile, validateSettingsPatch,
   updateSettings, formatInvoiceNumber, allocateInvoiceNumber,
 };

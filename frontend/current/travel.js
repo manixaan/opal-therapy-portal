@@ -1579,6 +1579,8 @@ function _previewLeg(col, startMin, endMin, cls, html, title) {
   }
   if (title) el.title = title;
   col.appendChild(el);
+  // A narrow column drops the word, then the place — never the minutes.
+  if (!el.classList.contains('t-bar') && el.querySelector('.t-dest')) _fitLegText(el);
   return el;
 }
 
@@ -1805,10 +1807,8 @@ function runBspRoutePreview(opts) {
   const fmt = (m) => (typeof fmtTime === 'function') ? fmtTime(Math.floor(m / 60), m % 60) : _hhmm(m);
   const tight = shownStart < plan.earliestStartMin;
   if (col && plan.travelMin > 0) {
-    const small = plan.travelMin < 20;
     _previewLeg(col, plan.travelStartMin, plan.travelEndMin, tight ? 'tight' : '',
-      '<span class="t-ico">' + (tight ? 'Tight' : 'Travel') + '</span><span class="t-label">' + plan.travelMin + ' min' +
-      (small ? '' : ' · ' + esc(pred.suburb || 'previous') + ' → ' + esc(toSub)) + '</span>',
+      _legLabelHtml(plan.travelMin, toSub, tight ? 'Tight' : 'Travel'),
       'Travel ' + plan.travelMin + ' min · ' + (pred.suburb || 'previous stop') + ' → ' + toSub + (plan.bufferMin ? ' (+' + plan.bufferMin + ' min buffer)' : ''));
   }
   // No drive (same place, or already home): nothing is drawn on the grid.
@@ -1888,7 +1888,7 @@ function runBspRoutePreview(opts) {
     });
     if (col && rlHeld.travelMin > 0) {
       _previewLeg(col, rlHeld.leaveAtMin, rlHeld.arriveMin, '',
-        '<span class="t-ico">Travel</span><span class="t-label">' + rlHeld.travelMin + ' min · ' + esc(rlHeld.fromSuburb || 'from') + ' → ' + esc(toSub) + '</span>',
+        _legLabelHtml(rlHeld.travelMin, toSub),
         'Travel ' + rlHeld.travelMin + ' min before ' + rlHeld.label + ' · ' + (rlHeld.fromLabel || '') + ' → ' + toSub);
     }
     notes.push('<strong>' + esc(rlHeld.label) + '</strong> will be done at ' + esc(rlHeld.client || 'the client') + '\'s location (' + esc(toKey) + '): leave ' + esc(rlHeld.fromLabel || 'where you are') +
@@ -2181,9 +2181,8 @@ function _bspPreviewHomeAfter(col, day, predS, toKey, endMin) {
   const cached = ROUTE_CACHE.get(routeKey(toKey, endKey, 'driving'));
   const min = isFresh(cached) ? cached.durationMin : estimateTravelMinFromTable(toKey, endKey);
   if (!(min > 0)) return;
-  const from = addrSuburb(toKey) || 'this stop', to = endPt.suburb || endPt.label || 'Home';
   _previewLeg(col, endMin, endMin + min, 'home-after',
-    '<span class="t-ico">Home</span><span class="t-label">' + min + ' min · ' + _tpEsc(from) + ' → ' + _tpEsc(to) + '</span>',
+    _legLabelHtml(min, endPt.label || 'Home'),
     'Drive home after this appointment ≈ ' + min + ' min');
 }
 
@@ -2568,7 +2567,7 @@ function computeDayTravelSegments(day) {
         if (toMin > 0) segs.push({
           day, kind: 'between', via: atPlace ? 'place-in' : 'home-return', plan: plan.mode, auto: plan.auto, homeAvailable: plan.homeAvailable,
           fromLoc: locOf(from), toLoc: homeLoc,
-          startMin: ret.startMin, endMin: ret.endMin, travelMin: toMin, freeMin: 0,
+          startMin: ret.startMin, endMin: ret.endMin, travelMin: toMin, freeMin: 0, backMin: fromMin,
           moved: ret.moved, tight: ret.tight || ret.endMin > sessionStartMin(next), autoStartMin: retAuto,
           fromSessionId: curr.id, toSessionId: null, gapFromSessionId: curr.id, gapToSessionId: next.id,
           ownerSessionId: curr.id, ownerSide: 'after', anchorBaseId: hb.baseId || calendarWeekLocations()[day] || null, routeReal: tTo.real,
@@ -2858,13 +2857,10 @@ function renderSegmentOverlay(col, seg) {
   const overlaps = seg.via !== 'stay' && (typeof SESSIONS !== 'undefined') && sessionsForDay(seg.day).some(x => !isTravelBlock(x) && sessionStartMin(x) < seg.endMin && sessionEndMin(x) > seg.startMin);
   if (overlaps) el.classList.add('overlaps');
   if (stayCompact) el.classList.add('stay-compact');
-  const icon = seg.kind === 'start' ? 'Start' : seg.kind === 'end' ? 'End'
-    : seg.via === 'home-return' ? 'Home' : seg.via === 'home-out' ? 'From home'
-    : seg.via === 'place-in' ? 'To ' + (seg.toLoc.label || 'stop') : seg.via === 'place-out' ? 'From ' + (seg.fromLoc.label || 'stop') : 'Travel';
   const from = seg.fromLoc.label || seg.fromLoc.suburb || 'Base';
   const to   = seg.toLoc.label   || seg.toLoc.suburb   || 'Base';
   // Size tiers (T-15/T-20): under 14 px a bar only; 14–20 px the minutes;
-  // from 20 px "8 min → Suburb". The origin is the tile above, so the
+  // from 20 px "Travel 8 min → Suburb" (_legLabelHtml). The origin is the tile above, so the
   // destination is what the leg names; everything else is in the title and
   // the panel. _fitLegText drops parts that do not fit — never the minutes.
   const tier = seg.via === 'stay' ? '' : overlaps ? 't-bar' : _legTier(legH);
@@ -2873,7 +2869,7 @@ function renderSegmentOverlay(col, seg) {
     ? `<span class="t-ico">Same place</span>`
     : tier === 't-bar' ? ''
     : tier === 't-mins' ? `<span class="t-label"><span class="t-min">${seg.travelMin} min</span></span>`
-    : `<span class="t-ico">${_tpEsc(icon)}</span><span class="t-label"><span class="t-min">${seg.travelMin} min</span><span class="t-dest"> → ${_tpEsc(seg.toLoc.suburb || to)}</span></span>`;
+    : _legLabelHtml(seg.travelMin, _legDestName(seg));
   if (seg.via === 'stay') el.classList.add('stay');
   // A drive that does not fit its gap (26 Nov 2026): the bare red gutter bar
   // said nothing. A short note sits on the boundary, in the earlier tile's
@@ -2885,7 +2881,42 @@ function renderSegmentOverlay(col, seg) {
       const gap = Math.max(0, sessionStartMin(gb) - sessionEndMin(ga));
       flag = document.createElement('span');
       flag.className = 't-flag';
-      flag.textContent = (seg.via === 'home-return' ? 'Home and back' : seg.travelMin + ' min drive') + ' · ' + (gap <= 0 ? 'no time' : gap < seg.travelMin ? 'only ' + gap + ' min' : 'no free slot');   // long enough, but other events fill it
+      // 28 Nov 2026: "Home and back · only 25 min" did not say what was wrong
+      // or what to do. A trip home (or to a saved stop) that does not fit now
+      // says so in words, with the time it needs, and a click goes direct.
+      const viaStop = (seg.via === 'home-return' && !seg.toHome) || seg.via === 'place-in';
+      if (viaStop) {
+        const need = seg.travelMin + (seg.backMin || 0);
+        const where = seg.via === 'place-in' ? (seg.toLoc.label || 'the stop') : 'home';
+        const lead = 'No time to go ' + (where === 'home' ? '' : 'to ') + where;
+        const detail = 'It needs about ' + need + ' min there and back' + (gap <= 0 ? ' and there is no gap.' : ' and the gap is ' + gap + ' min.');
+        // Two short lines: a column is ~140 px and one line would run over the tile.
+        flag.classList.add('t-flag-2');
+        const l1 = document.createElement('span'); l1.textContent = lead;
+        const l2 = document.createElement('span'); l2.textContent = 'Needs ' + need + ' min';
+        flag.append(l1, l2);
+        flag.dataset.tip = lead + '. ' + detail;
+        flag.title = flag.dataset.tip;
+        if (ga.dbId) {
+          flag.classList.add('t-flag-act');
+          const go = document.createElement('span');
+          go.className = 't-flag-go';
+          go.textContent = 'Go direct';
+          l2.append(' · ', go);
+          flag.setAttribute('role', 'button');
+          flag.tabIndex = 0;
+          flag.dataset.tip += ' Click to drive straight to the next client instead (Cmd+Z undoes it).';
+          flag.title = flag.dataset.tip;
+          flag.setAttribute('aria-label', flag.dataset.tip);
+          const goDirect = (e) => { e.stopPropagation(); e.preventDefault(); setBetweenTravel(ga.id, 'direct'); };
+          flag.addEventListener('pointerdown', (e) => e.stopPropagation());   // not a leg drag
+          flag.addEventListener('click', goDirect);
+          flag.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') goDirect(e); });
+        }
+      } else {
+        const what = seg.toHome ? seg.travelMin + ' min drive home' : seg.travelMin + ' min drive';
+        flag.textContent = what + ' · ' + (gap <= 0 ? 'no time' : gap < seg.travelMin ? 'only ' + gap + ' min free' : 'no free slot');   // long enough, but other events fill it
+      }
       flagTile = ga.element || null;
       el.appendChild(flag);
     }
@@ -2966,7 +2997,7 @@ function _settleLegFlag(flag, tile) {
     return Array.from(range.getClientRects()).some(hits);
   });
   if (!covers) return;
-  const words = flag.textContent;
+  const words = flag.dataset.tip || flag.textContent;
   flag.classList.add('compact');
   flag.textContent = '!';
   flag.title = words;
@@ -2978,13 +3009,53 @@ function _legHeightPx(startMin, endMin) {
   return Math.max(2, (endMin - startMin) / 60 * HOUR_PX - 4);
 }
 function _legTier(h) { return h < 14 ? 't-bar' : h < 20 ? 't-mins' : 't-full'; }
+/* One wording for every drive on the grid (28 Nov 2026): "Travel 8 min →
+   Harrisdale". The legs used to open with a different word per kind (Start,
+   End, Home, From home, To Office) and the booking previews read "8 min ·
+   A → B", so no two looked alike. The kind of drive is in the tooltip and
+   the panel; the leg says how long and where to. `word` is only ever
+   'Travel' or the 'Tight' warning. */
+function _legLabelHtml(min, dest, word) {
+  return '<span class="t-ico">' + _tpEsc(word || 'Travel') + '</span><span class="t-label"><span class="t-min">' + min +
+    ' min</span>' + (dest ? '<span class="t-dest"> → ' + _tpEsc(dest) + '</span>' : '') + '</span>';
+}
+/* Where a leg goes, in words: a drive that ends at your base (home or a saved
+   place) names it — "Home", "Office" — not its suburb, which read like one
+   more client stop; any other drive names the suburb it arrives in. */
+function _legDestName(seg) {
+  const t = seg.toLoc || {};
+  const toBase = seg.kind === 'end' || seg.toHome || seg.via === 'home-return' || seg.via === 'place-in';
+  if (toBase) return t.label || 'Home';
+  return _legPlaceWord(t.suburb) || _legClientName(t.label) || 'next stop';
+}
+/* An address with no suburb ("6 Elbert Way") comes back from addrSuburb as
+   itself, and the leg named a street where every other leg names a suburb
+   (28 Nov 2026). Anything that starts with a house number is a street, not a
+   place word. */
+function _legPlaceWord(sub) {
+  const v = String(sub || '').trim();
+  return v && !/^\d/.test(v) ? v : '';
+}
+/* With no suburb to name, the client is the next best word: the location
+   label reads "Julie Pitham · 6 Elbert Way" or "Julie Pitham (Haynes)". */
+function _legClientName(label) {
+  const v = String(label || '').split(' · ')[0].replace(/\s*\(.*\)\s*$/, '').trim();
+  return v && !/^\d/.test(v) ? v : '';
+}
 /* A narrow column cannot hold "Start 8 min → Canning Vale Direct ⇄". Rather
    than an ellipsis eating the destination, drop whole parts in order — the
    Start/End word, then the destination, then the switch (the panel has both) —
    so what remains is always readable and the minutes always show (T-20). */
 function _fitLegText(el) {
-  const over = () => el.scrollWidth > el.clientWidth + 0.5;
+  const over = () => el.scrollWidth > el.clientWidth + 0.5 || el.scrollHeight > el.clientHeight + 0.5;
   if (!over()) return;
+  // A leg tall enough for two lines wraps first (28 Nov 2026): "Travel
+  // 24 min → Piara Waters" on two lines beat a bare "24 min" in a leg with
+  // room to spare. Only when wrapping still does not fit are parts dropped.
+  if (el.clientHeight >= 28) {
+    el.classList.add('t-wrap');
+    if (!over()) return;
+  }
   el.classList.add('t-no-ico');
   if (!over()) return;
   // The destination goes before the switch (26 Nov 2026): the switch is the

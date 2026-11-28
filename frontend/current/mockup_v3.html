@@ -119,7 +119,7 @@
 <link rel="stylesheet" href="/resourcelibrary.css?v=4" />
 <link rel="stylesheet" href="/opa.css?v=5" />
 <link rel="stylesheet" href="/finance.css?v=2" />
-<link rel="stylesheet" href="/invoicing.css?v=8" />
+<link rel="stylesheet" href="/invoicing.css?v=10" />
 <link rel="stylesheet" href="/induction-assistant.css?v=4" />
 <link rel="stylesheet" href="/supportpop.css?v=2" />
 <link rel="stylesheet" href="/casenotes.css?v=4" />
@@ -160,7 +160,7 @@
 <script src="/docpreview.js?v=6" defer></script>
 <script src="/opa.js?v=4" defer></script>
 <script src="/finance.js?v=1" defer></script>
-<script src="/invoicing.js?v=14" defer></script>
+<script src="/invoicing.js?v=17" defer></script>
 <script src="/induction-assistant.js?v=3" defer></script>
 <script src="/supportpop.js?v=1" defer></script>
 <script src="/casenotes.js?v=6" defer></script>
@@ -204,7 +204,7 @@
      store and computeDayTravelSegments(), the calendar leg overlays and the
      travel details panel. Deferred and loaded ahead of profile.js and
      reports.js, both of which reach into it. -->
-<script src="/travel.js?v=80" defer></script>
+<script src="/travel.js?v=83" defer></script>
 <!-- Traffic alerts: a re-priced drive that now runs into a client session —
      point at it, offer Make room, Acknowledge or Ignore (today and tomorrow). -->
 <script src="/travel-alerts.js?v=1" defer></script>
@@ -2894,8 +2894,8 @@ window.opIcon = function (name, size) {
     white-space: normal; overflow-wrap: break-word; word-break: normal; text-wrap: pretty;
     -webkit-box-orient: vertical; -webkit-line-clamp: var(--sub-lines, 2); overflow: hidden;
   }
-  /* Duration-aware density: ≤65 min drops the location line; <40 min also
-     tightens the padding. Full details stay one click away in the detail
+  /* Height-aware density (applySessionDensity): a short tile drops the
+     location line; a shorter one also tightens the padding. Full details stay one click away in the detail
      panel (and in the hover tooltip). */
   .session.s-med .s-sub { display: none; }
   .session.s-compact .s-sub { display: none; }
@@ -3524,6 +3524,10 @@ window.opIcon = function (name, size) {
   .travel-overlay.t-mins .t-label, .travel-overlay.t-full .t-label,
   .travel-overlay.t-full .t-ico { flex-shrink: 0; overflow: visible; }
   .travel-overlay.t-full .t-ico { font-size: 10px; font-weight: 600; white-space: nowrap; }
+  /* Tall enough for two lines (_fitLegText): the place wraps under the
+     minutes instead of being dropped, and the switch takes its own line. */
+  .travel-overlay.t-wrap { flex-wrap: wrap; align-content: center; row-gap: 2px; line-height: 13px; }
+  .travel-overlay.t-wrap .t-label { white-space: normal; flex-shrink: 1; min-width: 0; overflow-wrap: break-word; }
   .travel-overlay.t-no-ico .t-ico, .travel-overlay.t-no-switch .t-switch,
   .travel-overlay.t-no-dest .t-dest { display: none; }
   /* Idle-gap overlay CSS REMOVED (2026-08-09): the free-time/gap overlay no
@@ -3577,6 +3581,13 @@ window.opIcon = function (name, size) {
     color: var(--danger, #9c3322); background: var(--panel); border: 1px solid currentColor; border-radius: 999px; pointer-events: none; }
   /* …shrunk to a "!" where it would cover a short tile's words; the sentence
      is its tooltip, so it takes the pointer (travel.js _settleLegFlag). */
+  /* …and one that can be fixed with a click (a trip home that does not fit)
+     takes the pointer; "Go direct" reads as the action (28 Nov 2026). */
+  .travel-overlay .t-flag.t-flag-act { pointer-events: auto; cursor: pointer; }
+  .travel-overlay .t-flag.t-flag-2 { display: flex; flex-direction: column; align-items: flex-end; line-height: 12px; padding: 2px 7px; border-radius: 7px; }
+  .travel-overlay .t-flag.t-flag-2.compact { display: block; padding: 0; line-height: 14px; border-radius: 999px; }
+  .travel-overlay .t-flag .t-flag-go { text-decoration: underline; text-underline-offset: 2px; }
+  .travel-overlay .t-flag.t-flag-act:hover, .travel-overlay .t-flag.t-flag-act:focus-visible { color: var(--panel); background: var(--danger, #9c3322); outline: none; }
   .travel-overlay .t-flag.compact { width: 14px; padding: 0; text-align: center; color: var(--panel); background: var(--danger, #9c3322); pointer-events: auto; cursor: pointer; }
   /* …but still grabbable: an invisible 10 px hit area over the bar's edge. */
   .travel-overlay.overlaps, .travel-overlay.stay.stay-compact { overflow: visible; }
@@ -14043,6 +14054,8 @@ function setCalendarHourPx(px, clientY) {
     if (!el || !el.isConnected || !el.closest('#cal-grid .cal-col') || s.allDay) return;
     el.style.top = tToY(s.startH, s.startM || 0) + 'px';
     el.style.height = sessionTileHeight(durMin(s), sessionStartMin(s)) + 'px';
+    // More room → more words: title lines and the location follow the height.
+    applySessionDensity(el, Math.min(durMin(s), 24 * 60 - sessionStartMin(s)));
   });
   // Travel legs and the now line follow live, from what is already computed.
   if (typeof redrawTravelLegsFromCache === 'function') { try { redrawTravelLegsFromCache(); } catch (_) { /* never break the zoom */ } }
@@ -14353,22 +14366,31 @@ function sessionTileHeight(min, startMin) {
 function sessionStartMin(s) { return s.startH * 60 + (s.startM||0); }
 function sessionEndMin(s)   { return s.endH   * 60 + (s.endM  ||0); }
 
-/* Duration-aware density classes for compact tiles. Display-only: <40 min
-   shows the title alone, ≤65 min shows title + time, longer shows all lines.
-   Called from addSession and every path that changes a tile's duration. */
+/* Height-aware density classes (pinch zoom, 28 Nov 2026). Display-only.
+   What a tile carries follows how tall it is DRAWN, not how long the event
+   is, so stretching the hours with a pinch lets a 30-min tile show its whole
+   title and location, and squeezing them tidies tiles back down. At the
+   default 72 px/hour the thresholds are the old ones exactly: under 15 min a
+   bare bar, under 40 the title alone, to 65 the title without the location,
+   longer everything. Called from addSession, every path that changes a
+   tile's duration, and every pinch step. */
 function applySessionDensity(el, durationMin) {
   el.classList.remove('s-compact', 's-med', 's-tiny');
-  if (durationMin < 15) el.classList.add('s-compact', 's-tiny');
-  else if (durationMin < 40) el.classList.add('s-compact');
-  else if (durationMin <= 65) el.classList.add('s-med');
+  const slotPx = durationMin / 60 * HOUR_PX;          // 72 px/h → minutes × 1.2
+  const tiny = slotPx < 18, compact = slotPx < 48, showSub = slotPx > 78;
+  if (tiny) el.classList.add('s-compact', 's-tiny');
+  else if (compact) el.classList.add('s-compact');
+  else if (!showSub) el.classList.add('s-med');
   // Whole lines only (C-15): the title clamps to the lines the tile holds,
-  // leaving one for the location line when that shows (>65 min).
+  // leaving room for the location (up to two lines once there is space).
   const h = parseFloat(el.style.height);
   if (h > 0) {
-    const compact = durationMin < 40;
     const lines = Math.max(1, Math.floor((h - (compact ? 0 : 4) + 0.5) / (compact ? 13.2 : 13.75)));
-    const sub = durationMin > 65 ? 1 : 0;
-    el.style.setProperty('--lines', String(Math.max(1, lines - sub)));
+    const subEl = el.querySelector('.s-sub');
+    const hasSub = showSub && (!subEl || subEl.textContent.trim() !== '');
+    const subLines = hasSub ? (lines >= 5 ? 2 : 1) : 0;
+    el.style.setProperty('--lines', String(Math.max(1, lines - subLines)));
+    el.style.setProperty('--sub-lines', String(Math.max(1, subLines)));
   }
 }
 
@@ -24000,17 +24022,26 @@ window.__sheetFocus = (function () {
   };
 })();
 
-/* Right-click anywhere outside the open booking panel closes it (12 Oct
-   2026) — the quick way out after a slot click. Capture phase, so that
-   right-click only closes the panel: it does not also open a block's menu
-   or the browser's. Inside the panel a right-click behaves as normal. */
+/* A two-finger click (right-click) anywhere outside an open side panel closes
+   it — the quick way out after clicking an event, a travel leg or a slot
+   (booking panel 12 Oct 2026; every side panel 28 Nov 2026). The panels are
+   the one-at-a-time list (SIDE_PANELS) plus the client profile, which opens
+   over the event panel and so is not in that list. Capture phase, so that
+   right-click only closes: it does not also open a tile's, a leg's or the
+   browser's menu. Inside a panel a right-click behaves as normal, and then
+   nothing closes. Centred dialogs and the movable Support window are not side
+   panels and stay put, so a stray click never throws away typing. */
+const RIGHT_CLICK_CLOSES = SIDE_PANELS.concat([
+  { id: 'cp-panel', open: () => { const o = document.getElementById('cp-overlay'); return !!(o && o.style.display === 'block'); },
+    close: () => window.closeClientProfile && window.closeClientProfile() },
+]);
 document.addEventListener('contextmenu', (e) => {
-  const panel = document.getElementById('booking-side-panel');
-  if (!panel || !panel.classList.contains('open')) return;
-  if (panel.contains(e.target)) return;
+  const open = RIGHT_CLICK_CLOSES.map(p => ({ p, el: document.getElementById(p.id) })).filter(x => x.el && x.p.open(x.el));
+  if (!open.length) return;
+  if (open.some(x => x.el.contains(e.target))) return;
   e.preventDefault();
   e.stopPropagation();
-  window.closeBookingPanel();
+  open.forEach(x => { try { x.p.close(); } catch (_) { /* one panel never blocks the rest */ } });
 }, true);
 
 function clearPanelPrefill() {

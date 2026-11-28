@@ -14,13 +14,24 @@ function fnSrc(name) {
   return rest.slice(0, rest.indexOf('\n}\n') + 2);
 }
 
+/* A tile element just real enough for applySessionDensity. */
+function fakeTile(sub = '64 Talbot Ave, Como') {
+  const cls = new Set(), vars = {};
+  return {
+    isConnected: true, closest: () => true, cls, vars,
+    classList: { add: (...c) => c.forEach(x => cls.add(x)), remove: (...c) => c.forEach(x => cls.delete(x)) },
+    style: { setProperty: (k, v) => { vars[k] = v; } },
+    querySelector: () => ({ textContent: sub }),
+  };
+}
+
 /* setCalendarHourPx in a tiny world: one grid (scrollable), one column, tiles. */
 function world({ hourPx = 72, colTop = 100, scrollTop = 500 } = {}) {
   const grid = { scrollTop, getBoundingClientRect: () => ({ top: 0, height: 600 }) };
   const col = { getBoundingClientRect: () => ({ top: colTop - grid.scrollTop }) };
   const tile = (startH, startM, dur, extra = {}) => ({
     startH, startM, endH: startH + Math.floor((startM + dur) / 60), endM: (startM + dur) % 60,
-    element: { isConnected: true, style: {}, closest: () => true }, ...extra,
+    element: fakeTile(), ...extra,
   });
   const SESSIONS = { a: tile(9, 0, 60), b: tile(13, 30, 30), all: tile(0, 0, 60, { allDay: true }) };
   const store = {};
@@ -34,8 +45,9 @@ function world({ hourPx = 72, colTop = 100, scrollTop = 500 } = {}) {
     function durMin(s) { return (s.endH - s.startH) * 60 + ((s.endM || 0) - (s.startM || 0)); }
     function sessionStartMin(s) { return s.startH * 60 + (s.startM || 0); }
     ${fnSrc('sessionTileHeight')}
+    ${fnSrc('applySessionDensity')}
     ${fnSrc('setCalendarHourPx')}
-    return { set: setCalendarHourPx, px: () => HOUR_PX };
+    return { set: setCalendarHourPx, px: () => HOUR_PX, density: applySessionDensity };
   `);
   const api = make({
     hourPx, SESSIONS, rebuilt,
@@ -71,6 +83,31 @@ describe('setCalendarHourPx', () => {
     const w = world();
     w.api.set(5, 100); expect(w.api.px()).toBe(36);
     w.api.set(9999, 100); expect(w.api.px()).toBe(216);
+  });
+
+  test('stretched tiles show more: a 30-min tile gains its title lines and its location', () => {
+    const w = world();
+    const b = w.SESSIONS.b.element;               // 13:30, 30 min
+    b.style.height = '26px'; w.api.density(b, 30); // as drawn at 72 px/h
+    expect(b.cls.has('s-compact')).toBe(true);
+    w.api.set(216, 300);
+    expect(b.cls.has('s-compact')).toBe(false);
+    expect(b.cls.has('s-med')).toBe(false);        // location line now shows
+    expect(Number(b.vars['--lines'])).toBeGreaterThan(2);
+    expect(b.vars['--sub-lines']).toBe('2');
+    w.api.set(36, 300);                            // squeezed back: tidy again
+    expect(b.cls.has('s-compact')).toBe(true);
+  });
+
+  test('default zoom keeps the old duration thresholds exactly', () => {
+    const w = world();
+    const t = fakeTile();
+    const at = (min) => { t.style.height = (min / 60 * 72 - 4) + 'px'; w.api.density(t, min); return [...t.cls].sort().join(' '); };
+    expect(at(10)).toBe('s-compact s-tiny');
+    expect(at(39)).toBe('s-compact');
+    expect(at(40)).toBe('s-med');
+    expect(at(65)).toBe('s-med');
+    expect(at(66)).toBe('');
   });
 
   test('no change → nothing redrawn', () => {

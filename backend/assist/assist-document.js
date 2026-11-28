@@ -20,6 +20,8 @@
  * routes guard every block like any other message. Pure: no I/O.
  */
 
+const { readReport } = require('./report-kinds');
+
 const FORMATS = Object.freeze({ document: 'document', casenote: 'casenote', auto: 'auto' });
 const CASE_NOTE_HEADINGS = Object.freeze(['Identify', 'Session details', 'Plan']);
 const MAX_BLOCKS = 80;
@@ -95,7 +97,11 @@ function validateDocument(input, format) {
     }
   }
   const title = input.title ? clean(input.title, MAX_TITLE_CHARS) || null : null;
-  return { ok: true, doc: { kind, title, blocks } };
+  const doc = { kind, title, blocks };
+  // A Report builder document keeps its kind through edits (assist/report-kinds.js).
+  const report = input.report ? readReport(input.report) : null;
+  if (report && kind === FORMATS.document) doc.report = report;
+  return { ok: true, doc };
 }
 
 /** Pull the JSON object out of a model reply and validate it. */

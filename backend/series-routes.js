@@ -65,6 +65,8 @@ async function bookingTemplate(ev) {
   };
   if (meta.booking && meta.booking.kind) {
     body.booking = { kind: meta.booking.kind, clientId: meta.booking.clientId || null, clientName: meta.booking.clientName || null };
+    // A non-face-to-face block can name several clients; every repeat names them all.
+    if (Array.isArray(meta.booking.clients) && meta.booking.clients.length) body.booking.clients = meta.booking.clients;
   }
   // The Splose details the first one was queued with (service, case, note…).
   const { rows: [q] } = await db.pool.query(

@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assist.css?v=14">
+  <link rel="stylesheet" href="/assist.css?v=18">
   <link rel="stylesheet" href="/theme.css?v=6">
 </head>
 <body>
@@ -30,6 +30,8 @@
         <button class="oa-btn primary" id="oa-new" type="button">+ New chat</button>
         <a class="oa-btn ghost" href="/" id="oa-portal" title="Back to the portal">Portal</a>
       </div>
+      <button class="oa-btn ghost oa-owing" id="oa-owing" type="button" title="Finished sessions with no case note yet — write them here" hidden>Notes owing</button>
+      <button class="oa-btn ghost oa-owing" id="oa-plans" type="button" title="NDIS plans ending in the next 8 weeks: funding used and the progress report" hidden>Plan reviews</button>
       <div class="oa-client" id="oa-client">
         <label class="sr-only" for="oa-client-search">Find a client</label>
         <input class="oa-client-search" id="oa-client-search" type="search" placeholder="Find a client to start a chat…" autocomplete="off">
@@ -44,6 +46,7 @@
         <div class="oa-title" id="oa-title">New chat</div>
         <span class="oa-client-chip" id="oa-client-chip" hidden></span>
         <button class="oa-btn ghost sm oa-cf-open" id="oa-client-file" type="button" title="Look up this client's case, sessions and your notes, and tick what to attach" hidden>Client file</button>
+        <button class="oa-btn ghost sm oa-cf-open" id="oa-report" type="button" title="Draft a progress report or support letter from your case notes, in the template's headings" hidden>Report</button>
         <button class="oa-btn sm" id="oa-use-selection" type="button" style="display:none;">Use selection</button>
         <span class="oa-pill" id="oa-status">Checking…</span>
         <button class="oa-theme" id="theme-toggle" type="button" onclick="window.OpalTheme.cycle()" title="Theme" aria-label="Theme"></button>
@@ -56,6 +59,7 @@
       <footer class="oa-compose">
         <div class="oa-compose-inner">
           <div id="oa-review-slot"></div>
+          <div class="oa-report-pending" id="oa-report-pending" hidden><span id="oa-report-pending-text"></span><button class="oa-btn ghost sm" id="oa-report-cancel" type="button">Not a report</button></div>
           <div class="oa-selection" id="oa-selection"><strong>Selected content attached</strong><span id="oa-selection-info"></span><button class="oa-btn ghost sm" id="oa-selection-clear" type="button">Remove</button></div>
           <!-- One box: attachments, a text area that grows, and a tool row (assist-composer.js). -->
           <div class="oa-composer" id="oa-composer">
@@ -63,7 +67,7 @@
             <label class="sr-only" for="oa-input">Message Opal Assist</label>
             <textarea class="oa-textarea" id="oa-input" rows="1" placeholder="Ask Opal Assist, or paste what you want rephrased…"></textarea>
             <div class="oa-composer-bar">
-              <button class="oa-icon-btn" id="oa-attach" type="button" title="Attach a file or picture (.txt, .docx, .pdf, photos, screenshots) — only the text is used, names hidden before sending" aria-label="Attach a file" hidden>
+              <button class="oa-icon-btn" id="oa-attach" type="button" title="Attach a file or picture (.txt, .docx, .pdf — scanned ones too — photos, screenshots) — only the text is used, names hidden before sending" aria-label="Attach a file" hidden>
                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
               </button>
               <input type="file" id="oa-file" accept=".txt,.md,.csv,.docx,.pdf,text/plain,image/*" multiple hidden>
@@ -99,10 +103,14 @@
       if (sf === 'excel') document.write('<script src="/assist-excel-format.js?v=2"><\/script>');
     })();
   </script>
-  <script src="/assist-doc.js?v=1"></script>
+  <script src="/assist-doc.js?v=2"></script>
   <script src="/assist-export.js?v=1"></script>
   <script src="/assist-client-file.js?v=1"></script>
-  <script src="/assist-composer.js?v=4"></script>
-  <script src="/assist.js?v=18"></script>
+  <script src="/assist-notes-owing.js?v=1"></script>
+  <script src="/assist-report.js?v=2"></script>
+  <script src="/assist-plan-radar.js?v=1"></script>
+  <script src="/assist-outlook.js?v=1"></script>
+  <script src="/assist-composer.js?v=6"></script>
+  <script src="/assist.js?v=22"></script>
 </body>
 </html>

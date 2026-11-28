@@ -742,7 +742,8 @@ describe('changed assets are cache-busted', () => {
       // 78: Via home only when it fits the gap; two-way leg control; no-time flag.
       // 80: the no-time note shrinks to "!" where it would cover a short tile's words;
       // a gap filled by other events says "no free slot".
-      ['travel.js', 80],
+      // 83: a trip home that does not fit says "No time to go home · needs N min" and a click goes direct.
+      ['travel.js', 83],
       // 1: traffic alerts — a re-priced drive running into a client session.
       ['travel-alerts.js', 1], ['travel-alerts.css', 2],
       // 1: booking-route.js/.css are new — client location selector, the
@@ -801,7 +802,7 @@ describe('changed assets are cache-busted', () => {
       // 1: Invoicing — calendar-driven NDIS invoices, travel and rural trip billing.
       // 4 (js): the session's MMM zone selector in the calendar billing box.
       // 5 (js): Complete invoicing counts non-face-to-face shares.
-      ['invoicing.js', 14], ['invoicing.css', 8],
+      ['invoicing.js', 17], ['invoicing.css', 10],
       ['induction-assistant.js', 3], ['induction-assistant.css', 4],
       // js 5: two-step editor panel, contents-mirroring outline with
       // drag-to-reorder, multi-article A4 pagination fix. css 5: the

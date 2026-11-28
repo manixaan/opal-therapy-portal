@@ -36,6 +36,8 @@ const Issues = require('./billing/billing-issues');
 const SB = require('./billing/splose-billing-source');
 const PD = require('./billing/payer-directory');
 const XP = require('./billing/xero-invoice-push');
+const RJ = require('./billing/run-jobs');
+const QF = require('./billing/quick-fix');
 const { recordAudit, listAudit } = require('./billing/billing-audit');
 const storage = require('./storage');
 
@@ -99,7 +101,11 @@ router.get('/api/invoicing/overview', safe(async (req, res) => {
                  WHERE r.organisation_id = $1 ORDER BY r.created_at DESC LIMIT 10`, [orgId(req)]),
     practitionersFor(orgId(req)),
   ]);
-  res.json({ counts, runs: runs.rows, practitioners, timezone: t });
+  const st = await Settings.ensureSettings(pool, orgId(req));
+  // Opening the tab reads payments from Xero in the background (throttled), so statuses are current.
+  RJ.syncPaymentsFor(orgId(req), { pool }).catch(() => {});
+  res.json({ counts, runs: runs.rows, practitioners, timezone: t, job: RJ.latestJob(orgId(req)),
+    autoDrafts: { enabled: st.autoDraftsEnabled !== false, lastAt: st.autoDraftsLastAt, lastPeriod: st.autoDraftsLastPeriod, lastError: st.autoDraftsLastError } });
 }));
 
 async function practitionersFor(org) {
@@ -136,8 +142,18 @@ router.post('/api/invoicing/runs', safe(async (req, res) => {
     if (!rows.length) return res.status(400).json({ error: 'Invalid practitioner' });
     practitionerIds = [practitionerId];
   }
+  // Background (the page's default): return at once and let the page poll the job.
+  if ((req.body || {}).background) {
+    return res.status(202).json(RJ.startRun({ pool, orgId: orgId(req), userId: req.user.id, from, to, practitionerIds }));
+  }
   const result = await Gen.runInvoicing({ pool, orgId: orgId(req), userId: req.user.id, from, to, practitionerIds, kind: 'NORMAL' });
   res.status(201).json(result);
+}));
+
+router.get('/api/invoicing/runs/jobs/:jobId', safe(async (req, res) => {
+  const j = RJ.getJob(orgId(req), String(req.params.jobId).slice(0, 80));
+  if (!j) return res.status(404).json({ error: 'That run is no longer tracked. Open the drafts to see what it made.' });
+  res.json(j);
 }));
 
 router.get('/api/invoicing/runs', safe(async (req, res) => {
@@ -172,7 +188,19 @@ router.get('/api/invoicing/invoices/:id', uuidParam('id'), safe(async (req, res)
 }));
 
 router.patch('/api/invoicing/invoices/:id', uuidParam('id'), safe(async (req, res) => {
-  res.json(await Life.updateDraftHeader({ pool, orgId: orgId(req), userId: req.user.id, invoiceId: req.params.id, patch: req.body || {} }));
+  const body = { ...(req.body || {}) };
+  const remember = body.remember === true; delete body.remember;
+  const out = await Life.updateDraftHeader({ pool, orgId: orgId(req), userId: req.user.id, invoiceId: req.params.id, patch: body });
+  // "remember": the page saved the same recipient on the client first; apply it to
+  // this client's open drafts so the invoice leaves Needs attention straight away.
+  if (remember && ['payerName', 'payerEmail', 'payerReference', 'payerType'].some(k => k in body)) {
+    const { rows: [inv] } = await pool.query(`SELECT client_id FROM invoices WHERE id = $1 AND organisation_id = $2`, [req.params.id, orgId(req)]);
+    if (inv && inv.client_id) {
+      const applied = await Life.withTx(pool, tx => QF.applyProfileToDrafts(tx, { orgId: orgId(req), userId: req.user.id, clientId: inv.client_id }));
+      return res.json({ ...out, applied });
+    }
+  }
+  res.json(out);
 }));
 
 router.post('/api/invoicing/invoices/:id/regenerate', uuidParam('id'), safe(async (req, res) => {
@@ -181,10 +209,19 @@ router.post('/api/invoicing/invoices/:id/regenerate', uuidParam('id'), safe(asyn
        FROM invoices WHERE id = $1 AND organisation_id = $2`, [req.params.id, orgId(req)]);
   if (!inv) return res.status(404).json({ error: 'Invoice not found' });
   if (!Life.EDITABLE_STATUSES.includes(inv.status)) return res.status(409).json({ error: 'Only a draft can be regenerated', code: 'INVOICE_LOCKED' });
+  // From the invoice page: catch a changed draft up in the background (no waiting).
+  if ((req.body || {}).background && !inv.trip_id) {
+    return res.status(202).json({ job: RJ.startRun({ pool, orgId: orgId(req), userId: req.user.id, from: inv.ps, to: inv.pe, clientIds: [inv.client_id] }) });
+  }
   const result = inv.trip_id
     ? await Trips.generateTripInvoices({ pool, orgId: orgId(req), userId: req.user.id, tripId: inv.trip_id })
     : await Gen.runInvoicing({ pool, orgId: orgId(req), userId: req.user.id, from: inv.ps, to: inv.pe, clientIds: [inv.client_id], kind: 'NORMAL' });
   res.json(result);
+}));
+
+// A draft that was never finalised can be deleted (audited). Its sessions come back on the next run.
+router.delete('/api/invoicing/invoices/:id', uuidParam('id'), safe(async (req, res) => {
+  res.json(await Life.withTx(pool, tx => QF.deleteDraft(tx, { orgId: orgId(req), userId: req.user.id, invoiceId: req.params.id })));
 }));
 
 router.post('/api/invoicing/invoices/:id/finalise', uuidParam('id'), safe(async (req, res) => {
@@ -417,6 +454,95 @@ router.post('/api/invoicing/issues/:id/dismiss', uuidParam('id'), safe(async (re
 }));
 
 /** Reprocess: re-run invoicing over the issue's scope after the record was fixed. */
+/**
+ * Quick fix for one attention item (no full run):
+ *  - payer / NDIS number: the pop-up saved the client's profile first (remembered for
+ *    every later run); this copies it onto the client's open drafts at once.
+ *  - case noting missing: { minutes } adds a case-noting line after the session,
+ *    or { leaveOff: true } leaves it off (remembered: not raised again).
+ *  - address / MMM: the profile or session zone was saved; the client's drafts are
+ *    recalculated in the background.
+ */
+router.post('/api/invoicing/issues/:id/quick-fix', uuidParam('id'), safe(async (req, res) => {
+  const { rows: [it] } = await pool.query(
+    `SELECT b.*, b.calendar_event_id::text AS event_id, to_char(b.service_date,'YYYY-MM-DD') AS sd FROM billing_issues b
+      WHERE b.id = $1 AND b.organisation_id = $2`, [req.params.id, orgId(req)]);
+  if (!it) return res.status(404).json({ error: 'Attention item not found' });
+  const body = req.body || {};
+  const o = orgId(req); const u = req.user.id;
+  if (QF.RECIPIENT_ISSUES.includes(it.issue_type)) {
+    if (!it.client_id) return res.status(409).json({ error: 'This item has no client' });
+    return res.json(await Life.withTx(pool, tx => QF.applyProfileToDrafts(tx, { orgId: o, userId: u, clientId: it.client_id })));
+  }
+  if (it.issue_type === 'CASE_NOTE_MISSING') {
+    if (body.leaveOff) {
+      await Life.withTx(pool, async tx => {
+        await tx.query(
+          `UPDATE billing_issues SET status = 'DISMISSED', resolved_at = NOW(), resolved_by_user_id = $3, resolution_note = 'No case noting for this session'
+            WHERE id = $1 AND organisation_id = $2 AND status = 'OPEN'`, [it.id, o, u]);
+        await recordAudit(tx, { orgId: o, actorUserId: u, action: 'billing_issue.dismissed', entityType: 'billing_issue', entityId: it.id,
+          after: { issueType: it.issue_type }, reason: 'No case noting for this session' });
+      });
+      return res.json({ ok: true, dismissed: true });
+    }
+    return res.json(await Life.withTx(pool, tx => QF.addCaseNoteLine(tx, { orgId: o, userId: u, eventId: it.event_id, minutes: body.minutes })));
+  }
+  // One answer for a calendar block (remembered): report writing, travel blocks, flights.
+  if (it.issue_type === 'REPORT_NOT_BILLED') {
+    const decision = String(body.decision || '');
+    await Life.withTx(pool, tx => QF.decideEvent(tx, { orgId: o, userId: u, eventId: it.event_id, decision }));
+    if (decision !== 'BILL') return res.json({ ok: true, decision });
+    // Bill it: the client's drafts for that day pick the block up in the background.
+    return res.status(202).json({ ok: true, decision, job: RJ.startRun({ pool, orgId: o, userId: u, from: it.sd, to: it.sd, clientIds: [it.client_id] }) });
+  }
+  if (it.issue_type === 'TRAVEL_BLOCK_NOT_INVOICED') {
+    if (body.decision === 'BILL') {
+      const cards = await RC.loadRateCards(pool, o);
+      return res.json(await Life.withTx(pool, tx => QF.addTravelBlockLine(tx, { orgId: o, userId: u, eventId: it.event_id, clientId: it.client_id,
+        rateCards: cards, resolveRule: RC.resolveRule, effectiveMmm: MMM.effectiveMmm })));
+    }
+    return res.json(await Life.withTx(pool, tx => QF.decideEvent(tx, { orgId: o, userId: u, eventId: it.event_id, decision: 'NOT_BILLABLE' })));
+  }
+  if (it.issue_type === 'TRAVEL_BLOCK_NO_CLIENT' || it.issue_type === 'FLIGHT_NO_TRIP') {
+    if (body.decision !== 'NOT_BILLABLE') return res.status(400).json({ error: 'Choose an answer' });
+    return res.json(await Life.withTx(pool, tx => QF.decideEvent(tx, { orgId: o, userId: u, eventId: it.event_id, decision: 'NOT_BILLABLE' })));
+  }
+  // A session's zone: set it, and remember it for the address (migration 097).
+  if (it.issue_type === 'SESSION_MMM_UNRESOLVED' || it.issue_type === 'SESSION_MMM_REVIEW') {
+    const zone = SessionMmm.validZone(body.zone);
+    if (zone == null) return res.status(400).json({ error: 'Choose the zone (MM1–MM7)' });
+    const { rows: [ev] } = await pool.query(
+      `SELECT e.id, e.location, e.manual_location FROM events e JOIN users u ON u.id = e.user_id WHERE e.id = $1 AND u.organisation_id = $2`, [it.event_id, o]);
+    if (!ev) return res.status(404).json({ error: 'Session not found' });
+    const address = DR.eventAddress(ev);
+    await Life.withTx(pool, async tx => {
+      await SessionMmm.setOwnerZone(tx, { orgId: o, eventId: ev.id, zone, reason: 'Needs attention fix', userId: u });
+      if (address) {
+        await tx.query(
+          `INSERT INTO billing_address_zones (organisation_id, address_key, address, mmm_zone, set_by_user_id) VALUES ($1,$2,$3,$4,$5)
+           ON CONFLICT (organisation_id, address_key) DO UPDATE SET mmm_zone = EXCLUDED.mmm_zone, address = EXCLUDED.address,
+             set_by_user_id = EXCLUDED.set_by_user_id, set_at = NOW()`, [o, Gen.addressKey(address), address.slice(0, 500), zone, u]);
+      }
+      await recordAudit(tx, { orgId: o, actorUserId: u, action: 'billing.session_zone_set', entityType: 'event', entityId: ev.id,
+        after: { zone, rememberedForAddress: !!address }, reason: 'Needs attention fix' });
+    });
+    return res.status(202).json({ job: RJ.startRun({ pool, orgId: o, userId: u, from: it.sd, to: it.sd,
+      practitionerIds: it.practitioner_user_id ? [it.practitioner_user_id] : null }) });
+  }
+  if (['CLIENT_ADDRESS_MISSING', 'MMM_UNRESOLVED', 'MMM_REVIEW'].includes(it.issue_type)) {
+    // The period of the run that raised it (a client whose sessions were all held has no draft yet).
+    const { rows: [p] } = await pool.query(
+      `SELECT to_char(period_start,'YYYY-MM-DD') AS f, to_char(period_end,'YYYY-MM-DD') AS t FROM invoice_runs
+        WHERE id = $1 AND organisation_id = $2`, [it.run_id, o]);
+    const from = it.sd || (p && p.f) || RJ.mondayOf(new Date().toISOString().slice(0, 10));
+    const to = it.sd || (p && p.t) || new Date().toISOString().slice(0, 10);
+    const job = RJ.startRun({ pool, orgId: o, userId: u, from: from <= to ? from : to, to: from <= to ? to : from,
+      clientIds: it.client_id ? [it.client_id] : null });
+    return res.status(202).json({ job });
+  }
+  return res.status(400).json({ error: 'This item has no quick fix; use its own button.' });
+}));
+
 router.post('/api/invoicing/issues/:id/reprocess', uuidParam('id'), safe(async (req, res) => {
   const { rows: [it] } = await pool.query(
     `SELECT b.*, to_char(b.service_date,'YYYY-MM-DD') AS sd FROM billing_issues b WHERE b.id = $1 AND b.organisation_id = $2`,

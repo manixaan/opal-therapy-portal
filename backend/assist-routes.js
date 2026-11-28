@@ -12,6 +12,8 @@
  *   POST   /api/assist/chat/stream            one reply as server-sent events
  *   GET    /api/assist/clients                the caller's clients, for the side-panel picker
  *   GET    /api/assist/client-file            a client chat's lookups: own notes (searchable), sessions, Splose cases — NO model call
+ *   GET    /api/assist/plan-reviews           plans ending soon: funding used, report started — caseload-scoped, NO model call
+ *   POST   /api/assist/outlook-draft          a document reply saved to the caller's OWN Outlook Drafts — never sent, NO model call
  *   GET    /api/assist/conversations          the caller's recent threads (?client=<ref>|general)
  *   GET    /api/assist/conversations/:id      one thread, tokenised turns
  *   DELETE /api/assist/conversations/:id      forget a thread now
@@ -46,6 +48,7 @@ const { buildSystemPrompt, SURFACES } = require('./assist/assist-prompt');
 const directory = require('./assist/identity-directory');
 const caseload = require('./splose-caseload');
 const documents = require('./assist/assist-document');
+const reports = require('./assist/report-kinds');
 const { toPlainText, plainTextStream } = require('./assist/plain-text');
 
 const router = express.Router();
@@ -178,23 +181,103 @@ router.get('/api/assist/client-file', rateLimit, safe(async (req, res) => {
   if (!clientRef) return;
   const clientId = CLIENT_REF_RE.exec(clientRef)[1];
   const query = clientFile.cleanQuery(req.query.q);
+  // The Report builder asks for one period's notes (Perth days, YYYY-MM-DD).
+  const period = clientFile.periodBounds(req.query.from, req.query.to);
+  const narrowed = !!(query || period.from || period.to);
   // Splose being slow or down costs only the case summary, never the notes.
   const casesP = sploseApi.fetchAllCases().then((all) => clientFile.shapeCases(all, clientId), (err) => {
     console.warn(`[assist] client-file cases unavailable (${err?.response?.status || err?.code || 'error'})`);
     return null;
   });
   const [notes, sessions, cases] = await Promise.all([
-    clientFile.loadNotes(pool, { userId: req.user.id, clientId, query }),
-    query ? Promise.resolve(null) : clientFile.loadSessions(pool, { user: req.user, clientId }),
-    query ? Promise.resolve(null) : casesP,
+    clientFile.loadNotes(pool, { userId: req.user.id, clientId, query, from: period.from, to: period.to }),
+    narrowed ? Promise.resolve(null) : clientFile.loadSessions(pool, { user: req.user, clientId }),
+    narrowed ? Promise.resolve(null) : casesP,
   ]);
   await db.logAuditEvent({
     actorUserId: req.user.id, organisationId: orgOf(req),
     action: 'assist.client_file_viewed', targetType: 'client', targetId: clientId,
-    metadata: { notes: notes.notes.length, searched: !!query, cases: cases ? cases.length : null },
+    metadata: { notes: notes.notes.length, searched: !!query, period: !!(period.from || period.to), cases: cases ? cases.length : null },
     ipAddress: req.ip,
   }).catch(() => {});
-  res.json({ query, notes: notes.notes, moreNotes: notes.more, sessions, cases, casesAvailable: query ? null : cases !== null });
+  res.json({ query, notes: notes.notes, moreNotes: notes.more, sessions, cases, casesAvailable: narrowed ? null : cases !== null });
+}));
+
+// ── Plan review radar (assist/plan-radar.js) ────────────────────────────────
+// Plans ending soon, funding used, report started — read-only, no model.
+// Caseload-scoped like the client list: read_only refused (above), a
+// therapist sees only cases assigned to their own Splose practitioner, an
+// unlinked therapist fails closed. Audited by counts only.
+const planRadar = require('./assist/plan-radar');
+router.get('/api/assist/plan-reviews', rateLimit, safe(async (req, res) => {
+  let allowed;
+  try { allowed = await caseload.allowedPatientIds(req); } catch (err) {
+    if (err instanceof caseload.CaseloadError) return res.status(err.status).json({ error: err.code, message: err.message });
+    console.warn(`[assist] plan radar caseload failed (${err?.response?.status || err?.code || 'error'})`);
+    return res.status(502).json({ error: 'splose_unavailable', message: 'Splose could not be reached just now. Try again in a minute.' });
+  }
+  const practitionerId = allowed ? (req.user.tp_splose_practitioner_id || null) : null;
+  let cases; let patients;
+  try { [cases, patients] = await Promise.all([sploseApi.fetchAllCases(), sploseApi.getPatients()]); } catch (err) {
+    console.warn(`[assist] plan radar cases failed (${err?.response?.status || err?.code || 'error'})`);
+    return res.status(502).json({ error: 'splose_unavailable', message: 'Splose could not be reached just now. Try again in a minute.' });
+  }
+  // Invoices only price the funding; without them the plans still show.
+  let invoices = null;
+  try { invoices = await sploseApi.getInvoices(); } catch (err) {
+    console.warn(`[assist] plan radar invoices unavailable (${err?.response?.status || err?.code || 'error'})`);
+  }
+  const invoicesComplete = Array.isArray(invoices) && invoices._fetchComplete !== false;
+  const now = new Date();
+  const billingPlanEnds = await planRadar.loadPlanEnds(pool, orgOf(req));
+  const prelim = planRadar.radarCases(cases, { allowed, practitionerId, now, billingPlanEnds });
+  const extras = await planRadar.loadExtras(pool, {
+    orgId: orgOf(req), userId: req.user.id,
+    rows: prelim.map((x) => ({ patientId: String(x.c.patientId), planStart: planRadar.isoDay(x.start), planEnd: planRadar.isoDay(x.end) })),
+  });
+  const wanted = new Set(prelim.map((x) => String(x.c.patientId)));
+  extras.names = {};
+  (Array.isArray(patients) ? patients : []).forEach((pt) => {
+    if (!wanted.has(String(pt.id))) return;
+    extras.names[String(pt.id)] = (pt.fullName || `${pt.firstname || ''} ${pt.lastname || ''}`).trim() || null;
+  });
+  const rows = planRadar.buildRadar({ cases, invoices, invoicesComplete, allowed, practitionerId, now, billingPlanEnds, extras });
+  await db.logAuditEvent({
+    actorUserId: req.user.id, organisationId: orgOf(req),
+    action: 'assist.plan_reviews_viewed', targetType: 'caseload', targetId: null,
+    metadata: { plans: rows.length, scope: allowed ? 'caseload' : 'practice', fundingAvailable: invoicesComplete },
+    ipAddress: req.ip,
+  }).catch(() => {});
+  res.json({ rows, windowDays: planRadar.WINDOW_DAYS, graceDays: planRadar.GRACE_DAYS, fundingAvailable: invoicesComplete, scope: allowed ? 'caseload' : 'practice' });
+}));
+
+// ── Outlook draft (assist/email-draft.js → graph-mail.js) ───────────────────
+// A document reply saved in the caller's own Outlook Drafts. Never sent: they
+// open it in Outlook and press Send. Plain-text blocks in, the HTML built and
+// escaped here. Needs GRAPH_MAIL_ENABLED (Mail.ReadWrite granted in Entra)
+// and the caller's Microsoft connection. Audited by counts only.
+const graphMail = require('./graph-mail');
+const emailDraft = require('./assist/email-draft');
+router.post('/api/assist/outlook-draft', rateLimit, safe(async (req, res) => {
+  const reason = graphMail.unavailableReason(req.user);
+  if (reason) return res.status(409).json({ error: 'outlook_unavailable', message: reason });
+  const b = req.body || {};
+  const to = emailDraft.readRecipients(b.to);
+  if (!to.ok) return res.status(400).json({ error: 'invalid_recipients', message: to.reason });
+  const body = emailDraft.renderBody(b.blocks);
+  if (!body.ok) return res.status(400).json({ error: 'invalid_document', message: body.reason });
+  const subject = emailDraft.readSubject(b.subject);
+  const accessToken = await graphMail.getAccessToken(req.user);
+  if (!accessToken) return res.status(409).json({ error: 'outlook_unavailable', message: 'Your Microsoft connection needs renewing. Reconnect it from Settings → Integrations.' });
+  const draft = await graphMail.createDraft({ accessToken, to: to.to, subject, html: body.html });
+  await db.logAuditEvent({
+    actorUserId: req.user.id, organisationId: orgOf(req),
+    action: draft.ok ? 'assist.outlook_draft_created' : 'assist.outlook_draft_failed', targetType: 'mailbox', targetId: null,
+    metadata: { recipients: to.to.length, chars: body.chars, code: draft.ok ? null : draft.code },
+    ipAddress: req.ip,
+  }).catch(() => {});
+  if (!draft.ok) return res.status(draft.code === 'scope_missing' ? 409 : 502).json({ error: draft.code, message: draft.reason });
+  res.json({ ok: true, webLink: draft.webLink || null });
 }));
 
 // ── Config ───────────────────────────────────────────────────────────────────
@@ -203,6 +286,7 @@ router.get('/api/assist/config', safe(async (req, res) => {
     enabled: provider.isEnabled(), reason: provider.isEnabled() ? null : provider.configError(), name: 'Opal Assist', retentionDays: RETENTION_DAYS,
     // What the page shows beside the send button, and what it needs to show how full a chat is.
     model: provider.describeModel(), historyTurns: HISTORY_TURNS, maxMessageChars: MAX_MESSAGE_CHARS, maxAttachmentChars: MAX_SELECTION_CHARS,
+    outlookDrafts: { available: graphMail.isAvailable(req.user), reason: graphMail.unavailableReason(req.user) },
   });
 }));
 
@@ -322,11 +406,16 @@ async function prepare(req, res) {
   // On the web page the model chooses the shape of each reply (chat, document,
   // case note); the Office panes and the phone keep plain answers. An explicit
   // format still forces one.
-  const format = documents.FORMATS[body.format] || (surface === 'web' ? documents.FORMATS.auto : null);
+  // The Report builder: a client chat on the web page asking for a progress
+  // report or support letter in the Templates' own headings, citing notes.
+  const report = surface === 'web' ? reports.readReport(body.report) : null;
+  if (report && !clientRef) { res.status(400).json({ error: 'report_needs_client', answer: 'A report is written in a client chat. Pick the client first.' }); return null; }
+  const format = report ? documents.FORMATS.document : (documents.FORMATS[body.format] || (surface === 'web' ? documents.FORMATS.auto : null));
   let system = buildSystemPrompt({ user: req.user, surface, selection, clientChat: !!clientRef });
   if (format) system += '\n\n' + documents.formatInstruction(format);
+  if (report) system += '\n\n' + reports.reportInstruction(report);
   const hiddenCount = Number.isInteger(body.hiddenCount) && body.hiddenCount >= 0 ? Math.min(body.hiddenCount, 10000) : 0;
-  return { message, selection, conversation, history, surface, system, hiddenCount, clientRef, format, known };
+  return { message, selection, conversation, history, surface, system, hiddenCount, clientRef, format, known, report };
 }
 
 /**
@@ -377,7 +466,7 @@ async function persist(req, prep, answer, streamed, kind = 'text') {
   await db.logAuditEvent({
     actorUserId: req.user.id, organisationId: orgOf(req),
     action: 'assist.chat', targetType: 'assist_conversation', targetId: conversation.id,
-    metadata: { surface: prep.surface, streamed: !!streamed, hiddenCount: prep.hiddenCount, hasSelection: !!prep.selection, messageChars: prep.message.length, clientChat: !!prep.clientRef, kind },
+    metadata: { surface: prep.surface, streamed: !!streamed, hiddenCount: prep.hiddenCount, hasSelection: !!prep.selection, messageChars: prep.message.length, clientChat: !!prep.clientRef, kind, report: prep.report ? prep.report.kind : undefined },
     ipAddress: req.ip,
   }).catch(() => {});
   return conversation;
@@ -415,13 +504,22 @@ async function settleReply(req, prep, messages, text) {
   }
   let parsed = documents.parseDocument(first, prep.format);
   let last = first;
+  // A report must carry its template's headings, in order: one correction, like a case note.
+  if (parsed.ok && prep.report) {
+    const reason = reports.checkHeadings(parsed.doc, prep.report);
+    if (reason) parsed = { ok: false, reason, kind: documents.FORMATS.document };
+  }
   if (!parsed.ok) {
     const kind = prep.format === documents.FORMATS.auto ? (parsed.kind || documents.FORMATS.document) : prep.format;
     const retry = [...messages, { role: 'assistant', content: first }, { role: 'user', content: `That reply did not follow the required format (${parsed.reason}). Send it again as the JSON object only, following the format rules exactly.` }];
     const r = await provider.generate({ system: prep.system, messages: retry, userId: req.user.id, organisationId: orgOf(req), raw: true });
     last = String(r.text || '').slice(0, MAX_ANSWER_CHARS * 2);
     parsed = documents.parseDocument(last, kind);
+    // Still off after the correction: keep the report anyway (it is still the
+    // practitioner's to read and edit); only the template fill will find fewer sections.
+    if (parsed.ok && prep.report) reports.checkHeadings(parsed.doc, prep.report);
   }
+  if (parsed.ok && prep.report) parsed.doc.report = { kind: prep.report.kind, goals: prep.report.goals };
   if (parsed.ok) return { kind: parsed.doc.kind, document: parsed.doc };
   return { kind: 'text', answer: documents.looksLikeDocument(last) ? NO_LAYOUT : (toPlainText(last).trim().slice(0, MAX_ANSWER_CHARS) || NO_LAYOUT) };
 }

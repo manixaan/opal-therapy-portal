@@ -788,6 +788,10 @@ server.listen(PORT, () => {
   // onboarding-expiry.js.
   require('./onboarding-expiry').startExpiryScheduler();
 
+  // Invoicing: draft the current week every night (billing/run-jobs.js, migration
+  // 096) so Monday's "Create drafts" only tops up. Off with INVOICING_AUTO_DRAFTS=off.
+  require('./billing/run-jobs').startAutoDrafts();
+
   // Resource Library recycle bin: anything deleted more than 90 days ago is
   // purged daily (rows, then the stored bytes nothing else still references).
   // Same in-process, single-instance pattern as the expiry sweep above.

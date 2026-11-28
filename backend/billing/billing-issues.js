@@ -20,6 +20,11 @@ const ISSUE_TYPES = Object.freeze({
   SESSION_MMM_REVIEW:        { severity: 'BLOCKING', label: 'Session MMM zone needs confirmation' },
   NF2F_TIMER_RUNNING:        { severity: 'WARNING',  label: 'Non-face-to-face timer still running' },
   NF2F_UNTIMED:              { severity: 'BLOCKING', label: 'Non-face-to-face block has no time entered' },
+  BLOCK_AWAITING_REVIEW:     { severity: 'WARNING',  label: 'Calendar block not checked yet' },
+  CASE_NOTE_MISSING:         { severity: 'WARNING',  label: 'Session has no case noting' },
+  REPORT_NOT_BILLED:         { severity: 'WARNING',  label: 'Report writing not billed anywhere' },
+  TRAVEL_BLOCK_NO_CLIENT:    { severity: 'WARNING',  label: 'Travel block names no client' },
+  FLIGHT_NO_TRIP:            { severity: 'WARNING',  label: 'Flight is not part of a trip' },
   EVENT_NO_CLIENT:           { severity: 'BLOCKING', label: 'Event has no client' },
   EVENT_NO_LOCATION:         { severity: 'BLOCKING', label: 'Event has no location' },
   EVENT_NO_SERVICE_TYPE:     { severity: 'BLOCKING', label: 'Event has no service type' },
@@ -66,9 +71,13 @@ class IssueCollector {
 
 async function upsertIssue(q, orgId, runId, it) {
   const { rows } = await q.query(
+    // A dismissed item stays dismissed: the next run does not raise it again
+    // (except a missing payer / NDIS number, which still holds the invoice).
     `INSERT INTO billing_issues (organisation_id, run_id, issue_type, severity, calendar_event_id, client_id,
         practitioner_user_id, trip_id, invoice_id, service_date, message, fix_target, dedupe_key)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+     SELECT $1::uuid, $2::uuid, $3::text, $4::text, $5::uuid, $6::text, $7::uuid, $8::uuid, $9::uuid, $10::date, $11::text, $12::jsonb, $13::text
+      WHERE $3::text IN ('CLIENT_MISSING_PAYER','NDIS_NUMBER_MISSING')
+         OR NOT EXISTS (SELECT 1 FROM billing_issues d WHERE d.organisation_id = $1 AND d.dedupe_key = $13 AND d.status = 'DISMISSED')
      ON CONFLICT (organisation_id, dedupe_key) WHERE status = 'OPEN'
      DO UPDATE SET last_seen_at = NOW(), run_id = EXCLUDED.run_id, message = EXCLUDED.message,
                    invoice_id = COALESCE(EXCLUDED.invoice_id, billing_issues.invoice_id),
@@ -77,7 +86,7 @@ async function upsertIssue(q, orgId, runId, it) {
     [orgId, runId || null, it.type, it.severity, it.eventId || null, it.clientId || null,
       it.practitionerId || null, it.tripId || null, it.invoiceId || null, it.serviceDate || null,
       it.message, JSON.stringify(it.fixTarget || {}), it.dedupeKey]);
-  return rows[0].id;
+  return rows[0] ? rows[0].id : null;
 }
 
 /**

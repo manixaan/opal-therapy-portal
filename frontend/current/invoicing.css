@@ -193,3 +193,37 @@ html:where([data-theme="dark"]) .inv-paper .draft-mark { color: var(--danger-ink
 .inv-pill.xero { background: var(--info-soft); color: var(--info-ink); }
 .inv-review-notes ul { margin: 6px 0 0; padding-left: 18px; }
 .inv-review-notes li { margin: 2px 0; }
+
+/* ── Edit in place (the invoice paper becomes the editor) ─────────────────── */
+.inv-ce { display: inline-block; min-width: 3ch; padding: 1px 4px; margin: -1px -4px; border-radius: 4px; outline: 1px dashed #b9c4c6; outline-offset: 0; cursor: text; }
+.inv-ce:hover { background: #f3f7f7; }
+.inv-ce:focus { outline: 2px solid var(--accent); background: #fff; }
+.inv-ce.num { text-align: right; min-width: 5ch; }
+.inv-ce:empty::before { content: attr(data-ph); color: #9aa5a8; }
+.inv-ce-date { font: inherit; font-size: 12.5px; border: 1px dashed #b9c4c6; border-radius: 4px; padding: 1px 4px; background: #fff; color: #1d2b2f; }
+.inv-new-line td { background: #f7fbfb; }
+.inv-line-x { color: var(--danger); font-weight: 700; min-width: 28px; }
+.inv-edit-hint { border-left: 3px solid var(--accent); }
+.inv-save-bad { color: var(--danger-ink); font-size: 12px; }
+.btn.danger { color: var(--danger-ink); border-color: var(--danger-soft); }
+.btn.danger:hover { background: var(--danger-soft); }
+/* Case noting and travel sit under their session: indent them slightly. */
+.inv-paper tr.inv-line-nf2f > td:nth-child(2), .inv-paper tr.inv-line-travel_labour > td:nth-child(2) { padding-left: 18px; }
+
+/* ── Quick fix pop-up ─────────────────────────────────────────────────────── */
+.inv-qf { grid-template-columns: 1fr; max-width: 420px; }
+.inv-check { display: flex !important; align-items: center; gap: 8px; flex-direction: row !important; }
+.inv-check input { width: auto; }
+
+/* ── Background run progress ──────────────────────────────────────────────── */
+.inv-progress-line { display: flex; align-items: center; gap: 10px; font-weight: 600; margin: 6px 0; }
+.inv-spin { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--border); border-top-color: var(--accent); animation: inv-spin 0.9s linear infinite; }
+@keyframes inv-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .inv-spin { animation: none; border-top-color: var(--border); } }
+
+/* ── Invoice page: the invoice full width, one status line above it ───────── */
+.inv-detail-full { max-width: 980px; }
+.inv-detail-full .inv-paper { width: 100%; }
+.inv-xero-strip { font-size: 12.5px; color: var(--ink-soft); background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 7px 12px; margin-bottom: 12px; }
+.inv-paydetails { margin-top: 22px; padding-top: 12px; border-top: 1px solid #e3e7e8; font-size: 12px; line-height: 1.55; color: #3b4a4e; }
+.inv-paydetails::first-line { font-weight: 700; }
