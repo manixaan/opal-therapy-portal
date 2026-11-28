@@ -291,6 +291,7 @@ describe('answers are remembered', () => {
     await run(agent, day(0), day(0));
     const [inv] = await invoices(agent);
     const d = await detail(agent, inv.id);
+    expect(d.business.abn).toBe('49 699 791 958'); // the practice ABN, with nothing typed in Billing settings
     expect(d.business.paymentDetails).toMatch(/BSB: 067-873/);
     expect(d.business.paymentDetails).toMatch(/24820381/);
     expect(d.business.paymentDetails).toMatch(/ann\.matthew@opaltherapy\.com\.au/);

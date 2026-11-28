@@ -81,12 +81,15 @@ const DEFAULT_PAYMENT_DETAILS = [
   'Questions about this invoice: Ann Mary Matthew · 0484 827 212 · ann.matthew@opaltherapy.com.au',
 ].join('\n');
 
+/** Opal Therapy Pty Limited's ABN (owner-confirmed 28 Nov 2026); Billing settings can replace it. */
+const DEFAULT_ABN = '49 699 791 958';
+
 /** The business identity printed on an invoice. */
 async function businessProfile(q, orgId) {
   const [st, org] = await Promise.all([ensureSettings(q, orgId), loadOrgProfile(q, orgId)]);
   return {
     name: st.businessName || org.name || 'Opal Therapy',
-    abn: st.abn || null,
+    abn: st.abn || DEFAULT_ABN,
     email: st.businessEmail || org.businessEmail || null,
     phone: st.businessPhone || org.businessPhone || null,
     address: st.businessAddress || org.businessAddress || null,
@@ -202,6 +205,6 @@ async function allocateInvoiceNumber(q, orgId) {
 }
 
 module.exports = {
-  SETTINGS_FIELDS, DEFAULT_PAYMENT_DETAILS, ensureSettings, loadOrgProfile, businessProfile, validateSettingsPatch,
+  SETTINGS_FIELDS, DEFAULT_PAYMENT_DETAILS, DEFAULT_ABN, ensureSettings, loadOrgProfile, businessProfile, validateSettingsPatch,
   updateSettings, formatInvoiceNumber, allocateInvoiceNumber,
 };

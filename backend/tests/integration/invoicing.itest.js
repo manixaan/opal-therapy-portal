@@ -590,12 +590,11 @@ describe('lifecycle: edit, PDF, finalise, pay, void & reissue, calendar link', (
     await run(agent, day(0), day(0));
     expect(byComp((await detail(agent, inv.id)).lines, 'SESSION')[0].quantity).toBe('0.2500');
 
-    // Draft PDF renders; finalise needs an ABN, then writes one immutable final PDF.
+    // Draft PDF renders; finalise (with the practice ABN built in) writes one immutable final PDF.
     const draftPdf = await agent.get(`/api/invoicing/invoices/${inv.id}/pdf?disposition=inline`);
     expect(draftPdf.status).toBe(200);
     expect(draftPdf.headers['content-type']).toBe('application/pdf');
     expect(Buffer.from(draftPdf.body).slice(0, 4).toString()).toBe('%PDF');
-    expect((await agent.post(`/api/invoicing/invoices/${inv.id}/finalise`)).body.code).toBe('NO_ABN');
     await agent.put('/api/invoicing/settings').send({ abn: '49 699 791 958' });
     expect((await agent.post(`/api/invoicing/invoices/${inv.id}/finalise`)).status).toBe(200);
     const p1 = await agent.get(`/api/invoicing/invoices/${inv.id}/pdf`).buffer(true);
