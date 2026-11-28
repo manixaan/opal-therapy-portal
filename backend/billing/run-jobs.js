@@ -141,9 +141,36 @@ async function autoDraftsTick({ pool = defaultPool, now = new Date(), run = Gen.
   return done;
 }
 
+// ── Payments from Xero ──────────────────────────────────────────────────────
+// Xero is where the CommBank feed is reconciled against each invoice. Opal reads
+// every copied invoice's paid amount from Xero (billing/xero-invoice-push.js
+// syncPayments) and sets its status (Sent → Part paid → Paid) — nobody enters
+// payments twice. Hourly in the background, and when the Invoicing tab opens
+// (at most every 5 minutes).
+const PAYMENTS_EVERY_MS = 60 * 60 * 1000;
+const PAYMENTS_ON_OPEN_MS = 5 * 60 * 1000;
+const lastPaymentsSync = new Map(); // orgId → ms
+
+async function syncPaymentsFor(orgId, { pool = defaultPool, minGapMs = PAYMENTS_ON_OPEN_MS, XP = require('./xero-invoice-push') } = {}) {
+  if (!XP.isEnabled()) return null;
+  const last = lastPaymentsSync.get(orgId) || 0;
+  if (Date.now() - last < minGapMs) return null;
+  lastPaymentsSync.set(orgId, Date.now());
+  try { return await XP.syncPayments({ pool, orgId, userId: null }); }
+  catch (e) { console.error('invoicing: payments from Xero failed:', e && e.code ? e.code : 'error'); return null; }
+}
+
+async function paymentsTick({ pool = defaultPool } = {}) {
+  const { rows } = await pool.query(`SELECT DISTINCT organisation_id FROM xero_invoice_links WHERE state = 'PUSHED'`);
+  for (const r of rows) await syncPaymentsFor(r.organisation_id, { pool, minGapMs: PAYMENTS_EVERY_MS - 60000 });
+}
+
 let timer = null;
 function startAutoDrafts({ pool = defaultPool } = {}) {
-  if (timer || process.env.NODE_ENV === 'test' || process.env.INVOICING_AUTO_DRAFTS === 'off') return false;
+  if (timer || process.env.NODE_ENV === 'test') return false;
+  // Payments from Xero run whatever the nightly-drafts switch says.
+  setInterval(() => { paymentsTick({ pool }).catch(() => {}); }, PAYMENTS_EVERY_MS).unref();
+  if (process.env.INVOICING_AUTO_DRAFTS === 'off') return false;
   let busy = false;
   const tick = () => {
     if (busy) return;
@@ -155,4 +182,4 @@ function startAutoDrafts({ pool = defaultPool } = {}) {
   return true;
 }
 
-module.exports = { startRun, getJob, latestJob, autoDraftsTick, startAutoDrafts, mondayOf, localParts, _jobs: jobs };
+module.exports = { syncPaymentsFor, paymentsTick, startRun, getJob, latestJob, autoDraftsTick, startAutoDrafts, mondayOf, localParts, _jobs: jobs };

@@ -70,6 +70,17 @@ async function loadOrgProfile(q, orgId) {
   };
 }
 
+/**
+ * Printed at the bottom of every invoice when Billing settings leaves "Payment
+ * details" blank (the owner's wording, 28 Nov 2026). Editable in Billing settings.
+ */
+const DEFAULT_PAYMENT_DETAILS = [
+  'Please pay by bank transfer',
+  'Account name: Opal Therapy Pty Limited',
+  'BSB: 067-873    Account number: 24820381',
+  'Questions about this invoice: Ann Mary Matthew · 0484 827 212 · ann.matthew@opaltherapy.com.au',
+].join('\n');
+
 /** The business identity printed on an invoice. */
 async function businessProfile(q, orgId) {
   const [st, org] = await Promise.all([ensureSettings(q, orgId), loadOrgProfile(q, orgId)]);
@@ -80,7 +91,7 @@ async function businessProfile(q, orgId) {
     phone: st.businessPhone || org.businessPhone || null,
     address: st.businessAddress || org.businessAddress || null,
     website: org.website || null,
-    paymentDetails: st.paymentDetails || null,
+    paymentDetails: st.paymentDetails || DEFAULT_PAYMENT_DETAILS,
     footer: st.invoiceFooter || null,
     paymentTermsDays: st.paymentTermsDays,
   };
@@ -191,6 +202,6 @@ async function allocateInvoiceNumber(q, orgId) {
 }
 
 module.exports = {
-  SETTINGS_FIELDS, ensureSettings, loadOrgProfile, businessProfile, validateSettingsPatch,
+  SETTINGS_FIELDS, DEFAULT_PAYMENT_DETAILS, ensureSettings, loadOrgProfile, businessProfile, validateSettingsPatch,
   updateSettings, formatInvoiceNumber, allocateInvoiceNumber,
 };

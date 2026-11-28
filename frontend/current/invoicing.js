@@ -248,7 +248,9 @@
     }
   }
 
-  var COLS = [['number', 'Invoice #'], [null, 'To'], ['client', 'Client'], [null, 'Location'], [null, 'Practitioner'], ['issue', 'Issue date'], ['due', 'Due date'], ['total', 'Amount', 'num'], [null, 'Outstanding', 'num'], [null, 'Status'], [null, 'Sent status']];
+  // Status comes from Xero once an invoice is there (paid / part paid follow the
+  // bank reconciliation in Xero), so there is no separate outstanding column.
+  var COLS = [['number', 'Invoice #'], [null, 'To'], ['client', 'Client'], [null, 'Practitioner'], ['issue', 'Issue date'], ['due', 'Due date'], ['total', 'Amount', 'num'], [null, 'Status'], [null, 'Sent / Xero']];
 
   async function loadInvoiceList() {
     var el = document.getElementById('inv-list');
@@ -265,7 +267,6 @@
         var sorted = c[0] && f.sort === c[0];
         return '<th class="' + (c[2] || '') + (c[0] ? ' sortable' : '') + (sorted ? ' sorted' : '') + '"' + (c[0] ? ' data-inv="sort" data-sort="' + c[0] + '" tabindex="0" aria-sort="' + (sorted ? (f.dir === 'asc' ? 'ascending' : 'descending') : 'none') + '"' : '') + '>' + esc(c[1]) + (sorted ? (f.dir === 'asc' ? ' ▲' : ' ▼') : '') + '</th>';
       }).join('') + '</tr></thead><tbody>' + r.invoices.map(function (i) {
-        var loc = (i.mmm_zones || []).filter(Boolean).map(function (z) { return 'MM' + z; }).join(', ');
         var can = sendable(i);
         return '<tr class="clickable" data-inv="open" data-id="' + esc(i.id) + '">' +
           '<td class="inv-sel">' + (can
@@ -274,10 +275,9 @@
           '<td><button type="button" class="inv-link" data-inv="open" data-id="' + esc(i.id) + '">' + esc(i.invoice_number) + '</button>' + (i.is_stale || i.source_changed_after_finalise ? '<div class="inv-dim" title="A source calendar event changed">⚠ source changed</div>' : '') + '</td>' +
           '<td>' + (i.payer_name ? esc(i.payer_name) : '<span class="inv-pill NEEDS_ATTENTION">Recipient missing</span>') + '</td>' +
           '<td>' + esc(i.client_name || '—') + (i.ndis_number ? '<div class="inv-dim">NDIS ' + esc(i.ndis_number) + '</div>' : '') + '</td>' +
-          '<td>' + (loc ? '<span class="inv-pill mmm">' + esc(loc) + '</span>' : '—') + (i.trip_name ? '<div class="inv-dim">Trip: ' + esc(i.trip_name) + '</div>' : '') + '</td>' +
           '<td>' + esc(i.practitioner_names || '—') + '</td>' +
           '<td>' + dmy(i.issue_date) + '</td><td>' + dmy(i.due_date) + '</td>' +
-          '<td class="num">' + money(i.total) + '</td><td class="num">' + money(i.outstanding) + '</td>' +
+          '<td class="num">' + money(i.total) + '</td>' +
           '<td>' + pill(i.display_status) + (i.open_issues ? ' <span class="inv-dim">' + i.open_issues + ' issue' + (i.open_issues === 1 ? '' : 's') + '</span>' : '') + '</td>' +
           '<td>' + (i.xero_state === 'PUSHED' ? '<span class="inv-pill xero" title="Copied to Xero">Xero</span> ' : i.xero_state === 'FAILED' ? '<span class="inv-pill NEEDS_ATTENTION" title="Not copied to Xero">Xero ✕</span> ' : '') +
             (i.sent_status === 'SENT' ? '<span class="inv-pill SENT">Sent</span>'
@@ -349,7 +349,7 @@
   async function saveInline(el) {
     var inv = state.detail && state.detail.invoice;
     if (!inv || !state.editMode) return;
-    var text = el.tagName === 'INPUT' ? el.value : el.textContent.replace(/ /g, ' ').trim();
+    var text = el.tagName === 'INPUT' ? el.value : (el.dataset.hdr === "notes" ? el.innerText : el.textContent).replace(/\u00a0/g, ' ').trim();
     try {
       if (el.dataset.line) {
         var l = lineById(el.dataset.line); if (!l) return;
@@ -368,15 +368,19 @@
         var k = el.dataset.hdr, col = { payerName: 'payer_name', payerEmail: 'payer_email', payerReference: 'payer_reference', notes: 'notes', issueDate: 'issue_date', dueDate: 'due_date' }[k];
         if ((text || '') === (inv[col] || '')) return;
         var b = {}; b[k] = text;
-        if (k.indexOf('payer') === 0) { b.reason = EDIT_REASON; if (!inv.payer_type) b.payerType = 'PLAN_MANAGER'; }
         if ((k === 'issueDate' || k === 'dueDate') && !text) return;
         saveState('Saving…');
-        await patch('/invoices/' + inv.id, b);
-        // Remember the recipient for this client's next invoices.
-        if (k.indexOf('payer') === 0 && inv.client_id) {
-          var pb = {}; pb[k] = text || null; if (!inv.payer_type) pb.payerType = 'PLAN_MANAGER';
-          await put('/clients/' + encodeURIComponent(inv.client_id), pb).catch(function () {});
+        if (k.indexOf('payer') === 0) {
+          b.reason = EDIT_REASON; if (!inv.payer_type) b.payerType = 'PLAN_MANAGER';
+          // Remember the recipient on the client first; the invoice then takes it
+          // and leaves Needs attention when nothing else is missing.
+          if (inv.client_id) {
+            var pb = {}; pb[k] = text || null; if (!inv.payer_type) pb.payerType = 'PLAN_MANAGER';
+            await put('/clients/' + encodeURIComponent(inv.client_id), pb);
+            b.remember = true;
+          }
         }
+        await patch('/invoices/' + inv.id, b);
       } else return;
       saveState('Saved');
       softRefresh();
@@ -519,7 +523,6 @@
       actions.push('<button class="btn" data-inv="email" data-id="' + esc(inv.id) + '">Email invoice</button>');
       if (inv.sent_status !== 'SENT') actions.push('<button class="btn" data-inv="mark-sent" data-id="' + esc(inv.id) + '">Mark sent</button>');
       if (inv.xero_state !== 'PUSHED' && inv.xero_state !== 'VOIDED') actions.push('<button class="btn" data-inv="xero-push" data-id="' + esc(inv.id) + '" title="Copy this invoice to Xero with the same number">Copy to Xero</button>');
-      if (inv.status !== 'PAID') actions.push('<button class="btn" data-inv="payment" data-id="' + esc(inv.id) + '" data-outstanding="' + esc(inv.outstanding) + '">Record payment</button>');
     }
     if (inv.status !== 'VOID') {
       actions.push('<button class="btn" data-inv="void" data-id="' + esc(inv.id) + '">Void</button>');
@@ -534,9 +537,6 @@
     var notes = [];
     (d.lines || []).forEach(function (l) { if (l.line_status === 'ACTIVE' && l.calculation && Array.isArray(l.calculation.reviewNotes)) l.calculation.reviewNotes.forEach(function (n) { if (notes.indexOf(n) < 0) notes.push(n); }); });
     if (notes.length) banners += '<div class="inv-note inv-review-notes"><b>For the reviewer — how travel was worked out</b> (not on the invoice)<ul>' + notes.map(function (n) { return '<li>' + esc(n) + '</li>'; }).join('') + '</ul></div>';
-    if (inv.xero_state === 'PUSHED') banners += '<div class="inv-note">In Xero as ' + esc(inv.invoice_number) + (inv.xero_status ? ' (' + esc(String(inv.xero_status).toLowerCase()) + ')' : '') + '. Payments are recorded in Xero and come back with <strong>Update payments from Xero</strong>.</div>';
-    else if (inv.xero_state === 'FAILED') banners += '<div class="inv-error">Not copied to Xero: ' + esc(inv.xero_error || 'unknown reason') + '</div>';
-    if (inv.sent_status === 'FAILED') banners += '<div class="inv-error">The email was not sent: ' + esc(inv.email_last_error || 'unknown reason') + '</div>';
     if (inv.source_changed_after_finalise) banners += '<div class="inv-error">Source event changed after invoice finalisation. This invoice has not been altered — use <strong>Void &amp; reissue</strong> to correct it, or dismiss the attention item if no correction is needed.</div>';
     if (inv.status === 'VOID') banners += '<div class="inv-note">Voided ' + dt(inv.voided_at) + (inv.voided_by_name ? ' by ' + esc(inv.voided_by_name) : '') + ': ' + esc(inv.void_reason || '') + (inv.reissued_as_id ? ' · Reissued as <button class="inv-link" data-inv="open" data-id="' + esc(inv.reissued_as_id) + '">' + esc(inv.reissued_as_number) + '</button>' : '') + '</div>';
     if (inv.reissue_of_number) banners += '<div class="inv-note">Reissue of ' + esc(inv.reissue_of_number) + '.</div>';
@@ -566,10 +566,9 @@
         '<tr class="calc-row" id="calc-' + esc(l.id) + '" hidden><td colspan="7">' + calcHtml(l) + '</td></tr>';
     }).join('');
 
-    var paidPct = Number(inv.total) > 0 ? Math.min(100, Math.round(100 * Number(inv.amount_paid) / Number(inv.total))) : 0;
     el.innerHTML =
-      '<div class="inv-detail-head"><h2>' + esc(inv.invoice_number) + ' ' + pill(inv.display_status) + '</h2><div class="inv-actions">' + actions.join('') + '</div></div>' + banners +
-      '<div class="inv-detail-grid"><div class="inv-paper"><div class="band"></div><div class="pad">' +
+      '<div class="inv-detail-head"><h2>' + esc(inv.invoice_number) + ' ' + pill(inv.display_status) + '</h2><div class="inv-actions">' + actions.join('') + '</div></div>' + xeroStrip(inv) + banners +
+      '<div class="inv-detail-full"><div class="inv-paper"><div class="band"></div><div class="pad">' +
       '<div class="top"><div><h2>Tax Invoice</h2>' + (editable ? '<div class="draft-mark">DRAFT</div>' : '') + '</div><img src="' + API + '/logo" alt="Opal Therapy"></div>' +
       '<div class="parties"><div><b>Client</b>' + esc(inv.client_name || '—') + '<br>NDIS Number: ' + esc(inv.ndis_number || 'not recorded') +
       (editing
@@ -581,33 +580,24 @@
       '<table><thead><tr><th>Item code</th><th>Description</th><th class="num">Unit price</th><th class="num">Quantity</th><th class="num">GST</th><th class="num">Amount AUD</th><th></th></tr></thead><tbody id="inv-line-body">' + (lineRows || '<tr><td colspan="7" class="inv-empty">No lines.</td></tr>') + '</tbody></table>' +
       (editing ? '<div style="margin-top:8px"><button class="mini" type="button" data-inv="add-line-inline">+ Add line</button> <span id="inv-save-state" class="inv-dim" aria-live="polite"></span></div>' : '') +
       '<div class="totals"><div><span>Subtotal</span><span>' + money(inv.subtotal) + '</span></div><div><span>' + (inv.tax_treatment === 'GST_10_EXCLUSIVE' ? 'GST 10%' : 'GST (GST-free)') + '</span><span>' + money(inv.gst_total) + '</span></div>' +
-      '<div class="strong"><span>Total AUD</span><span>' + money(inv.total) + '</span></div><div><span>Amount paid</span><span>' + money(inv.amount_paid) + '</span></div><div class="strong"><span>Outstanding</span><span>' + money(inv.outstanding) + '</span></div></div>' +
+      '<div class="strong"><span>Total AUD</span><span>' + money(inv.total) + '</span></div>' +
+      (Number(inv.amount_paid) > 0 ? '<div><span>Paid (from Xero)</span><span>' + money(inv.amount_paid) + '</span></div><div class="strong"><span>Balance due</span><span>' + money(inv.outstanding) + '</span></div>' : '') + '</div>' +
       (editing ? '<p style="font-size:12.5px;margin-top:14px"><b>Notes</b><br>' + hdrEd('notes', inv.notes, 'Notes printed on the invoice') + '</p>'
         : (inv.notes ? '<p style="font-size:12.5px;margin-top:14px"><b>Notes</b><br>' + esc(inv.notes) + '</p>' : '')) +
-      '</div></div>' +
-      '<aside class="inv-side">' +
-      '<div class="inv-panel"><h3>Payments</h3><div class="inv-progress"><i style="width:' + paidPct + '%"></i></div><div class="inv-dim">' + money(inv.amount_paid) + ' / ' + money(inv.total) + ' AUD</div>' +
-      (d.payments.length ? '<div style="margin-top:8px">' + d.payments.map(function (p) { return '<div class="inv-dim">' + dmy(p.paid_on) + ' · ' + aud(p.amount) + (p.method ? ' · ' + esc(p.method) : '') + (p.reference ? ' · ' + esc(p.reference) : '') + '</div>'; }).join('') + '</div>' : '') + '</div>' +
-      '<div class="inv-panel"><h3>Details</h3><div class="inv-kv">' +
-      '<div class="k">Status</div><div>' + pill(inv.display_status) + '</div>' +
-      '<div class="k">Sent</div><div>' + (inv.sent_status === 'SENT' ? dt(inv.sent_at) + (inv.sent_to ? ' to ' + esc(inv.sent_to) : '') : 'Not sent') + '</div>' +
-      (inv.finalised_at ? '<div class="k">Finalised</div><div>' + dt(inv.finalised_at) + (inv.finalised_by_name ? ' by ' + esc(inv.finalised_by_name) : '') + '</div>' : '') +
-      (inv.trip_name ? '<div class="k">Trip</div><div><button class="inv-link" data-inv="open-trip" data-id="' + esc(inv.trip_id) + '">' + esc(inv.trip_name) + '</button></div>' : '') +
-      '<div class="k">Client record</div><div><button class="inv-link" data-inv="open-client" data-client="' + esc(inv.client_id) + '">Billing profile</button></div>' +
-      '</div></div>' +
-      '<div class="inv-panel"><h3>Documents</h3>' + (d.documents.length ? d.documents.map(function (doc) {
-        return '<div class="inv-dim"><a href="' + API + '/documents/' + encodeURIComponent(doc.id) + '" target="_blank" rel="noopener">' + esc(doc.file_name) + '</a> · v' + doc.version + (doc.is_final ? ' · final (locked)' : ' · draft') + ' · ' + dt(doc.generated_at) + '</div>';
-      }).join('') : '<div class="inv-dim">No stored PDFs yet. Download or finalise to store one.</div>') + '</div>' +
-      '<div class="inv-panel"><h3>Audit trail</h3><div id="inv-audit" class="inv-dim">' + skel(2) + '</div></div>' +
-      '</aside></div>';
+      (biz.paymentDetails ? '<div class="inv-paydetails">' + esc(biz.paymentDetails).replace(/\n/g, '<br>') + '</div>' : '') +
+      '</div></div></div>';
     state.detail = d;
-    get('/invoices/' + encodeURIComponent(id) + '/audit').then(function (a) {
-      var box = document.getElementById('inv-audit');
-      if (!box) return;
-      box.innerHTML = a.events.length ? a.events.slice(0, 40).map(function (ev) {
-        return '<div style="margin-bottom:6px"><b>' + esc(ev.action.replace(/[._]/g, ' ')) + '</b> · ' + dt(ev.created_at) + (ev.actor_name ? ' · ' + esc(ev.actor_name) : '') + (ev.reason ? '<br>“' + esc(ev.reason) + '”' : '') + '</div>';
-      }).join('') : 'No events.';
-    }).catch(function () {});
+  }
+
+  /** One line above the invoice: has it been sent, and where is it in Xero. */
+  function xeroStrip(inv) {
+    var bits = [];
+    if (inv.sent_status === 'SENT') bits.push('Sent ' + dt(inv.sent_at) + (inv.sent_to ? ' to ' + esc(inv.sent_to) : ''));
+    else if (inv.sent_status === 'FAILED') bits.push('<span class="inv-save-bad">Not sent: ' + esc(inv.email_last_error || 'email failed') + '</span>');
+    if (inv.xero_state === 'PUSHED') bits.push('In Xero as ' + esc(inv.invoice_number) + (inv.xero_status ? ' (' + esc(String(inv.xero_status).toLowerCase()) + ')' : '') + ' — paid status follows Xero');
+    else if (inv.xero_state === 'FAILED') bits.push('<span class="inv-save-bad">Not in Xero: ' + esc(inv.xero_error || 'copy failed') + '</span>');
+    else if (['READY', 'SENT', 'PART_PAID', 'PAID'].indexOf(inv.status) >= 0) bits.push('Not in Xero yet');
+    return bits.length ? '<div class="inv-xero-strip">' + bits.join(' · ') + '</div>' : '';
   }
 
   // ── Quick fix ────────────────────────────────────────────────────────────
@@ -619,9 +609,10 @@
     'SESSION_MMM_UNRESOLVED', 'SESSION_MMM_REVIEW', 'CASE_NOTE_MISSING', 'REPORT_NOT_BILLED', 'TRAVEL_BLOCK_NOT_INVOICED',
     'TRAVEL_BLOCK_NO_CLIENT', 'FLIGHT_NO_TRIP'];
   state.issueCache = state.issueCache || {};
-  function zoneSelect() {
+  function zoneSelect(only) {
     var o = '<option value="">Choose…</option>';
-    for (var z = 1; z <= 7; z++) o += '<option value="' + z + '">MM' + z + (z === 1 ? ' — metro' : z >= 6 ? ' — remote' : '') + '</option>';
+    var list = Array.isArray(only) && only.length ? only.map(Number) : [1, 2, 3, 4, 5, 6, 7];
+    list.forEach(function (z) { o += '<option value="' + z + '">MM' + z + (z === 1 ? ' — metro' : z >= 6 ? ' — remote' : '') + '</option>'; });
     return '<select name="zone" required>' + o + '</select>';
   }
   function qfButtons(list) {
@@ -634,7 +625,7 @@
     if (!i) return;
     var t = i.fix_target || {};
     if (i.issue_type === 'NF2F_UNTIMED' && window.Nf2f) return window.Nf2f.openResolve(t.eventId);
-    var who = t.clientName || '';
+    var who = t.clientName || i.client_name || '';
     var html = '', foot = '', title = 'Quick fix';
     state.qf = { issue: i, profile: null, payers: [] };
     switch (i.issue_type) {
@@ -664,41 +655,47 @@
         foot = qfButtons([['save', 'Save']]); break;
       case 'CLIENT_ADDRESS_MISSING':
         title = 'Where are ' + (who ? who + "'s" : 'the') + ' sessions?';
-        html = '<form class="inv-form inv-qf" id="inv-qf-form"><label class="wide">Address<input name="serviceAddress" autocomplete="street-address" required></label></form>';
+        html = '<form class="inv-form inv-qf" id="inv-qf-form"><label class="wide">Address<input name="serviceAddress" autocomplete="off" placeholder="Start typing…" required></label></form>';
         foot = qfButtons([['save', 'Save']]); break;
       case 'MMM_UNRESOLVED': case 'MMM_REVIEW':
         title = 'Which MMM zone' + (who ? ' is ' + who + ' in' : '') + '?';
         html = '<form class="inv-form inv-qf" id="inv-qf-form"><label>Zone' + zoneSelect() + '</label></form>';
         foot = qfButtons([['save', 'Save']]); break;
       case 'SESSION_MMM_UNRESOLVED': case 'SESSION_MMM_REVIEW':
-        title = 'Which MMM zone was this session in?';
-        html = '<div class="inv-dim">' + esc(i.message) + '</div><form class="inv-form inv-qf" id="inv-qf-form"><label>Zone' + zoneSelect() + '</label></form>';
+        title = 'MMM zone for ' + (t.address || 'this session');
+        html = '<form class="inv-form inv-qf" id="inv-qf-form"><label>Zone' + zoneSelect(t.zones) + '</label></form><div class="inv-dim">Remembered for this address.</div>';
         foot = qfButtons([['save', 'Save']]); break;
       case 'CASE_NOTE_MISSING':
-        title = 'Case noting for this session';
-        html = '<div class="inv-dim">' + esc(i.message.split('. ')[0]) + '.</div><form class="inv-form inv-qf" id="inv-qf-form"><label>Case-noting minutes<input name="minutes" inputmode="numeric" type="number" min="1" max="600" step="1" required></label></form>';
+        title = 'Case-noting minutes — ' + (i.client_name || 'client') + ', ' + dmy(i.service_date || t.date);
+        html = '<form class="inv-form inv-qf" id="inv-qf-form"><label>Case-noting minutes<input name="minutes" inputmode="numeric" type="number" min="1" max="600" step="1" required></label></form>';
         foot = qfButtons([['leave', 'No case noting'], ['save', 'Add to invoice']]); break;
       case 'REPORT_NOT_BILLED':
-        title = 'Bill ' + (t.label || 'this report') + '?';
-        html = '<div>' + esc((t.label || 'Report writing') + (t.clientName ? ' for ' + t.clientName : '') + ', ' + dmy(t.date) + ', ' + (t.minutes || '?') + ' min') + '</div>';
+        title = 'Bill ' + (t.minutes || '?') + ' min ' + (t.label || 'report writing') + (t.clientName ? ' — ' + t.clientName : '') + ', ' + dmy(t.date) + '?';
+        html = '';
         foot = qfButtons([['NOT_BILLABLE', 'Not billable'], ['SPLOSE', 'Billed in Splose'], ['BILL', 'Bill it']]); break;
       case 'TRAVEL_BLOCK_NOT_INVOICED':
-        title = 'Bill this travel?';
-        html = '<div>' + esc((t.minutes || '?') + ' min travel block, ' + dmy(t.date) + (t.clientName ? ', for ' + t.clientName : '')) + '</div>';
+        title = 'Bill ' + (t.minutes || '?') + ' min travel' + (t.clientName ? ' — ' + t.clientName : '') + ', ' + dmy(t.date) + '?';
+        html = '';
         foot = qfButtons([['NOT_BILLABLE', 'Already a travel leg'], ['BILL', 'Bill it']]); break;
       case 'TRAVEL_BLOCK_NO_CLIENT':
-        title = 'Whose travel is this?';
-        html = '<div>' + esc((t.minutes || '?') + ' min travel block, ' + dmy(t.date)) + ' names no client. Add the client on the calendar, or mark it not billable.</div>';
+        title = 'Whose travel? ' + (t.minutes || '?') + ' min, ' + dmy(t.date);
+        html = '';
         foot = qfButtons([['calendar', 'Open calendar'], ['NOT_BILLABLE', 'Not billable']]); break;
       case 'FLIGHT_NO_TRIP':
-        title = 'Flight not on a trip';
-        html = '<div>' + esc(i.message) + '</div>';
+        title = 'Flight on ' + dmy(t.date) + ' — which trip?';
+        html = '';
         foot = qfButtons([['NOT_BILLABLE', 'Not billable'], ['trip', 'Create a trip']]); break;
       default: return;
     }
     modal(title, html + '<div id="inv-qf-msg"></div>', foot);
     var first = document.querySelector('#inv-qf-form input, #inv-qf-form select');
     if (first) first.focus();
+    var addrIn = document.querySelector('#inv-qf-form [name="serviceAddress"]');
+    if (addrIn) {
+      // Google address suggestions (server-side proxy; the key never reaches the browser).
+      if (typeof window.attachPlacesAutocomplete === 'function') window.attachPlacesAutocomplete(addrIn, function () {});
+      else if (window.OpalPlaces && window.OpalPlaces.attach) window.OpalPlaces.attach(addrIn, function () {});
+    }
     var nameIn = document.querySelector('#inv-qf-form [name="payerName"]');
     if (nameIn) nameIn.addEventListener('change', function () {
       // Picking a known payer fills its email: entered once, used for every client.
@@ -736,8 +733,7 @@
           await put('/clients/' + encodeURIComponent(i.client_id) + '/mmm-override', { zone: v('zone'), reason: 'Quick fix' });
           out = await post('/issues/' + i.id + '/quick-fix'); break;
         case 'SESSION_MMM_UNRESOLVED': case 'SESSION_MMM_REVIEW':
-          await put('/events/' + encodeURIComponent(t.eventId || i.calendar_event_id) + '/mmm', { zone: v('zone'), reason: 'Quick fix' });
-          out = await post('/issues/' + i.id + '/quick-fix'); break;
+          out = await post('/issues/' + i.id + '/quick-fix', { zone: v('zone') }); break;
         case 'CASE_NOTE_MISSING':
           out = await post('/issues/' + i.id + '/quick-fix', ans === 'leave' ? { leaveOff: true } : { minutes: v('minutes') }); break;
         case 'TRAVEL_BLOCK_NO_CLIENT':
@@ -757,20 +753,25 @@
     } catch (e) { btn.disabled = false; if (msg) msg.innerHTML = '<div class="inv-error">' + esc(e.message) + '</div>'; }
   }
 
+  // Every attention item has one "Fix": a pop-up asking only for the missing
+  // data where the portal can take the answer, otherwise straight to the place
+  // where it is fixed (the calendar, rate cards, a trip).
   function fixButton(i) {
     if (i && i.id) state.issueCache[i.id] = i;
-    if (i && QUICK_FIX.indexOf(i.issue_type) >= 0) return '<button class="btn btn-xs primary" data-inv="quick-fix" data-id="' + esc(i.id) + '">Quick fix</button>';
-    if (i && i.issue_type === 'NF2F_UNTIMED') { var tt = i.fix_target || {}; return '<button class="btn btn-xs primary" data-inv="nf2f-resolve" data-id="' + esc(tt.eventId) + '">Quick fix</button>'; }
-    var t = i.fix_target || {};
-    if (t.kind === 'client') return '<button class="btn btn-xs" data-inv="open-client" data-client="' + esc(t.clientId) + '">Fix client</button>';
-    if (t.kind === 'invoice') return '<button class="btn btn-xs" data-inv="open" data-id="' + esc(t.invoiceId) + '">Open invoice</button>';
-    if (t.kind === 'rate_cards') return '<button class="btn btn-xs" data-inv="goto" data-sec="settings">Rate cards</button>';
-    if (t.kind === 'trip') return '<button class="btn btn-xs" data-inv="open-trip" data-id="' + esc(t.tripId) + '" data-tab="' + esc(t.tab || 'costs') + '">Open trip</button>';
-    if (t.kind === 'route') return '<button class="btn btn-xs" data-inv="manual-route" data-o="' + esc(t.origin) + '" data-d="' + esc(t.destination) + '">Enter route</button>';
-    if (t.kind === 'nf2f') return '<button class="btn btn-xs" data-inv="nf2f-resolve" data-id="' + esc(t.eventId) + '">Enter the time</button>';
-    if (t.kind === 'event' || t.kind === 'work_location') return '<button class="btn btn-xs" data-inv="to-calendar" data-date="' + esc(t.date || '') + '">Open calendar</button>';
+    var t = (i && i.fix_target) || {};
+    var b = function (attrs) { return '<button class="btn btn-xs primary" ' + attrs + '>Fix</button>'; };
+    if (i && QUICK_FIX.indexOf(i.issue_type) >= 0) return b('data-inv="quick-fix" data-id="' + esc(i.id) + '"');
+    if (i && i.issue_type === 'NF2F_UNTIMED') return b('data-inv="nf2f-resolve" data-id="' + esc(t.eventId) + '"');
+    if (t.kind === 'client') return b('data-inv="open-client" data-client="' + esc(t.clientId) + '"');
+    if (t.kind === 'invoice') return b('data-inv="open" data-id="' + esc(t.invoiceId) + '"');
+    if (t.kind === 'rate_cards') return b('data-inv="goto" data-sec="settings"');
+    if (t.kind === 'trip') return b('data-inv="open-trip" data-id="' + esc(t.tripId) + '" data-tab="' + esc(t.tab || 'costs') + '"');
+    if (t.kind === 'route') return b('data-inv="manual-route" data-o="' + esc(t.origin) + '" data-d="' + esc(t.destination) + '"');
+    if (t.kind === 'nf2f') return b('data-inv="nf2f-resolve" data-id="' + esc(t.eventId) + '"');
+    if (t.kind === 'event' || t.kind === 'work_location') return b('data-inv="to-calendar" data-date="' + esc(t.date || '') + '"');
     return '';
   }
+
 
   // ── Complete invoicing ───────────────────────────────────────────────────
   function openCompleteInvoicing(opts) {
@@ -874,6 +875,7 @@
       '<div><b>' + ((s.alreadyInvoiced || 0) + (s.invoicedInSplose || 0)) + '</b><span>skipped — already invoiced</span></div>' +
       '<div><b>' + skipped + '</b><span>not billable (cancelled, DNA, future…)</span></div>' +
       '<div><b>' + (s.itemsNeedAttention || 0) + '</b><span>items need attention</span></div>' +
+      (s.warnings ? '<div><b>' + s.warnings + '</b><span>to check (case noting, reports, travel)</span></div>' : '') +
       '<div><b>' + aud(s.total) + '</b><span>value of touched drafts</span></div></div>';
     var btn = document.getElementById('inv-run-go'); if (btn) { btn.disabled = false; btn.textContent = 'Create drafts'; }
     var foot = document.getElementById('inv-modal-foot');
@@ -887,7 +889,7 @@
     el.innerHTML = '<div class="inv-table-wrap"><table class="inv-table"><thead><tr><th>Item</th><th>Client</th><th>Date</th><th>Detail</th><th></th></tr></thead><tbody>' + r.issues.map(function (i) {
       return '<tr><td><span class="inv-pill ' + esc(i.severity) + '">' + esc(i.label) + '</span></td><td>' + esc(i.client_name || i.client_id || '—') + '</td><td>' + dmy(i.service_date) + '</td>' +
         '<td>' + esc(i.message) + (i.invoice_number ? '<div class="inv-dim">Invoice ' + esc(i.invoice_number) + '</div>' : '') + '</td>' +
-        '<td style="white-space:nowrap">' + fixButton(i) + (QUICK_FIX.indexOf(i.issue_type) >= 0 || i.issue_type === 'NF2F_UNTIMED' ? '' : ' <button class="btn btn-xs" data-inv="reprocess" data-id="' + esc(i.id) + '">Reprocess</button>') + ' <button class="btn btn-xs" data-inv="dismiss" data-id="' + esc(i.id) + '">Dismiss</button></td></tr>';
+        '<td style="white-space:nowrap">' + fixButton(i) + ' <button class="btn btn-xs" data-inv="dismiss" data-id="' + esc(i.id) + '">Dismiss</button></td></tr>';
     }).join('') + '</tbody></table></div>';
   }
 

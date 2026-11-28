@@ -326,6 +326,8 @@ async function prepare(q, orgId, opts) {
   const cards = await RC.loadRateCards(q, orgId);
 
   // 3. Client-level checks + pricing per event
+  // Zones the owner already gave for an address (migration 097) are never asked again.
+  const addressZones = await loadAddressZones(q, orgId);
   const sessions = []; // billable or calc-blocked, not skipped
   for (const { ev, res } of evaluated) {
     if (res.state === 'SKIP') continue;
@@ -333,7 +335,7 @@ async function prepare(q, orgId, opts) {
     const entry = { ev, res, profile: p, blocked: res.state === 'ISSUE', recipientIssues: [] };
     if (p) {
       // An event already blocked (no location, no client…) is not zoned — its own issue says why.
-      const zone = res.state === 'ISSUE' ? { mmm: null } : sessionZone(ev, res, p);
+      const zone = res.state === 'ISSUE' ? { mmm: null } : sessionZone(ev, res, p, addressZones);
       const mmm = zone.mmm;
       entry.mmm = mmm;
       entry.mmmSnapshot = zone.snapshot || null;
@@ -343,7 +345,8 @@ async function prepare(q, orgId, opts) {
         entry.blocked = true;
         if (zone.issue) {
           issues.raise(zone.issue, { eventId: ev.id, clientId: ev.client_id, practitionerId: ev.user_id, serviceDate: ev.local_date,
-            message: sessionZoneMessage(zone, ev, p), fixTarget: { kind: 'event', eventId: ev.id, date: ev.local_date } });
+            message: sessionZoneMessage(zone, ev, p),
+            fixTarget: { kind: 'event', eventId: ev.id, date: ev.local_date, address: DR.eventAddress(ev) || null, zones: (zone.lookup && zone.lookup.zones) || [] } });
         } else {
           const type = !p.service_address ? 'CLIENT_ADDRESS_MISSING' : (p.mmm_zone && p.mmm_confidence === 'REVIEW' ? 'MMM_REVIEW' : 'MMM_UNRESOLVED');
           issues.raise(type, { clientId: ev.client_id, message: issueMessage(type, ev, p), fixTarget: { kind: 'client', clientId: ev.client_id } });
@@ -670,6 +673,7 @@ async function prepare(q, orgId, opts) {
       const mins = Math.round((new Date(t.end_time) - new Date(t.start_time)) / 60000);
       const isFlight = /^flight/.test(String(b.kind || ''));
       if (!clientId) {
+        if (!b.kind) continue;                                       // an auto travel leg, not a booked block
         // Flights belong to a trip (its travel hours); a travel block with no client
         // cannot be billed until someone says whose it is — asked, not dropped.
         if (opts.clientIds && opts.clientIds.length) continue;
@@ -729,13 +733,25 @@ function clientZone(p) {
  *   3. telehealth only: the client's own zone from their billing profile.
  * In person with no confident lookup → a SESSION_MMM_* issue; nothing is guessed.
  */
-function sessionZone(ev, res, profile) {
+/** "12 Smith St, Byford WA 6122" and "12 smith st byford wa 6122" are one address. */
+function addressKey(a) {
+  return String(a || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().slice(0, 400);
+}
+
+async function loadAddressZones(q, orgId) {
+  const { rows } = await q.query(`SELECT address_key, mmm_zone FROM billing_address_zones WHERE organisation_id = $1`, [orgId]);
+  return new Map(rows.map(r => [r.address_key, Number(r.mmm_zone)]));
+}
+
+function sessionZone(ev, res, profile, addressZones = new Map()) {
   if (ev.mmm_set_zone != null) {
     const zone = Number(ev.mmm_set_zone);
     return { mmm: zone, snapshot: { zone, source: ev.mmm_set_source === 'OWNER' ? 'set by owner' : 'set at booking' } };
   }
   if (!res.telehealth) {
     const address = DR.eventAddress(ev);
+    const remembered = address ? addressZones.get(addressKey(address)) : null;
+    if (remembered) return { mmm: remembered, snapshot: { zone: remembered, source: 'owner answer for this address' } };
     const r = Loc.lookupAddress(address);
     if (r.confident) {
       return { mmm: r.zone, snapshot: { zone: r.zone, source: 'session address', locality: r.locality, postcode: r.postcode,
@@ -968,19 +984,19 @@ async function collectReportBlocks(q, orgId, opts, { tz, now, splose, issues, nf
     if (b.decision === 'NOT_BILLABLE' || b.decision === 'SPLOSE') continue;
     const label = REPORT_KINDS[bk.kind] || 'Report writing';
     const secs = NF.blockSeconds(b);
+    // Splose has (or will bill) a matching support activity → it is Splose's, even after "Bill it".
+    if (splose.status === 'OK' && Array.isArray(splose.activities)) {
+      const lo = plusDays(b.local_date, -REPORT_MATCH_DAYS); const hi = plusDays(b.local_date, REPORT_MATCH_DAYS);
+      const match = splose.activities.some(a => a && !a.archived && !a.deletedAt && String(a.patientId) === clientId && a.start
+        && (() => { const d = SB.localDate(a.start, tz); return d >= lo && d <= hi; })());
+      if (match) continue;
+    }
     if (b.decision === 'BILL') {
       // Billed like non-face-to-face work: the block's length, the client's zone and session rate.
       nf2fParts.push({ ev: { ...b, client_id: clientId, client_name: bk.clientName || null }, block: b,
         part: { clientId, clientName: bk.clientName || null, seconds: secs, percent: 100 }, timed: secs,
         alloc: { nonBillablePercent: 0 }, clientsOnBlock: 1, activity: label });
       continue;
-    }
-    // Splose has (or will bill) a matching support activity → it is Splose's.
-    if (splose.status === 'OK' && Array.isArray(splose.activities)) {
-      const lo = plusDays(b.local_date, -REPORT_MATCH_DAYS); const hi = plusDays(b.local_date, REPORT_MATCH_DAYS);
-      const match = splose.activities.some(a => a && !a.archived && !a.deletedAt && String(a.patientId) === clientId && a.start
-        && (() => { const d = SB.localDate(a.start, tz); return d >= lo && d <= hi; })());
-      if (match) continue;
     }
     if (eventScoped) continue;
     const mins = Math.round(secs / 60);
@@ -1005,6 +1021,8 @@ async function checkCaseNotes(q, orgId, sessions, issues, { tz, practitionerIds 
        FROM events e JOIN users u ON u.id = e.user_id
       WHERE u.organisation_id = $1 AND COALESCE(e.is_deleted, FALSE) = FALSE
         AND e.custom_metadata->'booking'->>'group' = 'nf2f' AND e.custom_metadata->'booking'->>'kind' = 'case-noting'
+        AND LOWER(COALESCE(e.status, '')) <> 'cancelled'
+        AND NOT EXISTS (SELECT 1 FROM calendar_event_billing cb WHERE cb.event_id = e.id AND cb.attendance IN ('CANCELLED','NOT_BILLABLE','DID_NOT_ATTEND'))
         AND ((e.start_time AT TIME ZONE 'UTC') AT TIME ZONE $4)::date BETWEEN $2::date AND $3::date` + extra, params);
   const noted = new Map(); // clientId → [local dates of case-noting blocks]
   for (const b of blocks) {
@@ -1025,6 +1043,13 @@ async function checkCaseNotes(q, orgId, sessions, issues, { tz, practitionerIds 
       WHERE organisation_id = $1 AND issue_type = 'CASE_NOTE_MISSING' AND status = 'DISMISSED' AND calendar_event_id = ANY($2::uuid[])`,
     [orgId, billable.map(s => s.ev.id)]);
   for (const r of dismissed) manualFor.add(r.event_id);
+  // A session already on a finalised invoice is settled: nothing to add to it.
+  const { rows: settled } = await q.query(
+    `SELECT DISTINCT l.calendar_event_id::text AS event_id FROM invoice_lines l JOIN invoices i ON i.id = l.invoice_id
+      WHERE l.organisation_id = $1 AND l.component = 'SESSION' AND l.line_status = 'ACTIVE'
+        AND i.status NOT IN ('DRAFT','NEEDS_ATTENTION','VOID') AND l.calendar_event_id = ANY($2::uuid[])`,
+    [orgId, billable.map(s => s.ev.id)]);
+  for (const r of settled) manualFor.add(r.event_id);
   for (const s of billable) {
     const ev = s.ev;
     if (manualFor.has(String(ev.id))) continue;
@@ -1175,6 +1200,25 @@ async function runInvoicing(opts) {
       book.touch(d.invoice_id);
       await recordAudit(tx, { orgId, actorUserId: userId, action: 'invoice.line_removed', entityType: 'invoice_line', entityId: d.id,
         invoiceId: d.invoice_id, before: { component: 'NF2F', amount: d.amount }, reason: 'Non-face-to-face time no longer billable for this client' });
+    }
+
+    // A case-noting block booked after a quick-fix case-noting line: the calendar's
+    // block is billed, the typed-in line steps aside (never both).
+    for (const n of nf2f) {
+      if (n.blocked || n.activity !== 'Case noting') continue;
+      const { rows: replaced } = await tx.query(
+        `UPDATE invoice_lines l SET line_status = 'REMOVED', removed_reason = 'Replaced by the calendar case-noting block', removed_at = NOW(), updated_at = NOW()
+           FROM invoices i, invoice_lines s
+          WHERE i.id = l.invoice_id AND i.organisation_id = $1 AND i.status IN ('DRAFT','NEEDS_ATTENTION')
+            AND l.line_status = 'ACTIVE' AND l.client_id = $2 AND l.calculation->>'method' = 'case_note'
+            AND s.calendar_event_id::text = l.calculation->>'caseNoteFor' AND s.component = 'SESSION'
+            AND s.service_date BETWEEN $3::date - 7 AND $3::date
+        RETURNING l.invoice_id, l.id, l.amount`, [orgId, n.part.clientId, n.block.local_date]);
+      for (const d of replaced) {
+        book.touch(d.invoice_id);
+        await recordAudit(tx, { orgId, actorUserId: userId, action: 'invoice.line_removed', entityType: 'invoice_line', entityId: d.id,
+          invoiceId: d.invoice_id, before: { component: 'MANUAL', amount: d.amount }, reason: 'Replaced by the calendar case-noting block' });
+      }
     }
 
     // Splose support activities: one line each, claimed by the Splose activity id.
@@ -1333,4 +1377,4 @@ async function runInvoicing(opts) {
   }
 }
 
-module.exports = { runInvoicing, prepare, loadCandidateEvents, refreshDraft, insertLine, issueMessage, sessionZone, clientZone, ymd, validRange };
+module.exports = { addressKey, runInvoicing, prepare, loadCandidateEvents, refreshDraft, insertLine, issueMessage, sessionZone, clientZone, ymd, validRange };

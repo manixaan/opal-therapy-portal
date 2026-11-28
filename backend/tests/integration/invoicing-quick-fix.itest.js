@@ -93,7 +93,7 @@ async function block(user, { date, start = '14:00', minutes = 30, booking, event
   const { rows: [r] } = await db.pool.query(
     `INSERT INTO events (user_id, title, start_time, end_time, location, event_type, status, organisation_id, custom_metadata)
      VALUES ($1,$2,$3,$4,'',$5,'confirmed',$6,$7) RETURNING id`,
-    [user.id, booking.kind, s, e, eventType, user.organisation_id, JSON.stringify({ booking })]);
+    [user.id, booking.kind || 'Travel', s, e, eventType, user.organisation_id, JSON.stringify({ booking })]);
   if (timerSeconds != null) {
     await db.pool.query(
       `INSERT INTO event_billing_timers (event_id, organisation_id, user_id, status, accumulated_seconds, limit_seconds) VALUES ($1,$2,$3,'STOPPED',$4,$5)`,
@@ -106,7 +106,7 @@ const planManaged = (name, zone) => ({ participantName: name, ndisNumber: '43179
   payerName: 'MARS Plan Manager', payerEmail: 'mars@pm.test', serviceAddress: `${name} home, Zone MM${zone}` });
 
 async function profile(agent, clientId, body) { const r = await agent.put(`/api/invoicing/clients/${clientId}`).send(body); expect(r.status).toBe(200); return r.body; }
-async function run(agent, from, to) { const r = await agent.post('/api/invoicing/runs').send({ from, to }); expect(r.status).toBe(201); return r.body.summary; }
+async function run(agent, from, to) { const r = await agent.post('/api/invoicing/runs').send({ from, to }); if (r.status !== 201) console.warn('RUN', r.status, JSON.stringify(r.body)); expect(r.status).toBe(201); return r.body.summary; }
 async function invoices(agent) { const r = await agent.get('/api/invoicing/invoices'); expect(r.status).toBe(200); return r.body.invoices; }
 async function detail(agent, id) { const r = await agent.get(`/api/invoicing/invoices/${id}`); expect(r.status).toBe(200); return r.body; }
 async function openIssues(agent, type) { const r = await agent.get('/api/invoicing/issues'); return r.body.issues.filter(i => i.issue_type === type && i.status === 'OPEN'); }
@@ -255,6 +255,98 @@ describe('every billable calendar item is accounted for', () => {
     expect((await agent.post(`/api/invoicing/issues/${ask.id}/quick-fix`).send({ decision: 'NOT_BILLABLE' })).status).toBe(200);
     await run(agent, day(0), day(4));
     expect(await openIssues(agent, 'TRAVEL_BLOCK_NO_CLIENT')).toHaveLength(0);
+  });
+});
+
+describe('answers are remembered', () => {
+  test('a session zone answered once is kept for the address: the next session there is zoned without asking', async () => {
+    const app = buildApp(); const org = await seedOrganisation();
+    const { agent } = await login(app, 'owner', org.id);
+    const pr = await practitioner(org.id, [day(0), day(7)]);
+    await profile(agent, 'z1', planManaged('Zed One', 1));
+    const where = '1 Unknown Track, Nowhereville WA';
+    await session_(pr, { clientId: 'z1', clientName: 'Zed One', date: day(0), location: where });
+    await run(agent, day(0), day(0));
+    const [ask] = await openIssues(agent, 'SESSION_MMM_UNRESOLVED');
+    expect(ask.fix_target).toMatchObject({ address: where });
+    expect((await agent.post(`/api/invoicing/issues/${ask.id}/quick-fix`).send({ zone: 9 })).status).toBe(400);
+    const fx = await agent.post(`/api/invoicing/issues/${ask.id}/quick-fix`).send({ zone: 2 });
+    expect(fx.status).toBe(202);
+    expect((await waitJob(agent, fx.body.job.jobId)).state).toBe('DONE');
+    expect(await openIssues(agent, 'SESSION_MMM_UNRESOLVED')).toHaveLength(0);
+    // A week later, same address (typed differently): no question, zone 2.
+    const later = await session_(pr, { clientId: 'z1', clientName: 'Zed One', date: day(7), location: '1 unknown track,  NOWHEREVILLE wa' });
+    await run(agent, day(7), day(7));
+    expect(await openIssues(agent, 'SESSION_MMM_UNRESOLVED')).toHaveLength(0);
+    const { rows: [line] } = await db.pool.query(`SELECT mmm_zone FROM invoice_lines WHERE calendar_event_id = $1 AND component = 'SESSION'`, [later]);
+    expect(Number(line.mmm_zone)).toBe(2);
+  });
+
+  test('every invoice carries the bank and contact details unless Billing settings says otherwise', async () => {
+    const app = buildApp(); const org = await seedOrganisation();
+    const { agent } = await login(app, 'owner', org.id);
+    const pr = await practitioner(org.id, [day(0)]);
+    await profile(agent, 'f1', planManaged('Fay One', 1));
+    await session_(pr, { clientId: 'f1', clientName: 'Fay One', date: day(0) });
+    await run(agent, day(0), day(0));
+    const [inv] = await invoices(agent);
+    const d = await detail(agent, inv.id);
+    expect(d.business.paymentDetails).toMatch(/BSB: 067-873/);
+    expect(d.business.paymentDetails).toMatch(/24820381/);
+    expect(d.business.paymentDetails).toMatch(/ann\.matthew@opaltherapy\.com\.au/);
+    await agent.put('/api/invoicing/settings').send({ paymentDetails: 'Pay by EFT only' });
+    expect((await detail(agent, inv.id)).business.paymentDetails).toBe('Pay by EFT only');
+  });
+});
+
+describe('review fixes', () => {
+  test('a dismissed item stays dismissed on the next run; Opal\'s own travel legs are never asked about', async () => {
+    const app = buildApp(); const org = await seedOrganisation();
+    const { agent } = await login(app, 'owner', org.id);
+    const pr = await practitioner(org.id, [day(0)]);
+    await profile(agent, 'x1', planManaged('Xi One', 1));
+    await session_(pr, { clientId: 'x1', clientName: 'Xi One', date: day(0) });
+    // An auto travel leg (Outlook "Travel" category, no Smart Booking kind) and a booked one.
+    await block(pr, { date: day(0), start: '11:00', minutes: 20, eventType: 'travel', booking: {} });
+    await block(pr, { date: day(0), start: '15:00', minutes: 20, eventType: 'travel', booking: { kind: 'travel-block', group: 'travel' } });
+    await run(agent, day(0), day(4));
+    expect(await openIssues(agent, 'TRAVEL_BLOCK_NO_CLIENT')).toHaveLength(1);
+    const [cn] = await openIssues(agent, 'CASE_NOTE_MISSING');
+    expect((await agent.post(`/api/invoicing/issues/${cn.id}/dismiss`).send({ reason: 'not needed' })).status).toBe(200);
+    await run(agent, day(0), day(4));
+    expect(await openIssues(agent, 'CASE_NOTE_MISSING')).toHaveLength(0);
+  });
+
+  test('a recipient typed on the invoice (and saved on the client) takes it out of Needs attention', async () => {
+    const app = buildApp(); const org = await seedOrganisation();
+    const { agent } = await login(app, 'owner', org.id);
+    const pr = await practitioner(org.id, [day(0)]);
+    await profile(agent, 'y1', { participantName: 'Yu One', ndisNumber: '431793102', managementType: 'PLAN_MANAGED', serviceAddress: 'Yu home, Zone MM1' });
+    await session_(pr, { clientId: 'y1', clientName: 'Yu One', date: day(0) });
+    await run(agent, day(0), day(4));
+    const [inv] = await invoices(agent);
+    expect(inv.status).toBe('NEEDS_ATTENTION');
+    await profile(agent, 'y1', { payerType: 'PLAN_MANAGER', payerName: 'Plan Partners' });
+    const r = await agent.patch(`/api/invoicing/invoices/${inv.id}`).send({ payerName: 'Plan Partners', payerType: 'PLAN_MANAGER', reason: 'Edited on the invoice', remember: true });
+    expect(r.status).toBe(200);
+    expect((await detail(agent, inv.id)).invoice).toMatchObject({ status: 'DRAFT', payer_name: 'Plan Partners' });
+  });
+
+  test('a case-noting block booked after a quick-fix line replaces it — never both', async () => {
+    const app = buildApp(); const org = await seedOrganisation();
+    const { agent } = await login(app, 'owner', org.id);
+    const pr = await practitioner(org.id, [day(0), day(1)]);
+    await profile(agent, 'w1', planManaged('Wen One', 1));
+    const s1 = await session_(pr, { clientId: 'w1', clientName: 'Wen One', date: day(0) });
+    await run(agent, day(0), day(4));
+    const [w] = await openIssues(agent, 'CASE_NOTE_MISSING');
+    expect((await agent.post(`/api/invoicing/issues/${w.id}/quick-fix`).send({ minutes: 15 })).status).toBe(200);
+    await block(pr, { date: day(1), booking: caseNote('w1', 'Wen One'), timerSeconds: 900 });
+    await run(agent, day(0), day(4));
+    const [inv] = await invoices(agent);
+    const lines = active((await detail(agent, inv.id)).lines);
+    expect(lines.filter(l => l.calculation && l.calculation.caseNoteFor === s1)).toHaveLength(0);
+    expect(lines.filter(l => l.component === 'NF2F')).toHaveLength(1);
   });
 });
 

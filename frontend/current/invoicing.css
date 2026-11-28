@@ -220,3 +220,10 @@ html:where([data-theme="dark"]) .inv-paper .draft-mark { color: var(--danger-ink
 .inv-spin { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--border); border-top-color: var(--accent); animation: inv-spin 0.9s linear infinite; }
 @keyframes inv-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .inv-spin { animation: none; border-top-color: var(--border); } }
+
+/* ── Invoice page: the invoice full width, one status line above it ───────── */
+.inv-detail-full { max-width: 980px; }
+.inv-detail-full .inv-paper { width: 100%; }
+.inv-xero-strip { font-size: 12.5px; color: var(--ink-soft); background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 7px 12px; margin-bottom: 12px; }
+.inv-paydetails { margin-top: 22px; padding-top: 12px; border-top: 1px solid #e3e7e8; font-size: 12px; line-height: 1.55; color: #3b4a4e; }
+.inv-paydetails::first-line { font-weight: 700; }

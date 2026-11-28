@@ -102,6 +102,8 @@ router.get('/api/invoicing/overview', safe(async (req, res) => {
     practitionersFor(orgId(req)),
   ]);
   const st = await Settings.ensureSettings(pool, orgId(req));
+  // Opening the tab reads payments from Xero in the background (throttled), so statuses are current.
+  RJ.syncPaymentsFor(orgId(req), { pool }).catch(() => {});
   res.json({ counts, runs: runs.rows, practitioners, timezone: t, job: RJ.latestJob(orgId(req)),
     autoDrafts: { enabled: st.autoDraftsEnabled !== false, lastAt: st.autoDraftsLastAt, lastPeriod: st.autoDraftsLastPeriod, lastError: st.autoDraftsLastError } });
 }));
@@ -186,7 +188,19 @@ router.get('/api/invoicing/invoices/:id', uuidParam('id'), safe(async (req, res)
 }));
 
 router.patch('/api/invoicing/invoices/:id', uuidParam('id'), safe(async (req, res) => {
-  res.json(await Life.updateDraftHeader({ pool, orgId: orgId(req), userId: req.user.id, invoiceId: req.params.id, patch: req.body || {} }));
+  const body = { ...(req.body || {}) };
+  const remember = body.remember === true; delete body.remember;
+  const out = await Life.updateDraftHeader({ pool, orgId: orgId(req), userId: req.user.id, invoiceId: req.params.id, patch: body });
+  // "remember": the page saved the same recipient on the client first; apply it to
+  // this client's open drafts so the invoice leaves Needs attention straight away.
+  if (remember && ['payerName', 'payerEmail', 'payerReference', 'payerType'].some(k => k in body)) {
+    const { rows: [inv] } = await pool.query(`SELECT client_id FROM invoices WHERE id = $1 AND organisation_id = $2`, [req.params.id, orgId(req)]);
+    if (inv && inv.client_id) {
+      const applied = await Life.withTx(pool, tx => QF.applyProfileToDrafts(tx, { orgId: orgId(req), userId: req.user.id, clientId: inv.client_id }));
+      return res.json({ ...out, applied });
+    }
+  }
+  res.json(out);
 }));
 
 router.post('/api/invoicing/invoices/:id/regenerate', uuidParam('id'), safe(async (req, res) => {
@@ -462,9 +476,13 @@ router.post('/api/invoicing/issues/:id/quick-fix', uuidParam('id'), safe(async (
   }
   if (it.issue_type === 'CASE_NOTE_MISSING') {
     if (body.leaveOff) {
-      await pool.query(
-        `UPDATE billing_issues SET status = 'DISMISSED', resolved_at = NOW(), resolved_by_user_id = $3, resolution_note = 'No case noting for this session'
-          WHERE id = $1 AND organisation_id = $2 AND status = 'OPEN'`, [it.id, o, u]);
+      await Life.withTx(pool, async tx => {
+        await tx.query(
+          `UPDATE billing_issues SET status = 'DISMISSED', resolved_at = NOW(), resolved_by_user_id = $3, resolution_note = 'No case noting for this session'
+            WHERE id = $1 AND organisation_id = $2 AND status = 'OPEN'`, [it.id, o, u]);
+        await recordAudit(tx, { orgId: o, actorUserId: u, action: 'billing_issue.dismissed', entityType: 'billing_issue', entityId: it.id,
+          after: { issueType: it.issue_type }, reason: 'No case noting for this session' });
+      });
       return res.json({ ok: true, dismissed: true });
     }
     return res.json(await Life.withTx(pool, tx => QF.addCaseNoteLine(tx, { orgId: o, userId: u, eventId: it.event_id, minutes: body.minutes })));
@@ -489,10 +507,33 @@ router.post('/api/invoicing/issues/:id/quick-fix', uuidParam('id'), safe(async (
     if (body.decision !== 'NOT_BILLABLE') return res.status(400).json({ error: 'Choose an answer' });
     return res.json(await Life.withTx(pool, tx => QF.decideEvent(tx, { orgId: o, userId: u, eventId: it.event_id, decision: 'NOT_BILLABLE' })));
   }
-  if (['CLIENT_ADDRESS_MISSING', 'MMM_UNRESOLVED', 'MMM_REVIEW', 'SESSION_MMM_UNRESOLVED', 'SESSION_MMM_REVIEW'].includes(it.issue_type)) {
+  // A session's zone: set it, and remember it for the address (migration 097).
+  if (it.issue_type === 'SESSION_MMM_UNRESOLVED' || it.issue_type === 'SESSION_MMM_REVIEW') {
+    const zone = SessionMmm.validZone(body.zone);
+    if (zone == null) return res.status(400).json({ error: 'Choose the zone (MM1–MM7)' });
+    const { rows: [ev] } = await pool.query(
+      `SELECT e.id, e.location, e.manual_location FROM events e JOIN users u ON u.id = e.user_id WHERE e.id = $1 AND u.organisation_id = $2`, [it.event_id, o]);
+    if (!ev) return res.status(404).json({ error: 'Session not found' });
+    const address = DR.eventAddress(ev);
+    await Life.withTx(pool, async tx => {
+      await SessionMmm.setOwnerZone(tx, { orgId: o, eventId: ev.id, zone, reason: 'Needs attention fix', userId: u });
+      if (address) {
+        await tx.query(
+          `INSERT INTO billing_address_zones (organisation_id, address_key, address, mmm_zone, set_by_user_id) VALUES ($1,$2,$3,$4,$5)
+           ON CONFLICT (organisation_id, address_key) DO UPDATE SET mmm_zone = EXCLUDED.mmm_zone, address = EXCLUDED.address,
+             set_by_user_id = EXCLUDED.set_by_user_id, set_at = NOW()`, [o, Gen.addressKey(address), address.slice(0, 500), zone, u]);
+      }
+      await recordAudit(tx, { orgId: o, actorUserId: u, action: 'billing.session_zone_set', entityType: 'event', entityId: ev.id,
+        after: { zone, rememberedForAddress: !!address }, reason: 'Needs attention fix' });
+    });
+    return res.status(202).json({ job: RJ.startRun({ pool, orgId: o, userId: u, from: it.sd, to: it.sd,
+      practitionerIds: it.practitioner_user_id ? [it.practitioner_user_id] : null }) });
+  }
+  if (['CLIENT_ADDRESS_MISSING', 'MMM_UNRESOLVED', 'MMM_REVIEW'].includes(it.issue_type)) {
+    // The period of the run that raised it (a client whose sessions were all held has no draft yet).
     const { rows: [p] } = await pool.query(
-      `SELECT to_char(MIN(period_start),'YYYY-MM-DD') AS f, to_char(MAX(period_end),'YYYY-MM-DD') AS t FROM invoices
-        WHERE organisation_id = $1 AND client_id = $2 AND status IN ('DRAFT','NEEDS_ATTENTION')`, [o, it.client_id]);
+      `SELECT to_char(period_start,'YYYY-MM-DD') AS f, to_char(period_end,'YYYY-MM-DD') AS t FROM invoice_runs
+        WHERE id = $1 AND organisation_id = $2`, [it.run_id, o]);
     const from = it.sd || (p && p.f) || RJ.mondayOf(new Date().toISOString().slice(0, 10));
     const to = it.sd || (p && p.t) || new Date().toISOString().slice(0, 10);
     const job = RJ.startRun({ pool, orgId: o, userId: u, from: from <= to ? from : to, to: from <= to ? to : from,

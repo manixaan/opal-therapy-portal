@@ -186,6 +186,11 @@ async function deleteDraft(tx, { orgId, userId, invoiceId }) {
   if (x) throw err(409, 'This invoice is linked to Xero; void it instead.', 'INVOICE_LOCKED');
   await recordAudit(tx, { orgId, actorUserId: userId, action: 'invoice.draft_deleted', entityType: 'invoice', entityId: invoiceId, invoiceId,
     before: { invoice_number: inv.invoice_number, client_id: inv.client_id, total: inv.total, status: inv.status }, reason: 'Draft deleted' });
+  // A travel block billed onto this draft goes back to being asked about.
+  await tx.query(
+    `DELETE FROM billing_event_decisions d USING invoice_lines l
+      WHERE l.invoice_id = $1 AND d.organisation_id = $2 AND d.decision = 'BILL'
+        AND d.event_id::text = l.calculation->>'travelBlock'`, [invoiceId, orgId]);
   await tx.query(`DELETE FROM invoices WHERE id = $1`, [invoiceId]);
   return { ok: true, invoiceNumber: inv.invoice_number };
 }
