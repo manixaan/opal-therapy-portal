@@ -204,7 +204,7 @@
      store and computeDayTravelSegments(), the calendar leg overlays and the
      travel details panel. Deferred and loaded ahead of profile.js and
      reports.js, both of which reach into it. -->
-<script src="/travel.js?v=81" defer></script>
+<script src="/travel.js?v=82" defer></script>
 <!-- Traffic alerts: a re-priced drive that now runs into a client session —
      point at it, offer Make room, Acknowledge or Ignore (today and tomorrow). -->
 <script src="/travel-alerts.js?v=1" defer></script>
@@ -3524,6 +3524,10 @@ window.opIcon = function (name, size) {
   .travel-overlay.t-mins .t-label, .travel-overlay.t-full .t-label,
   .travel-overlay.t-full .t-ico { flex-shrink: 0; overflow: visible; }
   .travel-overlay.t-full .t-ico { font-size: 10px; font-weight: 600; white-space: nowrap; }
+  /* Tall enough for two lines (_fitLegText): the place wraps under the
+     minutes instead of being dropped, and the switch takes its own line. */
+  .travel-overlay.t-wrap { flex-wrap: wrap; align-content: center; row-gap: 2px; line-height: 13px; }
+  .travel-overlay.t-wrap .t-label { white-space: normal; flex-shrink: 1; min-width: 0; overflow-wrap: break-word; }
   .travel-overlay.t-no-ico .t-ico, .travel-overlay.t-no-switch .t-switch,
   .travel-overlay.t-no-dest .t-dest { display: none; }
   /* Idle-gap overlay CSS REMOVED (2026-08-09): the free-time/gap overlay no

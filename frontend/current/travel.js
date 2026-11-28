@@ -2991,15 +2991,36 @@ function _legDestName(seg) {
   const t = seg.toLoc || {};
   const toBase = seg.kind === 'end' || seg.toHome || seg.via === 'home-return' || seg.via === 'place-in';
   if (toBase) return t.label || 'Home';
-  return t.suburb || t.label || 'next stop';
+  return _legPlaceWord(t.suburb) || _legClientName(t.label) || 'next stop';
+}
+/* An address with no suburb ("6 Elbert Way") comes back from addrSuburb as
+   itself, and the leg named a street where every other leg names a suburb
+   (28 Nov 2026). Anything that starts with a house number is a street, not a
+   place word. */
+function _legPlaceWord(sub) {
+  const v = String(sub || '').trim();
+  return v && !/^\d/.test(v) ? v : '';
+}
+/* With no suburb to name, the client is the next best word: the location
+   label reads "Julie Pitham · 6 Elbert Way" or "Julie Pitham (Haynes)". */
+function _legClientName(label) {
+  const v = String(label || '').split(' · ')[0].replace(/\s*\(.*\)\s*$/, '').trim();
+  return v && !/^\d/.test(v) ? v : '';
 }
 /* A narrow column cannot hold "Start 8 min → Canning Vale Direct ⇄". Rather
    than an ellipsis eating the destination, drop whole parts in order — the
    Start/End word, then the destination, then the switch (the panel has both) —
    so what remains is always readable and the minutes always show (T-20). */
 function _fitLegText(el) {
-  const over = () => el.scrollWidth > el.clientWidth + 0.5;
+  const over = () => el.scrollWidth > el.clientWidth + 0.5 || el.scrollHeight > el.clientHeight + 0.5;
   if (!over()) return;
+  // A leg tall enough for two lines wraps first (28 Nov 2026): "Travel
+  // 24 min → Piara Waters" on two lines beat a bare "24 min" in a leg with
+  // room to spare. Only when wrapping still does not fit are parts dropped.
+  if (el.clientHeight >= 28) {
+    el.classList.add('t-wrap');
+    if (!over()) return;
+  }
   el.classList.add('t-no-ico');
   if (!over()) return;
   // The destination goes before the switch (26 Nov 2026): the switch is the

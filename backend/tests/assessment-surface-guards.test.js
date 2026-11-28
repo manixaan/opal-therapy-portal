@@ -742,7 +742,7 @@ describe('changed assets are cache-busted', () => {
       // 78: Via home only when it fits the gap; two-way leg control; no-time flag.
       // 80: the no-time note shrinks to "!" where it would cover a short tile's words;
       // a gap filled by other events says "no free slot".
-      ['travel.js', 81],
+      ['travel.js', 82],
       // 1: traffic alerts — a re-priced drive running into a client session.
       ['travel-alerts.js', 1], ['travel-alerts.css', 2],
       // 1: booking-route.js/.css are new — client location selector, the

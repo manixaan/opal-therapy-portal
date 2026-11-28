@@ -18,7 +18,10 @@ const api = new Function(`
   function _tpEsc(s) { return String(s).replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) + ';'); }
   ${fnSrc('_legLabelHtml')}
   ${fnSrc('_legDestName')}
-  return { label: _legLabelHtml, dest: _legDestName };
+  ${fnSrc('_legPlaceWord')}
+  ${fnSrc('_legClientName')}
+  ${fnSrc('_fitLegText')}
+  return { label: _legLabelHtml, dest: _legDestName, fit: _fitLegText };
 `)();
 const text = (html) => html.replace(/<[^>]+>/g, '');
 
@@ -43,6 +46,23 @@ describe('travel leg wording', () => {
   test('a drive to a client names the suburb', () => {
     expect(api.dest({ kind: 'start', toLoc: { label: 'Evana Samuel', suburb: 'Harrisdale' } })).toBe('Harrisdale');
     expect(api.dest({ kind: 'between', via: 'direct', toLoc: { suburb: 'Atwell' } })).toBe('Atwell');
+  });
+  test('a street with no suburb is never the place word: the client is named instead', () => {
+    expect(api.dest({ kind: 'between', via: 'direct', toLoc: { suburb: '6 Elbert Way', label: 'Julie Pitham · 6 Elbert Way' } })).toBe('Julie Pitham');
+    expect(api.dest({ kind: 'between', via: 'direct', toLoc: { suburb: null, label: 'Julie Pitham (Haynes)' } })).toBe('Julie Pitham');
+    expect(api.dest({ kind: 'between', via: 'direct', toLoc: { suburb: '6 Elbert Way', label: '6 Elbert Way' } })).toBe('next stop');
+  });
+  test('a tall leg wraps before it drops a word; a short one drops as before', () => {
+    const leg = (clientHeight, fitsWrapped) => {
+      const cls = new Set();
+      const el = { clientWidth: 100, clientHeight, classList: { add: (c) => cls.add(c) },
+        get scrollWidth() { return cls.has('t-wrap') && fitsWrapped ? 100 : 160; },
+        get scrollHeight() { return clientHeight; } };
+      api.fit(el);
+      return [...cls];
+    };
+    expect(leg(40, true)).toEqual(['t-wrap']);
+    expect(leg(16, true)).toEqual(['t-no-ico', 't-no-dest', 't-no-switch']);
   });
   test('no leg uses the old per-kind words or the "min · A → B" form', () => {
     expect(SRC).not.toMatch(/seg\.kind === 'start' \? 'Start' : seg\.kind === 'end' \? 'End'/);
