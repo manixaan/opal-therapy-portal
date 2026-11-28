@@ -153,6 +153,27 @@ async function prepare(q, orgId, opts) {
     sploseActivitiesIncluded: 0, invoicedInSplose: 0, splose: null,
   };
   const skip = reason => { summary.skipped[reason] = (summary.skipped[reason] || 0) + 1; };
+  // Blocks from Outlook / Splose that the calendar's block review still has as a
+  // guess are held from invoicing — say so, never drop them silently.
+  if (!(opts.eventIds && opts.eventIds.length)) {
+    const hp = [orgId, opts.from, opts.to, tz];
+    let hw = '';
+    if (opts.practitionerIds && opts.practitionerIds.length) { hp.push(opts.practitionerIds); hw += ` AND e.user_id = ANY($${hp.length}::uuid[])`; }
+    if (opts.clientIds && opts.clientIds.length) { hp.push(opts.clientIds); hw += ` AND e.client_id = ANY($${hp.length}::text[])`; }
+    const { rows: held } = await q.query(
+      `SELECT e.id, e.user_id, e.title, e.client_id,
+              to_char(((e.start_time AT TIME ZONE 'UTC') AT TIME ZONE $4)::date, 'YYYY-MM-DD') AS local_date
+         FROM events e JOIN users u ON u.id = e.user_id
+         JOIN event_block_reviews br ON br.event_id = e.id AND br.status IN ('guessed', 'needs_input')
+        WHERE u.organisation_id = $1 AND COALESCE(e.is_deleted, FALSE) = FALSE AND e.end_time <= NOW()
+          AND LOWER(COALESCE(e.status, '')) <> 'cancelled'
+          AND ((e.start_time AT TIME ZONE 'UTC') AT TIME ZONE $4)::date BETWEEN $2::date AND $3::date` + hw, hp);
+    for (const h of held) {
+      issues.raise('BLOCK_AWAITING_REVIEW', { eventId: h.id, clientId: h.client_id || null, practitionerId: h.user_id, serviceDate: h.local_date,
+        message: `"${h.title || 'Calendar block'}" on ${S.displayDate(h.local_date)} came from Outlook or Splose and has not been checked in the calendar's block review, so it is not billed yet.`,
+        fixTarget: { kind: 'block_review', eventId: h.id, date: h.local_date } });
+    }
+  }
 
   // 0. Splose: read once. Anything Splose must judge is held back when it cannot be read.
   if (opts.progress) opts.progress('Checking Splose for what is already invoiced');

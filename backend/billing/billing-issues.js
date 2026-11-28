@@ -20,6 +20,7 @@ const ISSUE_TYPES = Object.freeze({
   SESSION_MMM_REVIEW:        { severity: 'BLOCKING', label: 'Session MMM zone needs confirmation' },
   NF2F_TIMER_RUNNING:        { severity: 'WARNING',  label: 'Non-face-to-face timer still running' },
   NF2F_UNTIMED:              { severity: 'BLOCKING', label: 'Non-face-to-face block has no time entered' },
+  BLOCK_AWAITING_REVIEW:     { severity: 'WARNING',  label: 'Calendar block not checked yet' },
   CASE_NOTE_MISSING:         { severity: 'WARNING',  label: 'Session has no case noting' },
   REPORT_NOT_BILLED:         { severity: 'WARNING',  label: 'Report writing not billed anywhere' },
   TRAVEL_BLOCK_NO_CLIENT:    { severity: 'WARNING',  label: 'Travel block names no client' },

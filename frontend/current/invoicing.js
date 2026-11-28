@@ -768,6 +768,7 @@
     if (t.kind === 'trip') return b('data-inv="open-trip" data-id="' + esc(t.tripId) + '" data-tab="' + esc(t.tab || 'costs') + '"');
     if (t.kind === 'route') return b('data-inv="manual-route" data-o="' + esc(t.origin) + '" data-d="' + esc(t.destination) + '"');
     if (t.kind === 'nf2f') return b('data-inv="nf2f-resolve" data-id="' + esc(t.eventId) + '"');
+    if (t.kind === 'block_review') return b('data-inv="block-review"');
     if (t.kind === 'event' || t.kind === 'work_location') return b('data-inv="to-calendar" data-date="' + esc(t.date || '') + '"');
     return '';
   }
@@ -1386,6 +1387,11 @@
           toast('Draft deleted'); loadOverview(); go('invoices'); break;
         }
         case 'quick-fix': await openQuickFix(id); break;
+        case 'block-review':
+          // The calendar's block review asks the questions for each block in one place.
+          if (typeof window.switchTab === 'function') window.switchTab('calendar');
+          setTimeout(function () { if (window.BlockReview && window.BlockReview.open) window.BlockReview.open(); }, 300);
+          break;
         case 'refresh-draft': {
           btn.disabled = true; btn.textContent = 'Updating…';
           var rj = await post('/invoices/' + id + '/regenerate', { background: true });

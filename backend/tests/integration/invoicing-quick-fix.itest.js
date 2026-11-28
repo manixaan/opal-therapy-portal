@@ -300,6 +300,26 @@ describe('answers are remembered', () => {
   });
 });
 
+describe('nothing is dropped silently', () => {
+  test('a session still waiting in the calendar block review is held, and says so in Needs attention', async () => {
+    const app = buildApp(); const org = await seedOrganisation();
+    const { agent } = await login(app, 'owner', org.id);
+    const pr = await practitioner(org.id, [day(0)]);
+    await profile(agent, 'h1', planManaged('Hal One', 1));
+    const ev = await session_(pr, { clientId: 'h1', clientName: 'Hal One', date: day(0) });
+    await db.pool.query(`INSERT INTO event_block_reviews (event_id, user_id, status) VALUES ($1,$2,'guessed')`, [ev, pr.id]);
+    const s = await run(agent, day(0), day(4));
+    expect(s.sessionsIncluded).toBe(0);
+    const held = await openIssues(agent, 'BLOCK_AWAITING_REVIEW');
+    expect(held.map(h => h.calendar_event_id)).toEqual([ev]);
+    expect(held[0].fix_target).toMatchObject({ kind: 'block_review' });
+    // Once checked in the block review, it bills and the item closes.
+    await db.pool.query(`UPDATE event_block_reviews SET status = 'confirmed' WHERE event_id = $1`, [ev]);
+    expect((await run(agent, day(0), day(4))).sessionsIncluded).toBe(1);
+    expect(await openIssues(agent, 'BLOCK_AWAITING_REVIEW')).toHaveLength(0);
+  });
+});
+
 describe('review fixes', () => {
   test('a dismissed item stays dismissed on the next run; Opal\'s own travel legs are never asked about', async () => {
     const app = buildApp(); const org = await seedOrganisation();
