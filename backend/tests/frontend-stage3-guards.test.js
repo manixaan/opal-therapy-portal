@@ -3177,32 +3177,57 @@ describe('side-by-side layout follows the tiles (11 Oct 2026)', () => {
   });
 });
 
-describe('right-click closes the booking panel (12 Oct 2026)', () => {
+describe('right-click (two-finger click) closes any open side panel (12 Oct / 28 Nov 2026)', () => {
   const { JSDOM } = require('jsdom');
-  const start = HTML.indexOf("/* Right-click anywhere outside the open booking panel closes it");
-  const code = HTML.slice(start, HTML.indexOf('function clearPanelPrefill() {', start));
-  function env(open) {
-    const dom = new JSDOM(`<div id="booking-side-panel" class="${open ? 'open' : ''}"><input id="in-panel"></div><div id="cal-grid"><div class="session" id="tile"></div></div>`, { runScripts: 'outside-only' });
+  const start = HTML.indexOf('const SIDE_PANELS = [');
+  const listEnd = HTML.indexOf('(function oneSidePanelAtATime()', start);
+  const rcStart = HTML.indexOf('const RIGHT_CLICK_CLOSES = ');
+  const code = HTML.slice(start, listEnd) + HTML.slice(rcStart, HTML.indexOf('function clearPanelPrefill() {', rcStart));
+  function env(openId) {
+    const dom = new JSDOM(
+      '<div id="booking-side-panel"><input id="in-panel"></div><aside id="detail-drawer"><span id="in-drawer"></span></aside>' +
+      '<div id="travel-panel"></div><div id="cp-overlay" style="display:none"></div><div id="cp-panel"></div>' +
+      '<div id="cal-grid"><div class="session" id="tile"></div><div class="travel-overlay" id="leg"></div></div>',
+      { runScripts: 'outside-only' });
     const w = dom.window;
-    w.__closed = 0; w.__tileMenu = 0;
-    w.closeBookingPanel = () => { w.__closed++; w.document.getElementById('booking-side-panel').classList.remove('open'); };
-    w.document.getElementById('tile').addEventListener('contextmenu', () => { w.__tileMenu++; });
+    const $ = (id) => w.document.getElementById(id);
+    w.__closed = []; w.__menu = 0;
+    const shut = (id, cls) => () => { w.__closed.push(id); $(id).classList.remove(cls); };
+    Object.assign(w, {
+      closeBookingPanel: shut('booking-side-panel', 'open'), closeBlockDetail: shut('detail-drawer', 'show'),
+      closeTravelPanel: shut('travel-panel', 'open'),
+      closeClientProfile: () => { w.__closed.push('cp-panel'); $('cp-overlay').style.display = 'none'; },
+    });
+    ['tile', 'leg'].forEach((id) => $(id).addEventListener('contextmenu', () => { w.__menu++; }));
+    if (openId === 'cp-panel') $('cp-overlay').style.display = 'block';
+    else if (openId) $(openId).classList.add(openId === 'detail-drawer' ? 'show' : 'open');
     w.eval(code);
-    const rc = (id) => { const ev = new w.MouseEvent('contextmenu', { bubbles: true, cancelable: true }); w.document.getElementById(id).dispatchEvent(ev); return ev.defaultPrevented; };
+    const rc = (id) => { const ev = new w.MouseEvent('contextmenu', { bubbles: true, cancelable: true }); $(id).dispatchEvent(ev); return ev.defaultPrevented; };
     return { w, rc };
   }
-  test('outside the open panel: closes it, and nothing else opens', () => {
-    const { w, rc } = env(true);
-    expect(rc('tile')).toBe(true);
-    expect([w.__closed, w.__tileMenu]).toEqual([1, 0]);
+  test.each(['booking-side-panel', 'detail-drawer', 'travel-panel', 'cp-panel'])('outside the open %s: closes it, and no menu opens', (id) => {
+    const { w, rc } = env(id);
+    expect(rc('leg')).toBe(true);
+    expect([w.__closed, w.__menu]).toEqual([[id], 0]);
   });
-  test('inside the panel, or with the panel closed, right-click is untouched', () => {
-    const a = env(true);
+  test('right-clicking the grid with the travel panel open closes it', () => {
+    const { w, rc } = env('travel-panel');
+    rc('tile');
+    expect(w.__closed).toEqual(['travel-panel']);
+  });
+  test('inside the panel, or with no panel open, right-click is untouched', () => {
+    const a = env('booking-side-panel');
     expect(a.rc('in-panel')).toBe(false);
-    expect(a.w.__closed).toBe(0);
-    const b = env(false);
+    expect(a.w.__closed).toEqual([]);
+    const d = env('detail-drawer');
+    expect(d.rc('in-drawer')).toBe(false);
+    const b = env(null);
     b.rc('tile');
-    expect([b.w.__closed, b.w.__tileMenu]).toEqual([0, 1]);
+    expect([b.w.__closed, b.w.__menu]).toEqual([[], 1]);
+  });
+  test('reuses the one-at-a-time list rather than declaring a second', () => {
+    expect(HTML.match(/const SIDE_PANELS = \[/g)).toHaveLength(1);
+    expect(HTML).toContain('const RIGHT_CLICK_CLOSES = SIDE_PANELS.concat(');
   });
 });
 
@@ -3228,7 +3253,7 @@ describe('one side panel at a time (12 Oct 2026)', () => {
   // Travel Details opened on top of New Appointment: two side panels at once.
   const { JSDOM } = require('jsdom');
   const start = HTML.indexOf('const SIDE_PANELS = [');
-  const code = HTML.slice(start, HTML.indexOf('/* Right-click anywhere outside the open booking panel closes it', start));
+  const code = HTML.slice(start, HTML.indexOf('/* Sheet focus (Q-06', start));
   function env() {
     const ids = ['booking-side-panel', 'detail-drawer', 'travel-panel', 'notif-panel', 'help-panel', 'sup-my-panel', 'inv-detail-panel', 'ndis-detail-panel', 'ct-detail-panel'];
     const dom = new JSDOM(ids.map((id) => `<div id="${id}"></div>`).join('') + '<aside id="people-panel" hidden></aside><button id="ppl-close"></button>', { runScripts: 'outside-only' });

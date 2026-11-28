@@ -24011,17 +24011,26 @@ window.__sheetFocus = (function () {
   };
 })();
 
-/* Right-click anywhere outside the open booking panel closes it (12 Oct
-   2026) — the quick way out after a slot click. Capture phase, so that
-   right-click only closes the panel: it does not also open a block's menu
-   or the browser's. Inside the panel a right-click behaves as normal. */
+/* A two-finger click (right-click) anywhere outside an open side panel closes
+   it — the quick way out after clicking an event, a travel leg or a slot
+   (booking panel 12 Oct 2026; every side panel 28 Nov 2026). The panels are
+   the one-at-a-time list (SIDE_PANELS) plus the client profile, which opens
+   over the event panel and so is not in that list. Capture phase, so that
+   right-click only closes: it does not also open a tile's, a leg's or the
+   browser's menu. Inside a panel a right-click behaves as normal, and then
+   nothing closes. Centred dialogs and the movable Support window are not side
+   panels and stay put, so a stray click never throws away typing. */
+const RIGHT_CLICK_CLOSES = SIDE_PANELS.concat([
+  { id: 'cp-panel', open: () => { const o = document.getElementById('cp-overlay'); return !!(o && o.style.display === 'block'); },
+    close: () => window.closeClientProfile && window.closeClientProfile() },
+]);
 document.addEventListener('contextmenu', (e) => {
-  const panel = document.getElementById('booking-side-panel');
-  if (!panel || !panel.classList.contains('open')) return;
-  if (panel.contains(e.target)) return;
+  const open = RIGHT_CLICK_CLOSES.map(p => ({ p, el: document.getElementById(p.id) })).filter(x => x.el && x.p.open(x.el));
+  if (!open.length) return;
+  if (open.some(x => x.el.contains(e.target))) return;
   e.preventDefault();
   e.stopPropagation();
-  window.closeBookingPanel();
+  open.forEach(x => { try { x.p.close(); } catch (_) { /* one panel never blocks the rest */ } });
 }, true);
 
 function clearPanelPrefill() {
